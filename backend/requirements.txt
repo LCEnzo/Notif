@@ -1,0 +1,11 @@
+django
+djangorestframework
+
+requests
+beautifulsoup4
+lxml
+
+pytest
+pytest-django
+
+black
