@@ -57,7 +57,7 @@ Key features:
     ```
 2. Activate venv
     ```
-    source myenv/bin/activate
+    source venv/bin/activate
     ```
 3. Install the required Python packages for the backend.
     ```
