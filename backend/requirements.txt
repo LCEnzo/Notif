@@ -1,12 +1,12 @@
-django
-djangorestframework
-psycopg2
+django==4.2
+djangorestframework==3.14.0
+psycopg2==2.9.6
 
-requests
-beautifulsoup4
-lxml
+requests==2.28.2
+beautifulsoup4==4.12.2
+lxml==4.9.2
 
-pytest
-pytest-django
+pytest==7.3.1
+pytest-django==4.5.2
 
-black
+black==23.3
