@@ -1,6 +1,6 @@
 from django.contrib import admin
-from models import Link, Strategy
+from monitoring.models import Link, Strategy
 
-admin.register(
+admin.site.register(
     (Link, Strategy)
 )

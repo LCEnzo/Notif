@@ -24,15 +24,15 @@ class EntropyValidator:
     def get_help_text(self, password_entropy=None):
         password_string = (
             ""
-            if password_entropy == None
+            if password_entropy is None
             else f"Your password has {password_entropy} bits of entropy. "
         )
 
         return (
             f"The password entropy must be at least {self.min_entropy} bits. "
             + f"{password_string}" 
-            + f"Try increasing the number of characters, as well as using at least one "
-            + f"digit, lower and upper case letter, and symbol."
+            + "Try increasing the number of characters, as well as using at least one "
+            + "digit, lower and upper case letter, and symbol."
         )
 
     def calculate_password_entropy(self, password: str) -> float:
