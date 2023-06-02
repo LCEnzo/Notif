@@ -51,47 +51,47 @@ Key features:
 ### Installation and Setup
 
 1. Clone the repository.
-    ```
-    git clone https://github.com/your_username/my-update-notifier.git
-    cd backend
-    ```
+	```
+	git clone https://github.com/your_username/my-update-notifier.git
+	cd backend
+	```
 2. Activate venv
-    ```
-    source venv/bin/activate
-    ```
+	```
+	source venv/bin/activate
+	```
 3. Install the required Python packages for the backend.
-    ```
-    pip install -r requirements.txt
-    ```
+	```
+	pip install -r requirements.txt
+	```
 4. Apply the Django migrations.
-    ```
-    python manage.py migrate
-    ```
+	```
+	python manage.py migrate
+	```
 5. Run the Django development server.
-    ```
-    python manage.py runserver
-    ```
+	```
+	python manage.py runserver
+	```
 
 ---
 
 ## TODOs
 * Create Django app
   * Create accounts app
-    * Test it
+	* Test it
   * Create URL monitoring app
-    * Create app
-    * Add logic for one site
-      * Test it
-    * Repeat for other sites
-    * Create push notification functionality
-      * Test it   
+	* Create app
+	* Add logic for one site
+	  * Test it
+	* Repeat for other sites
+	* Create push notification functionality
+	  * Test it   
 * Create Android client
-    * Create log in portion
-      * Create tests
-    * Create user account management UI (CRUD ops)
-    * Create notifications receiver
-      * Test it
-    * Create updates list view
+	* Create log in portion
+	  * Create tests
+	* Create user account management UI (CRUD ops)
+	* Create notifications receiver
+	  * Test it
+	* Create updates list view
 * Create full end to end tests if not hard
 * Create docker image for server
 * Figure out deployment
