@@ -9,6 +9,25 @@ select = [
 	"UP",  # pyupgrade
 ]
 
+[tool.pyright]
+exclude = ["**/node_modules",
+	"**/__pycache__",
+	"**/experimental",
+	"**/typestubs",
+	"**/migrations",
+	"venv",
+]
+ignore = []
+defineConstant = { DEBUG = true }
+stubPath = "stubs"
+venv = "venv"
+
+reportMissingImports = true
+reportMissingTypeStubs = true
+
+pythonVersion = "3.11"
+pythonPlatform = "Linux"
+
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
 
