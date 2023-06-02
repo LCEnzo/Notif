@@ -11,7 +11,7 @@ pytest-django>=4.1,<5.0
 
 # Not needed to run the app, 
 # used for imporving and testing code
-mypy==1.2
+pyright>=1.1
 django-stubs==4.2
 types-requests
 types-beautifulsoup4

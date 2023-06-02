@@ -55,7 +55,7 @@ class BaseStrategy(ABC):
 
 	@abstractmethod
 	def scrape(self, url: URL, config_data: dict, comparison_data: dict, 
-			   *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		"""
 		This function is the basic functionality. It takes in the URL to be scraped, as well as JSON data/dict.
 		It should return whether there was new stuff found, and if so, what it is. 
@@ -68,7 +68,7 @@ class BaseStrategy(ABC):
 		pass
 
 	def __call__(self, url: URL, config_data: dict, comparison_data: dict, 
-				 *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+					*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		return self.scrape(url, config_data, comparison_data, args, kwargs)
 
 
@@ -81,7 +81,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 		return True
 
 	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]], 
-			   *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		selectors: list[str] = config_data['selectors'] 
 		old_data: dict[str, list[int]] = { 
 			selector: 
@@ -133,6 +133,61 @@ class SpaceBattlesThreadmarksStrategy(BaseStrategy):
 	pass
 
 
+@dataclass
+class AlertInfo:
+	"""
+	Mainly exists for QQ alerts, can probably be used for SV and SB.
+	"""
+	author_name: str | None = None
+	author_link: str | None = None
+	avatar_image_url: str | None = None
+	post_link: str | None = None
+	alert_text: str | None = None
+	post_time: time | None = None
+	# lengthy ergo likely a chapter post
+	lengthy_response: bool = False
+	post_date: date | None = None
+
+	def to_json(self) -> str:
+		json_dict = {
+			'author_name': self.author_name,
+			'author_link': self.author_link,
+			'avatar_image_url': self.avatar_image_url,
+			'post_link': self.post_link,
+			'alert_text': self.alert_text,
+			'lengthy_response': self.lengthy_response,
+			'post_date': None if self.post_date is None else self.post_date.isoformat(),
+			'post_time': None if self.post_time is None else self.post_time.strftime('%H:%M:%S')
+		}
+		return json.dumps(json_dict)
+
+	@classmethod
+	def from_json(cls, json_str: str) -> 'AlertInfo':
+		json_dict = json.loads(json_str)
+		post_date = None if json_dict['post_date'] is None else date.fromisoformat(json_dict['post_date'])
+		post_time = None if json_dict['post_time'] is None else time.fromisoformat(json_dict['post_time'])
+		return cls(
+			author_name=json_dict['author_name'],
+			author_link=json_dict['author_link'],
+			avatar_image_url=json_dict['avatar_image_url'],
+			post_link=json_dict['post_link'],
+			alert_text=json_dict['alert_text'],
+			lengthy_response=json_dict['lengthy_response'],
+			post_date=post_date,
+			post_time=post_time
+		)
+	
+	def __str__(self):
+		return f"Alert Information:\n" \
+			f"- Author Name: {self.author_name}\n" \
+			f"- Author Link: {self.author_link}\n" \
+			f"- Avatar Image URL: {self.avatar_image_url}\n" \
+			f"- Post Link: {self.post_link}\n" \
+			f"- Alert Text: {self.alert_text}\n" \
+			f"- Date: {self.post_date}\n" \
+			f"- Time: {self.post_time}\n" \
+			f"- Likely chapter: {self.lengthy_response}"
+
 @register
 class QQAlertsStrategy(BaseStrategy):
 	"""
@@ -143,58 +198,6 @@ class QQAlertsStrategy(BaseStrategy):
 	"""
 	login_url = "https://forum.questionablequesting.com/login/login"
 	alerts_url = "https://forum.questionablequesting.com/account/alerts"
-
-	@dataclass
-	class AlertInfo:
-		author_name: str | None = None
-		author_link: str | None = None
-		avatar_image_url: str | None = None
-		post_link: str | None = None
-		alert_text: str | None = None
-		post_time: time | None = None
-		# lengthy ergo likely a chapter post
-		lengthy_response: bool = False
-		post_date: date | None = None
-
-		def to_json(self) -> str:
-			json_dict = {
-				'author_name': self.author_name,
-				'author_link': self.author_link,
-				'avatar_image_url': self.avatar_image_url,
-				'post_link': self.post_link,
-				'alert_text': self.alert_text,
-				'lengthy_response': self.lengthy_response,
-				'post_date': None if self.post_date is None else self.post_date.isoformat(),
-				'post_time': None if self.post_time is None else self.post_time.strftime('%H:%M:%S')
-			}
-			return json.dumps(json_dict)
-
-		@classmethod
-		def from_json(cls, json_str: str) -> 'AlertInfo':
-			json_dict = json.loads(json_str)
-			post_date = None if json_dict['post_date'] is None else date.fromisoformat(json_dict['post_date'])
-			post_time = None if json_dict['post_time'] is None else time.fromisoformat(json_dict['post_time'])
-			return cls(
-				author_name=json_dict['author_name'],
-				author_link=json_dict['author_link'],
-				avatar_image_url=json_dict['avatar_image_url'],
-				post_link=json_dict['post_link'],
-				alert_text=json_dict['alert_text'],
-				lengthy_response=json_dict['lengthy_response'],
-				post_date=post_date,
-				post_time=post_time
-			)
-		
-		def __str__(self):
-			return f"Alert Information:\n" \
-				f"- Author Name: {self.author_name}\n" \
-				f"- Author Link: {self.author_link}\n" \
-				f"- Avatar Image URL: {self.avatar_image_url}\n" \
-				f"- Post Link: {self.post_link}\n" \
-				f"- Alert Text: {self.alert_text}\n" \
-				f"- Date: {self.post_date}\n" \
-				f"- Time: {self.post_time}\n" \
-				f"- Likely chapter: {self.lengthy_response}"
 
 	def can_scrape_url(self, url: URL) -> bool:
 		parsed_url = urlsplit(url)
@@ -282,7 +285,9 @@ class QQAlertsStrategy(BaseStrategy):
 			'redirect': '/account/alerts'
 		}
 
-		user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36 Edg/105.0.1343.42"
+		user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " + (
+				"(KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36 Edg/105.0.1343.42")
+		
 		login_headers = {
 			"User-Agent": user_agent,
 			'Referer': QQAlertsStrategy.alerts_url,
@@ -322,17 +327,17 @@ class QQAlertsStrategy(BaseStrategy):
 		author_tag = notif.find('a', class_='username subject')
 		if author_tag is not None:
 			author_name = author_tag.text.strip()
-			author_link = f"{url}/{author_tag['href']}"
+			author_link = f"{url}/{author_tag['href']}" # type: ignore
 
 		# Extract author avatar image URL
 		avatar_img = notif.find('img')
 		if avatar_img is not None:
-			avatar_image_url = f"{url}/{avatar_img['src']}"
+			avatar_image_url = f"{url}/{avatar_img['src']}" # type: ignore
 
 		# Extract post link
 		post_link_tag = notif.find('a', class_='PopupItemLink')
 		if post_link_tag is not None:
-			post_link = f"{url}/{post_link_tag['href']}"
+			post_link = f"{url}/{post_link_tag['href']}" # type: ignore
 
 		time_tag = notif.find('span', class_='time')
 		if time_tag is not None:
@@ -356,7 +361,7 @@ class QQAlertsStrategy(BaseStrategy):
 			lengthy_response = bool(re.search(regex_pattern, alert_text))
 
 		# Return the extracted information as an instance of the AlertInfo data class
-		return QQAlertsStrategy.AlertInfo(
+		return AlertInfo(
 			author_name=author_name,
 			author_link=author_link,
 			avatar_image_url=avatar_image_url,
