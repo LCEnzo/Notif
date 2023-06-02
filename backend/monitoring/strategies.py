@@ -4,15 +4,17 @@
 from typing import TypeAlias, Any
 from abc import ABC, abstractmethod
 from urllib.parse import urlsplit
+from dataclasses import dataclass
+from datetime import time, date, datetime, timedelta
+import json
+import re
 
 import requests
 from bs4 import BeautifulSoup
 from bs4.element import ResultSet, Tag
 
-from rest_framework import status
-
 # Types
-# TODO: Think of moving them to a centreal location so that the whole app can use them
+# TODO: Think of moving them to a central location so that the whole app can use them
 URL: TypeAlias = str
 NotifData: TypeAlias = list[tuple[str, str, str]]
 DataDict: TypeAlias = None | dict[str, Any]
@@ -22,125 +24,368 @@ NotifDataOrError: TypeAlias = str | NotifData
 registry = {}
 
 def register(cls):
-    registry[cls.__name__] = cls
-    return cls  # return the class so that it's still defined
+	registry[cls.__name__] = cls
+	return cls  # return the class so that it's still defined
 
 
 # Used for choices for the Strategy model
 STRATEGY_CHOICES = [(name, name) for name in registry.keys()]
 
 def _fetch_url_content(url: URL) -> str | None:
-    response = requests.get(url)
-    if response.status_code == status.HTTP_200_OK:
-        return response.text
-    else:
-        return None
+	response = requests.get(url)
+	if response.status_code == requests.codes.ok:
+		return response.text
+	else:
+		return None
 
 def _get_content_with_css_selector(html_content: str, css_selector: str) -> ResultSet[Tag]:
-    soup = BeautifulSoup(html_content, 'html.parser')
-    elements = soup.select(css_selector)
-    return elements
+	soup = BeautifulSoup(html_content, 'html.parser')
+	elements = soup.select(css_selector)
+	return elements
 
 
 class BaseStrategy(ABC):
-    @abstractmethod
-    def can_scrape_url(self, url: URL) -> bool:
-        """
-        This function exists to check if the strategy CAN scrape the URL. 
-        Whether that be a hardcoded list of sites, or whatever.
-        """
-        pass
+	@abstractmethod
+	def can_scrape_url(self, url: URL) -> bool:
+		"""
+		This function exists to check if the strategy CAN scrape the URL. 
+		Whether that be a hardcoded list of sites, or whatever.
+		"""
+		pass
 
-    @abstractmethod
-    def scrape(self, url: URL, config_data: dict, comparison_data: dict, 
-               *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
-        """
-        This function is the basic functionality. It takes in the URL to be scraped, as well as JSON data.
-        It should return whether there was new stuff found, and if so, what it is. 
-        Returns None in case nothing was found, str for errors, and the list of tuples containing a 
-        title, descrpition, and link in case of new content. It also returns new data if there is any.
-        """
-        pass
+	@abstractmethod
+	def scrape(self, url: URL, config_data: dict, comparison_data: dict, 
+			   *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+		"""
+		This function is the basic functionality. It takes in the URL to be scraped, as well as JSON data/dict.
+		It should return whether there was new stuff found, and if so, what it is. 
+		Returns None in case nothing was found, str for errors, and the list of tuples containing a 
+		title, description, and link in case of new content. It also returns new data if there is any.
 
-    def __call__(self, url: URL, config_data: dict, comparison_data: dict, 
-                 *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
-        return self.scrape(url, config_data, comparison_data, args, kwargs)
+		NotifDataOrError -> Error str | list of (title, description, link)
+		DataDict -> None | { "attr name": data for comparison }
+		"""
+		pass
+
+	def __call__(self, url: URL, config_data: dict, comparison_data: dict, 
+				 *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+		return self.scrape(url, config_data, comparison_data, args, kwargs)
 
 
 @register
 class GeneralSelectorStrategy(BaseStrategy):
-    """
-    Uses a CSS selector to check just some element on a page, instead of the whole thing.
-    """
-    def can_scrape_url(self, url: URL) -> bool:
-        return True
+	"""
+	Uses a CSS selector to check just   some element on a page, instead of the whole thing.
+	"""
+	def can_scrape_url(self, url: URL) -> bool:
+		return True
 
-    def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]], 
-               *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
-        selectors: list[str] = config_data['selectors'] 
-        old_data: dict[str, list[int]] = { 
-            selector: 
-                comparison_data.get(str(selector), []) 
-            for selector in selectors 
-        }
-        updates: NotifData = []
-        new_data: dict[str, list[int]] | None = None
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]], 
+			   *args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+		selectors: list[str] = config_data['selectors'] 
+		old_data: dict[str, list[int]] = { 
+			selector: 
+				comparison_data.get(str(selector), []) 
+			for selector in selectors 
+		}
+		updates: NotifData = []
+		new_data: dict[str, list[int]] | None = None
 
-        html_content = _fetch_url_content(url)
-        if html_content is None:
-            return "Empty html_content", None
+		html_content = _fetch_url_content(url)
+		if html_content is None:
+			return "Empty html_content", None
 
-        new_data = {
-            selector: 
-                list(
-                    [hash(ret) for ret in _get_content_with_css_selector(html_content, selector)]
-                ) 
-            for selector in selectors
-        }
+		new_data = {
+			selector: 
+				list(
+					[hash(ret) for ret in _get_content_with_css_selector(html_content, selector)]
+				) 
+			for selector in selectors
+		}
 
-        for selector in selectors:
-            tags = new_data.get(f'{selector}', [])
-            old_tags = old_data.get(f'{selector}', [])
-            update = False
+		for selector in selectors:
+			tags = new_data.get(f'{selector}', [])
+			old_tags = old_data.get(f'{selector}', [])
+			update = False
 
-            if len(tags) != len(old_tags):
-                update = True
-            else:
-                update = tags != old_tags
-            
-            if update:
-                split = urlsplit(url)
-                site_name = split.netloc.split('.')[0]
-                updates += [(f'{site_name} update', f'selector: {selector}', url)]
+			if len(tags) != len(old_tags):
+				update = True
+			else:
+				update = tags != old_tags
+			
+			if update:
+				split = urlsplit(url)
+				site_name = split.netloc.split('.')[0]
+				updates += [(f'{site_name} update', f'selector: {selector}', url)]
 
-        # No need to save new info to the db if the new info is the same as the old info
-        if len(updates) == 0:
-            new_data = None
+		# No need to save new info to the db if the new info is the same as the old info
+		if len(updates) == 0:
+			new_data = None
 
-        return updates, new_data
-
-
-class QQLogInMixin():
-    """
-    Check generalizability outside of just QQ, to other forums.
-    """
-    def login(self):
-        pass
-
-    pass
+		return updates, new_data
 
 
 @register
 class SpaceBattlesThreadmarksStrategy(BaseStrategy):
-    """
-    Check SpaceBattles threadmarks. Configuration should specify which threadmark tabs should be checked.
-    """
-    pass
+	"""
+	Check SpaceBattles threadmarks. Configuration should specify which threadmark tabs should be checked.
+	"""
+	pass
 
 
 @register
-class QQAlertsStrategy(BaseStrategy, QQLogInMixin):
-    """
-    Check QQ alerts. Needs to be able to login.
-    """
-    pass
+class QQAlertsStrategy(BaseStrategy):
+	"""
+	Check QQ alerts. 
+
+	Config data should include username, password, and optionally 
+	whether to include notifications other than likely story updates.
+	"""
+	login_url = "https://forum.questionablequesting.com/login/login"
+	alerts_url = "https://forum.questionablequesting.com/account/alerts"
+
+	@dataclass
+	class AlertInfo:
+		author_name: str | None = None
+		author_link: str | None = None
+		avatar_image_url: str | None = None
+		post_link: str | None = None
+		alert_text: str | None = None
+		post_time: time | None = None
+		# lengthy ergo likely a chapter post
+		lengthy_response: bool = False
+		post_date: date | None = None
+
+		def to_json(self) -> str:
+			json_dict = {
+				'author_name': self.author_name,
+				'author_link': self.author_link,
+				'avatar_image_url': self.avatar_image_url,
+				'post_link': self.post_link,
+				'alert_text': self.alert_text,
+				'lengthy_response': self.lengthy_response,
+				'post_date': None if self.post_date is None else self.post_date.isoformat(),
+				'post_time': None if self.post_time is None else self.post_time.strftime('%H:%M:%S')
+			}
+			return json.dumps(json_dict)
+
+		@classmethod
+		def from_json(cls, json_str: str) -> 'AlertInfo':
+			json_dict = json.loads(json_str)
+			post_date = None if json_dict['post_date'] is None else date.fromisoformat(json_dict['post_date'])
+			post_time = None if json_dict['post_time'] is None else time.fromisoformat(json_dict['post_time'])
+			return cls(
+				author_name=json_dict['author_name'],
+				author_link=json_dict['author_link'],
+				avatar_image_url=json_dict['avatar_image_url'],
+				post_link=json_dict['post_link'],
+				alert_text=json_dict['alert_text'],
+				lengthy_response=json_dict['lengthy_response'],
+				post_date=post_date,
+				post_time=post_time
+			)
+		
+		def __str__(self):
+			return f"Alert Information:\n" \
+				f"- Author Name: {self.author_name}\n" \
+				f"- Author Link: {self.author_link}\n" \
+				f"- Avatar Image URL: {self.avatar_image_url}\n" \
+				f"- Post Link: {self.post_link}\n" \
+				f"- Alert Text: {self.alert_text}\n" \
+				f"- Date: {self.post_date}\n" \
+				f"- Time: {self.post_time}\n" \
+				f"- Likely chapter: {self.lengthy_response}"
+
+	def can_scrape_url(self, url: URL) -> bool:
+		parsed_url = urlsplit(url)
+
+		alerts_domain = urlsplit(self.alerts_url).netloc
+		alerts_path = urlsplit(self.alerts_url).path
+
+		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
+
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], 
+			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+		if not self.can_scrape_url(url):
+			return ("Invalid URL", None)
+		updates = []
+
+		username: str = config_data['username'] 
+		password: str = config_data['password'] 
+		# Whether to include all alerts, or only those likely to be a new chapter
+		include_all: bool = bool(config_data['include_all'])
+
+		last_alert_datetime_str = comparison_data['last_alert']
+		last_alert_datetime = datetime.strptime(last_alert_datetime_str, "%Y-%m-%d %H:%M:%S")
+
+		resp = self._get_alerts_html(username, password)
+		alerts = self._extract_alerts(resp.text)
+
+		# Fill updates with new alerts
+		for alert in alerts:
+			if alert.post_date is not None and alert.post_time is not None:
+				alert_dt = datetime.combine(alert.post_date, alert.post_time)
+
+				if alert_dt > last_alert_datetime and (include_all or alert.lengthy_response):
+					title = "QQ: " + (
+							f"Likely chapter by {alert.author_name}" 
+							if alert.lengthy_response 
+							else f"Alert - {alert.author_name}"
+						)
+					description = alert.alert_text
+					link = alert.post_link
+
+					updates.append((title, description, link))
+
+		new_data = None
+		# search alerts for latest update (discarding those with None time)
+		for alert in alerts:
+			if alert.post_date is not None and alert.post_time is not None:
+				alert_dt = datetime.combine(alert.post_date, alert.post_time)
+
+				if alert_dt > last_alert_datetime and (include_all or alert.lengthy_response):
+					new_data = { "last_alert": alert_dt.strftime("%Y-%m-%d %H:%M:%S") }
+					break
+
+		return updates, new_data
+
+	@staticmethod
+	def _extract_alerts(html: str) -> list[AlertInfo]:
+		groups = _get_content_with_css_selector(html, '.alertGroup')
+
+		alerts = []
+		for group in groups:
+			date_text = group.select('h2.textHeading')[0].text
+			date = QQAlertsStrategy._convert_relative_date(date_text)
+
+			alert_list_items = group.select("li.primaryContent")
+			for alert in alert_list_items:
+				alert_info = QQAlertsStrategy._extract_alert_info(alert)
+				alert_info.post_date = date
+				alerts.append(alert_info)
+
+		return alerts
+
+	@staticmethod
+	def _get_alerts_html(username: str, password: str) -> requests.Response:
+		parsed_url = urlsplit(QQAlertsStrategy.alerts_url)
+
+		session_cookie_name = 'xf_session'
+		# mce_cookie_name = 'xf_mce_ccv'
+
+		payload = {
+			'login': username,
+			'register': '0',
+			'password': password,
+			'cookie_check': '1',
+			'_xfToken': '',
+			'redirect': '/account/alerts'
+		}
+
+		user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36 Edg/105.0.1343.42"
+		login_headers = {
+			"User-Agent": user_agent,
+			'Referer': QQAlertsStrategy.alerts_url,
+			'Host': parsed_url.netloc,
+			'Origin': f"{parsed_url.scheme}://{parsed_url.netloc}",
+		}
+
+		with requests.Session() as session:
+			getRes = session.get(QQAlertsStrategy.alerts_url)
+			sessionCookie = getRes.cookies.get(session_cookie_name)
+			login_headers['Cookie'] = f"{session_cookie_name}={sessionCookie}"
+
+			# Adds login_headers to session
+			for (header, value) in login_headers.items():
+				session.headers[header] = value
+
+			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
+			response = session.post(QQAlertsStrategy.login_url, data=payload)
+			session.close()
+
+		return response
+
+	@staticmethod
+	def _extract_alert_info(notif: Tag) -> AlertInfo:
+		parsed_url = urlsplit(QQAlertsStrategy.alerts_url)
+		url: URL = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
+		# Initialize the fields with None
+		author_name = None
+		author_link = None
+		avatar_image_url = None
+		post_link = None
+		alert_text = None
+		post_time = None
+
+		# Extract author name and link
+		author_tag = notif.find('a', class_='username subject')
+		if author_tag is not None:
+			author_name = author_tag.text.strip()
+			author_link = f"{url}/{author_tag['href']}"
+
+		# Extract author avatar image URL
+		avatar_img = notif.find('img')
+		if avatar_img is not None:
+			avatar_image_url = f"{url}/{avatar_img['src']}"
+
+		# Extract post link
+		post_link_tag = notif.find('a', class_='PopupItemLink')
+		if post_link_tag is not None:
+			post_link = f"{url}/{post_link_tag['href']}"
+
+		time_tag = notif.find('span', class_='time')
+		if time_tag is not None:
+			time_as_list = list([int(s) for s in time_tag.text.strip().split(':')])
+			# If given hours and minutes, or HH MM ss
+			if len(time_as_list) in [2, 3]:
+				post_time = time(time_as_list[0], time_as_list[1])
+
+		# Extract alert text
+		lengthy_response = False
+		alert_text_div = notif.find('div', class_='alertText')
+		if alert_text_div is not None:
+			alert_text = alert_text_div.text.strip()
+			alert_text = alert_text.replace('\n', ' ')
+
+			# Remove the time from alert text
+			if time_tag is not None:
+				alert_text = alert_text.replace(time_tag.text.strip(), '')
+
+			regex_pattern = r'replied with [0-9]+(\.[0-9]+)?k? words'
+			lengthy_response = bool(re.search(regex_pattern, alert_text))
+
+		# Return the extracted information as an instance of the AlertInfo data class
+		return QQAlertsStrategy.AlertInfo(
+			author_name=author_name,
+			author_link=author_link,
+			avatar_image_url=avatar_image_url,
+			post_link=post_link,
+			alert_text=alert_text,
+			post_time=post_time,
+			lengthy_response=lengthy_response
+		)
+  
+	@staticmethod
+	def _convert_relative_date(relative_date: str) -> date:
+		"""
+		Note, can cause an exception if neither Today, Yesterday, of a valid argument for strptime is provided ("%Y-%m-%d").
+		"""
+		today = datetime.now().date()
+
+		match relative_date:
+			case "Today":
+				return today
+			case "Yesterday":
+				return today - timedelta(days=1)
+			case "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday":
+				weekday = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(relative_date.title())
+				days_offset = (today.weekday() - weekday) % 7
+				return today - timedelta(days=days_offset)
+			case _ if datetime.strptime(relative_date, "%Y/%m/%d"):
+				return datetime.strptime(relative_date, "%Y/%m/%d").date()
+			case _:
+				return datetime.strptime(relative_date, "%Y-%m-%d").date()
+
+
+
