@@ -11,3 +11,5 @@ vscode/
 ../.vscode/*
 debug.log
 *.ipynb
+secrets.*
+*.secrets
