@@ -393,4 +393,135 @@ class QQAlertsStrategy(BaseStrategy):
 				return datetime.strptime(relative_date, "%Y-%m-%d").date()
 
 
+@dataclass
+class KemonoCardInfo:
+    name: str | None = None
+    date_time: datetime | None = None
+    service: str | None = None
+    link: URL | None = None
 
+    def to_json(self) -> str:
+        json_dict = {
+            'name': self.name,
+            'date_time': None if self.date_time is None else self.date_time.isoformat(),
+            'service': self.service,
+            'link': self.link
+        }
+        return json.dumps(json_dict)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> 'KemonoCardInfo':
+        json_dict = json.loads(json_str)
+        date_time = None if json_dict['date_time'] is None else datetime.fromisoformat(json_dict['date_time'])
+        return cls(
+            name=json_dict['name'],
+            date_time=date_time,
+            service=json_dict['service'],
+            link=json_dict['link']
+        )
+
+    def __str__(self):
+        return f"Kemono Profile Information:\n" \
+            f"- Service: {self.service}\n" \
+            f"- Name: {self.name}\n" \
+            f"- Date and Time: {self.date_time}\n" \
+            f"- Link: {self.link}"
+
+
+@register
+class KemonoFavouritesStrategy(BaseStrategy):
+	"""
+	Check Kemono favourites. 
+
+	Config data should include username, password.
+	"""
+	login_url = 'https://kemono.party/account/login'
+	fav_url = 'https://kemono.party/favorites'
+
+	def can_scrape_url(self, url: URL) -> bool:
+		parsed_url = urlsplit(url)
+
+		alerts_domain = urlsplit(self.fav_url).netloc
+		alerts_path = urlsplit(self.fav_url).path
+
+		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
+
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], 
+			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+		if not self.can_scrape_url(url):
+			return ("Invalid URL", None)
+		updates = []
+
+		username: str = config_data['username'] 
+		password: str = config_data['password'] 
+
+		last_update_datetime_str = comparison_data['last_update']
+		last_update_datetime = datetime.strptime(last_update_datetime_str, "%Y-%m-%d %H:%M:%S")
+
+		resp = self._get_favourites_html(username, password)
+		cards = self._extract_kemono_profile_cards(resp.text)
+
+		# Fill updates with new alerts
+		for card in cards:
+			if card.date_time is not None and card.date_time > last_update_datetime:
+				title = f"Kemono: {card.name} - {card.service}"
+				description = f"New posts by {card.name} on {card.service}, time {card.date_time}"
+				link = card.link
+
+				updates.append((title, description, link))
+
+		new_data = None
+		# search alerts for latest update (discarding those with None time)
+		for card in cards:
+			if card.date_time is not None and card.date_time > last_update_datetime:
+				json_dt = json.loads(card.to_json())['date_time']
+				new_data = { "last_update": json_dt }
+				break
+
+		return updates, new_data
+
+	@staticmethod
+	def _extract_kemono_profile_cards(html: str) -> list[KemonoCardInfo]:
+		card_tags = _get_content_with_css_selector(html, ".user-card")
+		parsed_url = urlsplit(KemonoFavouritesStrategy.fav_url)
+		url: URL = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
+		cards = []
+		for card_tag in card_tags:
+			service = card_tag.select_one('.user-card__service')
+			if service is not None:
+				service = service.text.strip()
+
+			name = card_tag.select_one('.user-card__name')
+			if name is not None:
+				name = name.text.strip()
+			
+			dt = card_tag.select_one('time.timestamp')
+			if dt is not None:
+				dt = datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f")
+
+			link = card_tag.attrs.get('href', None)
+			if link is not None:
+				link = url + '/' + link
+
+			cards.append(KemonoCardInfo(name, dt, service, link))
+
+		return cards
+
+	@staticmethod
+	def _get_favourites_html(username: str, password: str) -> requests.Response:
+		data = {
+			"username": f"{username}",
+			"password": f"{password}",
+		}
+
+		with requests.session() as session:
+			login_response = session.post(KemonoFavouritesStrategy.login_url, data=data)
+			assert login_response.status_code == requests.codes.ok
+
+			fav_response = session.get(KemonoFavouritesStrategy.fav_url)
+			assert fav_response.status_code == requests.codes.ok
+
+			session.close()
+
+		return fav_response
