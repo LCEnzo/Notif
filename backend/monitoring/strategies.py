@@ -1,6 +1,10 @@
 # This file contains scraping strategies/callables
 # This whole file is TODO
 
+# TODO:
+# 1. Add batch fetch to Strat classes. By default call _scrape for every URL.
+# Implement via requests session, to reduce network load, and request spam.
+
 from typing import TypeAlias, Any
 from abc import ABC, abstractmethod
 from urllib.parse import urlsplit
@@ -125,13 +129,140 @@ class GeneralSelectorStrategy(BaseStrategy):
 		return updates, new_data
 
 
-@register
-class SpaceBattlesThreadmarksStrategy(BaseStrategy):
-	"""
-	Check SpaceBattles threadmarks. Configuration should specify which threadmark tabs should be checked.
-	"""
-	pass
+@dataclass
+class SThreadmarkInfo:
+    title: str | None = None
+    word_count: str | None = None
+    pub_date: datetime | None = None
+    link: URL | None = None
 
+    def to_json(self) -> str:
+        json_dict = {
+            'title': self.title,
+            'word_count': self.word_count,
+            'pub_date': None if self.pub_date is None else self.pub_date.isoformat(),
+            'link': self.link
+        }
+        return json.dumps(json_dict)
+
+    @classmethod
+    def from_json(cls, json_str: str) -> 'SThreadmarkInfo':
+        json_dict = json.loads(json_str)
+        pub_date = None if json_dict['pub_date'] is None else datetime.fromisoformat(json_dict['pub_date'])
+        return cls(
+            title=json_dict['title'],
+            word_count=json_dict['word_count'],
+            pub_date=pub_date,
+            link=json_dict['link']
+        )
+
+    def __str__(self):
+        return f"SThreadmark Information:\n" \
+               f"- Title: {self.title}\n" \
+               f"- Word Count: {self.word_count}\n" \
+               f"- Pub Date: {self.pub_date}\n" \
+               f"- Link: {self.link}"
+
+@register
+class SBSVThreadmarksStrategy(BaseStrategy):
+	"""
+	Check SpaceBattles and SufficientVelocity threadmarks. 
+	TODO: Specify in configuration which threadmark tabs should be checked.
+	"""
+	# format used by strptime strftime
+	# found as a attr on an time element
+	time_format: str = "%Y-%m-%dT%H:%M:%S%z"
+
+	def can_scrape_url(self, url: URL) -> bool:
+		return ('forums.spacebattles.com/threads' in url) or (
+			'forums.sufficientvelocity.com/threads' in url)
+
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], 
+				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+		last_alert_str = comparison_data.get('last_alert')
+		
+		last_alert: datetime | None = (
+			datetime.strptime(last_alert_str, self.time_format) 
+			if last_alert_str is not None and last_alert_str is not ''
+			else None
+		)
+		
+		parsed = urlsplit(url)
+		req_url = parsed.scheme + "://" + parsed.netloc + '/' + parsed.path.replace('threadmarks', '')
+		req_url += '/threadmarks-load-range?threadmark_category_id=1'
+
+		response = requests.get(req_url)
+		marks = self._extract_threadmarks(response)
+
+		updates = list([
+			(
+				mark.title if mark.title is not None else "Title not found", 
+				f"New threadmark with {mark.word_count} words, since {mark.pub_date}",
+				mark.link if mark.link is not None else req_url
+			)
+			for mark in marks
+			if mark.pub_date is not None and (
+				mark.pub_date > last_alert # type: ignore
+				or 
+				last_alert is None 
+			)
+		])
+
+		new_data = {}
+		new_data['last_alert'] = ''
+		if len(marks) > 0:
+			latest_mark = marks.pop()
+			while latest_mark.pub_date is None and len(marks) > 0 is not None:
+				latest_mark = marks.pop()
+
+			if last_alert is None or (latest_mark.pub_date is not None and latest_mark.pub_date > last_alert):
+				json_mark = latest_mark.to_json()
+				json.loads(json_mark)
+				new_data['last_alert'] = latest_mark.pub_date.strftime(self.time_format) # type: ignore | already checked by condition
+
+		return updates, new_data
+
+	@staticmethod
+	def _extract_threadmarks(response: requests.Response) -> list[SThreadmarkInfo]:
+		marks: list[SThreadmarkInfo] = []
+		mark_tags = _get_content_with_css_selector(response.text, '.structItem--threadmark')
+
+		base_url = response.url
+		parsed_url = urlsplit(base_url)
+		scheme = parsed_url.scheme
+		netloc = parsed_url.netloc
+		base_url = f"{scheme}://{netloc}"
+
+		for mark_tag in mark_tags:
+			# The title of the threadmark and the href/link are on the same HTML tag
+			title = mark_tag.select_one('a')
+			link = None
+			if title is not None:
+				link = title.attrs.get('href')
+				title = title.text
+				if link is not None:
+					link = base_url + link
+
+			pub_date = mark_tag.select_one('time')
+			if pub_date is not None:
+				if (pub_date := pub_date.attrs.get('datetime')) is not None:
+					pub_date = datetime.strptime(pub_date, "%Y-%m-%dT%H:%M:%S%z")
+
+			wordcount = mark_tag.select_one('dd')
+			if wordcount is not None:
+				wordcount = wordcount.text  
+			
+			mark_info = SThreadmarkInfo(
+					title=title, 
+					word_count=wordcount,
+					pub_date=pub_date,
+					link=link
+				)
+
+			if mark_info.link is not None:
+				marks.append(mark_info)
+
+		return marks
 
 @dataclass
 class AlertInfo:
@@ -426,7 +557,6 @@ class KemonoCardInfo:
             f"- Name: {self.name}\n" \
             f"- Date and Time: {self.date_time}\n" \
             f"- Link: {self.link}"
-
 
 @register
 class KemonoFavouritesStrategy(BaseStrategy):
