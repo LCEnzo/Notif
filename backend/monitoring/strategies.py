@@ -183,7 +183,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		
 		last_alert: datetime | None = (
 			datetime.strptime(last_alert_str, self.time_format) 
-			if last_alert_str is not None and last_alert_str is not ''
+			if last_alert_str is not None and last_alert_str != ''
 			else None
 		)
 		
@@ -212,13 +212,11 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		new_data['last_alert'] = ''
 		if len(marks) > 0:
 			latest_mark = marks.pop()
-			while latest_mark.pub_date is None and len(marks) > 0 is not None:
+			while latest_mark.pub_date is None and len(marks) > 0:
 				latest_mark = marks.pop()
 
-			if last_alert is None or (latest_mark.pub_date is not None and latest_mark.pub_date > last_alert):
-				json_mark = latest_mark.to_json()
-				json.loads(json_mark)
-				new_data['last_alert'] = latest_mark.pub_date.strftime(self.time_format) # type: ignore | already checked by condition
+			if latest_mark.pub_date is not None and (last_alert is None or latest_mark.pub_date > last_alert):
+				new_data['last_alert'] = latest_mark.pub_date.strftime(self.time_format) 
 
 		return updates, new_data
 
