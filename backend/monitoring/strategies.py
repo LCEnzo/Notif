@@ -5,7 +5,7 @@
 # 1. Add batch fetch to Strat classes. By default call _scrape for every URL.
 # Implement via requests session, to reduce network load, and request spam.
 
-from typing import TypeAlias, Any
+from typing import TypeAlias, Any, NewType
 from abc import ABC, abstractmethod
 from urllib.parse import urlsplit
 from dataclasses import dataclass
@@ -19,7 +19,7 @@ from bs4.element import ResultSet, Tag
 
 # Types
 # TODO: Think of moving them to a central location so that the whole app can use them
-URL: TypeAlias = str
+URL = NewType("URL", str)
 NotifData: TypeAlias = list[tuple[str, str, str]]
 DataDict: TypeAlias = None | dict[str, Any]
 NotifDataOrError: TypeAlias = str | NotifData
@@ -254,13 +254,14 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 					title=title, 
 					word_count=wordcount,
 					pub_date=pub_date,
-					link=link
+					link=URL(link) if link is not None else None
 				)
 
 			if mark_info.link is not None:
 				marks.append(mark_info)
 
 		return marks
+
 
 @dataclass
 class AlertInfo:
@@ -442,7 +443,7 @@ class QQAlertsStrategy(BaseStrategy):
 	@staticmethod
 	def _extract_alert_info(notif: Tag) -> AlertInfo:
 		parsed_url = urlsplit(QQAlertsStrategy.alerts_url)
-		url: URL = f"{parsed_url.scheme}://{parsed_url.netloc}"
+		url: URL = URL(f"{parsed_url.scheme}://{parsed_url.netloc}")
 
 		# Initialize the fields with None
 		author_name = None
@@ -612,7 +613,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 	def _extract_kemono_profile_cards(html: str) -> list[KemonoCardInfo]:
 		card_tags = _get_content_with_css_selector(html, ".user-card")
 		parsed_url = urlsplit(KemonoFavouritesStrategy.fav_url)
-		url: URL = f"{parsed_url.scheme}://{parsed_url.netloc}"
+		url: URL = URL(f"{parsed_url.scheme}://{parsed_url.netloc}")
 
 		cards = []
 		for card_tag in card_tags:
@@ -632,7 +633,12 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			if link is not None:
 				link = url + '/' + link
 
-			cards.append(KemonoCardInfo(name, dt, service, link))
+			cards.append(KemonoCardInfo(
+				name=name, 
+				date_time=dt, 
+				service=service, 
+				link=URL(link) if link is not None else None
+			))
 
 		return cards
 
