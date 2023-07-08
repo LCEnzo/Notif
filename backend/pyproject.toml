@@ -1,13 +1,26 @@
 [project]
+name = 'notif'
 requires-python = ">=3.11"
 
 [tool.ruff]
 line-length = 120
 select = [
-	"E",   # pycodestyle
-	"F",   # pyflakes
-	"UP",  # pyupgrade
+	"E",		# pycodestyle
+	"F",		# pyflakes
+	"UP",		# pyupgrade
+	"I",		# isort
+	"N",		# pep8-naming
+	"ASYNC",	# flake8-async
+	"B",		# flake8-bugbear
+	"C4",		# flake8-comprehensions
+	"DTZ",		# flake8-datetimez
+	"DJ",		# flate8-django
+	"RET",		# flake8-return
+	"SIM",		# flake8-simplify
+	"NPY",		# numpy
 ]
+ignore = ["RET501", "RET504"]
+
 
 [tool.pyright]
 exclude = ["**/node_modules",
