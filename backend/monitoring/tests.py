@@ -2,7 +2,7 @@ import logging
 
 from django.test import TestCase
 
-from monitoring.strategies import _fetch_url_content, _get_content_with_css_selector, GeneralSelectorStrategy
+from monitoring.strategies import URL, GeneralSelectorStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -15,10 +15,10 @@ class TestSelectorStrat(TestCase):
 		config_data = { "selectors": ["article.post-card"] }
 		old_data = {}
 		
-		notif_data, new_data = strat(url, config_data, old_data)
+		notif_data, new_data = strat(URL(url), config_data, old_data)
 		
 		logger.debug(
-			f"selector strat on kemono: \t" + 
+			"selector strat on kemono: \t" + 
 			f"{notif_data} \n--------------------------\n" + 
 			f"{new_data}\n--------------------------\n"
 		)
