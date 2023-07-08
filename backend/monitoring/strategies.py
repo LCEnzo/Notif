@@ -5,13 +5,13 @@
 # 1. Add batch fetch to Strat classes. By default call _scrape for every URL.
 # Implement via requests session, to reduce network load, and request spam.
 
-from typing import TypeAlias, Any, NewType
-from abc import ABC, abstractmethod
-from urllib.parse import urlsplit
-from dataclasses import dataclass
-from datetime import time, date, datetime, timedelta
 import json
 import re
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
+from typing import Any, NewType, TypeAlias
+from urllib.parse import urlsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -33,14 +33,14 @@ def register(cls):
 
 
 # Used for choices for the Strategy model
-STRATEGY_CHOICES = [(name, name) for name in registry.keys()]
+STRATEGY_CHOICES = [(name, name) for name in registry]
 
 def _fetch_url_content(url: URL) -> str | None:
 	response = requests.get(url)
 	if response.status_code == requests.codes.ok:
 		return response.text
-	else:
-		return None
+	
+	return None
 
 def _get_content_with_css_selector(html_content: str, css_selector: str) -> ResultSet[Tag]:
 	soup = BeautifulSoup(html_content, 'html.parser')
@@ -101,9 +101,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 
 		new_data = {
 			selector: 
-				list(
-					[hash(ret) for ret in _get_content_with_css_selector(html_content, selector)]
-				) 
+				[hash(ret) for ret in _get_content_with_css_selector(html_content, selector)] 
 			for selector in selectors
 		}
 
@@ -112,10 +110,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 			old_tags = old_data.get(f'{selector}', [])
 			update = False
 
-			if len(tags) != len(old_tags):
-				update = True
-			else:
-				update = tags != old_tags
+			update = len(tags) != len(old_tags) or tags != old_tags
 			
 			if update:
 				split = urlsplit(url)
@@ -194,7 +189,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		response = requests.get(req_url)
 		marks = self._extract_threadmarks(response)
 
-		updates = list([
+		updates = [
 			(
 				mark.title if mark.title is not None else "Title not found", 
 				f"New threadmark with {mark.word_count} words, since {mark.pub_date}",
@@ -206,7 +201,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 				or 
 				last_alert is None 
 			)
-		])
+		]
 
 		new_data = {}
 		new_data['last_alert'] = ''
@@ -242,9 +237,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 					link = base_url + link
 
 			pub_date = mark_tag.select_one('time')
-			if pub_date is not None:
-				if (pub_date := pub_date.attrs.get('datetime')) is not None:
-					pub_date = datetime.strptime(pub_date, "%Y-%m-%dT%H:%M:%S%z")
+			if pub_date is not None and (pub_date := pub_date.attrs.get('datetime')) is not None:
+				pub_date = datetime.strptime(pub_date, "%Y-%m-%dT%H:%M:%S%z")
 
 			wordcount = mark_tag.select_one('dd')
 			if wordcount is not None:
@@ -471,7 +465,7 @@ class QQAlertsStrategy(BaseStrategy):
 
 		time_tag = notif.find('span', class_='time')
 		if time_tag is not None:
-			time_as_list = list([int(s) for s in time_tag.text.strip().split(':')])
+			time_as_list = [int(s) for s in time_tag.text.strip().split(':')]
 			# If given hours and minutes, or HH MM ss
 			if len(time_as_list) in [2, 3]:
 				post_time = time(time_as_list[0], time_as_list[1])
