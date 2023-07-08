@@ -6,7 +6,7 @@ This is a personal project for the purpose of practicing programming and to ease
 
 The application consists of two main components:
 1. Backend - Built using Django, hosted on a VPS.
-2. Android Client - Developed using Kotlin and Jetpack Compose.
+2. ~~Android Client - Developed using Kotlin and Jetpack Compose.~~
 
 ---
 
@@ -30,14 +30,9 @@ The backend has the following apps:
 
 ---
 
-## Android Client
+## Frontend
 
-The Android client is built using Kotlin with Jetpack Compose and interacts with the Django backend through API calls.
-
-Key features:
-1. User account creation and login
-2. User site/URL management (CRUD)
-3. Fetches and displays a list of updates
+Tech TBD - Kotlin or Flutter expected
 
 ---
 
@@ -45,7 +40,7 @@ Key features:
 
 ### Prerequisites
 
-- Python 3.x
+- Python 3.11 (or higher if no breaking changes)
 - Android Studio
 
 ### Installation and Setup
@@ -55,19 +50,23 @@ Key features:
 	git clone https://github.com/your_username/my-update-notifier.git
 	cd backend
 	```
-2. Activate venv
+2. Create a virtual environment if one does not exist
+    ```
+    python3 -m venv venv
+    ```
+3. Activate the virtual environment
 	```
 	source venv/bin/activate
 	```
-3. Install the required Python packages for the backend.
+4. Install the required Python packages for the backend.
 	```
 	pip install -r requirements.txt
 	```
-4. Apply the Django migrations.
+5. Apply the Django migrations.
 	```
 	python manage.py migrate
 	```
-5. Run the Django development server.
+6. Run the Django development server.
 	```
 	python manage.py runserver
 	```
@@ -77,7 +76,9 @@ Key features:
 ## TODOs
 * Create Django app
   * Create accounts app
-	* Test it
+    * Create needed models, views, serializers, permissions, etc
+    * Have CRUD for Users up and running
+	* Test all of this
   * Create URL monitoring app
 	* Create app
 	* Add logic for one site
@@ -85,13 +86,35 @@ Key features:
 	* Repeat for other sites
 	* Create push notification functionality
 	  * Test it   
-* Create Android client
+* Create Android client (Flutter?)
 	* Create log in portion
 	  * Create tests
 	* Create user account management UI (CRUD ops)
 	* Create notifications receiver
 	  * Test it
 	* Create updates list view
-* Create full end to end tests if not hard
+* Create full end to end tests if not difficult
 * Create docker image for server
 * Figure out deployment
+
+---
+
+## Note on tech used:
+
+### Why Python and Django?
+
+I already know Django and Python, and they are good enough for the project. Django is proven in production by a myriad of companies/products including Instagram. The subpar nature of the type system hurts, but for a small projects, it's not an impediment.
+
+### Why Postgresql?
+
+I wanted to try it out, and learn a little about DBs. In practice, a better choice would've been SQLite for the simplicity. Postgresql is overkill.
+
+### Why Flutter?
+
+I wanted to have one frontend for multiple platforms, and it seems a nice choice. The other option I've considered is using Sveltekit for the web, and potentially a native Android app, but that seems like a needless amount of work for now.
+
+### Why Docker and Hetzner?
+
+Hetzner is cheap. Will look into hosting on AWS/Azure/GCP to learn more about cloud later.
+
+Docker - practice and portability.
