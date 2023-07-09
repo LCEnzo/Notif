@@ -6,6 +6,7 @@
 # Implement via requests session, to reduce network load, and request spam.
 
 import json
+import logging
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -17,10 +18,12 @@ import requests
 from bs4 import BeautifulSoup
 from bs4.element import ResultSet, Tag
 
+logger = logging.getLogger(__name__)
+
 # Types
 # TODO: Think of moving them to a central location so that the whole app can use them
 URL = NewType("URL", str)
-NotifData: TypeAlias = list[tuple[str, str, str]]
+NotifData: TypeAlias = list[tuple[str, str, URL]]
 DataDict: TypeAlias = None | dict[str, Any]
 NotifDataOrError: TypeAlias = str | NotifData
 
@@ -215,8 +218,34 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 
 		return updates, new_data
 
-	@staticmethod
-	def _extract_threadmarks(response: requests.Response) -> list[SThreadmarkInfo]:
+	def _extract_title_and_link(self, mark_tag: Tag, base_url: str) -> tuple[str | None, str | None]:
+		# The title of the threadmark and the href/link are on the same HTML tag
+		title_tag = mark_tag.select_one('a')
+		title = link = None
+		if title_tag is not None:
+			title = title_tag.text
+			link = title_tag.attrs.get('href')
+			if link is not None:
+				link = base_url + link
+		return title, link
+
+	def _extract_pub_date(self, mark_tag: Tag) -> datetime | None:
+		pub_date_tag = mark_tag.select_one('time')
+		if pub_date_tag is not None:
+			pub_date_str = pub_date_tag.attrs.get('datetime')
+			if pub_date_str is not None:
+				try:
+					return datetime.strptime(pub_date_str, "%Y-%m-%dT%H:%M:%S%z")
+				except ValueError:
+					logger.error("SBSVThreadmarksStrategy | _extract_pub_date: Value Error {err}")
+					return None
+		return None
+
+	def _extract_wordcount(self, mark_tag: Tag) -> str | None:
+		wordcount_tag = mark_tag.select_one('dd')
+		return wordcount_tag.text if wordcount_tag is not None else None
+
+	def _extract_threadmarks(self, response: requests.Response) -> list[SThreadmarkInfo]:
 		marks: list[SThreadmarkInfo] = []
 		mark_tags = _get_content_with_css_selector(response.text, '.structItem--threadmark')
 
@@ -227,22 +256,9 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		base_url = f"{scheme}://{netloc}"
 
 		for mark_tag in mark_tags:
-			# The title of the threadmark and the href/link are on the same HTML tag
-			title = mark_tag.select_one('a')
-			link = None
-			if title is not None:
-				link = title.attrs.get('href')
-				title = title.text
-				if link is not None:
-					link = base_url + link
-
-			pub_date = mark_tag.select_one('time')
-			if pub_date is not None and (pub_date := pub_date.attrs.get('datetime')) is not None:
-				pub_date = datetime.strptime(pub_date, "%Y-%m-%dT%H:%M:%S%z")
-
-			wordcount = mark_tag.select_one('dd')
-			if wordcount is not None:
-				wordcount = wordcount.text  
+			title, link = self._extract_title_and_link(mark_tag, base_url)
+			pub_date = self._extract_pub_date(mark_tag)
+			wordcount = self._extract_wordcount(mark_tag)
 			
 			mark_info = SThreadmarkInfo(
 					title=title, 
@@ -576,7 +592,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		if not self.can_scrape_url(url):
 			return ("Invalid URL", None)
-		updates = []
+		updates: list[tuple[str, str, URL]] = []
 
 		username: str = config_data['username'] 
 		password: str = config_data['password'] 
@@ -606,35 +622,41 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 		return updates, new_data
 
-	@staticmethod
-	def _extract_kemono_profile_cards(html: str) -> list[KemonoCardInfo]:
+	def _extract_service(self, card_tag: Tag) -> str | None:
+		service = card_tag.select_one('.user-card__service')
+		return service.text.strip() if service is not None else None
+
+	def _extract_name(self, card_tag: Tag) -> str | None:
+		name = card_tag.select_one('.user-card__name')
+		return name.text.strip() if name is not None else None
+
+	def _extract_datetime(self, card_tag: Tag) -> datetime | None:
+		dt = card_tag.select_one('time.timestamp')
+		if dt is not None:
+			return datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f")
+		return None
+
+	def _extract_link(self, card_tag: Tag, url: URL) -> URL | None:
+		link = card_tag.attrs.get('href', None)
+		return URL(url + '/' + link) if link is not None else None
+
+	def _extract_kemono_profile_cards(self, html: str) -> list[KemonoCardInfo]:
 		card_tags = _get_content_with_css_selector(html, ".user-card")
 		parsed_url = urlsplit(KemonoFavouritesStrategy.fav_url)
 		url: URL = URL(f"{parsed_url.scheme}://{parsed_url.netloc}")
 
 		cards = []
 		for card_tag in card_tags:
-			service = card_tag.select_one('.user-card__service')
-			if service is not None:
-				service = service.text.strip()
-
-			name = card_tag.select_one('.user-card__name')
-			if name is not None:
-				name = name.text.strip()
-			
-			dt = card_tag.select_one('time.timestamp')
-			if dt is not None:
-				dt = datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f")
-
-			link = card_tag.attrs.get('href', None)
-			if link is not None:
-				link = url + '/' + link
+			service = self._extract_service(card_tag)
+			name = self._extract_name(card_tag)
+			dt = self._extract_datetime(card_tag)
+			link = self._extract_link(card_tag, url)
 
 			cards.append(KemonoCardInfo(
 				name=name, 
 				date_time=dt, 
 				service=service, 
-				link=URL(link) if link is not None else None
+				link=link
 			))
 
 		return cards

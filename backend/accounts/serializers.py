@@ -18,9 +18,10 @@ class UserCreationSerializer(ModelSerializer):
         instance = self.Meta.model(**validated_data)
 
         if password is None:
-            password = instance.set_unusable_password()
-
-        instance.set_password(password)
+            instance.set_unusable_password()
+        else:
+            instance.set_password(password)
+    
         instance.save()
         return instance
     
