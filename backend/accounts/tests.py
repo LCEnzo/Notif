@@ -25,7 +25,7 @@ def login_client(api_client: APIClient, username: str, password: str = password)
     return api_client
 
 
-class SetupMixin(TestCase):
+class SetupMixin:
     @classmethod
     def setUpTestData(cls):
         # Create users

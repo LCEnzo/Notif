@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 
-from django.shortcuts import render
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.serializers import BaseSerializer
 from rest_framework.viewsets import ModelViewSet
