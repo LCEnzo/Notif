@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,7 +26,7 @@ SECRET_KEY = 'django-insecure-e2z2l51_b_z%#fv-b$ai7%$_5eg4ndt8dr3_$p2nyek3rtpcj+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [] # type: ignore
 
 
 # Application definition
@@ -38,6 +39,7 @@ INSTALLED_APPS = [
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
 	'rest_framework',
+    'rest_framework_simplejwt',
 	'accounts',
 	'monitoring',
 ]
@@ -112,6 +114,7 @@ AUTH_PASSWORD_VALIDATORS = [
 	},
 ]
 
+AUTH_USER_MODEL = 'accounts.User'
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/
@@ -141,8 +144,7 @@ REST_FRAMEWORK = {
 		'rest_framework.permissions.IsAuthenticated',
 	],
 	'DEFAULT_AUTHENTICATION_CLASSES': [
-		'rest_framework.authentication.BasicAuthentication',
-		'rest_framework.authentication.SessionAuthentication',
+		'rest_framework_simplejwt.authentication.JWTAuthentication',
 	],
 }
 
@@ -175,3 +177,21 @@ if DEBUG:
         "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
         "django.contrib.auth.hashers.ScryptPasswordHasher",
     ]
+    
+
+# https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=20),
+    "REFRESH_TOKEN_LIFETIME": timedelta(hours=30),
+
+    "LEEWAY": 0,
+
+    "AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
+    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+    "USER_ID_FIELD": "id",
+    "USER_ID_CLAIM": "user_id",
+
+    "SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
+    "SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
+    "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
+}

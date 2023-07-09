@@ -11,17 +11,17 @@ from commons.utils import create_users, password
 
 
 def login_client(api_client: APIClient, username: str, password: str = password) -> APIClient:
-    api_client.force_authenticate(User.objects.filter(username=username).first())
-    # login_response = api_client.post(
-    #     "/auth/login/", data={"email": username, "password": password}, format="json"
-    # )
+    login_response = api_client.post(
+        path=reverse("token_obtain_pair"), 
+        data={"username": username, "password": password}, 
+        format="json"
+    )
+    assert login_response.status_code == status.HTTP_200_OK
 
-    # assert login_response.status_code == status.HTTP_200_OK
-
-    # jwt = login_response.data.get("jwt")
-    # assert jwt is not None
-    # api_client.credentials(HTTP_AUTHORIZATION=f"{jwt}")
-
+    jwt = login_response.data.get("access")
+    assert jwt is not None
+    
+    api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {jwt}")
     return api_client
 
 
