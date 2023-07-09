@@ -13,8 +13,8 @@ class IsRequestingThemselves(BasePermission):
         has_requestee = 'pk' in view.kwargs
         
         if has_requester and has_requestee:
-            requester_pk = request.user.pk
-            requestee_pk = view.kwargs['pk']
+            requester_pk = int(request.user.pk)
+            requestee_pk = int(view.kwargs['pk'])
             
             return requester_pk == requestee_pk
         
