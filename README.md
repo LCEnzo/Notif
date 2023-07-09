@@ -6,7 +6,7 @@ This is a personal project for the purpose of practicing programming and to ease
 
 The application consists of two main components:
 1. Backend - Built using Django, hosted on a VPS.
-2. ~~Android Client - Developed using Kotlin and Jetpack Compose.~~
+2. Frontend ~~Android Client - Developed using Kotlin and Jetpack Compose.~~
 
 ---
 
@@ -40,8 +40,9 @@ Tech TBD - Kotlin or Flutter expected
 
 ### Prerequisites
 
+As currently, only the backend has code, the prerequisites are:
+
 - Python 3.11 (or higher if no breaking changes)
-- Android Studio
 
 ### Installation and Setup
 
@@ -76,26 +77,31 @@ Tech TBD - Kotlin or Flutter expected
 ## TODOs
 * Create Django app
   * Create accounts app
-    * Create needed models, views, serializers, permissions, etc
-    * Have CRUD for Users up and running
-	* Test all of this
   * Create URL monitoring app
-	* Create app
-	* Add logic for one site
-	  * Test it
-	* Repeat for other sites
-	* Create push notification functionality
-	  * Test it   
-* Create Android client (Flutter?)
-	* Create log in portion
-	  * Create tests
-	* Create user account management UI (CRUD ops)
-	* Create notifications receiver
-	  * Test it
-	* Create updates list view
+* Create some kind of client
+  * Add registration
+  * Add basic account management (CRUD)
+  * Add UI for URL/link (CRUD)
+  * Add push notification receiver
 * Create full end to end tests if not difficult
 * Create docker image for server
 * Figure out deployment
+
+Should polish as the project is being written. This includes:
+* Rate limiting
+* CI/CD for making migrations, deployment, and running tests, among other things
+* Social login/register
+* End to end testing
+* Refactor arch for scalability (examples include adding , , ) 
+  * caching (redis?)
+  * refactoring scraping 
+    * to limit per second requests to a single domain	
+    * spreading out requests over time
+    * serve multiple users (who have the same link) with a single request
+    * ...
+* Add Selenium as a (fallback) option
+* Discord and/or Slack bots
+* Email notifications
 
 ---
 

@@ -420,9 +420,9 @@ class QQAlertsStrategy(BaseStrategy):
 		}
 
 		with requests.Session() as session:
-			getRes = session.get(QQAlertsStrategy.alerts_url)
-			sessionCookie = getRes.cookies.get(session_cookie_name)
-			login_headers['Cookie'] = f"{session_cookie_name}={sessionCookie}"
+			get_response = session.get(QQAlertsStrategy.alerts_url)
+			session_cookie = get_response.cookies.get(session_cookie_name)
+			login_headers['Cookie'] = f"{session_cookie_name}={session_cookie}"
 
 			# Adds login_headers to session
 			for (header, value) in login_headers.items():
@@ -498,7 +498,8 @@ class QQAlertsStrategy(BaseStrategy):
 	@staticmethod
 	def _convert_relative_date(relative_date: str) -> date:
 		"""
-		Note, can cause an exception if neither Today, Yesterday, of a valid argument for strptime is provided ("%Y-%m-%d").
+		Note, can cause an exception if neither Today, Yesterday, 
+		of a valid argument for strptime is provided ("%Y-%m-%d").
 		"""
 		today = datetime.now().date()
 
@@ -508,7 +509,9 @@ class QQAlertsStrategy(BaseStrategy):
 			case "Yesterday":
 				return today - timedelta(days=1)
 			case "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday":
-				weekday = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(relative_date.title())
+				weekday = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(
+						relative_date.title()
+					)
 				days_offset = (today.weekday() - weekday) % 7
 				return today - timedelta(days=days_offset)
 			case _ if datetime.strptime(relative_date, "%Y/%m/%d"):

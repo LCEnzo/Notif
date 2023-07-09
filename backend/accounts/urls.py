@@ -1,5 +1,14 @@
-from accounts import views
+from rest_framework.routers import DefaultRouter
 
-urlpatterns = [
+from accounts.views import (
+    UserViewSet,
+)
+
+router = DefaultRouter()
+
+router.register(r"users", UserViewSet, basename="users")
+
+urlpatterns = router.urls
+urlpatterns += [
 
 ]

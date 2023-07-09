@@ -1,6 +1,7 @@
-from django.core.exceptions import ValidationError
-from math import log2
 import string
+from math import log2
+
+from django.core.exceptions import ValidationError
 
 # Calculate the minimum entropy required by default
 time_in_seconds = 100 * 365 * 24 * 60 * 60  # 100 years in seconds
@@ -48,7 +49,7 @@ class EntropyValidator:
 		categories = [has_digit, has_lower, has_upper, has_punct, has_other]
 		lengths = [10, 26, 26, len(string.punctuation), 40]
 		char_set = sum(
-			cat * length if cat else 0 for cat, length in zip(categories, lengths)
+			cat * length if cat else 0 for cat, length in zip(categories, lengths, strict=True)
 		)
 
 		password_entropy = log2(char_set) * len(password)

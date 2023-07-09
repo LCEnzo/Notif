@@ -1,4 +1,5 @@
 from django.db import models
+
 from accounts.models import User
 from monitoring import strategies
 
@@ -10,9 +11,11 @@ class Strategy(models.Model):
 	function = models.CharField(
 		max_length=256,
 		choices=strategies.STRATEGY_CHOICES,
-		null=True,
-		default=None,
+		default="",
 	)
+
+	def __str__(self):
+		return f"Strategy {self.pk}: {self.function}"
 
 
 class Link(models.Model):
@@ -26,3 +29,5 @@ class Link(models.Model):
 	# I should consider what type of field to have
 	comparison_info = models.CharField(max_length=16*16*1024, default='')
 
+	def __str__(self):
+		return f"Link {self.pk} - {self.name}: {self.url}"
