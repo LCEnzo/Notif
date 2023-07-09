@@ -78,7 +78,7 @@ As currently, only the backend has code, the prerequisites are:
 * Create Django app
   * Create accounts app
   * Create URL monitoring app
-  * Fix timezone handling
+  * Fix timezone code
   * Set up environ
 * Create some kind of client
   * Add registration
@@ -90,6 +90,8 @@ As currently, only the backend has code, the prerequisites are:
 * Figure out deployment
 
 Should polish as the project is being written. This includes:
+* OpenAPI documentation
+* API versioning
 * Rate limiting
 * CI/CD for making migrations, deployment, and running tests, among other things
 * Social login/register

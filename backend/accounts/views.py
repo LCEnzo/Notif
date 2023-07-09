@@ -29,7 +29,7 @@ class UserViewSet(ModelViewSet):
             case _:
                 return UserMinimalReadSerializer
 
-    def get_permissions(self) -> Sequence:
+    def get_permissions(self):
         # Account creation, ie. registration, needs to work for visitors without an account
         if self.request.method == "POST" and self.kwargs.get('pk', None) is not None:
             return []

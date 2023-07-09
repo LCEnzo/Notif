@@ -79,7 +79,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 	USERNAME_FIELD = 'username'
 	EMAIL_FIELD = 'email'
-	REQUIRED_FIELDS = [USERNAME_FIELD, EMAIL_FIELD]
+	REQUIRED_FIELDS = [EMAIL_FIELD]
 
 	# Soft delete by default
 	def delete(self):
