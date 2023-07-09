@@ -78,6 +78,8 @@ As currently, only the backend has code, the prerequisites are:
 * Create Django app
   * Create accounts app
   * Create URL monitoring app
+  * Fix timezone handling
+  * Set up environ
 * Create some kind of client
   * Add registration
   * Add basic account management (CRUD)

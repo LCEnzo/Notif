@@ -10,9 +10,9 @@ class UserManager(BaseUserManager):
 			raise ValueError("Email is required")
 		email = self.normalize_email(email)
 		user = self.model(email=email, username=username, **extra_fields)
-		user.set_password(password)
+		user.set_password(password) # type: ignore
 		user.save(using=self._db)
-		return user
+		return user # type: ignore
 
 	def create_superuser(self, email: str, username: str, password: str, **extra_fields) -> "User":
 		extra_fields["is_staff"] = True
