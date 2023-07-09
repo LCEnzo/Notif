@@ -179,7 +179,7 @@ class ViewSetMixin(SetupMixin, TestCase):
     def _test_permissions(self, user: User, obj_pk: int, password: str = password, 
                           fields: dict[str, Any] | None = None, update_fields: dict[str, Any] | None = None, 
                           permissions: dict[str, bool] | None = None) \
-                            -> tuple[HttpResponse, HttpResponse, HttpResponse, HttpResponse, HttpResponse]:
+                            -> tuple[HttpResponse, ...]:
         """
         Test the permissions of the given user.
         
@@ -242,7 +242,7 @@ class ViewSetMixin(SetupMixin, TestCase):
         # setup, responses contains the return values
         client = login_client(APIClient(), user.get_username(), password)
         self.assertTrue(self.model.objects.filter(pk=obj_pk).exists()) # type: ignore
-        responses = []
+        responses: list[HttpResponse] = []
 
         # get list
         url = reverse(self.list_view_name)
