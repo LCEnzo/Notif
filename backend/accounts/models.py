@@ -1,9 +1,11 @@
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
+from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
-from django.contrib.auth.models import BaseUserManager, AbstractBaseUser, PermissionsMixin, Group, Permission
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
-	def create_user(self, email: str, username: str, password: str, **extra_fields):
+	def create_user(self, email: str, username: str, password: str, **extra_fields) -> "User":
 		if not email:
 			raise ValueError("Email is required")
 		email = self.normalize_email(email)
@@ -12,15 +14,34 @@ class UserManager(BaseUserManager):
 		user.save(using=self._db)
 		return user
 
-	def create_superuser(self, email: str, username: str, password: str, **extra_fields):
-		extra_fields.setdefault("is_staff", True)
-		extra_fields.setdefault("is_superuser", True)
+	def create_superuser(self, email: str, username: str, password: str, **extra_fields) -> "User":
+		extra_fields["is_staff"] = True
+		extra_fields["is_superuser"] = True
 		return self.create_user(email, username, password, **extra_fields)        
+	
+	def get_queryset(self):
+		return super().get_queryset().filter(date_deleted__isnull=True)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-	username = models.CharField(max_length=50)
+	class Meta:
+		verbose_name = "user"
+		verbose_name_plural = "users"
+
+	username_validator = UnicodeUsernameValidator()
+
+	name = models.CharField(max_length=64, default="Anon")
+	username = models.CharField(
+        max_length=150,
+        unique=True,
+        help_text="Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.",
+        validators=[username_validator],
+        error_messages={
+            "unique": "A user with that username already exists.",
+        },
+    )
 	email = models.EmailField(unique=True)
+	
 	groups = models.ManyToManyField(
 		Group, 
 		blank=True,
@@ -33,8 +54,40 @@ class User(AbstractBaseUser, PermissionsMixin):
 		related_name='users', 
 		related_query_name='users',
 	)
+	
+	# Bookkeeping
+	date_created = models.DateTimeField(auto_now_add=True)
+	date_modified = models.DateTimeField(auto_now=True)
+	date_deleted = models.DateTimeField(null=True, blank=True)
+
+	# Django admin panel permission
+	is_staff = models.BooleanField(
+        "staff status",
+        default=False,
+        help_text="Designates whether the user can log into this admin site.",
+    )
+	is_active = models.BooleanField(
+		"active",
+		default=True,
+		help_text=(
+			"Designates whether this user should be treated as active. "
+			"Unselect this instead of deleting accounts."
+		),
+	)
 
 	objects = UserManager()
 
 	USERNAME_FIELD = 'username'
 	EMAIL_FIELD = 'email'
+	REQUIRED_FIELDS = [USERNAME_FIELD, EMAIL_FIELD]
+
+	# Soft delete by default
+	def delete(self):
+		self.date_deleted = timezone.now()
+		self.is_active = False
+		self.save()
+
+	def actually_delete(self, using=None, keep_parents=False):
+		super().delete(using=using, keep_parents=keep_parents)
+
+
