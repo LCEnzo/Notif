@@ -236,8 +236,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			if pub_date_str is not None:
 				try:
 					return datetime.strptime(pub_date_str, "%Y-%m-%dT%H:%M:%S%z")
-				except ValueError:
-					logger.error("SBSVThreadmarksStrategy | _extract_pub_date: Value Error {err}")
+				except ValueError as err:
+					logger.error(f"SBSVThreadmarksStrategy | _extract_pub_date: Value Error {err}")
 					return None
 		return None
 
