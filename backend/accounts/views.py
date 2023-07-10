@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.serializers import BaseSerializer
@@ -32,6 +31,6 @@ class UserViewSet(ModelViewSet):
     def get_permissions(self):
         # Account creation, ie. registration, needs to work for visitors without an account
         if self.request.method == "POST": 
-            return [IsAuthenticated()]
+            return []
 
         return super().get_permissions()
