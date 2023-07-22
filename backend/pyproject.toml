@@ -20,7 +20,8 @@ select = [
 	"NPY",		# numpy
 ]
 ignore = ["RET501", "RET504"]
-exclude = ["**/node_modules",
+exclude = [
+	"**/node_modules",
 	"**/__pycache__",
 	"**/experimental",
 	"**/typestubs",

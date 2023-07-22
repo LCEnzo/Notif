@@ -44,35 +44,50 @@ As currently, only the backend has code, the prerequisites are:
 
 - Python 3.11 (or higher if no breaking changes)
 
+Instructions assume you are using a Debian derived Linux distro.
+
 ### Installation and Setup
 
+
 1. Clone the repository.
-	```
+	```bash
 	git clone https://github.com/your_username/my-update-notifier.git
 	cd backend
 	```
 2. Create a virtual environment if one does not exist
-    ```
+    ```bash
     python3 -m venv venv
     ```
 3. Activate the virtual environment
-	```
+	```bash
 	source venv/bin/activate
 	```
 4. Install the required Python packages for the backend.
-	```
+	```bash
 	pip install -r requirements.txt
 	```
-5. Apply the Django migrations.
+5. Create an `.env` file.
+	```bash
+	cat .env.example > .env
 	```
+6. Apply the Django migrations.
+	```bash
 	python manage.py migrate
 	```
-6. Run the Django development server.
-	```
+7. Run the Django development server.
+	```bash
 	python manage.py runserver
 	```
 
----
+## Misc
+
+### Secret Key Gen
+
+The following will change the Django secret key in `.env`.
+```bash
+python manage.py regenerate_secret_key
+```
+
 
 ## TODOs
 * Create Django app
