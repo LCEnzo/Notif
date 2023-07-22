@@ -44,7 +44,7 @@ INSTALLED_APPS = [
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
 	'rest_framework',
-    'rest_framework_simplejwt',
+	'rest_framework_simplejwt',
 	'accounts',
 	'monitoring',
 ]
@@ -171,32 +171,32 @@ LOGGING = {
 
 
 if DEBUG:
-    # https://stackoverflow.com/questions/18273110/django-make-password-too-slow-for-creating-large-list-of-users-programatically
-    # https://docs.djangoproject.com/en/4.2/topics/auth/passwords/
-    # This cuts done user creation time from ~270ms to 2.2ms on my laptop, but compromises security.
-    PASSWORD_HASHERS = [
-        'django.contrib.auth.hashers.MD5PasswordHasher',
-        "django.contrib.auth.hashers.PBKDF2PasswordHasher",
-        "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
-        "django.contrib.auth.hashers.Argon2PasswordHasher",
-        "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
-        "django.contrib.auth.hashers.ScryptPasswordHasher",
-    ]
-    
+	# https://stackoverflow.com/questions/18273110/django-make-password-too-slow-for-creating-large-list-of-users-programatically
+	# https://docs.djangoproject.com/en/4.2/topics/auth/passwords/
+	# This cuts done user creation time from ~270ms to 2.2ms on my laptop, but compromises security.
+	PASSWORD_HASHERS = [
+		'django.contrib.auth.hashers.MD5PasswordHasher',
+		"django.contrib.auth.hashers.PBKDF2PasswordHasher",
+		"django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+		"django.contrib.auth.hashers.Argon2PasswordHasher",
+		"django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+		"django.contrib.auth.hashers.ScryptPasswordHasher",
+	]
+	
 
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=20),
-    "REFRESH_TOKEN_LIFETIME": timedelta(hours=30),
+	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20),
+	"REFRESH_TOKEN_LIFETIME": timedelta(hours=30),
 
-    "LEEWAY": 0,
+	"LEEWAY": 0,
 
-    "AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
-    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
-    "USER_ID_FIELD": "id",
-    "USER_ID_CLAIM": "user_id",
+	"AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
+	"AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+	"USER_ID_FIELD": "id",
+	"USER_ID_CLAIM": "user_id",
 
-    "SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
-    "SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
-    "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
+	"SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
+	"SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
+	"SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
 }

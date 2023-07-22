@@ -5,13 +5,13 @@ from monitoring.models import Link, Strategy
 
 
 class StrategySerializer(ModelSerializer):
-    class Meta:
-        model = Strategy
-        fields = "__all__"
+	class Meta:
+		model = Strategy
+		fields = "__all__"
 
 
 class LinkSerializer(ModelSerializer):
-    class Meta:
-        model = Link
-        fields = "__all__"
+	class Meta:
+		model = Link
+		fields = "__all__"
 

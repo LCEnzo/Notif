@@ -5,16 +5,16 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("monitoring", "0003_alter_strategy_function"),
-    ]
+	dependencies = [
+		("monitoring", "0003_alter_strategy_function"),
+	]
 
-    operations = [
-        migrations.AlterField(
-            model_name="strategy",
-            name="data",
-            field=models.JSONField(
-                default={}, encoder=django.core.serializers.json.DjangoJSONEncoder
-            ),
-        ),
-    ]
+	operations = [
+		migrations.AlterField(
+			model_name="strategy",
+			name="data",
+			field=models.JSONField(
+				default={}, encoder=django.core.serializers.json.DjangoJSONEncoder
+			),
+		),
+	]

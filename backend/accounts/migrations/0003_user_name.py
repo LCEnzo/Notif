@@ -4,14 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("accounts", "0002_user_date_created_user_date_deleted_and_more"),
-    ]
+	dependencies = [
+		("accounts", "0002_user_date_created_user_date_deleted_and_more"),
+	]
 
-    operations = [
-        migrations.AddField(
-            model_name="user",
-            name="name",
-            field=models.CharField(default="Anon", max_length=64),
-        ),
-    ]
+	operations = [
+		migrations.AddField(
+			model_name="user",
+			name="name",
+			field=models.CharField(default="Anon", max_length=64),
+		),
+	]

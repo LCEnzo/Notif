@@ -129,37 +129,37 @@ class GeneralSelectorStrategy(BaseStrategy):
 
 @dataclass
 class SThreadmarkInfo:
-    title: str | None = None
-    word_count: str | None = None
-    pub_date: datetime | None = None
-    link: URL | None = None
+	title: str | None = None
+	word_count: str | None = None
+	pub_date: datetime | None = None
+	link: URL | None = None
 
-    def to_json(self) -> str:
-        json_dict = {
-            'title': self.title,
-            'word_count': self.word_count,
-            'pub_date': None if self.pub_date is None else self.pub_date.isoformat(),
-            'link': self.link
-        }
-        return json.dumps(json_dict)
+	def to_json(self) -> str:
+		json_dict = {
+			'title': self.title,
+			'word_count': self.word_count,
+			'pub_date': None if self.pub_date is None else self.pub_date.isoformat(),
+			'link': self.link
+		}
+		return json.dumps(json_dict)
 
-    @classmethod
-    def from_json(cls, json_str: str) -> 'SThreadmarkInfo':
-        json_dict = json.loads(json_str)
-        pub_date = None if json_dict['pub_date'] is None else datetime.fromisoformat(json_dict['pub_date'])
-        return cls(
-            title=json_dict['title'],
-            word_count=json_dict['word_count'],
-            pub_date=pub_date,
-            link=json_dict['link']
-        )
+	@classmethod
+	def from_json(cls, json_str: str) -> 'SThreadmarkInfo':
+		json_dict = json.loads(json_str)
+		pub_date = None if json_dict['pub_date'] is None else datetime.fromisoformat(json_dict['pub_date'])
+		return cls(
+			title=json_dict['title'],
+			word_count=json_dict['word_count'],
+			pub_date=pub_date,
+			link=json_dict['link']
+		)
 
-    def __str__(self):
-        return f"SThreadmark Information:\n" \
-               f"- Title: {self.title}\n" \
-               f"- Word Count: {self.word_count}\n" \
-               f"- Pub Date: {self.pub_date}\n" \
-               f"- Link: {self.link}"
+	def __str__(self):
+		return f"SThreadmark Information:\n" \
+			   f"- Title: {self.title}\n" \
+			   f"- Word Count: {self.word_count}\n" \
+			   f"- Pub Date: {self.pub_date}\n" \
+			   f"- Link: {self.link}"
 
 @register
 class SBSVThreadmarksStrategy(BaseStrategy):
@@ -175,8 +175,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		return ('forums.spacebattles.com/threads' in url) or (
 			'forums.sufficientvelocity.com/threads' in url)
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], 
-				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+	def scrape(self, url: URL, config_data: dict[str, Any], 
+		comparison_data: dict[str, str]) -> tuple[NotifDataOrError, DataDict]:
 		last_alert_str = comparison_data.get('last_alert')
 		
 		last_alert: datetime | None = (
@@ -246,6 +246,10 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		return wordcount_tag.text if wordcount_tag is not None else None
 
 	def _extract_threadmarks(self, response: requests.Response) -> list[SThreadmarkInfo]:
+		"""
+		Takes in a response that should contain the threadmarks page, 
+		and returns a list of threadmarks encoded as SThreadmarkInfo. 
+		"""
 		marks: list[SThreadmarkInfo] = []
 		mark_tags = _get_content_with_css_selector(response.text, '.structItem--threadmark')
 
@@ -538,37 +542,37 @@ class QQAlertsStrategy(BaseStrategy):
 
 @dataclass
 class KemonoCardInfo:
-    name: str | None = None
-    date_time: datetime | None = None
-    service: str | None = None
-    link: URL | None = None
+	name: str | None = None
+	date_time: datetime | None = None
+	service: str | None = None
+	link: URL | None = None
 
-    def to_json(self) -> str:
-        json_dict = {
-            'name': self.name,
-            'date_time': None if self.date_time is None else self.date_time.isoformat(),
-            'service': self.service,
-            'link': self.link
-        }
-        return json.dumps(json_dict)
+	def to_json(self) -> str:
+		json_dict = {
+			'name': self.name,
+			'date_time': None if self.date_time is None else self.date_time.isoformat(),
+			'service': self.service,
+			'link': self.link
+		}
+		return json.dumps(json_dict)
 
-    @classmethod
-    def from_json(cls, json_str: str) -> 'KemonoCardInfo':
-        json_dict = json.loads(json_str)
-        date_time = None if json_dict['date_time'] is None else datetime.fromisoformat(json_dict['date_time'])
-        return cls(
-            name=json_dict['name'],
-            date_time=date_time,
-            service=json_dict['service'],
-            link=json_dict['link']
-        )
+	@classmethod
+	def from_json(cls, json_str: str) -> 'KemonoCardInfo':
+		json_dict = json.loads(json_str)
+		date_time = None if json_dict['date_time'] is None else datetime.fromisoformat(json_dict['date_time'])
+		return cls(
+			name=json_dict['name'],
+			date_time=date_time,
+			service=json_dict['service'],
+			link=json_dict['link']
+		)
 
-    def __str__(self):
-        return f"Kemono Profile Information:\n" \
-            f"- Service: {self.service}\n" \
-            f"- Name: {self.name}\n" \
-            f"- Date and Time: {self.date_time}\n" \
-            f"- Link: {self.link}"
+	def __str__(self):
+		return f"Kemono Profile Information:\n" \
+			f"- Service: {self.service}\n" \
+			f"- Name: {self.name}\n" \
+			f"- Date and Time: {self.date_time}\n" \
+			f"- Link: {self.link}"
 
 @register
 class KemonoFavouritesStrategy(BaseStrategy):

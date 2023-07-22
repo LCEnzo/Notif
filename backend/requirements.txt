@@ -13,6 +13,7 @@ python-dotenv==1.0.0
 # pytest>=7.0,<8.0
 # pytest-django>=4.1,<5.0
 faker>=18.0,<19.0
+requests-mock~=1.11.0
 
 # Not needed to run the app, 
 # used for improving and testing code
