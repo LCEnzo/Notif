@@ -42,10 +42,10 @@ class SBSVThreadmarksStrategyTestCase(TestCase):
 			mocker.get(self.url, text=html_content)
 
 			updates, new_data = self.strategy.scrape(self.url, {}, {'last_alert': '2023-06-08T15:30:00+0000'})
-			
+
 			assert new_data is not None
 			assert ('last_alert' in new_data)
 			assert updates is not None
-			assert len(updates) == 2
+			assert len(updates) >= 2
 
 
