@@ -17,7 +17,7 @@ class UserManager(BaseUserManager):
 	def create_superuser(self, email: str, username: str, password: str, **extra_fields) -> "User":
 		extra_fields["is_staff"] = True
 		extra_fields["is_superuser"] = True
-		return self.create_user(email, username, password, **extra_fields)        
+		return self.create_user(email, username, password, **extra_fields)		
 	
 	def get_queryset(self):
 		return super().get_queryset().filter(date_deleted__isnull=True)
@@ -32,14 +32,14 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 	name = models.CharField(max_length=64, default="Anon")
 	username = models.CharField(
-        max_length=150,
-        unique=True,
-        help_text="Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.",
-        validators=[username_validator],
-        error_messages={
-            "unique": "A user with that username already exists.",
-        },
-    )
+		max_length=150,
+		unique=True,
+		help_text="Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.",
+		validators=[username_validator],
+		error_messages={
+			"unique": "A user with that username already exists.",
+		},
+	)
 	email = models.EmailField(unique=True)
 	
 	groups = models.ManyToManyField(
@@ -62,10 +62,10 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 	# Django admin panel permission
 	is_staff = models.BooleanField(
-        "staff status",
-        default=False,
-        help_text="Designates whether the user can log into this admin site.",
-    )
+		"staff status",
+		default=False,
+		help_text="Designates whether the user can log into this admin site.",
+	)
 	is_active = models.BooleanField(
 		"active",
 		default=True,
