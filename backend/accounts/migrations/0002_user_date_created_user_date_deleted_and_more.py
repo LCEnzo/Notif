@@ -5,27 +5,27 @@ import django.utils.timezone
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("accounts", "0001_initial"),
-    ]
+	dependencies = [
+		("accounts", "0001_initial"),
+	]
 
-    operations = [
-        migrations.AddField(
-            model_name="user",
-            name="date_created",
-            field=models.DateTimeField(
-                auto_now_add=True, default=django.utils.timezone.now
-            ),
-            preserve_default=False,
-        ),
-        migrations.AddField(
-            model_name="user",
-            name="date_deleted",
-            field=models.DateTimeField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name="user",
-            name="date_modified",
-            field=models.DateTimeField(auto_now=True),
-        ),
-    ]
+	operations = [
+		migrations.AddField(
+			model_name="user",
+			name="date_created",
+			field=models.DateTimeField(
+				auto_now_add=True, default=django.utils.timezone.now
+			),
+			preserve_default=False,
+		),
+		migrations.AddField(
+			model_name="user",
+			name="date_deleted",
+			field=models.DateTimeField(blank=True, null=True),
+		),
+		migrations.AddField(
+			model_name="user",
+			name="date_modified",
+			field=models.DateTimeField(auto_now=True),
+		),
+	]

@@ -4,14 +4,14 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("monitoring", "0002_strategy_link_comparison_info_link_last_scraped_and_more"),
-    ]
+	dependencies = [
+		("monitoring", "0002_strategy_link_comparison_info_link_last_scraped_and_more"),
+	]
 
-    operations = [
-        migrations.AlterField(
-            model_name="strategy",
-            name="function",
-            field=models.CharField(choices=[], default="", max_length=256),
-        ),
-    ]
+	operations = [
+		migrations.AlterField(
+			model_name="strategy",
+			name="function",
+			field=models.CharField(choices=[], default="", max_length=256),
+		),
+	]

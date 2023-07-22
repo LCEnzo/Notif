@@ -20,7 +20,8 @@ select = [
 	"NPY",		# numpy
 ]
 ignore = ["RET501", "RET504"]
-exclude = ["**/node_modules",
+exclude = [
+	"**/node_modules",
 	"**/__pycache__",
 	"**/experimental",
 	"**/typestubs",
@@ -30,12 +31,12 @@ exclude = ["**/node_modules",
 
 
 [tool.pyright]
-exclude = ["**/node_modules",
+exclude = [
+	"**/node_modules",
 	"**/__pycache__",
 	"**/experimental",
-	"**/typestubs",
 	"**/migrations",
-	"venv",
+	"venv"
 ]
 ignore = []
 defineConstant = { DEBUG = true }
@@ -50,7 +51,7 @@ pythonPlatform = "Linux"
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
-
+exclude=["migrations", "venv"]
 
 [tool.django-stubs]
 django_settings_module = "notif.settings"

@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Any, NewType, TypeAlias
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -129,37 +129,37 @@ class GeneralSelectorStrategy(BaseStrategy):
 
 @dataclass
 class SThreadmarkInfo:
-    title: str | None = None
-    word_count: str | None = None
-    pub_date: datetime | None = None
-    link: URL | None = None
+	title: str | None = None
+	word_count: str | None = None
+	pub_date: datetime | None = None
+	link: URL | None = None
 
-    def to_json(self) -> str:
-        json_dict = {
-            'title': self.title,
-            'word_count': self.word_count,
-            'pub_date': None if self.pub_date is None else self.pub_date.isoformat(),
-            'link': self.link
-        }
-        return json.dumps(json_dict)
+	def to_json(self) -> str:
+		json_dict = {
+			'title': self.title,
+			'word_count': self.word_count,
+			'pub_date': None if self.pub_date is None else self.pub_date.isoformat(),
+			'link': self.link
+		}
+		return json.dumps(json_dict)
 
-    @classmethod
-    def from_json(cls, json_str: str) -> 'SThreadmarkInfo':
-        json_dict = json.loads(json_str)
-        pub_date = None if json_dict['pub_date'] is None else datetime.fromisoformat(json_dict['pub_date'])
-        return cls(
-            title=json_dict['title'],
-            word_count=json_dict['word_count'],
-            pub_date=pub_date,
-            link=json_dict['link']
-        )
+	@classmethod
+	def from_json(cls, json_str: str) -> 'SThreadmarkInfo':
+		json_dict = json.loads(json_str)
+		pub_date = None if json_dict['pub_date'] is None else datetime.fromisoformat(json_dict['pub_date'])
+		return cls(
+			title=json_dict['title'],
+			word_count=json_dict['word_count'],
+			pub_date=pub_date,
+			link=json_dict['link']
+		)
 
-    def __str__(self):
-        return f"SThreadmark Information:\n" \
-               f"- Title: {self.title}\n" \
-               f"- Word Count: {self.word_count}\n" \
-               f"- Pub Date: {self.pub_date}\n" \
-               f"- Link: {self.link}"
+	def __str__(self):
+		return f"SThreadmark Information:\n" \
+				f"- Title: {self.title}\n" \
+				f"- Word Count: {self.word_count}\n" \
+				f"- Pub Date: {self.pub_date}\n" \
+				f"- Link: {self.link}"
 
 @register
 class SBSVThreadmarksStrategy(BaseStrategy):
@@ -175,8 +175,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		return ('forums.spacebattles.com/threads' in url) or (
 			'forums.sufficientvelocity.com/threads' in url)
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], 
-				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+	def scrape(self, url: URL, config_data: dict[str, Any], 
+		comparison_data: dict[str, str]) -> tuple[NotifDataOrError, DataDict]:
 		last_alert_str = comparison_data.get('last_alert')
 		
 		last_alert: datetime | None = (
@@ -184,10 +184,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			if last_alert_str is not None and last_alert_str != ''
 			else None
 		)
-		
-		parsed = urlsplit(url)
-		req_url = parsed.scheme + "://" + parsed.netloc + '/' + parsed.path.replace('threadmarks', '')
-		req_url += '/threadmarks-load-range?threadmark_category_id=1'
+
+		req_url = self._get_threadmarks_url(url)
 
 		response = requests.get(req_url)
 		marks = self._extract_threadmarks(response)
@@ -218,6 +216,25 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 
 		return updates, new_data
 
+	def _get_threadmarks_url(self, url: URL) -> URL:
+		"""
+		Takes in a given thread URL, and transforms it into one with a path 
+		'threadmarks-load-range?threadmark_category_id=1', as to be able to 
+		easily get a list of all threadmarks.
+		"""
+		parsed = urlsplit(url)
+
+		# Split the path on 'threadmarks' and take the first part
+		new_path = parsed.path.split('threadmarks')[0]
+		# Ensure that new_path has a '/' between parts
+		if not new_path.endswith('/'):
+			new_path += '/'
+		new_path += 'threadmarks-load-range?threadmark_category_id=1'
+
+		new_url = urlunsplit((parsed.scheme, parsed.netloc, new_path, '', ''))
+
+		return URL(new_url)
+
 	def _extract_title_and_link(self, mark_tag: Tag, base_url: str) -> tuple[str | None, str | None]:
 		# The title of the threadmark and the href/link are on the same HTML tag
 		title_tag = mark_tag.select_one('a')
@@ -236,8 +253,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			if pub_date_str is not None:
 				try:
 					return datetime.strptime(pub_date_str, "%Y-%m-%dT%H:%M:%S%z")
-				except ValueError:
-					logger.error("SBSVThreadmarksStrategy | _extract_pub_date: Value Error {err}")
+				except ValueError as err:
+					logger.error(f"SBSVThreadmarksStrategy | _extract_pub_date: Value Error {err}")
 					return None
 		return None
 
@@ -246,6 +263,10 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		return wordcount_tag.text if wordcount_tag is not None else None
 
 	def _extract_threadmarks(self, response: requests.Response) -> list[SThreadmarkInfo]:
+		"""
+		Takes in a response that should contain the threadmarks page, 
+		and returns a list of threadmarks encoded as SThreadmarkInfo. 
+		"""
 		marks: list[SThreadmarkInfo] = []
 		mark_tags = _get_content_with_css_selector(response.text, '.structItem--threadmark')
 
@@ -351,7 +372,7 @@ class QQAlertsStrategy(BaseStrategy):
 			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		if not self.can_scrape_url(url):
 			return ("Invalid URL", None)
-		updates = []
+		updates: list[tuple[str, str, URL]] = []
 
 		username: str = config_data['username'] 
 		password: str = config_data['password'] 
@@ -375,8 +396,8 @@ class QQAlertsStrategy(BaseStrategy):
 							if alert.lengthy_response 
 							else f"Alert - {alert.author_name}"
 						)
-					description = alert.alert_text
-					link = alert.post_link
+					description = alert.alert_text if alert.alert_text is not None else "-/-"
+					link = URL(alert.post_link) if alert.post_link is not None else url
 
 					updates.append((title, description, link))
 
@@ -538,37 +559,37 @@ class QQAlertsStrategy(BaseStrategy):
 
 @dataclass
 class KemonoCardInfo:
-    name: str | None = None
-    date_time: datetime | None = None
-    service: str | None = None
-    link: URL | None = None
+	name: str | None = None
+	date_time: datetime | None = None
+	service: str | None = None
+	link: URL | None = None
 
-    def to_json(self) -> str:
-        json_dict = {
-            'name': self.name,
-            'date_time': None if self.date_time is None else self.date_time.isoformat(),
-            'service': self.service,
-            'link': self.link
-        }
-        return json.dumps(json_dict)
+	def to_json(self) -> str:
+		json_dict = {
+			'name': self.name,
+			'date_time': None if self.date_time is None else self.date_time.isoformat(),
+			'service': self.service,
+			'link': self.link
+		}
+		return json.dumps(json_dict)
 
-    @classmethod
-    def from_json(cls, json_str: str) -> 'KemonoCardInfo':
-        json_dict = json.loads(json_str)
-        date_time = None if json_dict['date_time'] is None else datetime.fromisoformat(json_dict['date_time'])
-        return cls(
-            name=json_dict['name'],
-            date_time=date_time,
-            service=json_dict['service'],
-            link=json_dict['link']
-        )
+	@classmethod
+	def from_json(cls, json_str: str) -> 'KemonoCardInfo':
+		json_dict = json.loads(json_str)
+		date_time = None if json_dict['date_time'] is None else datetime.fromisoformat(json_dict['date_time'])
+		return cls(
+			name=json_dict['name'],
+			date_time=date_time,
+			service=json_dict['service'],
+			link=json_dict['link']
+		)
 
-    def __str__(self):
-        return f"Kemono Profile Information:\n" \
-            f"- Service: {self.service}\n" \
-            f"- Name: {self.name}\n" \
-            f"- Date and Time: {self.date_time}\n" \
-            f"- Link: {self.link}"
+	def __str__(self):
+		return f"Kemono Profile Information:\n" \
+			f"- Service: {self.service}\n" \
+			f"- Name: {self.name}\n" \
+			f"- Date and Time: {self.date_time}\n" \
+			f"- Link: {self.link}"
 
 @register
 class KemonoFavouritesStrategy(BaseStrategy):
@@ -608,7 +629,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			if card.date_time is not None and card.date_time > last_update_datetime:
 				title = f"Kemono: {card.name} - {card.service}"
 				description = f"New posts by {card.name} on {card.service}, time {card.date_time}"
-				link = card.link
+				link = card.link if card.link is not None else url
 
 				updates.append((title, description, link))
 
