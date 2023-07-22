@@ -1,5 +1,6 @@
 from typing import Any
 
+from django.db.models import Model
 from django.http import HttpResponse
 from django.test import TestCase
 from django.urls import reverse
@@ -60,7 +61,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 	detail_view_name = None  # The name of the detail view, to be defined in the subclass
 	model = None  # The model class being tested, to be defined in the subclass
 
-	def setUp(self, model) -> None:
+	def setUp(self, model: type[Model] = User) -> None:
 		"""
 		Set up the test case by initializing the model and object under test.
 		"""
@@ -90,6 +91,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 		Returns the response so further testing can be done.
 		"""
 		if pk is None:
+			assert self.obj is not None
 			pk = self.obj.pk
 		
 		url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: pk})
@@ -150,6 +152,8 @@ class ViewSetMixin(SetupMixin, TestCase):
 		`pk` is the primary key of the object we want to retrieve. 
 		Defaults to the id of the first instance returned by the model manager.
 		"""
+		assert self.obj is not None
+
 		if pk is None:
 			pk = self.obj.pk
 
@@ -170,6 +174,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 		Defaults to the id of the first instance returned by the model manager.
 		"""
 		if pk is None:
+			assert self.obj is not None
 			pk = self.obj.pk
 
 		url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: pk})
@@ -181,8 +186,8 @@ class ViewSetMixin(SetupMixin, TestCase):
 		return response
 
 	def _test_permissions(self, user: User, obj_pk: int, password: str = password, 
-						  fields: dict[str, Any] | None = None, update_fields: dict[str, Any] | None = None, 
-						  permissions: dict[str, bool] | None = None) \
+						fields: dict[str, Any] | None = None, update_fields: dict[str, Any] | None = None, 
+						permissions: dict[str, bool] | None = None) \
 							-> tuple[HttpResponse, ...]:
 		"""
 		Test the permissions of the given user.
