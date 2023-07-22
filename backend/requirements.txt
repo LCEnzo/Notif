@@ -21,7 +21,8 @@ requests-mock~=1.11.0
 # pyright>=1.1
 mypy
 django-stubs>=4.2,<5.0
+djangorestframework-stubs
 types-requests
 types-beautifulsoup4
-djangorestframework-stubs
+types-six
 ruff
