@@ -11,7 +11,12 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
 from datetime import timedelta
+from os import getenv
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,10 +26,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-e2z2l51_b_z%#fv-b$ai7%$_5eg4ndt8dr3_$p2nyek3rtpcj+'
+SECRET_KEY = getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = getenv("DEBUG", "True") == "True"
 
 ALLOWED_HOSTS = [] # type: ignore
 
@@ -39,7 +44,7 @@ INSTALLED_APPS = [
 	'django.contrib.messages',
 	'django.contrib.staticfiles',
 	'rest_framework',
-    'rest_framework_simplejwt',
+	'rest_framework_simplejwt',
 	'accounts',
 	'monitoring',
 ]
@@ -79,14 +84,18 @@ WSGI_APPLICATION = 'notif.wsgi.application'
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
 DATABASES = {
-	'default': {
-		'ENGINE': 'django.db.backends.postgresql',
-		'NAME': 'startdb',
-		'USER': 'user',
-		'PASSWORD': 'root',
-		'HOST': 'localhost',  # or '127.0.0.1'
-		'PORT': '',  # or '5432'
-	}
+	"default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": "db.sqlite3",
+    }
+	# 'default': {
+	# 	'ENGINE': 'django.db.backends.postgresql',
+	# 	'NAME': 'startdb',
+	# 	'USER': 'user',
+	# 	'PASSWORD': 'root',
+	# 	'HOST': 'localhost',  # or '127.0.0.1'
+	# 	'PORT': '',  # or '5432'
+	# }
 }
 
 # Password validation
@@ -166,32 +175,32 @@ LOGGING = {
 
 
 if DEBUG:
-    # https://stackoverflow.com/questions/18273110/django-make-password-too-slow-for-creating-large-list-of-users-programatically
-    # https://docs.djangoproject.com/en/4.2/topics/auth/passwords/
-    # This cuts done user creation time from ~270ms to 2.2ms on my laptop, but compromises security.
-    PASSWORD_HASHERS = [
-        'django.contrib.auth.hashers.MD5PasswordHasher',
-        "django.contrib.auth.hashers.PBKDF2PasswordHasher",
-        "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
-        "django.contrib.auth.hashers.Argon2PasswordHasher",
-        "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
-        "django.contrib.auth.hashers.ScryptPasswordHasher",
-    ]
-    
+	# https://stackoverflow.com/questions/18273110/django-make-password-too-slow-for-creating-large-list-of-users-programatically
+	# https://docs.djangoproject.com/en/4.2/topics/auth/passwords/
+	# This cuts done user creation time from ~270ms to 2.2ms on my laptop, but compromises security.
+	PASSWORD_HASHERS = [
+		'django.contrib.auth.hashers.MD5PasswordHasher',
+		"django.contrib.auth.hashers.PBKDF2PasswordHasher",
+		"django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+		"django.contrib.auth.hashers.Argon2PasswordHasher",
+		"django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+		"django.contrib.auth.hashers.ScryptPasswordHasher",
+	]
+	
 
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=20),
-    "REFRESH_TOKEN_LIFETIME": timedelta(hours=30),
+	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20 if not DEBUG else 48 * 60),
+	"REFRESH_TOKEN_LIFETIME": timedelta(hours=30 if not DEBUG else 7 * 24),
 
-    "LEEWAY": 0,
+	"LEEWAY": 0,
 
-    "AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
-    "AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
-    "USER_ID_FIELD": "id",
-    "USER_ID_CLAIM": "user_id",
+	"AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
+	"AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
+	"USER_ID_FIELD": "id",
+	"USER_ID_CLAIM": "user_id",
 
-    "SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
-    "SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
-    "SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
+	"SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
+	"SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
+	"SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
 }
