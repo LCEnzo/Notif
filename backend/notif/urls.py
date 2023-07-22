@@ -23,8 +23,8 @@ from rest_framework_simplejwt.views import (
 
 urlpatterns = [
 	path('admin/', admin.site.urls),
-	path('api/accounts/', include('accounts.urls')),
-	path('api/monitoring/', include('monitoring.urls')),
+	path('api/v1/accounts/', include('accounts.urls')),
+	path('api/v1/monitoring/', include('monitoring.urls')),
     # JWT config
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'), # type: ignore
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # type: ignore
