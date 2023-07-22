@@ -54,15 +54,15 @@ Instructions assume you are using a Debian derived Linux distro.
 	git clone https://github.com/your_username/my-update-notifier.git
 	cd backend
 	```
-2. Create a virtual environment if one does not exist
+2. Create a virtual environment if one does not exist.
     ```bash
     python3 -m venv venv
     ```
-3. Activate the virtual environment
+3. Activate the virtual environment.
 	```bash
 	source venv/bin/activate
 	```
-4. Install the required Python packages for the backend.
+4. Install the required Python dependencies.
 	```bash
 	pip install -r requirements.txt
 	```
@@ -70,7 +70,7 @@ Instructions assume you are using a Debian derived Linux distro.
 	```bash
 	cat .env.example > .env
 	```
-6. Apply the Django migrations.
+6. Apply Django migrations.
 	```bash
 	python manage.py migrate
 	```
