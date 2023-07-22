@@ -2,8 +2,8 @@ from django.urls import include, path  # noqa: F401
 from rest_framework.routers import DefaultRouter
 
 from monitoring.views import (
-    LinkViewSet,
-    StrategyViewSet,
+	LinkViewSet,
+	StrategyViewSet,
 )
 
 router = DefaultRouter()

@@ -5,50 +5,50 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("monitoring", "0001_initial"),
-    ]
+	dependencies = [
+		("monitoring", "0001_initial"),
+	]
 
-    operations = [
-        migrations.CreateModel(
-            name="Strategy",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("data", models.JSONField()),
-                (
-                    "function",
-                    models.CharField(
-                        choices=[], default=None, max_length=256, null=True
-                    ),
-                ),
-            ],
-        ),
-        migrations.AddField(
-            model_name="link",
-            name="comparison_info",
-            field=models.CharField(default="", max_length=262144),
-        ),
-        migrations.AddField(
-            model_name="link",
-            name="last_scraped",
-            field=models.DateTimeField(default=None, null=True),
-        ),
-        migrations.AddField(
-            model_name="link",
-            name="strategy",
-            field=models.ForeignKey(
-                default=None,
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                to="monitoring.strategy",
-            ),
-        ),
-    ]
+	operations = [
+		migrations.CreateModel(
+			name="Strategy",
+			fields=[
+				(
+					"id",
+					models.BigAutoField(
+						auto_created=True,
+						primary_key=True,
+						serialize=False,
+						verbose_name="ID",
+					),
+				),
+				("data", models.JSONField()),
+				(
+					"function",
+					models.CharField(
+						choices=[], default=None, max_length=256, null=True
+					),
+				),
+			],
+		),
+		migrations.AddField(
+			model_name="link",
+			name="comparison_info",
+			field=models.CharField(default="", max_length=262144),
+		),
+		migrations.AddField(
+			model_name="link",
+			name="last_scraped",
+			field=models.DateTimeField(default=None, null=True),
+		),
+		migrations.AddField(
+			model_name="link",
+			name="strategy",
+			field=models.ForeignKey(
+				default=None,
+				null=True,
+				on_delete=django.db.models.deletion.SET_NULL,
+				to="monitoring.strategy",
+			),
+		),
+	]

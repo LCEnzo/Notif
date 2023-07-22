@@ -55,9 +55,9 @@ Instructions assume you are using a Debian derived Linux distro.
 	cd backend
 	```
 2. Create a virtual environment if one does not exist.
-    ```bash
-    python3 -m venv venv
-    ```
+	```bash
+	python3 -m venv venv
+	```
 3. Activate the virtual environment.
 	```bash
 	source venv/bin/activate
@@ -114,10 +114,10 @@ Should polish as the project is being written. This includes:
 * Refactor arch for scalability (examples include adding , , ) 
   * caching (redis?)
   * refactoring scraping 
-    * to limit per second requests to a single domain	
-    * spreading out requests over time
-    * serve multiple users (who have the same link) with a single request
-    * ...
+	* to limit per second requests to a single domain	
+	* spreading out requests over time
+	* serve multiple users (who have the same link) with a single request
+	* ...
 * Add Selenium as a (fallback) option
 * Discord and/or Slack bots
 * Email notifications

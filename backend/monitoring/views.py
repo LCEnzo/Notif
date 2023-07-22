@@ -7,13 +7,13 @@ from monitoring.serializers import LinkSerializer, StrategySerializer
 
 
 class LinkViewSet(ModelViewSet):
-    permission_classes = [IsAuthenticated, ReadOnly | IsAdminUser]
-    queryset = Link.objects.all()
-    serializer_class = LinkSerializer
+	permission_classes = [IsAuthenticated, ReadOnly | IsAdminUser]
+	queryset = Link.objects.all()
+	serializer_class = LinkSerializer
 
 
 class StrategyViewSet(ModelViewSet):
-    permission_classes = [IsAuthenticated, ReadOnly | IsAdminUser]
-    queryset = Strategy.objects.all()
-    serializer_class = StrategySerializer
+	permission_classes = [IsAuthenticated, ReadOnly | IsAdminUser]
+	queryset = Strategy.objects.all()
+	serializer_class = StrategySerializer
 

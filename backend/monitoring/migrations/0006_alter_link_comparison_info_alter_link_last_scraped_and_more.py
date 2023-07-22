@@ -4,24 +4,24 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("monitoring", "0005_alter_strategy_data"),
-    ]
+	dependencies = [
+		("monitoring", "0005_alter_strategy_data"),
+	]
 
-    operations = [
-        migrations.AlterField(
-            model_name="link",
-            name="comparison_info",
-            field=models.CharField(blank=True, max_length=262144),
-        ),
-        migrations.AlterField(
-            model_name="link",
-            name="last_scraped",
-            field=models.DateTimeField(auto_now=True, null=True),
-        ),
-        migrations.AlterField(
-            model_name="strategy",
-            name="function",
-            field=models.CharField(choices=[], max_length=256),
-        ),
-    ]
+	operations = [
+		migrations.AlterField(
+			model_name="link",
+			name="comparison_info",
+			field=models.CharField(blank=True, max_length=262144),
+		),
+		migrations.AlterField(
+			model_name="link",
+			name="last_scraped",
+			field=models.DateTimeField(auto_now=True, null=True),
+		),
+		migrations.AlterField(
+			model_name="strategy",
+			name="function",
+			field=models.CharField(choices=[], max_length=256),
+		),
+	]
