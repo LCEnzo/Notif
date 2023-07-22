@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Any, NewType, TypeAlias
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -156,10 +156,10 @@ class SThreadmarkInfo:
 
 	def __str__(self):
 		return f"SThreadmark Information:\n" \
-			   f"- Title: {self.title}\n" \
-			   f"- Word Count: {self.word_count}\n" \
-			   f"- Pub Date: {self.pub_date}\n" \
-			   f"- Link: {self.link}"
+				f"- Title: {self.title}\n" \
+				f"- Word Count: {self.word_count}\n" \
+				f"- Pub Date: {self.pub_date}\n" \
+				f"- Link: {self.link}"
 
 @register
 class SBSVThreadmarksStrategy(BaseStrategy):
@@ -184,10 +184,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			if last_alert_str is not None and last_alert_str != ''
 			else None
 		)
-		
-		parsed = urlsplit(url)
-		req_url = parsed.scheme + "://" + parsed.netloc + '/' + parsed.path.replace('threadmarks', '')
-		req_url += '/threadmarks-load-range?threadmark_category_id=1'
+
+		req_url = self._get_threadmarks_url(url)
 
 		response = requests.get(req_url)
 		marks = self._extract_threadmarks(response)
@@ -217,6 +215,25 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 				new_data['last_alert'] = latest_mark.pub_date.strftime(self.time_format) 
 
 		return updates, new_data
+
+	def _get_threadmarks_url(self, url: URL) -> URL:
+		"""
+		Takes in a given thread URL, and transforms it into one with a path 
+		'threadmarks-load-range?threadmark_category_id=1', as to be able to 
+		easily get a list of all threadmarks.
+		"""
+		parsed = urlsplit(url)
+
+		# Split the path on 'threadmarks' and take the first part
+		new_path = parsed.path.split('threadmarks')[0]
+		# Ensure that new_path has a '/' between parts
+		if not new_path.endswith('/'):
+			new_path += '/'
+		new_path += 'threadmarks-load-range?threadmark_category_id=1'
+
+		new_url = urlunsplit((parsed.scheme, parsed.netloc, new_path, '', ''))
+
+		return URL(new_url)
 
 	def _extract_title_and_link(self, mark_tag: Tag, base_url: str) -> tuple[str | None, str | None]:
 		# The title of the threadmark and the href/link are on the same HTML tag
@@ -355,7 +372,7 @@ class QQAlertsStrategy(BaseStrategy):
 			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		if not self.can_scrape_url(url):
 			return ("Invalid URL", None)
-		updates = []
+		updates: list[tuple[str, str, URL]] = []
 
 		username: str = config_data['username'] 
 		password: str = config_data['password'] 
@@ -379,8 +396,8 @@ class QQAlertsStrategy(BaseStrategy):
 							if alert.lengthy_response 
 							else f"Alert - {alert.author_name}"
 						)
-					description = alert.alert_text
-					link = alert.post_link
+					description = alert.alert_text if alert.alert_text is not None else "-/-"
+					link = URL(alert.post_link) if alert.post_link is not None else url
 
 					updates.append((title, description, link))
 
@@ -612,7 +629,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			if card.date_time is not None and card.date_time > last_update_datetime:
 				title = f"Kemono: {card.name} - {card.service}"
 				description = f"New posts by {card.name} on {card.service}, time {card.date_time}"
-				link = card.link
+				link = card.link if card.link is not None else url
 
 				updates.append((title, description, link))
 
