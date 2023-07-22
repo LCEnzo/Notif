@@ -17,6 +17,7 @@ from urllib.parse import urlsplit, urlunsplit
 import requests
 from bs4 import BeautifulSoup
 from bs4.element import ResultSet, Tag
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -180,7 +181,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		last_alert_str = comparison_data.get('last_alert')
 		
 		last_alert: datetime | None = (
-			datetime.strptime(last_alert_str, self.time_format) 
+			datetime.strptime(last_alert_str, self.time_format).astimezone(timezone.get_default_timezone()) 
 			if last_alert_str is not None and last_alert_str != ''
 			else None
 		)
@@ -380,7 +381,10 @@ class QQAlertsStrategy(BaseStrategy):
 		include_all: bool = bool(config_data['include_all'])
 
 		last_alert_datetime_str = comparison_data['last_alert']
-		last_alert_datetime = datetime.strptime(last_alert_datetime_str, "%Y-%m-%d %H:%M:%S")
+		last_alert_datetime = datetime.strptime(
+				last_alert_datetime_str, 
+				"%Y-%m-%d %H:%M:%S"
+			).astimezone(timezone.get_default_timezone()) 
 
 		resp = self._get_alerts_html(username, password)
 		alerts = self._extract_alerts(resp.text)
@@ -538,7 +542,7 @@ class QQAlertsStrategy(BaseStrategy):
 		Note, can cause an exception if neither Today, Yesterday, 
 		of a valid argument for strptime is provided ("%Y-%m-%d").
 		"""
-		today = datetime.now().date()
+		today = datetime.now(tz=timezone.get_default_timezone()).date()
 
 		match relative_date:
 			case "Today":
@@ -551,10 +555,10 @@ class QQAlertsStrategy(BaseStrategy):
 					)
 				days_offset = (today.weekday() - weekday) % 7
 				return today - timedelta(days=days_offset)
-			case _ if datetime.strptime(relative_date, "%Y/%m/%d"):
-				return datetime.strptime(relative_date, "%Y/%m/%d").date()
+			case _ if datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()):
+				return datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()) .date()
 			case _:
-				return datetime.strptime(relative_date, "%Y-%m-%d").date()
+				return datetime.strptime(relative_date, "%Y-%m-%d").astimezone(timezone.get_default_timezone()) .date()
 
 
 @dataclass
@@ -619,7 +623,10 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		password: str = config_data['password'] 
 
 		last_update_datetime_str = comparison_data['last_update']
-		last_update_datetime = datetime.strptime(last_update_datetime_str, "%Y-%m-%d %H:%M:%S")
+		last_update_datetime = datetime.strptime(
+				last_update_datetime_str, 
+				"%Y-%m-%d %H:%M:%S"
+			).astimezone(timezone.get_default_timezone()) 
 
 		resp = self._get_favourites_html(username, password)
 		cards = self._extract_kemono_profile_cards(resp.text)
@@ -654,7 +661,10 @@ class KemonoFavouritesStrategy(BaseStrategy):
 	def _extract_datetime(self, card_tag: Tag) -> datetime | None:
 		dt = card_tag.select_one('time.timestamp')
 		if dt is not None:
-			return datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f")
+			return datetime.strptime(
+					dt.text.strip(), 
+					"%Y-%m-%d %H:%M:%S.%f"
+				).astimezone(timezone.get_default_timezone()) 
 		return None
 
 	def _extract_link(self, card_tag: Tag, url: URL) -> URL | None:
