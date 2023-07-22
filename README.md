@@ -91,10 +91,10 @@ python manage.py regenerate_secret_key
 
 ## TODOs
 * Create Django app
-  * Create accounts app
-  * Create URL monitoring app
-  * Fix timezone code
-  * Set up environ
+  * Create accounts app - Initial implementation done
+  * Create URL monitoring app - Initial implementation done
+  * Fix timezone code - Given default zones, unsure if that's fine
+  * Set up environ - Done
 * Create some kind of client
   * Add registration
   * Add basic account management (CRUD)
@@ -105,8 +105,8 @@ python manage.py regenerate_secret_key
 * Figure out deployment
 
 Should polish as the project is being written. This includes:
-* OpenAPI documentation
-* API versioning
+* OpenAPI documentation (would be great if something like FastAPI docs could be had)
+* API versioning - kinda? JWT stuff is under `/api/`, while the rest is under `/api/v1/`
 * Rate limiting
 * CI/CD for making migrations, deployment, and running tests, among other things
 * Social login/register
@@ -119,6 +119,7 @@ Should polish as the project is being written. This includes:
 	* serve multiple users (who have the same link) with a single request
 	* ...
 * Add Selenium as a (fallback) option
+* Investigate stuff such as scrapy
 * Discord and/or Slack bots
 * Email notifications
 
