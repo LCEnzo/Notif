@@ -1,15 +1,18 @@
+# IDE
+.idea/*
+.vscode/*
+
+# Python
 venv/
 *.pyc
 __pycache__/
-*.sqlite3
-../.idea/*
-.idea/*
-idea/
-.git/
-.vscode/*
-vscode/
-../.vscode/*
-debug.log
 *.ipynb
+
+# DB
+*.sqlite3
+
+# Logs and secrets
+debug.log
 secrets.*
 *.secrets
+.env

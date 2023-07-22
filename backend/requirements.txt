@@ -1,11 +1,13 @@
-django==4.2
+django>=4.2,<5.0
 djangorestframework>=3.14,<4.0
 djangorestframework_simplejwt>=5.2,<6.0
 psycopg2-binary>=2.9
 
-requests==2.28.2,<3.0
+requests>=2.28.2,<3.0
 beautifulsoup4>=4.1,<5.0
 lxml>=4.6,<5.0
+
+python-dotenv==1.0.0
 
 # Pytest might be overkill
 # pytest>=7.0,<8.0
@@ -17,7 +19,7 @@ faker>=18.0,<19.0
 # TODO: Look into stuff like poetry to handle dependencies, and different configurations for prod and dev
 # pyright>=1.1
 mypy
-django-stubs==4.2
+django-stubs>=4.2,<5.0
 types-requests
 types-beautifulsoup4
 djangorestframework-stubs
