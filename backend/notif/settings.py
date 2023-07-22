@@ -84,14 +84,18 @@ WSGI_APPLICATION = 'notif.wsgi.application'
 # https://docs.djangoproject.com/en/4.0/ref/settings/#databases
 
 DATABASES = {
-	'default': {
-		'ENGINE': 'django.db.backends.postgresql',
-		'NAME': 'startdb',
-		'USER': 'user',
-		'PASSWORD': 'root',
-		'HOST': 'localhost',  # or '127.0.0.1'
-		'PORT': '',  # or '5432'
-	}
+	"default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": "db.sqlite3",
+    }
+	# 'default': {
+	# 	'ENGINE': 'django.db.backends.postgresql',
+	# 	'NAME': 'startdb',
+	# 	'USER': 'user',
+	# 	'PASSWORD': 'root',
+	# 	'HOST': 'localhost',  # or '127.0.0.1'
+	# 	'PORT': '',  # or '5432'
+	# }
 }
 
 # Password validation
@@ -186,8 +190,8 @@ if DEBUG:
 
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
 SIMPLE_JWT = {
-	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20),
-	"REFRESH_TOKEN_LIFETIME": timedelta(hours=30),
+	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20 if not DEBUG else 48 * 60),
+	"REFRESH_TOKEN_LIFETIME": timedelta(hours=30 if not DEBUG else 7 * 24),
 
 	"LEEWAY": 0,
 
