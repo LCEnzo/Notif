@@ -26,16 +26,20 @@ def login_client(api_client: APIClient, username: str, password: str = password)
 
 
 class SetupMixin:
+    api_client: APIClient
+    regular_user: User
+    secondary_user: User
+
     @classmethod
-    def setUpTestData(cls):
+    def setUpTestData(cls) -> None:
         # Create users
         create_users()
         
-        cls.regular_user: User | None = User.objects.first() 
-        # Tests need users to run. The assert is mostly there for the typechecker.
+        cls.regular_user = User.objects.first() # type: ignore
+        # Tests need users to run. 
         assert (cls.regular_user is not None)
 
-        cls.secondary_user: User | None = User.objects.exclude(pk=cls.regular_user.pk).first() 
+        cls.secondary_user = User.objects.exclude(pk=cls.regular_user.pk).first() # type: ignore
         assert (cls.secondary_user is not None)
         assert (cls.secondary_user.pk != cls.regular_user.pk)
 
