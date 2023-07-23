@@ -1,12 +1,12 @@
 # My Update Notifier
 
-This is a personal project for the purpose of practicing programming and to ease my own inconvenience in the form of checking various sites and forums. The aim is to build an app that will gather updates and push notifications to clients.
+This is a personal project for the purpose of practicing programming and to ease my own inconvenience in the form of checking various sites and forums. The aim is to build an app that will gather updates from various websites, blogs and forums, and push notifications to clients.
 
 ## Overview
 
 The application consists of two main components:
 1. Backend - Built using Django, hosted on a VPS.
-2. Frontend ~~Android Client - Developed using Kotlin and Jetpack Compose.~~
+2. Frontend - Flutter
 
 ---
 
