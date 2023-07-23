@@ -1,0 +1,23 @@
+# IDE
+.idea/*
+.vscode/*
+
+# Python
+venv/
+*.pyc
+__pycache__/
+*.ipynb
+
+# DB
+*.sqlite3
+
+# Logs and secrets
+debug.log
+secrets.*
+*.secrets
+.env.example
+
+# tooling 'n' stuff
+Dockerfile
+.git
+.gitignore
