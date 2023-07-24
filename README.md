@@ -132,11 +132,11 @@ Should polish as the project is being written. This includes:
 
 ### Why Python and Django?
 
-I already know Django and Python, and they are good enough for the project. Django is proven in production by a myriad of companies/products including Instagram. The subpar nature of the type system hurts, but for a small projects, it's not an impediment.
+I already know Django and Python, and they are good enough for the project. Django is proven in production by a myriad of companies/products including Instagram. The subpar nature of the type system hurts, but for a small projects, it's not a big impediment. FastAPI would be a good alternative, but at the time of starting this project I was unfamiliar with it, and can't be bothered to port this.
 
-### Why Postgresql?
+### Why SQLite
 
-I wanted to try it out, and learn a little about DBs. In practice, a better choice would've been SQLite for the simplicity. Postgresql is overkill.
+Ease of use, ease of backup. Good enough for a small project.
 
 ### Why Flutter?
 
