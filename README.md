@@ -93,15 +93,28 @@ python manage.py regenerate_secret_key
 * Create Django app
   * Create accounts app - Initial implementation done
   * Create URL monitoring app - Initial implementation done
+  * Setup scraping on a schedule
+    * Repeat function
+    * Test to make sure the scraping is working
+      * Create a test site for this? 
   * Fix timezone code - Given default zones, unsure if that's fine
   * Set up environ - Done
 * Create some kind of client
   * Add registration
-  * Add basic account management (CRUD)
-  * Add UI for URL/link (CRUD)
+    * First screen for new/logged out users
+  * Create a main screen to display a list of updates, and have navigation to other screens
+    * Figure out platform agnostic storage model
+  * Add basic account management screen (CRUD w/o C)
+    * User Profile screen for reading and updating, with a delete button
+  * Add UI for URL/link (CRUD), new screen
   * Add push notification receiver
+    * No screen, but have to figure out notifications on multiple platforms
+      * Notifications for mobile
+      * Notifications for Win/Linux
+      * Web notifications (number in favicon?)
+    * Main screen already lists notifications
 * Create full end to end tests if not difficult
-* Create docker image for server
+* Create docker image for server - Initial implementation is done
 * Figure out deployment
 
 Should polish as the project is being written. This includes:
