@@ -12,8 +12,8 @@ COPY . .
 
 WORKDIR /backend
 
+RUN apt update && apt -y upgrade
 RUN pip install --upgrade pip setuptools wheel
-RUN apt-get update
 
 RUN pip install --no-cache-dir -r requirements.txt
 
