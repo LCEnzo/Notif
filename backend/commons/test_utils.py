@@ -108,40 +108,27 @@ class ViewSetMixin(SetupMixin, TestCase):
 
 		Args:
 			fields (dict[str, Any], optional): Specifies the data to send to the POST endpoint. 
-											If this contains anything more than strings and lists, 
-											you should be creating your own function instead of using this one.
-											Defaults to `{"name": "New Instance"}`.
+			If this contains anything more than strings and lists, you should be creating your own 
+			function instead of using this one.
+			
+			Defaults to `{"name": "New Instance"}`.
 
 		Returns:
 			HttpResponse: The response from the API post call.
 		"""
+		assert self.model is not None
+
 		if fields is None:
 			fields = {"name": "New Instance"}
 
-		def get_count(fields) -> int:
-			"""
-			Helper function to get the count of objects matching the given fields.
-			"""
-			queryset = self.model.objects.all() # type: ignore
-			for field, value in fields.items():
-				if type(value) == list:
-					if len(value) == 0:
-						queryset = queryset.filter(**{field: None})
-					else:
-						field_in = field + "__in"
-						queryset = queryset.filter(**{field_in: value})
-				else:
-					queryset = queryset.filter(**{field: value})
-			return queryset.count()
-
-		count_before_post = get_count(fields)
+		count_before_post = self.model.objects.count()
 
 		url = reverse(self.list_view_name)
 		data = fields
 		response = self.api_client.post(url, data)
 
 		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-		self.assertEqual(get_count(fields), count_before_post + 1)
+		self.assertEqual(self.model.objects.count(), count_before_post + 1)
 
 		return response
 

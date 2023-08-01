@@ -21,8 +21,21 @@ class UserViewSetTestCase(ViewSetMixin):
 		self._test_retrieve_object(comparison_field="username")
 
 	def test_create_user(self):
-		fields = {"username": "test_username01", "email": "fake@example.com", "name": "Ichi Nii"}
+		fields = {
+			"username": "test_username01", 
+			"email": "fake@example.com", 
+			"name": "Ichi Nii",
+			"password": "securepassword123 securepassword123"
+		}
+		resp = self._test_create_object(fields=fields)
+		print(f"{resp = }")
+		print(f"{resp.content}")
 
+		fields = {
+			"username": "newuser",
+			"email": "newuser@example.com",
+			"password": "securepassword123 securepassword123"
+		}
 		self._test_create_object(fields=fields)
 
 	def test_update_user(self):
@@ -32,7 +45,12 @@ class UserViewSetTestCase(ViewSetMixin):
 		self._test_delete_object()
 
 	def test_regular_user_permissions(self):
-		fields = {"username": "test_username01", "email": "fake@example.com", "name": "Ichi Nii"}
+		fields = {
+			"username": "test_username01", 
+			"email": "fake@example.com", 
+			"name": "Ichi Nii", 
+			"password": "securepassword123"
+		}
 		update_fields = {"name": "Maria"}
 		permissions = {'list': True, 'retrieve': True, 'create': True}
 
