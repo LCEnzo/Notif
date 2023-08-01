@@ -1,7 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:notif/screens/about.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(App());
+}
+
+class App extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Notif',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: AboutPage(), // directly open AboutPage() for testing
+      routes: {
+        // define the routes
+        // '/Home': (context) => HomePage(),
+        '/About': (context) => AboutPage(),
+      },
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -57,6 +76,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   int _counter = 0;
+  Color seed = Colors.teal[900] ?? Colors.black;
 
   void _incrementCounter() {
     setState(() {
@@ -82,7 +102,7 @@ class _MyHomePageState extends State<MyHomePage> {
         // TRY THIS: Try changing the color here to a specific color (to
         // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
         // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: seed, // Theme.of(context).colorScheme.inversePrimary,
         // Here we take the value from the MyHomePage object that was created by
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
