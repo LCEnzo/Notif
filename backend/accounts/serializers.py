@@ -1,4 +1,6 @@
+from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
+from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
 from accounts.models import User
@@ -7,19 +9,17 @@ from accounts.models import User
 class UserCreationSerializer(ModelSerializer):
 	class Meta:
 		model = User
-		fields = ['username', 'email', 'name']
+		fields = ['username', 'email', 'name', 'password']
 
 	@transaction.atomic
 	def create(self, validated_data: dict) -> User:
-		password = validated_data.pop("password", None)
+		password = validated_data.pop("password")
+		
 		if 'username' not in validated_data:
 			validated_data['username'] = validated_data['email']
-		instance = self.Meta.model(**validated_data)
 
-		if password is None:
-			instance.set_unusable_password()
-		else:
-			instance.set_password(password)
+		instance = self.Meta.model(**validated_data)
+		instance.set_password(password)
 	
 		instance.save()
 		return instance
@@ -32,6 +32,17 @@ class UserCreationSerializer(ModelSerializer):
 			validated_data.pop('password', None)
 
 		return super().update(instance, validated_data)
+	
+	def validate(self, data):
+		# This will only validate password during creation and not during update.
+		password = data.get('password', None)
+		if self.instance is None and password is None:
+			raise serializers.ValidationError({"password": "Password needs to exist"})
+		
+		if password is not None:
+			validate_password(password)
+		
+		return data
 
 
 class UserFullReadSerializer(ModelSerializer):
