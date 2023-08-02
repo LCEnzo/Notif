@@ -3,25 +3,12 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
-class AboutPage extends StatefulWidget {
-  @override
-  _AboutPageState createState() => _AboutPageState();
-}
+class AboutPage extends StatelessWidget {
+  const AboutPage({Key? key}) : super(key: key);
 
-class _AboutPageState extends State<AboutPage> {
-  String appVersion = '';
-
-  @override
-  void initState() {
-    super.initState();
-    getAppVersion();
-  }
-
-  Future<void> getAppVersion() async {
-    PackageInfo packageInfo = await PackageInfo.fromPlatform();
-    setState(() {
-      appVersion = packageInfo.version;
-    });
+  Future<String> getAppVersion() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    return packageInfo.version;
   }
 
   @override
@@ -39,10 +26,20 @@ class _AboutPageState extends State<AboutPage> {
               children: <Widget>[
                 const Text(
                   'Notif',
-                  style: const TextStyle(fontSize: 24),
+                  style: TextStyle(fontSize: 24),
                 ),
                 const SizedBox(height: 16),
-                Text('Version: $appVersion'),
+                FutureBuilder<String>(
+                  future: getAppVersion(),
+                  builder:
+                      (BuildContext context, AsyncSnapshot<String> snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const CircularProgressIndicator();
+                    } else {
+                      return Text('Version: ${snapshot.data}');
+                    }
+                  },
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   'This app monitors the URLs you enter, and provides notifications when the sites '
