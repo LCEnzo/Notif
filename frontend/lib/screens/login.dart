@@ -10,28 +10,37 @@ class LogInPage extends StatelessWidget {
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
     return Scaffold(
-        body: Center(
-            child: isSmallScreen
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
+      body: Center(
+          child: isSmallScreen
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Logo(title: "Welcome to Flutter!"),
+                    _FormContent(formKey: formKey),
+                  ],
+                )
+              : Container(
+                  padding: const EdgeInsets.all(32.0),
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: Row(
                     children: [
-                      const Logo(title: "Welcome to Flutter!"),
-                      _FormContent(formKey: formKey),
+                      const Expanded(child: Logo(title: "Welcome to Flutter!")),
+                      Expanded(
+                        child: Center(child: _FormContent(formKey: formKey)),
+                      ),
                     ],
-                  )
-                : Container(
-                    padding: const EdgeInsets.all(32.0),
-                    constraints: const BoxConstraints(maxWidth: 800),
-                    child: Row(
-                      children: [
-                        const Expanded(
-                            child: Logo(title: "Welcome to Flutter!")),
-                        Expanded(
-                          child: Center(child: _FormContent(formKey: formKey)),
-                        ),
-                      ],
-                    ),
-                  )));
+                  ),
+                )),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          /// TODO: Login for logged out, Home for logged in user
+          Navigator.pushNamed(context, '/About');
+        },
+        tooltip: 'About',
+        backgroundColor: Theme.of(context).primaryColor,
+        child: const Icon(Icons.question_mark_rounded),
+      ),
+    );
   }
 }
 
@@ -91,7 +100,7 @@ class _FormContent extends StatelessWidget {
             const SizedBox(height: 16),
             CustomButton(
               buttonText: 'Register',
-              buttonColor: Colors.blueAccent[100],
+              buttonColor: Theme.of(context).primaryColorLight,
               onPressed: () {
                 Navigator.pushNamed(context, '/Register');
               },

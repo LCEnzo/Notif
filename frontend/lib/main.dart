@@ -14,6 +14,9 @@ class App extends StatelessWidget {
         // Define the default brightness and colors.
         brightness: Brightness.light,
         primaryColor: const Color.fromARGB(255, 69, 26, 172),
+        primaryColorLight: const Color.fromARGB(255, 89, 53, 173),
+        primaryColorDark: Color.fromARGB(255, 76, 18, 211),
+        // colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.deepPurple),
 
         // Define the default font family.
         fontFamily: 'Hack Regular',
@@ -28,7 +31,7 @@ class App extends StatelessWidget {
         // scaffoldBackgroundColor: const Color(0x1e1e1e), // default background color
         // backgroundColor: const Color(0x2e2e2e),
       ),
-      home: LogInPage(), // directly open AboutPage() for testing
+      home: LogInPage(),
       routes: {
         // define the routes
         // '/Home': (context) => HomePage(),
