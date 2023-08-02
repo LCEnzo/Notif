@@ -11,7 +11,22 @@ class App extends StatelessWidget {
     return MaterialApp(
       title: 'Notif',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        // Define the default brightness and colors.
+        brightness: Brightness.light,
+        primaryColor: Colors.deepPurple[700],
+
+        // Define the default font family.
+        fontFamily: 'Hack Regular',
+
+        // Define the default `TextTheme`. Use this to specify the default
+        // text styling for headlines, titles, bodies of text, and more.
+        textTheme: const TextTheme(
+          displayLarge: TextStyle(fontSize: 72),
+          titleLarge: TextStyle(fontSize: 36),
+          bodyMedium: TextStyle(fontSize: 14),
+        ),
+        // scaffoldBackgroundColor: const Color(0x1e1e1e), // default background color
+        // backgroundColor: const Color(0x2e2e2e),
       ),
       home: AboutPage(), // directly open AboutPage() for testing
       routes: {
