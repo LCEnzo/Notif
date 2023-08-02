@@ -44,10 +44,12 @@ Not really a screen, but should be mentioned nonetheless,
 - homescreen: after logging in
 - register: button nav
 - forgot password: button nav
+- about: button
 
 ### Regiser:
 - homescreen: after registering
 - login: back button
+- about: button
 
 ### Forgot password:
 - login: back button
@@ -62,10 +64,11 @@ Not really a screen, but should be mentioned nonetheless,
 - others: 
 
 ### About:
-- homescreen: via back button
+- home, log in, register: back button
 
 
 ## TODOs
 
 ### Login Register data sharing
-When navigating from one to another, also move data from password and email fields.
+- When navigating from one to another, also move data from password and email fields.
+- Dark mode, including fetching the default from the device
