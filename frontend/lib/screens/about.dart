@@ -104,19 +104,6 @@ class AboutPage extends StatelessWidget {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (Navigator.canPop(context)) {
-            Navigator.pop(context);
-          } else {
-            /// TODO: Login for logged out, Home for logged in user
-            Navigator.pushNamed(context, '/LogIn');
-          }
-        },
-        tooltip: 'Back',
-        backgroundColor: Theme.of(context).primaryColor,
-        child: const Icon(Icons.arrow_back_rounded),
-      ),
     );
   }
 }
