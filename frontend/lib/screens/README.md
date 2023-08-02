@@ -65,3 +65,7 @@ Not really a screen, but should be mentioned nonetheless,
 - homescreen: via back button
 
 
+## TODOs
+
+### Login Register data sharing
+When navigating from one to another, also move data from password and email fields.

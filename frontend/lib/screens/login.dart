@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:notif/commons/login_register_fields.dart';
 
 class LogInPage extends StatelessWidget {
   const LogInPage({Key? key}) : super(key: key);
@@ -6,25 +7,27 @@ class LogInPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
+    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
     return Scaffold(
         body: Center(
             child: isSmallScreen
-                ? const Column(
+                ? Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _Logo(),
-                      _FormContent(),
+                      const Logo(title: "Welcome to Flutter!"),
+                      _FormContent(formKey: formKey),
                     ],
                   )
                 : Container(
                     padding: const EdgeInsets.all(32.0),
                     constraints: const BoxConstraints(maxWidth: 800),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Expanded(child: _Logo()),
+                        const Expanded(
+                            child: Logo(title: "Welcome to Flutter!")),
                         Expanded(
-                          child: Center(child: _FormContent()),
+                          child: Center(child: _FormContent(formKey: formKey)),
                         ),
                       ],
                     ),
@@ -32,151 +35,72 @@ class LogInPage extends StatelessWidget {
   }
 }
 
-class _Logo extends StatelessWidget {
-  const _Logo({Key? key}) : super(key: key);
+class _FormContent extends StatelessWidget {
+  final GlobalKey<FormState> formKey;
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController passwordController = TextEditingController();
+
+  _FormContent({Key? key, required this.formKey}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
+    bool rememberMe = false;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        FlutterLogo(size: isSmallScreen ? 100 : 200),
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Text(
-            "Welcome to Flutter!",
-            textAlign: TextAlign.center,
-            style: isSmallScreen
-                ? Theme.of(context).textTheme.headlineSmall
-                : Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(color: Colors.black),
-          ),
-        )
-      ],
-    );
-  }
-}
-
-class _FormContent extends StatefulWidget {
-  const _FormContent({Key? key}) : super(key: key);
-
-  @override
-  State<_FormContent> createState() => __FormContentState();
-}
-
-class __FormContentState extends State<_FormContent> {
-  bool _isPasswordVisible = false;
-  bool _rememberMe = false;
-
-  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-
-  @override
-  Widget build(BuildContext context) {
     return Container(
       constraints: const BoxConstraints(maxWidth: 300),
       child: Form(
-        key: _formKey,
+        key: formKey,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextFormField(
-              validator: (value) {
-                // add email validation
-                if (value == null || value.isEmpty) {
-                  return 'Please enter some text';
-                }
-
-                bool emailValid = RegExp(
-                        r"^[a-zA-Z0-9.a-zA-Z0-9.!#$%&'*+-/=?^_`{|}~]+@[a-zA-Z0-9]+\.[a-zA-Z]+")
-                    .hasMatch(value);
-                if (!emailValid) {
-                  return 'Please enter a valid email';
-                }
-
-                return null;
-              },
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                hintText: 'Enter your email',
-                prefixIcon: Icon(Icons.email_outlined),
-                border: OutlineInputBorder(),
-              ),
+            EmailTextField(
+              labelText: 'Email',
+              hintText: 'Enter your email',
+              textController: emailController,
             ),
-            _gap(),
-            TextFormField(
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter some text';
-                }
-
-                if (value.length < 6) {
-                  return 'Password must be at least 6 characters';
-                }
-                return null;
-              },
-              obscureText: !_isPasswordVisible,
-              decoration: InputDecoration(
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
-                  prefixIcon: const Icon(Icons.lock_outline_rounded),
-                  border: const OutlineInputBorder(),
-                  suffixIcon: IconButton(
-                    icon: Icon(_isPasswordVisible
-                        ? Icons.visibility_off
-                        : Icons.visibility),
-                    onPressed: () {
-                      setState(() {
-                        _isPasswordVisible = !_isPasswordVisible;
-                      });
-                    },
-                  )),
+            const SizedBox(height: 16),
+            PasswordTextField(
+              labelText: 'Password',
+              hintText: 'Enter your password',
+              textController: passwordController,
             ),
-            _gap(),
+            const SizedBox(height: 16),
             CheckboxListTile(
-              value: _rememberMe,
+              value: rememberMe,
               onChanged: (value) {
                 if (value == null) return;
-                setState(() {
-                  _rememberMe = value;
-                });
+                rememberMe = value;
               },
               title: const Text('Remember me'),
               controlAffinity: ListTileControlAffinity.leading,
               dense: true,
               contentPadding: const EdgeInsets.all(0),
             ),
-            _gap(),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(4)),
-                ),
-                child: const Padding(
-                  padding: EdgeInsets.all(10.0),
-                  child: Text(
-                    'Sign in',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                onPressed: () {
-                  if (_formKey.currentState?.validate() ?? false) {
-                    /// do something
-                  }
-                },
-              ),
+            const SizedBox(height: 16),
+            CustomButton(
+              buttonText: 'Sign in',
+              onPressed: () {
+                if (formKey.currentState?.validate() ?? false) {
+                  /// TODO: Handle login logic via auth.dart service
+                  print(
+                      "Validated data:\n\temail: ${emailController.text}, password: ${passwordController.text}");
+                }
+              },
             ),
+            const SizedBox(height: 16),
+            CustomButton(
+              buttonText: 'Register',
+              buttonColor: Colors.blueAccent[100],
+              onPressed: () {
+                Navigator.pushNamed(context, '/Register');
+              },
+            ),
+
+            /// TODO: add logic and/or navigation for password recovery
           ],
         ),
       ),
     );
   }
-
-  Widget _gap() => const SizedBox(height: 16);
 }
