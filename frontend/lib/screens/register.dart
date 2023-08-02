@@ -10,28 +10,36 @@ class RegisterPage extends StatelessWidget {
     final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
     return Scaffold(
-        body: Center(
-            child: isSmallScreen
-                ? Column(
-                    mainAxisSize: MainAxisSize.min,
+      body: Center(
+          child: isSmallScreen
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Logo(title: "Welcome to Flutter!"),
+                    _FormContent(formKey: formKey),
+                  ],
+                )
+              : Container(
+                  padding: const EdgeInsets.all(32.0),
+                  constraints: const BoxConstraints(maxWidth: 800),
+                  child: Row(
                     children: [
-                      const Logo(title: "Welcome to Flutter!"),
-                      _FormContent(formKey: formKey),
+                      const Expanded(child: Logo(title: "Welcome to Flutter!")),
+                      Expanded(
+                        child: Center(child: _FormContent(formKey: formKey)),
+                      ),
                     ],
-                  )
-                : Container(
-                    padding: const EdgeInsets.all(32.0),
-                    constraints: const BoxConstraints(maxWidth: 800),
-                    child: Row(
-                      children: [
-                        const Expanded(
-                            child: Logo(title: "Welcome to Flutter!")),
-                        Expanded(
-                          child: Center(child: _FormContent(formKey: formKey)),
-                        ),
-                      ],
-                    ),
-                  )));
+                  ),
+                )),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.pushNamed(context, '/About');
+        },
+        tooltip: 'About',
+        backgroundColor: Theme.of(context).primaryColor,
+        child: const Icon(Icons.question_mark_rounded),
+      ),
+    );
   }
 }
 
@@ -45,8 +53,6 @@ class _FormContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    bool rememberMe = false;
-
     return Container(
       constraints: const BoxConstraints(maxWidth: 300),
       child: Form(
@@ -88,7 +94,7 @@ class _FormContent extends StatelessWidget {
             const SizedBox(height: 16),
             CustomButton(
               buttonText: 'Back',
-              buttonColor: Colors.blueAccent[100],
+              buttonColor: Theme.of(context).primaryColorLight,
               onPressed: () {
                 if (Navigator.canPop(context)) {
                   Navigator.pop(context);
