@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:notif/screens/about.dart';
+import 'package:notif/screens/shared.dart';
 
 void main() {
   runApp(App());
@@ -28,10 +28,11 @@ class App extends StatelessWidget {
         // scaffoldBackgroundColor: const Color(0x1e1e1e), // default background color
         // backgroundColor: const Color(0x2e2e2e),
       ),
-      home: AboutPage(), // directly open AboutPage() for testing
+      home: LogInPage(), // directly open AboutPage() for testing
       routes: {
         // define the routes
         // '/Home': (context) => HomePage(),
+        '/LogIn': (context) => LogInPage(),
         '/About': (context) => AboutPage(),
       },
     );
