@@ -4,10 +4,16 @@
 
 ## Screen Layouts
 
-### Login/Register Screen
-- Contains a form for logging in
-- Has a button for registration
-- Needs decision on whether to split into two screens, or how to handle differences between logging in and registration forms
+### Login
+- Contains a form for logging in, a title, and a logo
+- Has buttons to navigate to registration and password recovery
+- Skips to Home Screen if logged in
+
+### Register Screen
+- Has a form for registration
+
+### Forgot Password Screen
+- IDK how this can work
 
 ### Home Screen
 - Displays navigation options to other screens
@@ -31,17 +37,25 @@ List of screens, and the links to other screens they should include.
 
 ### The entry point for users: 
 Not really a screen, but should be mentioned nonetheless, 
-- login/register: If the user is not already logged in
+- login: If the user is not already logged in
 - homescreen: if the user is logged in
 
-### Login/Register:
-- homescreen after logging in
-- maybe some intro or whatever after registering, but for now homescreen
+### Login:
+- homescreen: after logging in
+- register: button nav
+- forgot password: button nav
+
+### Regiser:
+- homescreen: after registering
+- login: back button
+
+### Forgot password:
+- login: back button
 
 ### Homescreen:
 - settings: a button or in a menu
 - about: a button or in a menu
-- login/register: after logging out
+- login: after logging out
 
 ### Settings:
 - homescreen: via back button I guess
