@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:notif/screens/shared.dart';
 
 void main() {
-  runApp(App());
+  runApp(const App());
 }
 
 class App extends StatelessWidget {
+  const App({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -15,7 +17,7 @@ class App extends StatelessWidget {
         brightness: Brightness.light,
         primaryColor: const Color.fromARGB(255, 69, 26, 172),
         primaryColorLight: const Color.fromARGB(255, 89, 53, 173),
-        primaryColorDark: Color.fromARGB(255, 76, 18, 211),
+        primaryColorDark: const Color.fromARGB(255, 76, 18, 211),
         // colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.deepPurple),
 
         // Define the default font family.
@@ -31,13 +33,13 @@ class App extends StatelessWidget {
         // scaffoldBackgroundColor: const Color(0x1e1e1e), // default background color
         // backgroundColor: const Color(0x2e2e2e),
       ),
-      home: LogInPage(),
+      home: const LogInPage(),
       routes: {
         // define the routes
         // '/Home': (context) => HomePage(),
-        '/LogIn': (context) => LogInPage(),
-        '/Register': (context) => RegisterPage(),
-        '/About': (context) => AboutPage(),
+        '/LogIn': (context) => const LogInPage(),
+        '/Register': (context) => const RegisterPage(),
+        '/About': (context) => const AboutPage(),
       },
     );
   }
