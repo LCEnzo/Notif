@@ -26,7 +26,7 @@ urlpatterns = [
 	path('api/v1/accounts/', include('accounts.urls')),
 	path('api/v1/monitoring/', include('monitoring.urls')),
 	# JWT config
-	path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'), # type: ignore
-	path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # type: ignore
-	path('api/token/verify/', TokenVerifyView.as_view(), name='token_verify'), # type: ignore
+	path('api/v1/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'), # type: ignore
+	path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # type: ignore
+	path('api/v1/token/verify/', TokenVerifyView.as_view(), name='token_verify'), # type: ignore
 ]
