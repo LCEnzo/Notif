@@ -1,8 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:notif/screens/shared.dart';
+import 'package:notif/services/auth.dart';
+import 'package:provider/provider.dart';
 
 void main() {
-  runApp(const App());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AuthService()),
+      ],
+      child: const App(),
+    ),
+  );
 }
 
 class App extends StatelessWidget {
@@ -35,8 +44,7 @@ class App extends StatelessWidget {
       ),
       home: const LogInPage(),
       routes: {
-        // define the routes
-        // '/Home': (context) => HomePage(),
+        '/Home': (context) => const HomePage(),
         '/LogIn': (context) => const LogInPage(),
         '/Register': (context) => const RegisterPage(),
         '/About': (context) => const AboutPage(),

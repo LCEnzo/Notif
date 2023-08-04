@@ -232,10 +232,6 @@ class EntropyValidator {
   }
 
   String getHelpText({double? passwordEntropy}) {
-    String passwordString = passwordEntropy == null
-        ? ""
-        : "Your password has ${passwordEntropy.toStringAsFixed(2)} bits of entropy. ";
-
     // ignore: prefer_interpolation_to_compose_strings
     return "Use more and different characters. \"S0m3 password!\"";
   }

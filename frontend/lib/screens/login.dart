@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/login_register_fields.dart';
+import 'package:notif/services/auth.dart';
+import 'package:provider/provider.dart';
 
 class LogInPage extends StatelessWidget {
   const LogInPage({Key? key}) : super(key: key);
@@ -15,7 +18,7 @@ class LogInPage extends StatelessWidget {
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Logo(title: "Welcome to Flutter!"),
+                    const Logo(title: "Unused title text?"),
                     _FormContent(formKey: formKey),
                   ],
                 )
@@ -24,7 +27,7 @@ class LogInPage extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 800),
                   child: Row(
                     children: [
-                      const Expanded(child: Logo(title: "Welcome to Flutter!")),
+                      const Expanded(child: Logo(title: "Welcome to Notif!")),
                       Expanded(
                         child: Center(child: _FormContent(formKey: formKey)),
                       ),
@@ -33,7 +36,6 @@ class LogInPage extends StatelessWidget {
                 )),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          /// TODO: Login for logged out, Home for logged in user
           Navigator.pushNamed(context, '/About');
         },
         tooltip: 'About',
@@ -46,14 +48,29 @@ class LogInPage extends StatelessWidget {
 
 class _FormContent extends StatelessWidget {
   final GlobalKey<FormState> formKey;
-  final TextEditingController emailController = TextEditingController();
+  final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
   _FormContent({Key? key, required this.formKey}) : super(key: key);
 
+  String? noValidate(String? password) {
+    if (password == null || password.isEmpty) {
+      return "Password cannot be empty";
+    }
+
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     bool rememberMe = false;
+    final authService = Provider.of<AuthService>(context, listen: true);
+
+    if (authService.jwt != null) {
+      Future.delayed(Duration.zero, () {
+        Navigator.pushNamed(context, '/Home');
+      });
+    }
 
     return Container(
       constraints: const BoxConstraints(maxWidth: 300),
@@ -63,16 +80,17 @@ class _FormContent extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            EmailTextField(
-              labelText: 'Email',
-              hintText: 'Enter your email',
-              textController: emailController,
+            UsernameTextField(
+              labelText: 'Username',
+              hintText: 'Enter your username',
+              textController: usernameController,
             ),
             const SizedBox(height: 16),
             PasswordTextField(
               labelText: 'Password',
               hintText: 'Enter your password',
               textController: passwordController,
+              validator: noValidate,
             ),
             const SizedBox(height: 16),
             CheckboxListTile(
@@ -89,11 +107,32 @@ class _FormContent extends StatelessWidget {
             const SizedBox(height: 16),
             CustomButton(
               buttonText: 'Sign in',
-              onPressed: () {
+              onPressed: () async {
                 if (formKey.currentState?.validate() ?? false) {
-                  /// TODO: Handle login logic via auth.dart service
-                  print(
-                      "Validated data:\n\temail: ${emailController.text}, password: ${passwordController.text}");
+                  if (kDebugMode) {
+                    print(
+                        "Validated data:\n\tusername: ${usernameController.text}, password: ${passwordController.text}");
+                  }
+                  try {
+                    await authService.login(
+                        usernameController.text, passwordController.text);
+                  } catch (e) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      showDialog<dynamic>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Login Failed'),
+                          content: Text('$e'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => {Navigator.pop(context)},
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    });
+                  }
                 }
               },
             ),
@@ -106,7 +145,7 @@ class _FormContent extends StatelessWidget {
               },
             ),
 
-            /// TODO: add logic and/or navigation for password recovery
+            // TODO: add logic and/or navigation for password recovery
           ],
         ),
       ),
