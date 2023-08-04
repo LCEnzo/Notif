@@ -83,6 +83,7 @@ python manage.py regenerate_secret_key
 ```
 
 ## TODOs
+* Figure out design
 * Create Django app
   * Create accounts app - Initial implementation done
   * Create URL monitoring app - Initial implementation done
@@ -93,8 +94,8 @@ python manage.py regenerate_secret_key
   * Fix timezone code - Given default zones, unsure if that's fine
   * Set up environ - Done
 * Create some kind of client
-  * Add registration
-    * First screen for new/logged out users
+  * Add registration - Done
+    * First screen for new/logged out users - Done, need to fix logo
   * Create a main screen to display a list of updates, and have navigation to other screens
     * Figure out platform agnostic storage model
   * Add basic account management screen (CRUD w/o C)
