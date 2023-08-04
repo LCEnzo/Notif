@@ -49,7 +49,7 @@ Instructions assume you are using a Debian derived Linux distro.
 	```
 2. Create a virtual environment if one does not exist.
 	```bash
-	python3 -m venv venv
+	python -m venv venv
 	```
 3. Activate the virtual environment.
 	```bash
@@ -63,8 +63,9 @@ Instructions assume you are using a Debian derived Linux distro.
 	```bash
 	cat .env.example > .env
 	```
-6. Apply Django migrations.
+6. Make and Apply Django migrations.
 	```bash
+ 	python manage.py makemigrations
 	python manage.py migrate
 	```
 7. Run the Django development server.
