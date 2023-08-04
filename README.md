@@ -8,8 +8,6 @@ The application consists of two main components:
 1. Backend - Built using Django, hosted on a VPS.
 2. Frontend - Flutter
 
----
-
 ## Backend
 
 The backend has the following apps:
@@ -28,13 +26,9 @@ The backend has the following apps:
 - Stores updates for URLs
 - Sends push notifications for updates
 
----
-
 ## Frontend
 
-Tech TBD - Kotlin or Flutter expected
-
----
+...
 
 ## Getting Started
 
@@ -48,7 +42,6 @@ Instructions assume you are using a Debian derived Linux distro.
 
 ### Installation and Setup
 
-
 1. Clone the repository.
 	```bash
 	git clone https://github.com/your_username/my-update-notifier.git
@@ -56,7 +49,7 @@ Instructions assume you are using a Debian derived Linux distro.
 	```
 2. Create a virtual environment if one does not exist.
 	```bash
-	python3 -m venv venv
+	python -m venv venv
 	```
 3. Activate the virtual environment.
 	```bash
@@ -70,15 +63,16 @@ Instructions assume you are using a Debian derived Linux distro.
 	```bash
 	cat .env.example > .env
 	```
-6. Apply Django migrations.
+6. Make and Apply Django migrations.
 	```bash
+ 	python manage.py makemigrations
 	python manage.py migrate
 	```
 7. Run the Django development server.
 	```bash
 	python manage.py runserver
 	```
-
+ 
 ## Misc
 
 ### Secret Key Gen
@@ -87,7 +81,6 @@ The following will change the Django secret key in `.env`.
 ```bash
 python manage.py regenerate_secret_key
 ```
-
 
 ## TODOs
 * Create Django app
@@ -136,17 +129,15 @@ Should polish as the project is being written. This includes:
 * Discord and/or Slack bots
 * Email notifications
 
----
-
 ## Note on tech used:
 
 ### Why Python and Django?
 
-I already know Django and Python, and they are good enough for the project. Django is proven in production by a myriad of companies/products including Instagram. The subpar nature of the type system hurts, but for a small projects, it's not an impediment.
+I already know Django and Python, and they are good enough for the project. Django is proven in production by a myriad of companies/products including Instagram. The subpar nature of the type system hurts, but for a small projects, it's not a big impediment. FastAPI would be a good alternative, but at the time of starting this project I was unfamiliar with it, and can't be bothered to port this.
 
-### Why Postgresql?
+### Why SQLite
 
-I wanted to try it out, and learn a little about DBs. In practice, a better choice would've been SQLite for the simplicity. Postgresql is overkill.
+Ease of use, ease of backup. Good enough for a small project.
 
 ### Why Flutter?
 
@@ -154,6 +145,6 @@ I wanted to have one frontend for multiple platforms, and it seems a nice choice
 
 ### Why Docker and Hetzner?
 
-Hetzner is cheap. Will look into hosting on AWS/Azure/GCP to learn more about cloud later.
+Hetzner is cheap. Will look into hosting on AWS/Azure/GCP to learn more about cloud later. Might use DO.
 
-Docker - practice and portability.
+Docker - use for practice, reproducability, and portability.

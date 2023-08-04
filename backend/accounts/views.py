@@ -31,6 +31,9 @@ class UserViewSet(ModelViewSet):
 				return UserFullReadSerializer
 			case _:
 				return UserMinimalReadSerializer
+			
+		# For mypy
+		return UserMinimalReadSerializer
 
 	def get_permissions(self):
 		# Account creation, ie. registration, needs to work for visitors without an account
