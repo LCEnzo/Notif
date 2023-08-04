@@ -25,3 +25,6 @@
         "password": "securepassword123 securepassword123"
     }
     ```
+  
+## TODOs:
+ - Deal with CORS

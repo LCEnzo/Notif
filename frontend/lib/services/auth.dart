@@ -25,7 +25,7 @@ class AuthService extends ChangeNotifier {
 
   Future<void> login(String username, String password) async {
     final response = await http.post(
-      Uri.parse('$apiUrl/login/'),
+      Uri.parse('$apiUrl/token/'),
       headers: <String, String>{
         'Content-Type': 'application/json; charset=UTF-8',
       },

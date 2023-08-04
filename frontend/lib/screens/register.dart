@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/login_register_fields.dart';
 
@@ -15,7 +16,7 @@ class RegisterPage extends StatelessWidget {
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Logo(title: "Welcome to Flutter!"),
+                    const Logo(title: "Unused title text?"),
                     _FormContent(formKey: formKey),
                   ],
                 )
@@ -24,7 +25,7 @@ class RegisterPage extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 800),
                   child: Row(
                     children: [
-                      const Expanded(child: Logo(title: "Welcome to Flutter!")),
+                      const Expanded(child: Logo(title: "Welcome to Notif!")),
                       Expanded(
                         child: Center(child: _FormContent(formKey: formKey)),
                       ),
@@ -84,10 +85,12 @@ class _FormContent extends StatelessWidget {
               onPressed: () {
                 if (formKey.currentState?.validate() ?? false) {
                   /// TODO: Handle login logic via auth.dart service
-                  print("Validated data:");
-                  print("\t- username: ${usernameController.text}");
-                  print("\t- email: ${emailController.text}");
-                  print("\t- password: ${passwordController.text}");
+                  if (kDebugMode) {
+                    print("Validated data:");
+                    print("\t- username: ${usernameController.text}");
+                    print("\t- email: ${emailController.text}");
+                    print("\t- password: ${passwordController.text}");
+                  }
                 }
               },
             ),
