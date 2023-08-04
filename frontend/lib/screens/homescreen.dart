@@ -21,7 +21,8 @@ class HomePage extends StatelessWidget {
         title: const Text('Notif'),
         centerTitle: true,
         backgroundColor: Theme.of(context).primaryColor,
-        leading: BackButton(
+        leading: IconButton(
+          icon: const Icon(Icons.logout),
           onPressed: () {
             authService.logout();
             Navigator.pushNamed(context, '/LogIn');

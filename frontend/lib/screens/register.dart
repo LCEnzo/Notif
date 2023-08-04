@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/login_register_fields.dart';
+import 'package:notif/services/auth.dart';
+import 'package:provider/provider.dart';
 
 class RegisterPage extends StatelessWidget {
   const RegisterPage({Key? key}) : super(key: key);
@@ -54,6 +56,14 @@ class _FormContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context, listen: true);
+
+    if (authService.jwt != null) {
+      Future.delayed(Duration.zero, () {
+        Navigator.pushNamed(context, '/Home');
+      });
+    }
+
     return Container(
       constraints: const BoxConstraints(maxWidth: 300),
       child: Form(
@@ -82,14 +92,34 @@ class _FormContent extends StatelessWidget {
             const SizedBox(height: 16),
             CustomButton(
               buttonText: 'Register',
-              onPressed: () {
+              onPressed: () async {
                 if (formKey.currentState?.validate() ?? false) {
-                  /// TODO: Handle login logic via auth.dart service
                   if (kDebugMode) {
                     print("Validated data:");
                     print("\t- username: ${usernameController.text}");
                     print("\t- email: ${emailController.text}");
                     print("\t- password: ${passwordController.text}");
+                  }
+
+                  try {
+                    await authService.register(usernameController.text,
+                        emailController.text, passwordController.text);
+                  } catch (e) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      showDialog<dynamic>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Register Failed'),
+                          content: Text('$e'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => {Navigator.pop(context)},
+                              child: const Text('OK'),
+                            ),
+                          ],
+                        ),
+                      );
+                    });
                   }
                 }
               },
