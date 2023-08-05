@@ -1,35 +1,36 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:notif/commons/login_register_fields.dart';
-import 'package:notif/services/auth.dart';
+import 'package:Notif/commons/login_register_fields.dart';
+import 'package:Notif/services/auth.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LogInPage extends StatelessWidget {
   const LogInPage({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    const String appTitle = "Welcome to Notif!";
     final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
-    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
     return Scaffold(
       body: Center(
           child: isSmallScreen
-              ? Column(
+              ? const Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Logo(title: "Unused title text?"),
-                    _FormContent(formKey: formKey),
+                    Logo(title: appTitle),
+                    _FormContent(),
                   ],
                 )
               : Container(
                   padding: const EdgeInsets.all(32.0),
                   constraints: const BoxConstraints(maxWidth: 800),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const Expanded(child: Logo(title: "Welcome to Notif!")),
+                      Expanded(child: Logo(title: appTitle)),
                       Expanded(
-                        child: Center(child: _FormContent(formKey: formKey)),
+                        child: Center(child: _FormContent()),
                       ),
                     ],
                   ),
@@ -46,31 +47,38 @@ class LogInPage extends StatelessWidget {
   }
 }
 
-class _FormContent extends StatelessWidget {
-  final GlobalKey<FormState> formKey;
+class _FormContent extends StatefulWidget {
+  const _FormContent({Key? key}) : super(key: key);
+
+  @override
+  _FormContentState createState() => _FormContentState();
+}
+
+class _FormContentState extends State<_FormContent> {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  final formKey = GlobalKey<FormState>();
+  bool rememberMe = false;
 
-  _FormContent({Key? key, required this.formKey}) : super(key: key);
+  @override
+  void initState() {
+    super.initState();
 
-  String? noValidate(String? password) {
-    if (password == null || password.isEmpty) {
-      return "Password cannot be empty";
-    }
+    _loadUsername();
+    _loadRememberMe();
 
-    return null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final AuthService authService;
+      authService = Provider.of<AuthService>(context, listen: false);
+      if (authService.jwt != null) {
+        Navigator.pushReplacementNamed(context, '/Home');
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    bool rememberMe = false;
-    final authService = Provider.of<AuthService>(context, listen: true);
-
-    if (authService.jwt != null) {
-      Future.delayed(Duration.zero, () {
-        Navigator.pushNamed(context, '/Home');
-      });
-    }
+    final authService = Provider.of<AuthService>(context, listen: false);
 
     return Container(
       constraints: const BoxConstraints(maxWidth: 300),
@@ -81,12 +89,14 @@ class _FormContent extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             UsernameTextField(
+              key: const Key('usernameField'),
               labelText: 'Username',
               hintText: 'Enter your username',
               textController: usernameController,
             ),
             const SizedBox(height: 16),
             PasswordTextField(
+              key: const Key('passwordField'),
               labelText: 'Password',
               hintText: 'Enter your password',
               textController: passwordController,
@@ -96,8 +106,11 @@ class _FormContent extends StatelessWidget {
             CheckboxListTile(
               value: rememberMe,
               onChanged: (value) {
-                if (value == null) return;
-                rememberMe = value;
+                setState(() {
+                  if (value == null) return;
+                  rememberMe = value;
+                  _saveRememberMe();
+                });
               },
               title: const Text('Remember me'),
               controlAffinity: ListTileControlAffinity.leading,
@@ -108,31 +121,13 @@ class _FormContent extends StatelessWidget {
             CustomButton(
               buttonText: 'Sign in',
               onPressed: () async {
-                if (formKey.currentState?.validate() ?? false) {
-                  if (kDebugMode) {
-                    print(
-                        "Validated data:\n\tusername: ${usernameController.text}, password: ${passwordController.text}");
-                  }
-                  try {
-                    await authService.login(
-                        usernameController.text, passwordController.text);
-                  } catch (e) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      showDialog<dynamic>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Login Failed'),
-                          content: Text('$e'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => {Navigator.pop(context)},
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
-                      );
-                    });
-                  }
+                if (rememberMe) {
+                  _saveUsername();
+                }
+
+                bool loggedIn = await loginClick(authService, context);
+                if (loggedIn && context.mounted) {
+                  Navigator.pushReplacementNamed(context, '/Home');
                 }
               },
             ),
@@ -141,7 +136,7 @@ class _FormContent extends StatelessWidget {
               buttonText: 'Register',
               buttonColor: Theme.of(context).primaryColorLight,
               onPressed: () {
-                Navigator.pushNamed(context, '/Register');
+                Navigator.pushReplacementNamed(context, '/Register');
               },
             ),
 
@@ -150,5 +145,77 @@ class _FormContent extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Future<bool> loginClick(AuthService authService, BuildContext context) async {
+    if (formKey.currentState?.validate() ?? false) {
+      if (kDebugMode) {
+        print(
+            "Validated data:\n\tusername: ${usernameController.text}, password: ${passwordController.text}");
+      }
+      try {
+        await authService.login(
+            usernameController.text, passwordController.text);
+        return true;
+      } catch (e) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          showDialog<dynamic>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Login Failed'),
+              content: Text('$e'),
+              actions: [
+                TextButton(
+                  onPressed: () => {Navigator.pop(context)},
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        });
+      }
+    }
+
+    return false;
+  }
+
+  Future<void> _loadRememberMe() async {
+    final perfs = await SharedPreferences.getInstance();
+    bool? rememberMe = perfs.getBool('rememberMe');
+
+    if (rememberMe != null) {
+      setState(() {
+        this.rememberMe = rememberMe;
+      });
+    }
+  }
+
+  Future<void> _saveRememberMe() async {
+    final perfs = await SharedPreferences.getInstance();
+    perfs.setBool('rememberMe', rememberMe);
+  }
+
+  Future<void> _loadUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? username = prefs.getString('username');
+
+    if (username != null) {
+      setState(() {
+        usernameController.text = username;
+      });
+    }
+  }
+
+  Future<void> _saveUsername() async {
+    final perfs = await SharedPreferences.getInstance();
+    perfs.setString('username', usernameController.text);
+  }
+
+  String? noValidate(String? password) {
+    if (password == null || password.isEmpty) {
+      return "Password cannot be empty";
+    }
+
+    return null;
   }
 }
