@@ -1,4 +1,4 @@
-name: notif
+name: Notif
 description: Notif frontend, an automated web scraper designed to push notifications to users whenever updates appear on monitored websites, blogs, and forums.
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -34,6 +34,7 @@ dependencies:
   url_launcher: ^6.1.12
   http: ^1.1.0
   provider: ^6.0.1
+  shared_preferences: ^2.2.0
 
 
   # The following adds the Cupertino Icons font to your application.

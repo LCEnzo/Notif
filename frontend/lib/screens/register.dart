@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:notif/commons/login_register_fields.dart';
-import 'package:notif/services/auth.dart';
+import 'package:Notif/commons/login_register_fields.dart';
+import 'package:Notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 class RegisterPage extends StatelessWidget {
@@ -9,8 +9,8 @@ class RegisterPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const String appTitle = "Welcome to Notif!";
     final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
-    final GlobalKey<FormState> formKey = GlobalKey<FormState>();
 
     return Scaffold(
       body: Center(
@@ -18,8 +18,8 @@ class RegisterPage extends StatelessWidget {
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Logo(title: "Unused title text?"),
-                    _FormContent(formKey: formKey),
+                    const Logo(title: appTitle),
+                    _FormContent(),
                   ],
                 )
               : Container(
@@ -27,9 +27,9 @@ class RegisterPage extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 800),
                   child: Row(
                     children: [
-                      const Expanded(child: Logo(title: "Welcome to Notif!")),
+                      const Expanded(child: Logo(title: appTitle)),
                       Expanded(
-                        child: Center(child: _FormContent(formKey: formKey)),
+                        child: Center(child: _FormContent()),
                       ),
                     ],
                   ),
@@ -47,12 +47,12 @@ class RegisterPage extends StatelessWidget {
 }
 
 class _FormContent extends StatelessWidget {
-  final GlobalKey<FormState> formKey;
+  final formKey = GlobalKey<FormState>();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  _FormContent({Key? key, required this.formKey}) : super(key: key);
+  _FormContent({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +60,7 @@ class _FormContent extends StatelessWidget {
 
     if (authService.jwt != null) {
       Future.delayed(Duration.zero, () {
-        Navigator.pushNamed(context, '/Home');
+        Navigator.pushReplacementNamed(context, '/Home');
       });
     }
 
@@ -132,7 +132,7 @@ class _FormContent extends StatelessWidget {
                 if (Navigator.canPop(context)) {
                   Navigator.pop(context);
                 } else {
-                  Navigator.pushNamed(context, '/LogIn');
+                  Navigator.pushReplacementNamed(context, '/LogIn');
                 }
               },
             ),
