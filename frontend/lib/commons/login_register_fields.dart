@@ -35,27 +35,23 @@ class UsernameTextField extends StatefulWidget {
   final String hintText;
   final TextEditingController textController;
 
-  const UsernameTextField(
-      {Key? key,
-      required this.labelText,
-      required this.hintText,
-      required this.textController})
-      : super(key: key);
+  const UsernameTextField({
+    Key? key,
+    required this.labelText,
+    required this.hintText,
+    required this.textController,
+  }) : super(key: key);
 
   @override
-  _UsernameTextField createState() =>
-      _UsernameTextField(textController: textController);
+  _UsernameTextFieldState createState() => _UsernameTextFieldState();
 }
 
-class _UsernameTextField extends State<UsernameTextField> {
-  final TextEditingController textController;
-
-  _UsernameTextField({required this.textController});
-
+class _UsernameTextFieldState extends State<UsernameTextField> {
   @override
   Widget build(BuildContext context) {
     return TextFormField(
-      controller: textController,
+      key: widget.key,
+      controller: widget.textController,
       decoration: InputDecoration(
         labelText: widget.labelText,
         hintText: widget.hintText,
@@ -81,15 +77,13 @@ class EmailTextField extends StatefulWidget {
       : super(key: key);
 
   @override
-  _EmailTextFieldState createState() =>
-      _EmailTextFieldState(textController: textController);
+  _EmailTextFieldState createState() => _EmailTextFieldState();
 }
 
 class _EmailTextFieldState extends State<EmailTextField> {
   late String? Function(String?) validator;
-  final TextEditingController textController;
 
-  _EmailTextFieldState({required this.textController});
+  _EmailTextFieldState();
 
   @override
   void initState() {
@@ -111,7 +105,7 @@ class _EmailTextFieldState extends State<EmailTextField> {
   Widget build(BuildContext context) {
     return TextFormField(
       validator: validator,
-      controller: textController,
+      controller: widget.textController,
       decoration: InputDecoration(
         labelText: widget.labelText,
         hintText: widget.hintText,
@@ -137,16 +131,14 @@ class PasswordTextField extends StatefulWidget {
       : super(key: key);
 
   @override
-  _PasswordTextFieldState createState() =>
-      _PasswordTextFieldState(textController: textController);
+  _PasswordTextFieldState createState() => _PasswordTextFieldState();
 }
 
 class _PasswordTextFieldState extends State<PasswordTextField> {
   bool _isPasswordVisible = false;
   late String? Function(String?) validator;
-  final TextEditingController textController;
 
-  _PasswordTextFieldState({required this.textController});
+  _PasswordTextFieldState();
 
   @override
   void initState() {
@@ -157,7 +149,7 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
   @override
   Widget build(BuildContext context) {
     return TextFormField(
-      controller: textController,
+      controller: widget.textController,
       validator: validator,
       obscureText: !_isPasswordVisible,
       decoration: InputDecoration(
