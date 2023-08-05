@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:notif/commons/login_register_fields.dart';
-import 'package:notif/services/auth.dart';
+import 'package:Notif/commons/login_register_fields.dart';
+import 'package:Notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 class HomePage extends StatelessWidget {
