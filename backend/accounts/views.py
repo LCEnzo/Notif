@@ -1,5 +1,9 @@
 
+from rest_framework import status
+from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.viewsets import ModelViewSet
 
@@ -27,6 +31,9 @@ class UserViewSet(ModelViewSet):
 				return UserFullReadSerializer
 			case _:
 				return UserMinimalReadSerializer
+			
+		# For mypy
+		return UserMinimalReadSerializer
 
 	def get_permissions(self):
 		# Account creation, ie. registration, needs to work for visitors without an account
@@ -34,3 +41,12 @@ class UserViewSet(ModelViewSet):
 			return []
 
 		return super().get_permissions()
+
+	@action(detail=False, methods=['get', 'post'], permission_classes=[IsAuthenticated])
+	def get_my_info(self, request: Request) -> Response:
+		user = request.user
+		assert type(user) == User
+		return Response(
+			status=status.HTTP_200_OK, 
+			data=self.get_serializer_class()(user).data
+		)

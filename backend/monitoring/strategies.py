@@ -559,6 +559,9 @@ class QQAlertsStrategy(BaseStrategy):
 				return datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()) .date()
 			case _:
 				return datetime.strptime(relative_date, "%Y-%m-%d").astimezone(timezone.get_default_timezone()) .date()
+			
+		# For mypy
+		raise ValueError
 
 
 @dataclass
