@@ -44,7 +44,12 @@ class Migration(migrations.Migration):
                         encoder=django.core.serializers.json.DjangoJSONEncoder,
                     ),
                 ),
-                ("function", models.CharField(choices=[], max_length=256)),
+                ("strat_cls", models.CharField(choices=[
+                    ("GeneralSelectorStrategy", "GeneralSelectorStrategy"),
+                    ("SBSVThreadmarksStrategy", "SBSVThreadmarksStrategy"),
+                    ("QQAlertsStrategy", "QQAlertsStrategy"),
+                    ("KemonoFavouritesStrategy", "KemonoFavouritesStrategy"),
+                ], max_length=256)),
             ],
         ),
         migrations.CreateModel(
@@ -76,6 +81,7 @@ class Migration(migrations.Migration):
                         default=None,
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="link_set",
                         to="monitoring.strategy",
                     ),
                 ),
