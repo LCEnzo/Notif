@@ -30,3 +30,27 @@ class IsRequestingThemselves(BasePermission):
 		
 		return False
 
+
+class IsOwner(permissions.BasePermission):
+	"""
+	Custom permission to only allow owners of an object to view/edit it.
+	"""
+	def has_object_permission(self, request: HttpRequest | Request, view: Any, obj: Any) -> bool:
+		has_requester = hasattr(request, 'user') and (not request.user.is_anonymous)
+		obj_has_owner = hasattr(obj, 'user')
+		return has_requester and obj_has_owner and obj.user.pk == request.user.pk
+
+
+class IsOwnerOrAdmin(permissions.BasePermission):
+	"""
+	Custom permission to only allow owners of an object or admin to view/edit it.
+	"""
+	def has_object_permission(self, request: HttpRequest | Request, view: Any, obj: Any) -> bool:
+		has_requester = hasattr(request, 'user') and (not request.user.is_anonymous)
+		user_is_admin: bool = has_requester and request.user.is_staff or request.user.is_superuser # type: ignore
+
+		obj_has_owner = hasattr(obj, 'user')
+		obj_owner_is_requester: bool = has_requester and obj_has_owner and obj.user.pk == request.user.pk
+
+		return obj_owner_is_requester or user_is_admin
+
