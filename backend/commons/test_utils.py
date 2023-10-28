@@ -77,7 +77,6 @@ class ViewSetMixin(SetupMixin, TestCase):
 	list_view_name = 'users-list'  # The name of the list view, to be defined in the subclass
 	detail_view_name = 'users-detail'  # The name of the detail view, to be defined in the subclass
 	model: type[Model]  # The model class being tested, to be defined in the subclass
-
 	def setUp(self, list_view_name: str = 'users-list', 
 		detail_view_name: str = 'users-detail', model: type[Model] = User) -> None:
 		"""
