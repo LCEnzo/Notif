@@ -36,7 +36,7 @@ class Link(models.Model):
 	last_scraped = models.DateTimeField(auto_now=True, null=True, blank=True)
 	# Information with which to compare newly scraped data, to see whether a update has occurred
 	# Will probably add things like timestamps, html snippet hashes, etc
-	# I should consider what type of field to have
+	# I should consider what type of field to have. Previous scrape response or whatever
 	comparison_info = models.CharField(max_length=16*16*1024, blank=True)
 
 	def __str__(self):

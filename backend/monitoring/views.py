@@ -1,10 +1,14 @@
 from django.db.models.query import QuerySet
+from rest_framework.decorators import api_view, permission_classes  # noqa: F401
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
+from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from commons.permissions import IsOwnerOrAdmin
 from monitoring.models import Link, Strategy
 from monitoring.serializers import LinkSerializer, StrategySerializer
+from monitoring.strategies import STRATEGY_CHOICES
 
 
 class LinkViewSet(ModelViewSet):
@@ -36,4 +40,9 @@ class StrategyViewSet(ModelViewSet):
 		
 		return queryset.filter(links__user=user)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_strat_choices(request: Request) -> Response:
+	return Response(data=list(STRATEGY_CHOICES))
 

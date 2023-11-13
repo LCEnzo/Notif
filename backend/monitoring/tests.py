@@ -74,6 +74,10 @@ class LinkViewSetTestCase(ViewSetMixin):
 		# print(f"{resp = }")
 		# print(f"{resp.content!r}")
 
+	def test_create_link_and_strat(self):
+		# TODO
+		assert False
+
 	def test_update_link(self):
 		self._test_update_object()
 

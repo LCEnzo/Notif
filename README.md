@@ -112,6 +112,7 @@ python manage.py regenerate_secret_key
 * Figure out deployment
 
 Should polish as the project is being written. This includes:
+* Fingerprint login
 * OpenAPI documentation (would be great if something like FastAPI docs could be had)
 * API versioning - kinda? JWT stuff is under `/api/`, while the rest is under `/api/v1/`
 * Rate limiting
