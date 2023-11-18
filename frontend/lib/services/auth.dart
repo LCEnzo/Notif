@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 const String apiUrl = String.fromEnvironment('API_URL',
     defaultValue: 'http://localhost:8000/api/v1');
 
+final jwtStorage = FlutterSecureStorage();
+
 class UserData {
   String email;
   String username;

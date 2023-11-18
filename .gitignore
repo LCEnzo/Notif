@@ -16,3 +16,6 @@ debug.log
 secrets.*
 *.secrets
 .env
+
+# Misc
+.directory

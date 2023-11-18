@@ -8,6 +8,7 @@ from faker import Faker
 from faker.providers import bank, company, person
 
 from accounts.models import User
+from monitoring.models import Link, Strategy
 
 # Global password variable for ease of access
 password: str = 'password'
@@ -46,8 +47,9 @@ def backup_db() -> None:
 		print(f"Check the {backup_db.__name__} function in the {__file__} file.")
 
 
-def create_users(user_count: int = 30):
+def create_users(user_count: int = 30) -> list[User]:
 	existing_usernames = set(User.objects.values_list('username', flat=True))
+	users = []
 
 	for _ in range(user_count):
 		# Generate a unique username
@@ -66,5 +68,37 @@ def create_users(user_count: int = 30):
 		user.set_password(password)
 		user.save()
 
-# TODO: add logic for populating the DB with users, links, and everything else needed for testing functionality
+		users.append(user)
+		
+	return users
 
+
+def create_admin() -> User:
+	user_list = create_users(1)
+	user = user_list[0]
+
+	user.is_staff = True
+	user.is_superuser = True
+	user.save()
+
+	return user
+
+
+def create_strat_and_links(user: User) -> tuple[Strategy, list[Link]]:
+	assert user is not None and user.__class__ == User
+
+	strat = Strategy.objects.create(strat_cls="GeneralSelectorStrategy", data={"selectors": ["body"]})
+	link1 = Link.objects.create(
+		name = "Google",
+		url = "www.google.com",
+		user = user,
+		strategy = strat
+	)
+	link2 = Link.objects.create(
+		name = "Bing",
+		url = "bing.com",
+		user = user,
+		strategy = strat
+	)
+
+	return (strat, [link1, link2])

@@ -10,9 +10,11 @@ from commons.utils import create_users, password  # noqa: F401
 
 class UserViewSetTestCase(ViewSetMixin):
 	def setUp(self):
-		super().setUp(model=User)
-		self.list_view_name = "users-list"
-		self.detail_view_name = "users-detail"
+		super().setUp(
+			list_view_name = "users-list", 
+			detail_view_name = "users-detail", 
+			model = User
+		)
 
 	def test_list_users(self):
 		self._test_list_objects()
@@ -27,9 +29,7 @@ class UserViewSetTestCase(ViewSetMixin):
 			"name": "Ichi Nii",
 			"password": "securepassword123 securepassword123"
 		}
-		resp = self._test_create_object(fields=fields)
-		print(f"{resp = }")
-		print(f"{resp.content}")
+		_ = self._test_create_object(fields=fields)
 
 		fields = {
 			"username": "newuser",

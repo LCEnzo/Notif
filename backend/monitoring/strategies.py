@@ -28,16 +28,13 @@ NotifData: TypeAlias = list[tuple[str, str, URL]]
 DataDict: TypeAlias = None | dict[str, Any]
 NotifDataOrError: TypeAlias = str | NotifData
 
+# Used for choices for the Strategy model
+STRATEGY_CHOICES = {}
 
-registry = {}
-
-def register(cls):
-	registry[cls.__name__] = cls
+def register(cls: type):
+	STRATEGY_CHOICES[cls.__name__] = cls
 	return cls  # return the class so that it's still defined
 
-
-# Used for choices for the Strategy model
-STRATEGY_CHOICES = [(name, name) for name in registry]
 
 def _fetch_url_content(url: URL) -> str | None:
 	response = requests.get(url)

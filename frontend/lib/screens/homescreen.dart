@@ -29,12 +29,31 @@ class HomePage extends StatelessWidget {
           },
         ),
       ),
-      body: const SingleChildScrollView(
-        child: Center(
+      body: const Column(children: [
+        Center(
           child: Padding(
               padding: EdgeInsets.all(16.0), child: Logo(title: "Placeholder")),
         ),
-      ),
+        Center(child: NotificationsView())
+      ]),
     );
+  }
+}
+
+class NotificationsView extends StatefulWidget {
+  const NotificationsView({super.key});
+
+  @override
+  NotificationViewState createState() => NotificationViewState();
+}
+
+class NotificationViewState extends State<NotificationsView> {
+  @override
+  Widget build(BuildContext context) {
+    final userDataService =
+        Provider.of<UserDataService>(context, listen: false);
+
+    // TODO: implement build
+    throw UnimplementedError();
   }
 }
