@@ -143,7 +143,7 @@ class UserDataService extends ChangeNotifier {
     }
 
     final response = await http.get(
-      Uri.parse('$apiUrl/accounts/users'),
+      Uri.parse('$apiUrl/accounts/users/get_my_info/'),
       headers: <String, String>{
         'Content-Type': 'application/json; charset=UTF-8',
         'Authorization': 'Bearer ${jwt.access}',

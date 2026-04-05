@@ -13,5 +13,24 @@ class StrategySerializer(ModelSerializer):
 class LinkSerializer(ModelSerializer):
 	class Meta:
 		model = Link
-		fields = "__all__"
 
+		fields = [
+			'name',
+			'url',
+			'user',
+			'strategy',
+			'last_scraped',
+			'comparison_info',
+		]
+
+		read_only_fields = [
+			'comparison_info',
+			'last_scraped'
+		]
+
+		extra_kwargs = {
+			'name': {'required': True},
+			'url': {'required': True},
+			'user': {'required': True},
+			'strategy': {'required': True},
+		}

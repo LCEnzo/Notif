@@ -8,6 +8,9 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => AuthService()),
+        ChangeNotifierProvider(
+          create: (context) => UserDataService(context.read<AuthService>()),
+        ),
       ],
       child: const App(),
     ),

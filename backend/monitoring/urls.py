@@ -13,5 +13,5 @@ router.register(r'strategies', StrategyViewSet, basename="strategies")
 urlpatterns = router.urls
 
 urlpatterns += [
-
+	path("strat-choices", get_strat_choices, name='get-strat-choices'),
 ]

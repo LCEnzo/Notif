@@ -28,22 +28,19 @@ NotifData: TypeAlias = list[tuple[str, str, URL]]
 DataDict: TypeAlias = None | dict[str, Any]
 NotifDataOrError: TypeAlias = str | NotifData
 
+# Used for choices for the Strategy model
+STRATEGY_CHOICES = {}
 
-registry = {}
-
-def register(cls):
-	registry[cls.__name__] = cls
+def register(cls: type):
+	STRATEGY_CHOICES[cls.__name__] = cls
 	return cls  # return the class so that it's still defined
 
-
-# Used for choices for the Strategy model
-STRATEGY_CHOICES = [(name, name) for name in registry]
 
 def _fetch_url_content(url: URL) -> str | None:
 	response = requests.get(url)
 	if response.status_code == requests.codes.ok:
 		return response.text
-	
+
 	return None
 
 def _get_content_with_css_selector(html_content: str, css_selector: str) -> ResultSet[Tag]:
@@ -56,18 +53,18 @@ class BaseStrategy(ABC):
 	@abstractmethod
 	def can_scrape_url(self, url: URL) -> bool:
 		"""
-		This function exists to check if the strategy CAN scrape the URL. 
+		This function exists to check if the strategy CAN scrape the URL.
 		Whether that be a hardcoded list of sites, or whatever.
 		"""
 		pass
 
 	@abstractmethod
-	def scrape(self, url: URL, config_data: dict, comparison_data: dict, 
+	def scrape(self, url: URL, config_data: dict, comparison_data: dict,
 				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		"""
 		This function is the basic functionality. It takes in the URL to be scraped, as well as JSON data/dict.
-		It should return whether there was new stuff found, and if so, what it is. 
-		Returns None in case nothing was found, str for errors, and the list of tuples containing a 
+		It should return whether there was new stuff found, and if so, what it is.
+		Returns None in case nothing was found, str for errors, and the list of tuples containing a
 		title, description, and link in case of new content. It also returns new data if there is any.
 
 		NotifDataOrError -> Error str | list of (title, description, link)
@@ -75,7 +72,7 @@ class BaseStrategy(ABC):
 		"""
 		pass
 
-	def __call__(self, url: URL, config_data: dict, comparison_data: dict, 
+	def __call__(self, url: URL, config_data: dict, comparison_data: dict,
 					*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		return self.scrape(url, config_data, comparison_data, args, kwargs)
 
@@ -88,13 +85,13 @@ class GeneralSelectorStrategy(BaseStrategy):
 	def can_scrape_url(self, url: URL) -> bool:
 		return True
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]], 
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]],
 				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
-		selectors: list[str] = config_data['selectors'] 
-		old_data: dict[str, list[int]] = { 
-			selector: 
-				comparison_data.get(str(selector), []) 
-			for selector in selectors 
+		selectors: list[str] = config_data['selectors']
+		old_data: dict[str, list[int]] = {
+			selector:
+				comparison_data.get(str(selector), [])
+			for selector in selectors
 		}
 		updates: NotifData = []
 		new_data: dict[str, list[int]] | None = None
@@ -104,8 +101,8 @@ class GeneralSelectorStrategy(BaseStrategy):
 			return "Empty html_content", None
 
 		new_data = {
-			selector: 
-				[hash(ret) for ret in _get_content_with_css_selector(html_content, selector)] 
+			selector:
+				[hash(ret) for ret in _get_content_with_css_selector(html_content, selector)]
 			for selector in selectors
 		}
 
@@ -115,7 +112,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 			update = False
 
 			update = len(tags) != len(old_tags) or tags != old_tags
-			
+
 			if update:
 				split = urlsplit(url)
 				site_name = split.netloc.split('.')[0]
@@ -165,7 +162,7 @@ class SThreadmarkInfo:
 @register
 class SBSVThreadmarksStrategy(BaseStrategy):
 	"""
-	Check SpaceBattles and SufficientVelocity threadmarks. 
+	Check SpaceBattles and SufficientVelocity threadmarks.
 	TODO: Specify in configuration which threadmark tabs should be checked.
 	"""
 	# format used by strptime strftime
@@ -176,12 +173,12 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		return ('forums.spacebattles.com/threads' in url) or (
 			'forums.sufficientvelocity.com/threads' in url)
 
-	def scrape(self, url: URL, config_data: dict[str, Any], 
+	def scrape(self, url: URL, config_data: dict[str, Any],
 		comparison_data: dict[str, str]) -> tuple[NotifDataOrError, DataDict]:
 		last_alert_str = comparison_data.get('last_alert')
-		
+
 		last_alert: datetime | None = (
-			datetime.strptime(last_alert_str, self.time_format).astimezone(timezone.get_default_timezone()) 
+			datetime.strptime(last_alert_str, self.time_format).astimezone(timezone.get_default_timezone())
 			if last_alert_str is not None and last_alert_str != ''
 			else None
 		)
@@ -193,15 +190,15 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 
 		updates = [
 			(
-				mark.title if mark.title is not None else "Title not found", 
+				mark.title if mark.title is not None else "Title not found",
 				f"New threadmark with {mark.word_count} words, since {mark.pub_date}",
 				mark.link if mark.link is not None else req_url
 			)
 			for mark in marks
 			if mark.pub_date is not None and (
 				mark.pub_date > last_alert # type: ignore
-				or 
-				last_alert is None 
+				or
+				last_alert is None
 			)
 		]
 
@@ -213,14 +210,14 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 				latest_mark = marks.pop()
 
 			if latest_mark.pub_date is not None and (last_alert is None or latest_mark.pub_date > last_alert):
-				new_data['last_alert'] = latest_mark.pub_date.strftime(self.time_format) 
+				new_data['last_alert'] = latest_mark.pub_date.strftime(self.time_format)
 
 		return updates, new_data
 
 	def _get_threadmarks_url(self, url: URL) -> URL:
 		"""
-		Takes in a given thread URL, and transforms it into one with a path 
-		'threadmarks-load-range?threadmark_category_id=1', as to be able to 
+		Takes in a given thread URL, and transforms it into one with a path
+		'threadmarks-load-range?threadmark_category_id=1', as to be able to
 		easily get a list of all threadmarks.
 		"""
 		parsed = urlsplit(url)
@@ -265,8 +262,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 
 	def _extract_threadmarks(self, response: requests.Response) -> list[SThreadmarkInfo]:
 		"""
-		Takes in a response that should contain the threadmarks page, 
-		and returns a list of threadmarks encoded as SThreadmarkInfo. 
+		Takes in a response that should contain the threadmarks page,
+		and returns a list of threadmarks encoded as SThreadmarkInfo.
 		"""
 		marks: list[SThreadmarkInfo] = []
 		mark_tags = _get_content_with_css_selector(response.text, '.structItem--threadmark')
@@ -281,9 +278,9 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			title, link = self._extract_title_and_link(mark_tag, base_url)
 			pub_date = self._extract_pub_date(mark_tag)
 			wordcount = self._extract_wordcount(mark_tag)
-			
+
 			mark_info = SThreadmarkInfo(
-					title=title, 
+					title=title,
 					word_count=wordcount,
 					pub_date=pub_date,
 					link=URL(link) if link is not None else None
@@ -338,7 +335,7 @@ class AlertInfo:
 			post_date=post_date,
 			post_time=post_time
 		)
-	
+
 	def __str__(self):
 		return f"Alert Information:\n" \
 			f"- Author Name: {self.author_name}\n" \
@@ -353,9 +350,9 @@ class AlertInfo:
 @register
 class QQAlertsStrategy(BaseStrategy):
 	"""
-	Check QQ alerts. 
+	Check QQ alerts.
 
-	Config data should include username, password, and optionally 
+	Config data should include username, password, and optionally
 	whether to include notifications other than likely story updates.
 	"""
 	login_url = "https://forum.questionablequesting.com/login/login"
@@ -369,22 +366,22 @@ class QQAlertsStrategy(BaseStrategy):
 
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], 
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str],
 			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		if not self.can_scrape_url(url):
 			return ("Invalid URL", None)
 		updates: list[tuple[str, str, URL]] = []
 
-		username: str = config_data['username'] 
-		password: str = config_data['password'] 
+		username: str = config_data['username']
+		password: str = config_data['password']
 		# Whether to include all alerts, or only those likely to be a new chapter
 		include_all: bool = bool(config_data['include_all'])
 
 		last_alert_datetime_str = comparison_data['last_alert']
 		last_alert_datetime = datetime.strptime(
-				last_alert_datetime_str, 
+				last_alert_datetime_str,
 				"%Y-%m-%d %H:%M:%S"
-			).astimezone(timezone.get_default_timezone()) 
+			).astimezone(timezone.get_default_timezone())
 
 		resp = self._get_alerts_html(username, password)
 		alerts = self._extract_alerts(resp.text)
@@ -396,8 +393,8 @@ class QQAlertsStrategy(BaseStrategy):
 
 				if alert_dt > last_alert_datetime and (include_all or alert.lengthy_response):
 					title = "QQ: " + (
-							f"Likely chapter by {alert.author_name}" 
-							if alert.lengthy_response 
+							f"Likely chapter by {alert.author_name}"
+							if alert.lengthy_response
 							else f"Alert - {alert.author_name}"
 						)
 					description = alert.alert_text if alert.alert_text is not None else "-/-"
@@ -452,7 +449,7 @@ class QQAlertsStrategy(BaseStrategy):
 
 		user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " + (
 				"(KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36 Edg/105.0.1343.42")
-		
+
 		login_headers = {
 			"User-Agent": user_agent,
 			'Referer': QQAlertsStrategy.alerts_url,
@@ -535,11 +532,11 @@ class QQAlertsStrategy(BaseStrategy):
 			post_time=post_time,
 			lengthy_response=lengthy_response
 		)
-  
+
 	@staticmethod
 	def _convert_relative_date(relative_date: str) -> date:
 		"""
-		Note, can cause an exception if neither Today, Yesterday, 
+		Note, can cause an exception if neither Today, Yesterday,
 		of a valid argument for strptime is provided ("%Y-%m-%d").
 		"""
 		today = datetime.now(tz=timezone.get_default_timezone()).date()
@@ -559,6 +556,9 @@ class QQAlertsStrategy(BaseStrategy):
 				return datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()) .date()
 			case _:
 				return datetime.strptime(relative_date, "%Y-%m-%d").astimezone(timezone.get_default_timezone()) .date()
+
+		# For mypy
+		raise ValueError
 
 
 @dataclass
@@ -598,7 +598,7 @@ class KemonoCardInfo:
 @register
 class KemonoFavouritesStrategy(BaseStrategy):
 	"""
-	Check Kemono favourites. 
+	Check Kemono favourites.
 
 	Config data should include username, password.
 	"""
@@ -613,20 +613,20 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], 
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str],
 			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
 		if not self.can_scrape_url(url):
 			return ("Invalid URL", None)
 		updates: list[tuple[str, str, URL]] = []
 
-		username: str = config_data['username'] 
-		password: str = config_data['password'] 
+		username: str = config_data['username']
+		password: str = config_data['password']
 
 		last_update_datetime_str = comparison_data['last_update']
 		last_update_datetime = datetime.strptime(
-				last_update_datetime_str, 
+				last_update_datetime_str,
 				"%Y-%m-%d %H:%M:%S"
-			).astimezone(timezone.get_default_timezone()) 
+			).astimezone(timezone.get_default_timezone())
 
 		resp = self._get_favourites_html(username, password)
 		cards = self._extract_kemono_profile_cards(resp.text)
@@ -662,9 +662,9 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		dt = card_tag.select_one('time.timestamp')
 		if dt is not None:
 			return datetime.strptime(
-					dt.text.strip(), 
+					dt.text.strip(),
 					"%Y-%m-%d %H:%M:%S.%f"
-				).astimezone(timezone.get_default_timezone()) 
+				).astimezone(timezone.get_default_timezone())
 		return None
 
 	def _extract_link(self, card_tag: Tag, url: URL) -> URL | None:
@@ -684,9 +684,9 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			link = self._extract_link(card_tag, url)
 
 			cards.append(KemonoCardInfo(
-				name=name, 
-				date_time=dt, 
-				service=service, 
+				name=name,
+				date_time=dt,
+				service=service,
 				link=link
 			))
 
