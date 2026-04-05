@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from monitoring.views import (
 	LinkViewSet,
 	StrategyViewSet,
+	get_strat_choices,
 )
 
 router = DefaultRouter()

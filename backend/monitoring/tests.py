@@ -20,8 +20,17 @@ class TestSelectorStrat(TestCase):
 		url = "https://kemono.party/patreon/user/50187986"
 		config_data = { "selectors": ["article.post-card"] }
 		old_data: dict[str, list[int]] = {}
+		html_content = """
+		<html>
+			<body>
+				<article class="post-card">Post 1</article>
+			</body>
+		</html>
+		"""
 
-		notif_data, new_data = strat(URL(url), config_data, old_data)
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, text=html_content)
+			notif_data, new_data = strat(URL(url), config_data, old_data)
 
 		logger.debug(
 			"selector strat on kemono: \t" +
@@ -121,4 +130,3 @@ class LinkViewSetTestCase(ViewSetMixin):
 			update_fields=update_fields,
 			permissions=permissions
 		)
-
