@@ -1,26 +1,27 @@
 FROM python:3.11.4-slim
 
-# prevents Python from writing out pyc files 
-ENV PYTHONDONTWRITEBYTECODE 1 
-# forces the stdout and stderr streams to be unbuffered, used for logging
-ENV PYTHONUNBUFFERED 1
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-WORKDIR /backend
+WORKDIR /app
 
-# Assumes that the backend folder is in the same directory as the Dockerfile
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential libxml2-dev libxslt1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
-WORKDIR /backend
+RUN useradd --create-home appuser \
+    && chown -R appuser:appuser /app
 
-RUN apt update && apt -y upgrade
-RUN pip install --upgrade pip setuptools wheel
-
-RUN pip install --no-cache-dir -r requirements.txt
-
-# In use for SQLite
-RUN python manage.py migrate
+USER appuser
 
 EXPOSE 8000
 
-# CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
-CMD  ["bash"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]

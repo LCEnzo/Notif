@@ -1,0 +1,15 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      SQLITE_PATH: /app/data/db.sqlite3
+    ports:
+      - "8000:8000"
+    volumes:
+      - backend_data:/app/data
+
+volumes:
+  backend_data:

@@ -28,3 +28,17 @@
   
 ## TODOs:
  - Deal with CORS
+
+## Docker
+
+Run the backend with Docker Compose from the repository root:
+
+```bash
+docker compose up --build backend
+```
+
+Notes:
+
+- The backend reads environment variables from `backend/.env`.
+- The compose setup stores the SQLite database in a named Docker volume.
+- Container startup runs `python manage.py migrate` before starting the Django dev server on `0.0.0.0:8000`.
