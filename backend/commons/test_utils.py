@@ -1,5 +1,5 @@
 from collections import namedtuple
-from typing import Any
+from typing import Any, cast
 
 from django.db.models import Model
 from django.http import HttpResponse
@@ -78,7 +78,12 @@ class ViewSetMixin(SetupMixin, TestCase):
 	detail_view_name = 'users-detail'  # The name of the detail view, to be defined in the subclass
 	model: type[Model]  # The model class being tested, to be defined in the subclass
 
-	def setUp(self, list_view_name: str = 'users-list', detail_view_name: str = 'users-detail', model: type[Model] = User) -> None:
+	def setUp(
+			self,
+			list_view_name: str = 'users-list',
+			detail_view_name: str = 'users-detail',
+			model: type[Model] = User
+		) -> None:
 		"""
 		Set up the test case by initializing the model and object under test.
 		"""
@@ -86,7 +91,12 @@ class ViewSetMixin(SetupMixin, TestCase):
 		self.detail_view_name = detail_view_name
 		self.model = model
 		assert self.model is not None
-		self.obj = self.model.objects.first()
+		self.obj = self.model_manager.first()
+
+	@property
+	def model_manager(self) -> Any:
+		assert self.model is not None
+		return cast(Any, self.model).objects
 
 	def _test_list_objects(self, filters: dict[str, Any] | None = None) -> HttpResponse:
 		"""
@@ -105,7 +115,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 		response = self.api_client.get(url)
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		actual_count = self.model.objects.count() if not filters else self.model.objects.filter(**filters).count()
+		actual_count = self.model_manager.count() if not filters else self.model_manager.filter(**filters).count()
 		self.assertEqual(len(response.data), actual_count)
 
 		return response
@@ -149,14 +159,14 @@ class ViewSetMixin(SetupMixin, TestCase):
 		if fields is None:
 			fields = {"name": "New Instance"}
 
-		count_before_post = self.model.objects.count()
+		count_before_post = self.model_manager.count()
 
 		url = reverse(self.list_view_name)
 		data = fields
 		response = self.api_client.post(url, data)
 
 		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-		self.assertEqual(self.model.objects.count(), count_before_post + 1)
+		self.assertEqual(self.model_manager.count(), count_before_post + 1)
 
 		return response
 
@@ -196,7 +206,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 		response = self.api_client.delete(url)
 
 		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-		self.assertFalse(self.model.objects.filter(pk=pk).exists()) # type: ignore
+		self.assertFalse(self.model_manager.filter(pk=pk).exists())
 
 		return response
 
@@ -271,7 +281,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 
 		# setup, responses contains the return values
 		client = login_client(APIClient(), user.get_username(), password)
-		self.assertTrue(self.model.objects.filter(pk=obj_pk).exists())
+		self.assertTrue(self.model_manager.filter(pk=obj_pk).exists())
 		response_list: list[HttpResponse] = []
 
 		# get list

@@ -1,10 +1,10 @@
 import logging
 import os
 from pprint import pprint  # noqa: F401
-from django.urls import reverse
 
 import requests_mock
 from django.test import TestCase
+from django.urls import reverse
 
 from commons.test_utils import ViewSetMixin
 from monitoring.models import Link
@@ -38,7 +38,7 @@ class TestSelectorStrat(TestCase):
 			f"{new_data = }\n--------------------------\n"
 		)
 
-		assert type(notif_data) != str
+		assert not isinstance(notif_data, str)
 		assert new_data is not None
 
 

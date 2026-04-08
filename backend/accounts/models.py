@@ -47,13 +47,13 @@ class User(AbstractBaseUser, PermissionsMixin):
 		blank=True,
 		related_name='users', 
 		related_query_name='users',
-	)
+	)  # type: ignore[assignment]
 	user_permissions = models.ManyToManyField(
 		Permission,
 		blank=True,
 		related_name='users', 
 		related_query_name='users',
-	)
+	)  # type: ignore[assignment]
 	
 	# Bookkeeping
 	date_created = models.DateTimeField(auto_now_add=True)
@@ -89,5 +89,4 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 	def actually_delete(self, using=None, keep_parents=False):
 		super().delete(using=using, keep_parents=keep_parents)
-
 

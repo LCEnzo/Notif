@@ -9,14 +9,15 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Any, NewType, TypeAlias
+from typing import Any, NewType
 from urllib.parse import urlsplit, urlunsplit
 
 import requests
 from bs4 import BeautifulSoup
-from bs4.element import ResultSet, Tag
+from bs4.element import AttributeValueList, ResultSet, Tag
 from django.utils import timezone
 
 logger = logging.getLogger(__name__)
@@ -24,9 +25,9 @@ logger = logging.getLogger(__name__)
 # Types
 # TODO: Think of moving them to a central location so that the whole app can use them
 URL = NewType("URL", str)
-NotifData: TypeAlias = list[tuple[str, str, URL]]
-DataDict: TypeAlias = None | dict[str, Any]
-NotifDataOrError: TypeAlias = str | NotifData
+type NotifData = list[tuple[str, str, URL]]
+type DataDict = None | dict[str, Any]
+type NotifDataOrError = str | NotifData
 
 # Used for choices for the Strategy model
 STRATEGY_CHOICES = {}
@@ -34,6 +35,16 @@ STRATEGY_CHOICES = {}
 def register(cls: type):
 	STRATEGY_CHOICES[cls.__name__] = cls
 	return cls  # return the class so that it's still defined
+
+
+def _string_attr_value(value: str | AttributeValueList | None) -> str | None:
+	if value is None:
+		return None
+
+	if isinstance(value, Sequence) and not isinstance(value, str):
+		return " ".join(str(part) for part in value)
+
+	return value
 
 
 def _fetch_url_content(url: URL) -> str | None:
@@ -239,7 +250,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		title = link = None
 		if title_tag is not None:
 			title = title_tag.text
-			link = title_tag.attrs.get('href')
+			link = _string_attr_value(title_tag.attrs.get('href'))
 			if link is not None:
 				link = base_url + link
 		return title, link
@@ -247,7 +258,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 	def _extract_pub_date(self, mark_tag: Tag) -> datetime | None:
 		pub_date_tag = mark_tag.select_one('time')
 		if pub_date_tag is not None:
-			pub_date_str = pub_date_tag.attrs.get('datetime')
+			pub_date_str = _string_attr_value(pub_date_tag.attrs.get('datetime'))
 			if pub_date_str is not None:
 				try:
 					return datetime.strptime(pub_date_str, "%Y-%m-%dT%H:%M:%S%z")
@@ -668,7 +679,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		return None
 
 	def _extract_link(self, card_tag: Tag, url: URL) -> URL | None:
-		link = card_tag.attrs.get('href', None)
+		link = _string_attr_value(card_tag.attrs.get('href'))
 		return URL(url + '/' + link) if link is not None else None
 
 	def _extract_kemono_profile_cards(self, html: str) -> list[KemonoCardInfo]:

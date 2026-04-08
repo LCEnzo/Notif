@@ -34,11 +34,7 @@ The backend has the following apps:
 
 ### Prerequisites
 
-As currently, only the backend has code, the prerequisites are:
-
-- Python 3.11 (or higher if no breaking changes)
-
-Instructions assume you are using a Debian derived Linux distro.
+For the backend, use `uv` with Python 3.13.
 
 ### Installation and Setup
 
@@ -47,30 +43,22 @@ Instructions assume you are using a Debian derived Linux distro.
 	git clone https://github.com/your_username/my-update-notifier.git
 	cd backend
 	```
-2. Create a virtual environment if one does not exist.
+2. Sync the backend environment.
 	```bash
-	python -m venv venv
+	uv sync --python 3.13
 	```
-3. Activate the virtual environment.
-	```bash
-	source venv/bin/activate
-	```
-4. Install the required Python dependencies.
-	```bash
-	pip install -r requirements.txt
-	```
-5. Create an `.env` file.
+3. Create an `.env` file.
 	```bash
 	cat .env.example > .env
 	```
-6. Make and Apply Django migrations.
+4. Make and apply Django migrations.
 	```bash
- 	python manage.py makemigrations
-	python manage.py migrate
+	uv run python manage.py makemigrations
+	uv run python manage.py migrate
 	```
-7. Run the Django development server.
+5. Run the Django development server.
 	```bash
-	python manage.py runserver
+	uv run python manage.py runserver
 	```
  
 ## Misc
