@@ -43,7 +43,7 @@ class UsernameTextField extends StatefulWidget {
   }) : super(key: key);
 
   @override
-  _UsernameTextFieldState createState() => _UsernameTextFieldState();
+  State<UsernameTextField> createState() => _UsernameTextFieldState();
 }
 
 class _UsernameTextFieldState extends State<UsernameTextField> {
@@ -77,7 +77,7 @@ class EmailTextField extends StatefulWidget {
       : super(key: key);
 
   @override
-  _EmailTextFieldState createState() => _EmailTextFieldState();
+  State<EmailTextField> createState() => _EmailTextFieldState();
 }
 
 class _EmailTextFieldState extends State<EmailTextField> {
@@ -131,7 +131,7 @@ class PasswordTextField extends StatefulWidget {
       : super(key: key);
 
   @override
-  _PasswordTextFieldState createState() => _PasswordTextFieldState();
+  State<PasswordTextField> createState() => _PasswordTextFieldState();
 }
 
 class _PasswordTextFieldState extends State<PasswordTextField> {

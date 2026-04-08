@@ -10,9 +10,11 @@ from commons.utils import create_users, password  # noqa: F401
 
 class UserViewSetTestCase(ViewSetMixin):
 	def setUp(self):
-		super().setUp(model=User)
-		self.list_view_name = "users-list"
-		self.detail_view_name = "users-detail"
+		super().setUp(
+			list_view_name = "users-list",
+			detail_view_name = "users-detail",
+			model = User
+		)
 
 	def test_list_users(self):
 		self._test_list_objects()
@@ -22,14 +24,12 @@ class UserViewSetTestCase(ViewSetMixin):
 
 	def test_create_user(self):
 		fields = {
-			"username": "test_username01", 
-			"email": "fake@example.com", 
+			"username": "test_username01",
+			"email": "fake@example.com",
 			"name": "Ichi Nii",
 			"password": "securepassword123 securepassword123"
 		}
-		resp = self._test_create_object(fields=fields)
-		print(f"{resp = }")
-		print(f"{resp.content}")
+		_ = self._test_create_object(fields=fields)
 
 		fields = {
 			"username": "newuser",
@@ -46,9 +46,9 @@ class UserViewSetTestCase(ViewSetMixin):
 
 	def test_regular_user_permissions(self):
 		fields = {
-			"username": "test_username01", 
-			"email": "fake@example.com", 
-			"name": "Ichi Nii", 
+			"username": "test_username01",
+			"email": "fake@example.com",
+			"name": "Ichi Nii",
 			"password": "securepassword123"
 		}
 		update_fields = {"name": "Maria"}
@@ -57,8 +57,8 @@ class UserViewSetTestCase(ViewSetMixin):
 		self._test_permissions(
 			user=self.regular_user, # type: ignore
 			obj_pk=self.secondary_user.pk, # type: ignore
-			fields=fields, 
-			update_fields=update_fields, 
+			fields=fields,
+			update_fields=update_fields,
 			permissions=permissions
-		) 
-	
+		)
+

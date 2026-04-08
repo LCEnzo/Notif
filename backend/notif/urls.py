@@ -21,8 +21,6 @@ from rest_framework_simplejwt.views import (  # type: ignore
     TokenVerifyView,
 )
 
-from accounts.urls import router
-
 urlpatterns = [
 	path('admin/', admin.site.urls),
 	path('api/v1/accounts/', include('accounts.urls')),

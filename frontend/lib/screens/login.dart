@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:Notif/commons/login_register_fields.dart';
-import 'package:Notif/services/auth.dart';
+import 'package:notif/commons/login_register_fields.dart';
+import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -209,6 +209,13 @@ class _FormContentState extends State<_FormContent> {
   Future<void> _saveUsername() async {
     final perfs = await SharedPreferences.getInstance();
     perfs.setString('username', usernameController.text);
+  }
+
+  @override
+  void dispose() {
+    usernameController.dispose();
+    passwordController.dispose();
+    super.dispose();
   }
 
   String? noValidate(String? password) {

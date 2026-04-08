@@ -31,7 +31,11 @@ SECRET_KEY = getenv("DJANGO_SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = getenv("DEBUG", "True") == "True"
 
-ALLOWED_HOSTS = [] # type: ignore
+ALLOWED_HOSTS = [
+	host.strip()
+	for host in getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",")
+	if host.strip()
+]  # type: ignore
 CORS_ALLOW_ALL_ORIGINS = True
 
 
@@ -89,7 +93,7 @@ WSGI_APPLICATION = 'notif.wsgi.application'
 DATABASES = {
 	"default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": "db.sqlite3",
+        "NAME": getenv("SQLITE_PATH", "db.sqlite3"),
     }
 	# 'default': {
 	# 	'ENGINE': 'django.db.backends.postgresql',

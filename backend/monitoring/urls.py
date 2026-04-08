@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from monitoring.views import (
 	LinkViewSet,
 	StrategyViewSet,
+	get_strat_choices,
 )
 
 router = DefaultRouter()
@@ -13,5 +14,5 @@ router.register(r'strategies', StrategyViewSet, basename="strategies")
 urlpatterns = router.urls
 
 urlpatterns += [
-
+	path("strat-choices", get_strat_choices, name='get-strat-choices'),
 ]
