@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:Notif/screens/shared.dart';
-import 'package:Notif/services/auth.dart';
+import 'package:notif/screens/shared.dart';
+import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 void main() {

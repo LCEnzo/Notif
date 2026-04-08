@@ -14,7 +14,7 @@ This file tracks the current repository cleanup effort on the `master-integratio
 - `uv`: installed in user space as `~/.local/bin/uv`
 - Backend verification environment: `/tmp/notif-master-integration/backend/.venv`
 - Backend test runner: available inside that `.venv`
-- `flutter`: installed separately but currently ignored during backend-focused salvage work
+- Frontend verification toolchain: Flutter `3.41.6` with Dart `3.11.4`
 
 If you install tools for me, install them into this WSL environment so they are available from the Linux shell in `/tmp/notif-master-integration`.
 
@@ -40,6 +40,10 @@ If you install tools for me, install them into this WSL environment so they are 
 - [x] Create a local backend `.venv` with `uv`
 - [x] Install backend dependencies needed for test execution
 - [x] Run backend tests successfully
+- [x] Review `origin/feat/frontend-register-screen`
+- [x] Fix the current frontend baseline so `flutter analyze` passes
+- [x] Replace the stale Flutter counter smoke test with an app-level login-screen smoke test
+- [x] Run frontend analysis and tests successfully
 
 ## Latest Checkpoint
 
@@ -60,6 +64,8 @@ Working state beyond that checkpoint:
 - `backend/manage.py test` now passes on `master-integration` in the local `.venv`
 - A manual migration now renames `Strategy.function` to `Strategy.strat_cls`
 - `origin/feat/site-crud-interface` has been reviewed and appears functionally absorbed by the current integration branch, with the remaining differences mostly being older tests, queryset bugs, and migration-shape choices
+- `origin/feat/frontend-register-screen` has now also been reviewed and functionally absorbed by the current integration branch
+- The frontend currently passes both `flutter analyze` and `flutter test` in the clean worktree
 
 ## Important Guardrails
 
@@ -92,7 +98,9 @@ Working state beyond that checkpoint:
 ### `origin/feat/frontend-register-screen`
 
 - Frontend auth and registration work
-- Still relevant after current integration
+- Review is now complete
+- The branch has been functionally absorbed into `master-integration`
+- Current stabilization work includes lowercase package naming, dependency fixes for modern Flutter, and a passing smoke test
 
 ### `origin/feat/backend-dockerization`
 
@@ -113,10 +121,12 @@ Working state beyond that checkpoint:
 
 ### Frontend
 
-- The home screen no longer crashes immediately, but notifications are still placeholder-only.
-- `frontend/lib/services/data.dart` is still stubbed.
+- Home screen no longer crashes immediately, and the authenticated route path is now stable enough for smoke testing.
+- Notifications are still placeholder-only.
+- `frontend/lib/services/data.dart` is still a compile-clean placeholder rather than a finished client layer.
+- `UserDataService` is wired into the top-level providers on `master-integration`.
 - Auth persistence/storage is still unfinished.
-- Flutter tooling is not installed here yet, so no real Flutter verification has been run.
+- Frontend verification now runs successfully in this environment.
 
 ### Backend
 
@@ -139,16 +149,18 @@ Working state beyond that checkpoint:
 - [x] Make the integrated `new-master` state stable enough to checkpoint
 - [x] Review `origin/feat/site-crud-interface`
 - [x] Reconcile the meaningful model and CRUD behavior differences from `origin/feat/site-crud-interface`
+- [x] Review `origin/feat/frontend-register-screen`
+- [x] Reconcile the meaningful frontend auth and registration differences from `origin/feat/frontend-register-screen`
 - [ ] Decide whether to keep the current migration chain or adopt a squashed variant before final merge
 - [ ] Checkpoint the passing backend baseline after the site CRUD review
-- [ ] Integrate `origin/feat/frontend-register-screen`
-- [ ] Finish frontend auth flow so login, register, logout, and initial post-login navigation work
+- [ ] Checkpoint the passing frontend baseline after the frontend branch review
+- [x] Finish frontend auth flow so login, register, logout, and initial post-login navigation work
 - [ ] Implement or remove stubbed frontend data-layer code
 - [ ] Integrate `origin/feat/backend-dockerization`
 - [ ] Verify whether `origin/feat/jwt_auth` contains anything still missing
 - [ ] Verify whether `fix/strategy-testing` contains anything still missing
-- [ ] Run backend tests
-- [ ] Run frontend analysis/tests/build checks
+- [x] Run backend tests
+- [x] Run frontend analysis/tests/build checks
 - [ ] Manually test the login/register flow end to end
 - [ ] Manually test link/strategy CRUD behavior end to end
 - [ ] Merge `master-integration` into `master`
@@ -187,6 +199,6 @@ Working state beyond that checkpoint:
 
 ## Next Step
 
-- Checkpoint the current passing backend baseline on `master-integration`
-- Move on to `origin/feat/frontend-register-screen`
-- Finish the frontend auth path so login, registration, and post-login navigation are stable enough for real verification
+- Checkpoint the current passing frontend baseline on `master-integration`
+- Move on to `origin/feat/backend-dockerization`
+- Verify whether `origin/feat/jwt_auth` and `fix/strategy-testing` still contain anything materially missing

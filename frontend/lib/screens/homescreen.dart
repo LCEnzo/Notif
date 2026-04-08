@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:Notif/commons/login_register_fields.dart';
-import 'package:Notif/services/auth.dart';
+import 'package:notif/commons/login_register_fields.dart';
+import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 class HomePage extends StatelessWidget {
@@ -11,9 +11,17 @@ class HomePage extends StatelessWidget {
     final authService = Provider.of<AuthService>(context, listen: true);
 
     if (authService.jwt == null) {
-      Future.delayed(Duration.zero, () {
-        Navigator.pushNamed(context, '/LogIn');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          Navigator.pushReplacementNamed(context, '/LogIn');
+        }
       });
+
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
     }
 
     return Scaffold(
@@ -25,7 +33,7 @@ class HomePage extends StatelessWidget {
           icon: const Icon(Icons.logout),
           onPressed: () {
             authService.logout();
-            Navigator.pushNamed(context, '/LogIn');
+            Navigator.pushReplacementNamed(context, '/LogIn');
           },
         ),
       ),
