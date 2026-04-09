@@ -3,6 +3,7 @@ import os
 from pprint import pprint  # noqa: F401
 
 import requests_mock
+from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
 
@@ -62,9 +63,14 @@ class SBSVThreadmarksStrategyTestCase(TestCase):
 
 
 class LinkViewSetTestCase(ViewSetMixin):
-	def setUp(self):
+	def setUp(
+			self,
+			list_view_name: str = "links-list",
+			detail_view_name: str = "links-detail",
+			model: type[Model] = Link,
+		) -> None:
 		# TODO, have some initialization, so there are instances of Link and Strat in the DB
-		super().setUp(list_view_name = "links-list", detail_view_name = "links-detail", model=Link)
+		super().setUp(list_view_name=list_view_name, detail_view_name=detail_view_name, model=model)
 
 	def test_list_links(self):
 		filters = {"user__pk": f"{self.regular_user.pk}"}

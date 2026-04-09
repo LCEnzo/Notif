@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
@@ -17,8 +19,8 @@ class UserManager(BaseUserManager):
 	def create_superuser(self, email: str, username: str, password: str, **extra_fields) -> "User":
 		extra_fields["is_staff"] = True
 		extra_fields["is_superuser"] = True
-		return self.create_user(email, username, password, **extra_fields)		
-	
+		return self.create_user(email, username, password, **extra_fields)
+
 	def get_queryset(self):
 		return super().get_queryset().filter(date_deleted__isnull=True)
 
@@ -41,20 +43,20 @@ class User(AbstractBaseUser, PermissionsMixin):
 		},
 	)
 	email = models.EmailField(unique=True)
-	
+
 	groups = models.ManyToManyField(
-		Group, 
+		Group,
 		blank=True,
-		related_name='users', 
+		related_name='users',
 		related_query_name='users',
 	)  # type: ignore[assignment]
 	user_permissions = models.ManyToManyField(
 		Permission,
 		blank=True,
-		related_name='users', 
+		related_name='users',
 		related_query_name='users',
 	)  # type: ignore[assignment]
-	
+
 	# Bookkeeping
 	date_created = models.DateTimeField(auto_now_add=True)
 	date_modified = models.DateTimeField(auto_now=True)
@@ -82,11 +84,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 	REQUIRED_FIELDS = [EMAIL_FIELD]
 
 	# Soft delete by default
-	def delete(self):
+	def delete(
+			self,
+			using: Any | None = None,
+			keep_parents: bool = False,
+		) -> tuple[int, dict[str, int]]:
 		self.date_deleted = timezone.now()
 		self.is_active = False
-		self.save()
+		self.save(using=using, update_fields=['date_deleted', 'is_active', 'date_modified'])
+		return (1, {self._meta.label: 1})
 
-	def actually_delete(self, using=None, keep_parents=False):
-		super().delete(using=using, keep_parents=keep_parents)
-
+	def actually_delete(
+			self,
+			using: Any | None = None,
+			keep_parents: bool = False,
+		) -> tuple[int, dict[str, int]]:
+		return super().delete(using=using, keep_parents=keep_parents)

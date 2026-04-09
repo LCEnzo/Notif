@@ -3,16 +3,19 @@
 import os
 import sys
 
-try:
-	from dotenv import load_dotenv
-except ImportError:
-	load_dotenv = None
+
+def _load_local_env() -> None:
+	try:
+		from dotenv import load_dotenv
+	except ImportError:
+		return
+
+	load_dotenv()
 
 
 def main():
 	"""Run administrative tasks."""
-	if load_dotenv is not None:
-		load_dotenv()
+	_load_local_env()
 
 	if len(sys.argv) == 2 and sys.argv[1] == 'runserver':
 		backend_port = os.getenv('BACKEND_PORT')
