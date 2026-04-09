@@ -4,8 +4,25 @@ import os
 import sys
 
 
+def _load_local_env() -> None:
+	try:
+		from dotenv import load_dotenv
+	except ImportError:
+		return
+
+	load_dotenv()
+
+
 def main():
 	"""Run administrative tasks."""
+	_load_local_env()
+
+	if len(sys.argv) == 2 and sys.argv[1] == 'runserver':
+		backend_port = os.getenv('BACKEND_PORT')
+		if backend_port:
+			runserver_host = os.getenv('RUNSERVER_HOST', '127.0.0.1')
+			sys.argv.append(f'{runserver_host}:{backend_port}')
+
 	os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'notif.settings')
 	try:
 		from django.core.management import execute_from_command_line

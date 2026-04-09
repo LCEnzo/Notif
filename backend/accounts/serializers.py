@@ -14,16 +14,16 @@ class UserCreationSerializer(ModelSerializer):
 	@transaction.atomic
 	def create(self, validated_data: dict) -> User:
 		password = validated_data.pop("password")
-		
+
 		if 'username' not in validated_data:
 			validated_data['username'] = validated_data['email']
 
 		instance = self.Meta.model(**validated_data)
 		instance.set_password(password)
-	
+
 		instance.save()
 		return instance
-	
+
 	@transaction.atomic
 	def update(self, instance: User, validated_data: dict):
 		# Ensure a user can only update their own password.
@@ -32,16 +32,16 @@ class UserCreationSerializer(ModelSerializer):
 			validated_data.pop('password', None)
 
 		return super().update(instance, validated_data)
-	
+
 	def validate(self, data):
 		# This will only validate password during creation and not during update.
 		password = data.get('password', None)
 		if self.instance is None and password is None:
 			raise serializers.ValidationError({"password": "Password needs to exist"})
-		
+
 		if password is not None:
 			validate_password(password)
-		
+
 		return data
 
 

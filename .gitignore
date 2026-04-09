@@ -3,9 +3,13 @@
 .vscode/*
 
 # Python
+.venv/
 venv/
 *.pyc
 __pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
 *.ipynb
 
 # DB

@@ -1,10 +1,11 @@
 import logging
 import os
 from pprint import pprint  # noqa: F401
-from django.urls import reverse
 
 import requests_mock
+from django.db.models import Model
 from django.test import TestCase
+from django.urls import reverse
 
 from commons.test_utils import ViewSetMixin
 from monitoring.models import Link
@@ -38,7 +39,7 @@ class TestSelectorStrat(TestCase):
 			f"{new_data = }\n--------------------------\n"
 		)
 
-		assert type(notif_data) != str
+		assert not isinstance(notif_data, str)
 		assert new_data is not None
 
 
@@ -62,9 +63,14 @@ class SBSVThreadmarksStrategyTestCase(TestCase):
 
 
 class LinkViewSetTestCase(ViewSetMixin):
-	def setUp(self):
+	def setUp(
+			self,
+			list_view_name: str = "links-list",
+			detail_view_name: str = "links-detail",
+			model: type[Model] = Link,
+		) -> None:
 		# TODO, have some initialization, so there are instances of Link and Strat in the DB
-		super().setUp(list_view_name = "links-list", detail_view_name = "links-detail", model=Link)
+		super().setUp(list_view_name=list_view_name, detail_view_name=detail_view_name, model=model)
 
 	def test_list_links(self):
 		filters = {"user__pk": f"{self.regular_user.pk}"}

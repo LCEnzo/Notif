@@ -31,7 +31,7 @@ class EntropyValidator:
 
 		return (
 			f"The password entropy must be at least {self.min_entropy} bits. "
-			+ f"{password_string}" 
+			+ f"{password_string}"
 			+ "Try increasing the number of characters, as well as using at least one "
 			+ "digit, lower and upper case letter, and symbol."
 		)

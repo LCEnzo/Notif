@@ -6,8 +6,10 @@ services:
       - ./backend/.env
     environment:
       SQLITE_PATH: /app/data/db.sqlite3
+      BACKEND_PORT: ${BACKEND_PORT:-8000}
+      RUNSERVER_HOST: 0.0.0.0
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
     volumes:
       - backend_data:/app/data
 

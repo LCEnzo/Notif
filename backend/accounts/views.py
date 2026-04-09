@@ -45,7 +45,7 @@ class UserViewSet(ModelViewSet):
 	@action(detail=False, methods=['get', 'post'], permission_classes=[IsAuthenticated])
 	def get_my_info(self, request: Request) -> Response:
 		user = request.user
-		assert type(user) == User
+		assert isinstance(user, User)
 		return Response(
 			status=status.HTTP_200_OK,
 			data=UserFullReadSerializer(user).data

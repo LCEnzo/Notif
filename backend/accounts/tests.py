@@ -1,4 +1,4 @@
-
+from django.db.models import Model
 from django.test import TestCase  # noqa: F401
 from rest_framework import status  # noqa: F401
 from rest_framework.test import APIClient  # noqa: F401
@@ -9,11 +9,16 @@ from commons.utils import create_users, password  # noqa: F401
 
 
 class UserViewSetTestCase(ViewSetMixin):
-	def setUp(self):
+	def setUp(
+			self,
+			list_view_name: str = "users-list",
+			detail_view_name: str = "users-detail",
+			model: type[Model] = User,
+		) -> None:
 		super().setUp(
-			list_view_name = "users-list",
-			detail_view_name = "users-detail",
-			model = User
+			list_view_name=list_view_name,
+			detail_view_name=detail_view_name,
+			model=model
 		)
 
 	def test_list_users(self):
@@ -61,4 +66,3 @@ class UserViewSetTestCase(ViewSetMixin):
 			update_fields=update_fields,
 			permissions=permissions
 		)
-

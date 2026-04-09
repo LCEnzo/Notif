@@ -57,7 +57,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
 	'django.middleware.security.SecurityMiddleware',
-	'django.contrib.sessions.middleware.SessionMiddleware',    
+	'django.contrib.sessions.middleware.SessionMiddleware',
 	"corsheaders.middleware.CorsMiddleware",
 	"django.middleware.common.CommonMiddleware",
 	'django.middleware.csrf.CsrfViewMiddleware',
@@ -193,7 +193,7 @@ if DEBUG:
 		"django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 		"django.contrib.auth.hashers.ScryptPasswordHasher",
 	]
-	
+
 
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
 SIMPLE_JWT = {
