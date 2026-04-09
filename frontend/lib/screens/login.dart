@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LogInPage extends StatelessWidget {
-  const LogInPage({Key? key}) : super(key: key);
+  const LogInPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +48,7 @@ class LogInPage extends StatelessWidget {
 }
 
 class _FormContent extends StatefulWidget {
-  const _FormContent({Key? key}) : super(key: key);
+  const _FormContent();
 
   @override
   _FormContentState createState() => _FormContentState();

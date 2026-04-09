@@ -4,7 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 class AboutPage extends StatelessWidget {
-  const AboutPage({Key? key}) : super(key: key);
+  const AboutPage({super.key});
 
   Future<String> getAppVersion() async {
     final packageInfo = await PackageInfo.fromPlatform();
