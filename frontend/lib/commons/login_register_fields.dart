@@ -3,7 +3,7 @@ import 'dart:math';
 
 class Logo extends StatelessWidget {
   final String title;
-  const Logo({Key? key, required this.title}) : super(key: key);
+  const Logo({super.key, required this.title});
 
   @override
   Widget build(BuildContext context) {
@@ -36,11 +36,11 @@ class UsernameTextField extends StatefulWidget {
   final TextEditingController textController;
 
   const UsernameTextField({
-    Key? key,
+    super.key,
     required this.labelText,
     required this.hintText,
     required this.textController,
-  }) : super(key: key);
+  });
 
   @override
   State<UsernameTextField> createState() => _UsernameTextFieldState();
@@ -69,12 +69,11 @@ class EmailTextField extends StatefulWidget {
   final TextEditingController textController;
 
   const EmailTextField(
-      {Key? key,
+      {super.key,
       required this.labelText,
       required this.hintText,
       this.validator,
-      required this.textController})
-      : super(key: key);
+      required this.textController});
 
   @override
   State<EmailTextField> createState() => _EmailTextFieldState();
@@ -123,12 +122,11 @@ class PasswordTextField extends StatefulWidget {
   final TextEditingController textController;
 
   const PasswordTextField(
-      {Key? key,
+      {super.key,
       required this.labelText,
       required this.hintText,
       this.validator,
-      required this.textController})
-      : super(key: key);
+      required this.textController});
 
   @override
   State<PasswordTextField> createState() => _PasswordTextFieldState();
@@ -176,11 +174,10 @@ class CustomButton extends StatelessWidget {
   final Color? buttonColor;
 
   const CustomButton(
-      {Key? key,
+      {super.key,
       required this.buttonText,
       required this.onPressed,
-      this.buttonColor})
-      : super(key: key);
+      this.buttonColor});
 
   @override
   Widget build(BuildContext context) {

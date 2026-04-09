@@ -5,7 +5,7 @@ import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 class RegisterPage extends StatelessWidget {
-  const RegisterPage({Key? key}) : super(key: key);
+  const RegisterPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -52,7 +52,7 @@ class _FormContent extends StatelessWidget {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  _FormContent({Key? key}) : super(key: key);
+  _FormContent();
 
   @override
   Widget build(BuildContext context) {
