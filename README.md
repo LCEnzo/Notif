@@ -60,6 +60,13 @@ For the backend, use `uv` with Python 3.13.
 	```bash
 	uv run python manage.py runserver
 	```
+
+6. Create an admin account if you want to use Django admin.
+	```bash
+	uv run python manage.py createsuperuser
+	```
+
+By default, Django listens on `http://localhost:8000`. For a local override, set `BACKEND_PORT` in `backend/.env`.
  
 ## Misc
 

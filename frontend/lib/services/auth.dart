@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 
-const String apiUrl = String.fromEnvironment('API_URL',
-    defaultValue: 'http://localhost:8000/api/v1');
+const String apiUrl = String.fromEnvironment(
+  'API_URL',
+  defaultValue: 'http://localhost:8000/api/v1',
+);
 
 class UserData {
   String email;

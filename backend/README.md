@@ -11,6 +11,10 @@ uv run python manage.py migrate
 uv run python manage.py runserver
 ```
 
+By default, the development server listens on `http://localhost:8000`.
+For a local-only override, set `BACKEND_PORT` in `backend/.env`.
+There is no seeded admin account; create one with `uv run python manage.py createsuperuser`.
+
 ### Useful commands
 
 ```bash
@@ -52,12 +56,12 @@ uv run mypy .
 Run the backend with Docker Compose from the repository root:
 
 ```bash
-docker compose up --build backend
+docker compose --env-file backend/.env up --build backend
 ```
 
 Notes:
 
 - The backend reads environment variables from `backend/.env`.
 - The compose setup stores the SQLite database in a named Docker volume.
-- Container startup runs `python manage.py migrate` before starting the Django dev server on `0.0.0.0:8000`.
+- Container startup runs `python manage.py migrate` before starting the Django dev server on the port from `BACKEND_PORT` or `8000`.
 - The image installs dependencies from `pyproject.toml` and `uv.lock`, not from `requirements.txt`.
