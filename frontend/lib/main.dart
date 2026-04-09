@@ -25,25 +25,20 @@ class App extends StatelessWidget {
     return MaterialApp(
       title: 'Notif',
       theme: ThemeData(
-        // Define the default brightness and colors.
-        brightness: Brightness.light,
-        primaryColor: const Color.fromARGB(255, 69, 26, 172),
-        primaryColorLight: const Color.fromARGB(255, 89, 53, 173),
-        primaryColorDark: const Color.fromARGB(255, 76, 18, 211),
-        // colorScheme: ColorScheme.fromSwatch(primarySwatch: Colors.deepPurple),
-
-        // Define the default font family.
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color.fromARGB(255, 69, 26, 172),
+          brightness: Brightness.light,
+          primaryContainer: const Color.fromARGB(255, 89, 53, 173),
+          primary: const Color.fromARGB(255, 69, 26, 172),
+          tertiary: const Color.fromARGB(255, 76, 18, 211),
+        ),
         fontFamily: 'Hack Regular',
-
-        // Define the default `TextTheme`. Use this to specify the default
-        // text styling for headlines, titles, bodies of text, and more.
         textTheme: const TextTheme(
           displayLarge: TextStyle(fontSize: 72),
           titleLarge: TextStyle(fontSize: 36),
           bodyMedium: TextStyle(fontSize: 14),
         ),
-        // scaffoldBackgroundColor: const Color(0x1e1e1e), // default background color
-        // backgroundColor: const Color(0x2e2e2e),
       ),
       home: const LogInPage(),
       routes: {

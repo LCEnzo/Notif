@@ -39,7 +39,7 @@ class RegisterPage extends StatelessWidget {
           Navigator.pushNamed(context, '/About');
         },
         tooltip: 'About',
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         child: const Icon(Icons.question_mark_rounded),
       ),
     );
@@ -129,7 +129,7 @@ class _FormContent extends StatelessWidget {
             const SizedBox(height: 16),
             CustomButton(
               buttonText: 'Back',
-              buttonColor: Theme.of(context).primaryColorLight,
+              buttonColor: Theme.of(context).colorScheme.primaryContainer,
               onPressed: () {
                 if (Navigator.canPop(context)) {
                   Navigator.pop(context);

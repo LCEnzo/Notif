@@ -40,7 +40,7 @@ class LogInPage extends StatelessWidget {
           Navigator.pushNamed(context, '/About');
         },
         tooltip: 'About',
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         child: const Icon(Icons.question_mark_rounded),
       ),
     );
@@ -134,7 +134,7 @@ class _FormContentState extends State<_FormContent> {
             const SizedBox(height: 16),
             CustomButton(
               buttonText: 'Register',
-              buttonColor: Theme.of(context).primaryColorLight,
+              buttonColor: Theme.of(context).colorScheme.primaryContainer,
               onPressed: () {
                 Navigator.pushReplacementNamed(context, '/Register');
               },
