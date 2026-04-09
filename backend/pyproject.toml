@@ -49,6 +49,7 @@ exclude = [
 select = [
 	"E",     # pycodestyle
 	"F",     # pyflakes
+	"W",     # pycodestyle warnings
 	"UP",    # pyupgrade
 	"I",     # isort
 	"N",     # pep8-naming
@@ -59,8 +60,16 @@ select = [
 	"DJ",    # flake8-django
 	"RET",   # flake8-return
 	"SIM",   # flake8-simplify
+	"RUF100",# unused-noqa
 ]
-ignore = ["RET501", "RET504"]
+ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118"]
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "double"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
 
 [tool.pyright]
 exclude = [
@@ -69,7 +78,8 @@ exclude = [
 	"**/experimental",
 	"**/migrations",
 	".venv",
-	"venv",
+	"venv", 
+	"**/.*",
 ]
 ignore = []
 defineConstant = { DEBUG = true }
@@ -86,6 +96,7 @@ pythonPlatform = "Linux"
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
 exclude = ["migrations", "\\.venv", "venv"]
 python_version = "3.13"
+check_untyped_defs = true
 warn_unused_configs = true
 
 [tool.django-stubs]
