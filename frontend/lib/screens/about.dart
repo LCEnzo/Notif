@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
@@ -17,7 +16,7 @@ class AboutPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('About'),
         centerTitle: true,
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).colorScheme.primary,
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -57,9 +56,9 @@ class AboutPage extends StatelessWidget {
                       'The source code can be found on the following GitHub repository: '),
                   TextButton(
                     onPressed: () async {
-                      const url = 'https://github.com/LCEnzo/Notif';
-                      if (await canLaunchUrlString(url)) {
-                        await launchUrlString(url);
+                      final url = Uri.parse('https://github.com/LCEnzo/Notif');
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url);
                       } else {
                         throw 'Could not launch $url';
                       }

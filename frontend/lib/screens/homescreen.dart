@@ -28,7 +28,7 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Notif'),
         centerTitle: true,
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         leading: IconButton(
           icon: const Icon(Icons.logout),
           onPressed: () {
