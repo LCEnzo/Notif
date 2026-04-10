@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
+import 'package:notif/commons/auth_validators.dart';
 
 class Logo extends StatelessWidget {
   final String title;
@@ -543,7 +544,7 @@ class _EmailTextFieldState extends State<EmailTextField> {
   @override
   void initState() {
     super.initState();
-    validator = widget.validator ?? defaultValidator;
+    validator = widget.validator ?? validateEmail;
   }
 
   String? defaultValidator(String? value) {
@@ -689,53 +690,5 @@ class CustomButton extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class EntropyValidator {
-  static const double timeInSeconds =
-      100 * 365 * 24 * 60 * 60; // 100 years in seconds
-  static const double attemptsPerSecond =
-      1e9; // Estimated attempts per second for a consumer CPU
-  static final double minEntropy = log(timeInSeconds * attemptsPerSecond) / ln2;
-
-  String? validate(String? password) {
-    if (password == null || password.isEmpty) {
-      return "Password cannot be empty";
-    }
-
-    double passwordEntropy = calculatePasswordEntropy(password);
-    if (passwordEntropy < minEntropy) {
-      return getHelpText(passwordEntropy: passwordEntropy);
-    }
-
-    return null;
-  }
-
-  String getHelpText({double? passwordEntropy}) {
-    // ignore: prefer_interpolation_to_compose_strings
-    return "Use more and different characters. \"S0m3 password!\"";
-  }
-
-  double calculatePasswordEntropy(String password) {
-    bool hasDigit = password.contains(RegExp(r'\d'));
-    bool hasLower = password.contains(RegExp(r'[a-z]'));
-    bool hasUpper = password.contains(RegExp(r'[A-Z]'));
-    bool hasPunct = password.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'));
-    bool hasOther = password.contains(RegExp(r'[^\w\s]'));
-
-    List<bool> categories = [hasDigit, hasLower, hasUpper, hasPunct, hasOther];
-    List<int> lengths = [10, 26, 26, 32, 40];
-    int charSet = 0;
-
-    for (var i = 0; i < categories.length; i++) {
-      if (categories[i]) {
-        charSet += lengths[i];
-      }
-    }
-
-    double passwordEntropy = log(charSet) / ln2 * password.length;
-
-    return passwordEntropy;
   }
 }
