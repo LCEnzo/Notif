@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -84,7 +83,7 @@ class GlassHelpButton extends StatelessWidget {
               highlightElevation: 0,
               hoverElevation: 0,
               focusElevation: 0,
-              splashColor: Colors.white.withOpacity(0.12),
+              splashColor: Colors.white.withValues(alpha: 0.12),
               child: child,
             ),
           ),
@@ -119,7 +118,7 @@ class AuthPanel extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: Container(
             decoration: BoxDecoration(
-              color: AuthPalette.panel.withOpacity(0.42),
+              color: AuthPalette.panel.withValues(alpha: 0.42),
               borderRadius: radius,
               border: Border.all(color: AuthPalette.panelBorder),
             ),
