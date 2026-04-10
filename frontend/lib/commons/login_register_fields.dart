@@ -62,9 +62,9 @@ class _PosterBackgroundPainter extends CustomPainter {
       colors: AuthPalette.baseGradientColors,
       stops: AuthPalette.baseGradientStops,
     ),
-    _RadialGradientOp(
-      center: Alignment(0, -1),
-      radius: 0.85,
+    _CircularGradientOp(
+      centerYFactor: 0,
+      diameterFactor: 0.78,
       colors: AuthPalette.bloomColors,
       stops: AuthPalette.bloomStops,
     ),
@@ -75,29 +75,38 @@ class _PosterBackgroundPainter extends CustomPainter {
       stops: AuthPalette.transitionStops,
     ),
     _GrainOp(
-      spacing: 7,
-      limitYFactor: 0.7,
-      noiseThreshold: 0.5,
-      opacityScale: 0.42,
-      minRadius: 0.4,
-      maxRadiusDelta: 0.35,
+      spacing: 2.6,
+      limitYFactor: 1,
+      noiseThreshold: 0.09,
+      opacityScale: 0.34,
+      minRadius: 0.26,
+      maxRadiusDelta: 0.38,
       fromColor: AuthPalette.grainFrom,
       toColor: AuthPalette.grainTo,
-      colorLerpScale: 0.45,
+      colorLerpScale: 0.68,
       fadeCenter: Alignment(0, -1),
-      fadeRadius: 1.3,
+      fadeRadius: 2.85,
     ),
     _HalftoneOp(
-      spacing: 14,
-      startYFactor: 0.6,
-      baseRadius: 1,
-      radiusGrowth: 5,
-      opacityBase: 0.16,
-      opacityGrowth: 0.34,
-      fromColor: AuthPalette.halftoneFrom,
-      toColor: AuthPalette.halftoneTo,
-      colorLerpScale: 0.95,
-      convexCurveDepthFactor: 0.18,
+      spacing: 11.5,
+      startYFactor: 0.44,
+      baseRadius: 1.35,
+      radiusGrowth: 6.6,
+      opacityBase: 0.14,
+      opacityGrowth: 0.24,
+      topColor: AuthPalette.halftoneTop,
+      bottomColor: AuthPalette.halftoneBottom,
+      colorLerpScale: 0.66,
+      convexCurveDepthFactor: 0.16,
+      landscapeCurveBoost: 1.15,
+      curveExponent: 1.7,
+      landscapeExponentPull: 0.35,
+    ),
+    _LinearGradientOp(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: AuthPalette.floorFadeColors,
+      stops: AuthPalette.floorFadeStops,
     ),
   ];
 
@@ -183,35 +192,32 @@ class _LinearGradientOp extends _BackgroundOp {
   }
 }
 
-class _RadialGradientOp extends _BackgroundOp {
-  final Alignment center;
-  final double radius;
+class _CircularGradientOp extends _BackgroundOp {
+  final double centerYFactor;
+  final double diameterFactor;
   final List<Color> colors;
   final List<double>? stops;
-  final _RelativeRect rect;
-  final _BackgroundShape shape;
 
-  const _RadialGradientOp({
-    required this.center,
-    required this.radius,
+  const _CircularGradientOp({
+    required this.centerYFactor,
+    required this.diameterFactor,
     required this.colors,
     this.stops,
-    this.rect = const _RelativeRect.full(),
-    this.shape = _BackgroundShape.rect,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    final targetRect = rect.resolve(size);
+    final radius = size.width * diameterFactor / 2;
+    final center = Offset(size.width / 2, size.height * centerYFactor);
     final paint = Paint()
       ..shader = RadialGradient(
-        center: center,
-        radius: radius,
+        center: Alignment.center,
+        radius: 1,
         colors: colors,
         stops: stops,
-      ).createShader(targetRect);
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
 
-    _drawShape(canvas, targetRect, paint, shape);
+    canvas.drawRect(Offset.zero & size, paint);
   }
 }
 
@@ -296,10 +302,13 @@ class _HalftoneOp extends _BackgroundOp {
   final double radiusGrowth;
   final double opacityBase;
   final double opacityGrowth;
-  final Color fromColor;
-  final Color toColor;
+  final Color topColor;
+  final Color bottomColor;
   final double colorLerpScale;
   final double convexCurveDepthFactor;
+  final double landscapeCurveBoost;
+  final double curveExponent;
+  final double landscapeExponentPull;
 
   const _HalftoneOp({
     required this.spacing,
@@ -308,37 +317,49 @@ class _HalftoneOp extends _BackgroundOp {
     required this.radiusGrowth,
     required this.opacityBase,
     required this.opacityGrowth,
-    required this.fromColor,
-    required this.toColor,
+    required this.topColor,
+    required this.bottomColor,
     required this.colorLerpScale,
     this.convexCurveDepthFactor = 0,
+    this.landscapeCurveBoost = 0,
+    this.curveExponent = 2,
+    this.landscapeExponentPull = 0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()..style = PaintingStyle.fill;
     final startY = size.height * startYFactor;
-    final curveDepth = size.height * convexCurveDepthFactor;
+    final aspectRatio = size.width / size.height;
+    final landscapeFactor = (aspectRatio - 1).clamp(0.0, 1.8);
+    final curveDepth = size.height *
+        convexCurveDepthFactor *
+        (1 + landscapeFactor * landscapeCurveBoost);
+    final exponent =
+        (curveExponent - landscapeFactor * landscapeExponentPull).clamp(0.7, 4.0);
     var rowIndex = 0;
 
     for (double y = startY; y < size.height + spacing; y += spacing) {
       final normalized = ((y - startY) / (size.height - startY)).clamp(0.0, 1.0);
+      final contrastFactor = 1 - normalized;
       final xOffset = rowIndex.isEven ? 0.0 : spacing / 2;
       final radius = baseRadius + normalized * radiusGrowth;
 
       paint.color = Color.lerp(
-            fromColor,
-            toColor,
-            normalized * colorLerpScale,
+            bottomColor,
+            topColor,
+            contrastFactor * colorLerpScale,
           )!
-          .withOpacity(opacityBase + normalized * opacityGrowth);
+          .withOpacity(opacityBase + contrastFactor * opacityGrowth);
 
       for (double x = -spacing; x < size.width + spacing; x += spacing) {
         final currentX = x + xOffset;
         final centerDistance =
-            ((currentX - (size.width / 2)).abs() / (size.width / 2)).clamp(0.0, 1.0);
+            ((currentX - (size.width / 2)).abs() / (size.width / 2))
+                .clamp(0.0, 1.0);
+        final edgeLift = 1 - pow(centerDistance, exponent).toDouble();
         final localStartY =
-            startY + curveDepth * (1.0 - centerDistance * centerDistance);
+            startY + curveDepth * edgeLift;
         if (y < localStartY) {
           continue;
         }
@@ -348,6 +369,62 @@ class _HalftoneOp extends _BackgroundOp {
 
       rowIndex++;
     }
+  }
+}
+
+class GlassHelpButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  final String tooltip;
+  final Widget child;
+
+  const GlassHelpButton({
+    super.key,
+    required this.onPressed,
+    required this.tooltip,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(4);
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: [
+          BoxShadow(
+            color: AuthPalette.fabShadow,
+            blurRadius: 22,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AuthPalette.fabGlass,
+              borderRadius: radius,
+              border: Border.all(color: AuthPalette.panelBorder),
+            ),
+            child: FloatingActionButton(
+              onPressed: onPressed,
+              tooltip: tooltip,
+              backgroundColor: Colors.transparent,
+              foregroundColor: AuthPalette.fabIcon,
+              elevation: 0,
+              highlightElevation: 0,
+              hoverElevation: 0,
+              focusElevation: 0,
+              splashColor: Colors.white.withOpacity(0.12),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -397,7 +474,7 @@ class AuthPanel extends StatelessWidget {
           filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: Container(
             decoration: BoxDecoration(
-              color: AuthPalette.panel.withOpacity(0.52),
+              color: AuthPalette.panel.withOpacity(0.42),
               borderRadius: radius,
               border: Border.all(color: AuthPalette.panelBorder),
             ),
@@ -558,26 +635,56 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final backgroundColor = buttonColor ?? theme.colorScheme.primary;
-    final foregroundColor =
-        ThemeData.estimateBrightnessForColor(backgroundColor) == Brightness.dark
-            ? AuthPalette.buttonForeground
-            : theme.colorScheme.onSurface;
+    final backgroundColor = buttonColor ?? AuthPalette.primaryButtonBase;
+    final isPrimary = buttonColor == null;
+    final foregroundColor = isPrimary
+        ? AuthPalette.buttonForeground
+        : AuthPalette.secondaryButtonForeground;
+
+    final radius = BorderRadius.circular(4);
 
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: backgroundColor,
-          foregroundColor: foregroundColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          boxShadow: [
+            BoxShadow(
+              color: AuthPalette.buttonShadow,
+              blurRadius: 10,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
-        onPressed: onPressed as void Function(),
-        child: Padding(
-          padding: const EdgeInsets.all(10.0),
-          child: Text(
-            buttonText,
+        child: ClipRRect(
+          borderRadius: radius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: backgroundColor,
+                borderRadius: radius,
+                border: Border.all(color: AuthPalette.buttonBorder),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: onPressed as void Function(),
+                  child: Padding(
+                    padding: const EdgeInsets.all(10.0),
+                    child: Center(
+                      child: Text(
+                        buttonText,
+                        style: TextStyle(
+                          color: foregroundColor,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),

@@ -10,43 +10,16 @@ class RegisterPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const String appTitle = "Welcome to Notif!";
-    final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
-
     return Scaffold(
       body: PageBackground(
         child: Center(
-          child: isSmallScreen
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Logo(
-                      title: appTitle,
-                      textColor: AuthPalette.logoText,
-                    ),
-                    _FormContent(),
-                  ],
-                )
-              : Container(
-                  padding: const EdgeInsets.all(32.0),
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Logo(
-                          title: appTitle,
-                          textColor: AuthPalette.logoText,
-                        ),
-                      ),
-                      Expanded(
-                        child: Center(child: _FormContent()),
-                      ),
-                    ],
-                  ),
-                ),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: _FormContent(),
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: GlassHelpButton(
         onPressed: () {
           Navigator.pushNamed(context, '/About');
         },
@@ -81,7 +54,7 @@ class _FormContent extends StatelessWidget {
     }
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 300),
+      constraints: const BoxConstraints(maxWidth: 330),
       child: AuthPanel(
         child: Form(
           key: formKey,
@@ -144,7 +117,7 @@ class _FormContent extends StatelessWidget {
               const SizedBox(height: 16),
               CustomButton(
                 buttonText: 'Back',
-                buttonColor: Theme.of(context).colorScheme.primaryContainer,
+                buttonColor: AuthPalette.secondaryButtonBase,
                 onPressed: () {
                   if (Navigator.canPop(context)) {
                     Navigator.pop(context);
