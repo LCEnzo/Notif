@@ -30,8 +30,8 @@ class _PosterBackgroundPainter extends CustomPainter {
       stops: AuthPalette.baseGradientStops,
     ),
     _CircularGradientOp(
-      centerYFactor: 0,
-      diameterFactor: 0.78,
+      centerYFactor: -0.05,
+      diameterFactor: 0.74,
       colors: AuthPalette.bloomColors,
       stops: AuthPalette.bloomStops,
     ),
@@ -56,15 +56,15 @@ class _PosterBackgroundPainter extends CustomPainter {
     ),
     _HalftoneOp(
       spacing: 13,
-      startYFactor: 0.4,
-      baseRadius: 1.5,
-      radiusGrowth: 6.6,
+      startYFactor: 0.42,
+      baseRadius: 0.6,
+      radiusGrowth: 12,
       opacityBase: 0.16,
       opacityGrowth: 0.26,
       topColor: AuthPalette.halftoneTop,
       bottomColor: AuthPalette.halftoneBottom,
       colorLerpScale: 0.66,
-      convexCurveDepthFactor: 0.16,
+      convexCurveDepthFactor: 0.12,
       landscapeCurveBoost: 1.15,
       curveExponent: 1.7,
       landscapeExponentPull: 0.35,
@@ -98,10 +98,18 @@ abstract class _BackgroundOp {
 
 enum _BackgroundShape { rect, oval }
 
+/// Defines a shader target rectangle as fractions of the painted canvas.
 class _RelativeRect {
+  /// Left edge as a fraction of the canvas width.
   final double leftFactor;
+
+  /// Top edge as a fraction of the canvas height.
   final double topFactor;
+
+  /// Width as a fraction of the canvas width.
   final double widthFactor;
+
+  /// Height as a fraction of the canvas height.
   final double heightFactor;
 
   const _RelativeRect({
@@ -127,12 +135,24 @@ class _RelativeRect {
   }
 }
 
+/// Paints a linear gradient into a rectangular or oval region.
 class _LinearGradientOp extends _BackgroundOp {
+  /// Gradient start in Flutter's alignment space, e.g. `topCenter`.
   final Alignment begin;
+
+  /// Gradient end in Flutter's alignment space.
   final Alignment end;
+
+  /// Colors sampled across the gradient from [begin] to [end].
   final List<Color> colors;
+
+  /// Optional normalized stop positions for [colors].
   final List<double>? stops;
+
+  /// Region of the canvas that the shader is created against.
   final _RelativeRect rect;
+
+  /// Shape used when drawing the gradient-filled [rect].
   final _BackgroundShape shape;
 
   const _LinearGradientOp({
@@ -159,10 +179,19 @@ class _LinearGradientOp extends _BackgroundOp {
   }
 }
 
+/// Paints a radial bloom whose size and vertical placement scale with the page.
 class _CircularGradientOp extends _BackgroundOp {
+  /// Vertical center as a fraction of canvas height.
+  /// `0` places the bloom center on the top edge, `0.5` in the middle.
   final double centerYFactor;
+
+  /// Circle diameter as a fraction of canvas width.
   final double diameterFactor;
+
+  /// Colors sampled from the middle of the bloom outward.
   final List<Color> colors;
+
+  /// Optional normalized stop positions for [colors].
   final List<double>? stops;
 
   const _CircularGradientOp({
@@ -189,16 +218,37 @@ class _CircularGradientOp extends _BackgroundOp {
 }
 
 class _GrainOp extends _BackgroundOp {
+  /// Distance between adjacent grain samples in logical pixels.
   final double spacing;
+
+  /// Vertical extent of the grain field as a fraction of canvas height.
   final double limitYFactor;
+
+  /// Minimum hashed noise value required before a grain dot is drawn.
   final double noiseThreshold;
+
+  /// Multiplier applied to the post-threshold noise value for alpha.
   final double opacityScale;
+
+  /// Smallest possible grain radius.
   final double minRadius;
+
+  /// Extra radius added on top of [minRadius] as noise increases.
   final double maxRadiusDelta;
+
+  /// Color used for lower-noise grain dots.
   final Color fromColor;
+
+  /// Color used for higher-noise grain dots.
   final Color toColor;
+
+  /// Controls how aggressively noise shifts the dot color toward [toColor].
   final double colorLerpScale;
+
+  /// Center of the radial fade in Flutter's alignment space.
   final Alignment fadeCenter;
+
+  /// Radius of the radial fade in normalized canvas space.
   final double fadeRadius;
 
   const _GrainOp({
@@ -263,18 +313,43 @@ class _GrainOp extends _BackgroundOp {
 }
 
 class _HalftoneOp extends _BackgroundOp {
+  /// Distance between halftone sample points in logical pixels.
   final double spacing;
+
+  /// Baseline top edge of the halftone field as a fraction of canvas height.
   final double startYFactor;
+
+  /// Dot radius right at the local frontier.
   final double baseRadius;
+
+  /// Additional radius gained as a dot moves away from the frontier.
   final double radiusGrowth;
+
+  /// Minimum alpha applied to halftone dots.
   final double opacityBase;
+
+  /// Extra alpha added as dots move toward the top of the field.
   final double opacityGrowth;
+
+  /// Color used near the upper part of the halftone field.
   final Color topColor;
+
+  /// Color used near the lower part of the halftone field.
   final Color bottomColor;
+
+  /// Controls how strongly the vertical gradient interpolates toward [topColor].
   final double colorLerpScale;
+
+  /// Depth of the curved frontier as a fraction of canvas height.
   final double convexCurveDepthFactor;
+
+  /// Extra curve depth applied on wider layouts.
   final double landscapeCurveBoost;
+
+  /// Shapes how quickly the frontier lifts toward the center versus the edges.
   final double curveExponent;
+
+  /// Reduces [curveExponent] on wide layouts to soften the curve.
   final double landscapeExponentPull;
 
   const _HalftoneOp({
@@ -311,7 +386,6 @@ class _HalftoneOp extends _BackgroundOp {
       final normalized = ((y - startY) / (size.height - startY)).clamp(0.0, 1.0);
       final contrastFactor = 1 - normalized;
       final xOffset = rowIndex.isEven ? 0.0 : spacing / 2;
-      final radius = baseRadius + normalized * radiusGrowth;
 
       paint.color = Color.lerp(
             bottomColor,
@@ -330,6 +404,13 @@ class _HalftoneOp extends _BackgroundOp {
         if (y < localStartY) {
           continue;
         }
+
+        final availableDepth = size.height - localStartY;
+        final distanceFromFrontier = y - localStartY;
+        final frontierNormalized = availableDepth <= 0
+            ? 1.0
+            : (distanceFromFrontier / availableDepth).clamp(0.0, 1.0);
+        final radius = baseRadius + frontierNormalized * radiusGrowth;
 
         canvas.drawCircle(Offset(currentX, y), radius, paint);
       }
