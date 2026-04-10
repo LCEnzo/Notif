@@ -54,6 +54,6 @@ class AuthPalette {
 
   static const Color grainFrom = Color(0xFF16040B);
   static const Color grainTo = Color(0xFF9A41DB);
-  static const Color halftoneTop = Color(0xFF12021D);
-  static const Color halftoneBottom = Color(0xFF3A0A68);
+  static const Color halftoneTop = Color.fromARGB(255, 10, 2, 25);
+  static const Color halftoneBottom = halftoneTop;
 }
