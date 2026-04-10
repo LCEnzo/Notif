@@ -3,7 +3,6 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/auth_validators.dart';
-import 'package:notif/commons/auth_background.dart';
 
 class Logo extends StatelessWidget {
   final String title;
