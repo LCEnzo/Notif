@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
@@ -14,12 +15,16 @@ class LogInPage extends StatelessWidget {
     final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
-      body: Center(
+      body: PageBackground(
+        child: Center(
           child: isSmallScreen
               ? const Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Logo(title: appTitle),
+                    Logo(
+                      title: appTitle,
+                      textColor: AuthPalette.logoText,
+                    ),
                     _FormContent(),
                   ],
                 )
@@ -28,20 +33,29 @@ class LogInPage extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 800),
                   child: const Row(
                     children: [
-                      Expanded(child: Logo(title: appTitle)),
+                      Expanded(
+                        child: Logo(
+                          title: appTitle,
+                          textColor: AuthPalette.logoText,
+                        ),
+                      ),
                       Expanded(
                         child: Center(child: _FormContent()),
                       ),
                     ],
                   ),
-                )),
+                ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.pushNamed(context, '/About');
         },
         tooltip: 'About',
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        child: const Icon(Icons.question_mark_rounded),
+        child: const Icon(
+          Icons.question_mark_rounded,
+          color: AuthPalette.fabIcon,
+        ),
       ),
     );
   }
@@ -80,68 +94,70 @@ class _FormContentState extends State<_FormContent> {
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
 
-    return Container(
+    return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 300),
-      child: Form(
-        key: formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            UsernameTextField(
-              key: const Key('usernameField'),
-              labelText: 'Username',
-              hintText: 'Enter your username',
-              textController: usernameController,
-            ),
-            const SizedBox(height: 16),
-            PasswordTextField(
-              key: const Key('passwordField'),
-              labelText: 'Password',
-              hintText: 'Enter your password',
-              textController: passwordController,
-              validator: noValidate,
-            ),
-            const SizedBox(height: 16),
-            CheckboxListTile(
-              value: rememberMe,
-              onChanged: (value) {
-                setState(() {
-                  if (value == null) return;
-                  rememberMe = value;
-                  _saveRememberMe();
-                });
-              },
-              title: const Text('Remember me'),
-              controlAffinity: ListTileControlAffinity.leading,
-              dense: true,
-              contentPadding: const EdgeInsets.all(0),
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              buttonText: 'Sign in',
-              onPressed: () async {
-                if (rememberMe) {
-                  _saveUsername();
-                }
+      child: AuthPanel(
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              UsernameTextField(
+                key: const Key('usernameField'),
+                labelText: 'Username',
+                hintText: 'Enter your username',
+                textController: usernameController,
+              ),
+              const SizedBox(height: 16),
+              PasswordTextField(
+                key: const Key('passwordField'),
+                labelText: 'Password',
+                hintText: 'Enter your password',
+                textController: passwordController,
+                validator: noValidate,
+              ),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                value: rememberMe,
+                onChanged: (value) {
+                  setState(() {
+                    if (value == null) return;
+                    rememberMe = value;
+                    _saveRememberMe();
+                  });
+                },
+                title: const Text('Remember me'),
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                contentPadding: const EdgeInsets.all(0),
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                buttonText: 'Sign in',
+                onPressed: () async {
+                  if (rememberMe) {
+                    _saveUsername();
+                  }
 
-                bool loggedIn = await loginClick(authService, context);
-                if (loggedIn && context.mounted) {
-                  Navigator.pushReplacementNamed(context, '/Home');
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              buttonText: 'Register',
-              buttonColor: Theme.of(context).colorScheme.primaryContainer,
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, '/Register');
-              },
-            ),
+                  bool loggedIn = await loginClick(authService, context);
+                  if (loggedIn && context.mounted) {
+                    Navigator.pushReplacementNamed(context, '/Home');
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                buttonText: 'Register',
+                buttonColor: Theme.of(context).colorScheme.primaryContainer,
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, '/Register');
+                },
+              ),
 
-            // TODO: add logic and/or navigation for password recovery
-          ],
+              // TODO: add logic and/or navigation for password recovery
+            ],
+          ),
         ),
       ),
     );

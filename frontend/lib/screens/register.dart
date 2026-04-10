@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
@@ -13,12 +14,16 @@ class RegisterPage extends StatelessWidget {
     final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
-      body: Center(
+      body: PageBackground(
+        child: Center(
           child: isSmallScreen
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Logo(title: appTitle),
+                    Logo(
+                      title: appTitle,
+                      textColor: AuthPalette.logoText,
+                    ),
                     _FormContent(),
                   ],
                 )
@@ -27,20 +32,29 @@ class RegisterPage extends StatelessWidget {
                   constraints: const BoxConstraints(maxWidth: 800),
                   child: Row(
                     children: [
-                      const Expanded(child: Logo(title: appTitle)),
+                      Expanded(
+                        child: Logo(
+                          title: appTitle,
+                          textColor: AuthPalette.logoText,
+                        ),
+                      ),
                       Expanded(
                         child: Center(child: _FormContent()),
                       ),
                     ],
                   ),
-                )),
+                ),
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.pushNamed(context, '/About');
         },
         tooltip: 'About',
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        child: const Icon(Icons.question_mark_rounded),
+        child: const Icon(
+          Icons.question_mark_rounded,
+          color: AuthPalette.fabIcon,
+        ),
       ),
     );
   }
@@ -66,81 +80,83 @@ class _FormContent extends StatelessWidget {
       });
     }
 
-    return Container(
+    return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 300),
-      child: Form(
-        key: formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            UsernameTextField(
-              labelText: 'Username',
-              hintText: 'Enter your username',
-              textController: usernameController,
-            ),
-            const SizedBox(height: 16),
-            EmailTextField(
-              labelText: 'Email',
-              hintText: 'Enter your email',
-              textController: emailController,
-            ),
-            const SizedBox(height: 16),
-            PasswordTextField(
-              labelText: 'Password',
-              hintText: 'Enter your password',
-              textController: passwordController,
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              buttonText: 'Register',
-              onPressed: () async {
-                if (formKey.currentState?.validate() ?? false) {
-                  if (kDebugMode) {
-                    print("Validated data:");
-                    print("\t- username: ${usernameController.text}");
-                    print("\t- email: ${emailController.text}");
-                    print("\t- password: ${passwordController.text}");
-                  }
+      child: AuthPanel(
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              UsernameTextField(
+                labelText: 'Username',
+                hintText: 'Enter your username',
+                textController: usernameController,
+              ),
+              const SizedBox(height: 16),
+              EmailTextField(
+                labelText: 'Email',
+                hintText: 'Enter your email',
+                textController: emailController,
+              ),
+              const SizedBox(height: 16),
+              PasswordTextField(
+                labelText: 'Password',
+                hintText: 'Enter your password',
+                textController: passwordController,
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                buttonText: 'Register',
+                onPressed: () async {
+                  if (formKey.currentState?.validate() ?? false) {
+                    if (kDebugMode) {
+                      print("Validated data:");
+                      print("\t- username: ${usernameController.text}");
+                      print("\t- email: ${emailController.text}");
+                      print("\t- password: ${passwordController.text}");
+                    }
 
-                  try {
-                    await authService.register(usernameController.text,
-                        emailController.text, passwordController.text);
-                  } catch (e) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      showDialog<dynamic>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Register Failed'),
-                          content: Text('$e'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => {Navigator.pop(context)},
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
-                      );
-                    });
+                    try {
+                      await authService.register(usernameController.text,
+                          emailController.text, passwordController.text);
+                    } catch (e) {
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        showDialog<dynamic>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Register Failed'),
+                            content: Text('$e'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => {Navigator.pop(context)},
+                                child: const Text('OK'),
+                              ),
+                            ],
+                          ),
+                        );
+                      });
+                    }
                   }
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              buttonText: 'Back',
-              buttonColor: Theme.of(context).colorScheme.primaryContainer,
-              onPressed: () {
-                if (Navigator.canPop(context)) {
-                  Navigator.pop(context);
-                } else {
-                  Navigator.pushReplacementNamed(context, '/LogIn');
-                }
-              },
-            ),
+                },
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                buttonText: 'Back',
+                buttonColor: Theme.of(context).colorScheme.primaryContainer,
+                onPressed: () {
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    Navigator.pushReplacementNamed(context, '/LogIn');
+                  }
+                },
+              ),
 
-            /// TODO: add logic and/or navigation for password recovery
-          ],
+              /// TODO: add logic and/or navigation for password recovery
+            ],
+          ),
         ),
       ),
     );
