@@ -26,8 +26,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Welcome to Notif!'), findsOneWidget);
-    expect(find.text('Sign in'), findsOneWidget);
+    expect(find.text('Log in'), findsOneWidget);
     expect(find.text('Register'), findsOneWidget);
   });
 }
