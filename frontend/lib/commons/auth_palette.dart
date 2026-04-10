@@ -3,31 +3,37 @@ import 'package:flutter/material.dart';
 class AuthPalette {
   const AuthPalette._();
 
-  static const Color logoText = Color(0xFFFFEAF7);
   static const Color panel = Color(0xFFE3E3E7);
   static const Color panelBorder = Color(0x29FFFFFF);
   static const Color panelShadow = Color(0x38000000);
   static const Color fabIcon = panel;
+  static const Color fabGlass = Color(0x40E3E3E7);
+  static const Color fabShadow = Color(0x30000000);
   static const Color buttonForeground = Colors.white;
+  static const Color secondaryButtonForeground = Colors.white;
+  static const Color primaryButtonBase = Color(0xFF451AAC);
+  static const Color secondaryButtonBase = Color(0xFF5935AD);
+  static const Color buttonBorder = Color(0x33FFFFFF);
+  static const Color buttonShadow = Color(0x18000000);
 
   static const List<Color> baseGradientColors = [
     Color(0xFF7716A4),
     Color(0xFF5D148F),
     Color(0xFF33104F),
     Color(0xFF0B0716),
-    Color(0xFF020105),
+    Color(0xFF000000),
   ];
 
   static const List<double> baseGradientStops = [0.0, 0.3, 0.58, 0.82, 1.0];
 
   static const List<Color> bloomColors = [
-    Color(0xFFFF4CB8),
-    Color(0xFFF336B0),
-    Color(0xFFC42ADE),
-    Color(0x00571A84),
+    Color(0xFFFC2FA7),
+    Color(0xEEFA42B2),
+    Color(0xA0CC33DE),
+    Color(0x003E0D63),
   ];
 
-  static const List<double> bloomStops = [0.0, 0.28, 0.62, 1.0];
+  static const List<double> bloomStops = [0.0, 0.24, 0.52, 1.0];
 
   static const List<Color> transitionColors = [
     Color(0x00FFFFFF),
@@ -38,8 +44,16 @@ class AuthPalette {
 
   static const List<double> transitionStops = [0.22, 0.56, 0.82, 1.0];
 
-  static const Color grainFrom = Color(0xFF22051E);
-  static const Color grainTo = Color(0xFF7B28B0);
-  static const Color halftoneFrom = Color(0xFF6D20BE);
-  static const Color halftoneTo = Color(0xFF010103);
+  static const List<Color> floorFadeColors = [
+    Color(0x00000000),
+    Color(0xA6000000),
+    Color(0xFF000000),
+  ];
+
+  static const List<double> floorFadeStops = [0.72, 0.9, 1.0];
+
+  static const Color grainFrom = Color(0xFF16040B);
+  static const Color grainTo = Color(0xFF9A41DB);
+  static const Color halftoneTop = Color(0xFF12021D);
+  static const Color halftoneBottom = Color(0xFF3A0A68);
 }

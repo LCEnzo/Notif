@@ -11,43 +11,16 @@ class LogInPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const String appTitle = "Welcome to Notif!";
-    final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
-
     return Scaffold(
       body: PageBackground(
-        child: Center(
-          child: isSmallScreen
-              ? const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Logo(
-                      title: appTitle,
-                      textColor: AuthPalette.logoText,
-                    ),
-                    _FormContent(),
-                  ],
-                )
-              : Container(
-                  padding: const EdgeInsets.all(32.0),
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  child: const Row(
-                    children: [
-                      Expanded(
-                        child: Logo(
-                          title: appTitle,
-                          textColor: AuthPalette.logoText,
-                        ),
-                      ),
-                      Expanded(
-                        child: Center(child: _FormContent()),
-                      ),
-                    ],
-                  ),
-                ),
+        child: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: _FormContent(),
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: GlassHelpButton(
         onPressed: () {
           Navigator.pushNamed(context, '/About');
         },
@@ -93,9 +66,13 @@ class _FormContentState extends State<_FormContent> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
+    final theme = Theme.of(context);
+    final rememberMeStyle = theme.textTheme.bodyLarge?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 300),
+      constraints: const BoxConstraints(maxWidth: 330),
       child: AuthPanel(
         child: Form(
           key: formKey,
@@ -127,14 +104,14 @@ class _FormContentState extends State<_FormContent> {
                     _saveRememberMe();
                   });
                 },
-                title: const Text('Remember me'),
+                title: Text('Remember me', style: rememberMeStyle),
                 controlAffinity: ListTileControlAffinity.leading,
                 dense: true,
                 contentPadding: const EdgeInsets.all(0),
               ),
               const SizedBox(height: 16),
               CustomButton(
-                buttonText: 'Sign in',
+                buttonText: 'Log in',
                 onPressed: () async {
                   if (rememberMe) {
                     _saveUsername();
@@ -149,7 +126,7 @@ class _FormContentState extends State<_FormContent> {
               const SizedBox(height: 16),
               CustomButton(
                 buttonText: 'Register',
-                buttonColor: Theme.of(context).colorScheme.primaryContainer,
+                buttonColor: AuthPalette.secondaryButtonBase,
                 onPressed: () {
                   Navigator.pushReplacementNamed(context, '/Register');
                 },
