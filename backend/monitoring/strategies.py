@@ -24,6 +24,8 @@ from commons.result import Err, Ok
 
 logger = logging.getLogger(__name__)
 
+REQUEST_TIMEOUT_SECONDS = 30
+
 # Types
 # TODO: Think of moving them to a central location so that the whole app can use them
 URL = NewType("URL", str)
@@ -50,7 +52,10 @@ def _string_attr_value(value: str | AttributeValueList | None) -> str | None:
 
 
 def _fetch_url_content(url: URL) -> str | None:
-	response = requests.get(url)
+	try:
+		response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+	except requests.RequestException:
+		return None
 	if response.status_code == requests.codes.ok:
 		return response.text
 
@@ -198,7 +203,10 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 
 		req_url = self._get_threadmarks_url(url)
 
-		response = requests.get(req_url)
+		try:
+			response = requests.get(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
+		except requests.RequestException as exc:
+			return Err(f"Request failed: {exc}"), None
 		marks = self._extract_threadmarks(response)
 
 		updates = [
@@ -396,7 +404,10 @@ class QQAlertsStrategy(BaseStrategy):
 				"%Y-%m-%d %H:%M:%S"
 			).astimezone(timezone.get_default_timezone())
 
-		resp = self._get_alerts_html(username, password)
+		try:
+			resp = self._get_alerts_html(username, password)
+		except requests.RequestException as exc:
+			return Err(f"Request failed: {exc}"), None
 		alerts = self._extract_alerts(resp.text)
 
 		# Fill updates with new alerts
@@ -471,7 +482,7 @@ class QQAlertsStrategy(BaseStrategy):
 		}
 
 		with requests.Session() as session:
-			get_response = session.get(QQAlertsStrategy.alerts_url)
+			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
 			session_cookie = get_response.cookies.get(session_cookie_name)
 			login_headers['Cookie'] = f"{session_cookie_name}={session_cookie}"
 
@@ -480,7 +491,7 @@ class QQAlertsStrategy(BaseStrategy):
 				session.headers[header] = value
 
 			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
-			response = session.post(QQAlertsStrategy.login_url, data=payload)
+			response = session.post(QQAlertsStrategy.login_url, data=payload, timeout=REQUEST_TIMEOUT_SECONDS)
 			session.close()
 
 		return response
@@ -641,7 +652,10 @@ class KemonoFavouritesStrategy(BaseStrategy):
 				"%Y-%m-%d %H:%M:%S"
 			).astimezone(timezone.get_default_timezone())
 
-		resp = self._get_favourites_html(username, password)
+		try:
+			resp = self._get_favourites_html(username, password)
+		except requests.RequestException as exc:
+			return Err(f"Request failed: {exc}"), None
 		cards = self._extract_kemono_profile_cards(resp.text)
 
 		# Fill updates with new alerts
@@ -713,10 +727,10 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		}
 
 		with requests.session() as session:
-			login_response = session.post(KemonoFavouritesStrategy.login_url, data=data)
+			login_response = session.post(KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS)
 			assert login_response.status_code == requests.codes.ok
 
-			fav_response = session.get(KemonoFavouritesStrategy.fav_url)
+			fav_response = session.get(KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS)
 			assert fav_response.status_code == requests.codes.ok
 
 			session.close()

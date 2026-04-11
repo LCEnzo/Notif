@@ -2,6 +2,7 @@ import logging
 import os
 from pprint import pprint  # noqa: F401
 
+import requests
 import requests_mock
 from django.db.models import Model
 from django.test import TestCase
@@ -100,6 +101,51 @@ class TestSelectorStratErr(TestCase):
 
 		assert isinstance(result, Err)
 		assert new_data is None
+
+	def test_timeout_returns_err(self):
+		strat = GeneralSelectorStrategy()
+		url = "https://example.com"
+		config_data = {"selectors": ["div.content"]}
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, exc=requests.exceptions.ConnectTimeout)
+			result, new_data = strat(URL(url), config_data, {})
+
+		assert isinstance(result, Err)
+		assert new_data is None
+
+	def test_sbsv_timeout_returns_err(self):
+		strat = SBSVThreadmarksStrategy()
+		url = URL("http://forums.spacebattles.com/threads/test.123/threadmarks")
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, exc=requests.exceptions.ReadTimeout)
+			result, new_data = strat.scrape(url, {}, {'last_alert': ''})
+
+		assert isinstance(result, Err)
+		assert "Request failed" in result.error
+
+
+class RateLimiterTestCase(TestCase):
+	def test_same_domain_waits(self):
+		from monitoring.rate_limiter import DomainRateLimiter
+		limiter = DomainRateLimiter(delay=0.15)
+		import time
+		start = time.monotonic()
+		limiter.wait_for_domain("https://example.com/a")
+		limiter.wait_for_domain("https://example.com/b")
+		elapsed = time.monotonic() - start
+		assert elapsed >= 0.14
+
+	def test_different_domains_no_wait(self):
+		from monitoring.rate_limiter import DomainRateLimiter
+		limiter = DomainRateLimiter(delay=0.5)
+		import time
+		start = time.monotonic()
+		limiter.wait_for_domain("https://example.com/a")
+		limiter.wait_for_domain("https://other.com/b")
+		elapsed = time.monotonic() - start
+		assert elapsed < 0.2
 
 
 class TestSelectorStrat(TestCase):
