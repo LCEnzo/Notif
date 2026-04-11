@@ -34,7 +34,7 @@ class Link(models.Model):
 	url = models.URLField(max_length=1000)
 	user = models.ForeignKey(User, on_delete=models.CASCADE)
 	strategy = models.ForeignKey(Strategy, default=None, null=True, on_delete=models.SET_NULL, related_name='link_set')
-	last_scraped = models.DateTimeField(auto_now=True, null=True, blank=True)
+	last_scraped = models.DateTimeField(null=True, blank=True, default=None)
 	# Information with which to compare newly scraped data, to see whether a update has occurred
 	# Will probably add things like timestamps, html snippet hashes, etc
 	# I should consider what type of field to have. Previous scrape response or whatever
