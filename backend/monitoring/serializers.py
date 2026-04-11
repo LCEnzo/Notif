@@ -44,7 +44,7 @@ class UpdateSerializer(ModelSerializer):
 
 
 class NotificationSerializer(ModelSerializer):
-	update = UpdateSerializer(read_only=True)
+	update = UpdateSerializer(read_only=True)  # type: ignore[assignment]
 
 	class Meta:
 		model = Notification

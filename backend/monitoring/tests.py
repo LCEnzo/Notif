@@ -4,6 +4,7 @@ from pprint import pprint  # noqa: F401
 
 import requests
 import requests_mock
+from django.core.management import call_command
 from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
@@ -12,6 +13,7 @@ from rest_framework.test import APIClient
 from commons.result import Err, Ok
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client
 from monitoring.models import Link, Notification, Update
+from monitoring.services import scrape_link
 from monitoring.strategies import URL, GeneralSelectorStrategy, SBSVThreadmarksStrategy
 
 logger = logging.getLogger(__name__)
@@ -359,3 +361,124 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 			update__link__user=self.regular_user, status=Notification.Status.UNREAD
 		).count()
 		self.assertEqual(unread_count, 0)
+
+
+class ScrapeServiceTestCase(SetupMixin, TestCase):
+	def setUp(self):
+		# Fixture links use schemeless URLs like "www.google.com" which
+		# requests can't dispatch. Give them proper URLs for service tests.
+		for link in self.links:
+			link.url = f"https://{link.url}"
+			link.save()
+
+	def test_scrape_link_creates_updates_and_notifications(self):
+		link = self.links[0]
+		html = '<html><body><article class="post-card">New Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			result = scrape_link(link)
+
+		assert isinstance(result, Ok)
+		assert result.value > 0
+		assert Update.objects.filter(link=link).exists()
+		assert Notification.objects.filter(update__link=link).exists()
+
+	def test_scrape_link_no_strategy_returns_err(self):
+		link = self.links[0]
+		link.strategy = None
+		link.save()
+
+		result = scrape_link(link)
+		assert isinstance(result, Err)
+		assert "No strategy" in result.error
+
+	def test_scrape_link_sets_last_scraped(self):
+		link = self.links[0]
+		assert link.last_scraped is None
+
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			scrape_link(link)
+
+		link.refresh_from_db()
+		assert link.last_scraped is not None
+
+	def test_scrape_link_deduplication(self):
+		link = self.links[0]
+		html = '<html><body><article class="post-card">Same Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			scrape_link(link)
+			count_after_first = Update.objects.filter(link=link).count()
+
+			scrape_link(link)
+			count_after_second = Update.objects.filter(link=link).count()
+
+		assert count_after_first == count_after_second
+
+	def test_scrape_link_updates_comparison_info(self):
+		link = self.links[0]
+		assert link.comparison_info == ''
+
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			scrape_link(link)
+
+		link.refresh_from_db()
+		assert link.comparison_info != ''
+
+	def test_management_command_runs(self):
+		link = self.links[0]
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			# Should not raise
+			call_command('scrape', '--link', str(link.pk), '--delay', '0')
+
+
+class TriggerScrapeEndpointTestCase(SetupMixin, TestCase):
+	def setUp(self):
+		for link in self.links:
+			link.url = f"https://{link.url}"
+			link.save()
+
+	def test_trigger_scrape_single_link(self):
+		link = self.links[0]
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			response = self.api_client.post(
+				reverse('trigger-scrape'),
+				{'link_id': link.pk},
+				format='json',
+			)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data['status'], 'ok')
+
+	def test_trigger_scrape_other_users_link_404(self):
+		other_link = Link.objects.filter(user=self.secondary_user).first()
+		assert other_link is not None
+		response = self.api_client.post(
+			reverse('trigger-scrape'),
+			{'link_id': other_link.pk},
+			format='json',
+		)
+		self.assertEqual(response.status_code, 404)
+
+	def test_trigger_scrape_all(self):
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			response = self.api_client.post(reverse('trigger-scrape'), format='json')
+
+		self.assertEqual(response.status_code, 200)
+		# Should have entries for the authenticated user's links
+		assert len(response.data) > 0
