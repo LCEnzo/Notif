@@ -1,6 +1,9 @@
-# IDE
+# IDE & AI tools
 .idea/*
 .vscode/*
+.claude/
+.codex/
+.cursor/
 
 # Python
 .venv/
@@ -19,7 +22,7 @@ __pycache__/
 debug.log
 secrets.*
 *.secrets
-.env
+*.env
 
 # Misc
 .directory
