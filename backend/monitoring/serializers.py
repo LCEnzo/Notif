@@ -1,7 +1,7 @@
 from rest_framework import serializers  # noqa: F401
 from rest_framework.serializers import ModelSerializer
 
-from monitoring.models import Link, Strategy
+from monitoring.models import Link, Notification, Strategy, Update
 
 
 class StrategySerializer(ModelSerializer):
@@ -34,3 +34,19 @@ class LinkSerializer(ModelSerializer):
 			'user': {'required': True},
 			'strategy': {'required': True},
 		}
+
+
+class UpdateSerializer(ModelSerializer):
+	class Meta:
+		model = Update
+		fields = ['id', 'link', 'title', 'description', 'item_url', 'created_at']
+		read_only_fields = fields
+
+
+class NotificationSerializer(ModelSerializer):
+	update = UpdateSerializer(read_only=True)
+
+	class Meta:
+		model = Notification
+		fields = ['id', 'update', 'status', 'read_at']
+		read_only_fields = ['id', 'update', 'read_at']

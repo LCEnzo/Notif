@@ -87,7 +87,7 @@ class BaseStrategy(ABC):
 
 	def __call__(self, url: URL, config_data: dict, comparison_data: dict,
 					*args, **kwargs) -> tuple[ScrapeResult, DataDict]:
-		return self.scrape(url, config_data, comparison_data, args, kwargs)
+		return self.scrape(url, config_data, comparison_data, *args, **kwargs)
 
 
 @register

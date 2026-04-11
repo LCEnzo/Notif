@@ -26,6 +26,12 @@ What next:
 		IDK about Flutter, just flags for builds?
 		ngix?
 	Figure out scraping on a schedule. Celery, cron jobs, or whatever.
+	Push notifications:
+		Notification model currently tracks in-app read/dismiss state only.
+		When adding push (e.g. FCM), separate delivery tracking from read state —
+		either a DeliveryAttempt table (channel, status, sent_at, error) per
+		Notification, or at minimum push_sent_at/push_failed_at fields.
+		A single notification may have multiple deliveries (push + email + in-app).
 
 
 ---

@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from monitoring.views import (
 	LinkViewSet,
+	NotificationViewSet,
 	StrategyViewSet,
 	get_strat_choices,
 )
@@ -10,6 +11,7 @@ from monitoring.views import (
 router = DefaultRouter()
 router.register(r'links', LinkViewSet, basename="links")
 router.register(r'strategies', StrategyViewSet, basename="strategies")
+router.register(r'notifications', NotificationViewSet, basename="notifications")
 
 urlpatterns = router.urls
 
