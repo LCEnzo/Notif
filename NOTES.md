@@ -26,3 +26,37 @@ What next:
 		IDK about Flutter, just flags for builds?
 		ngix?
 	Figure out scraping on a schedule. Celery, cron jobs, or whatever.
+
+
+---
+
+## Scraping Ideas & Workarounds (from 2026-04-11 session)
+
+### RSS for XenForo forums (SB/SV/QQ)
+- `https://forums.spacebattles.com/threads/foo.123456/threadmarks.rss` -- structured XML for threadmarks
+- Would massively simplify `SBSVThreadmarksStrategy` -- use `feedparser` library instead of HTML parsing
+- RSS does NOT cover user profiles or alerts, only thread content
+
+### httpx for async
+- Lightweight async HTTP client, drop-in-ish replacement for `requests`
+- Better than Scrapy for this project's scale -- use with a per-domain semaphore for rate limiting
+- Enables concurrent fetching without the full Scrapy framework overhead
+
+### fxtwitter.com for X/Twitter
+- Replace `x.com` with `fxtwitter.com` in URLs -- server-side rendered, no JS needed
+- API endpoint: `https://api.fxtwitter.com/username/status/123` returns structured JSON
+- Also: vxtwitter.com, girlcockx.com (same service, different domains)
+- Free, no API key, volunteer-run -- risk of going down but fine for personal use
+- Test whether `https://api.fxtwitter.com/username` gives recent tweets for profile monitoring
+
+### SubscribeStar
+- Target site for monitoring (similar to Kemono use case -- creator updates)
+- Needs investigation: is it server-rendered? Does it have RSS? API?
+
+### Cloudflare bypass options (if sites start blocking plain requests)
+- **curl_cffi** -- impersonates browser TLS fingerprints, drop-in for `requests`, lightweight
+- **cloudscraper** -- specifically for Cloudflare challenges, wraps `requests`, may lag behind updates
+- **Playwright / Selenium** -- full headless browser, heaviest but most reliable
+- **FlareSolverr** -- self-hosted proxy that solves Cloudflare via headless browser, Dockerizable
+- **undetected-chromedriver** -- patched ChromeDriver, less maintained than Playwright
+- Not needed currently -- forum targets (SB, SV, QQ) don't use aggressive Cloudflare
