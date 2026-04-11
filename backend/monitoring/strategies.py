@@ -217,9 +217,9 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			)
 			for mark in marks
 			if mark.pub_date is not None and (
-				mark.pub_date > last_alert # type: ignore
-				or
 				last_alert is None
+				or
+				mark.pub_date > last_alert
 			)
 		]
 
