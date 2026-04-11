@@ -7,6 +7,7 @@ from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
 
+from commons.result import Ok
 from commons.test_utils import ViewSetMixin
 from monitoring.models import Link
 from monitoring.strategies import URL, GeneralSelectorStrategy, SBSVThreadmarksStrategy
@@ -39,7 +40,8 @@ class TestSelectorStrat(TestCase):
 			f"{new_data = }\n--------------------------\n"
 		)
 
-		assert not isinstance(notif_data, str)
+		assert isinstance(notif_data, Ok)
+		assert len(notif_data.value) > 0
 		assert new_data is not None
 
 
@@ -58,8 +60,8 @@ class SBSVThreadmarksStrategyTestCase(TestCase):
 
 			assert new_data is not None
 			assert ('last_alert' in new_data)
-			assert updates is not None
-			assert len(updates) >= 2
+			assert isinstance(updates, Ok)
+			assert len(updates.value) >= 2
 
 
 class LinkViewSetTestCase(ViewSetMixin):

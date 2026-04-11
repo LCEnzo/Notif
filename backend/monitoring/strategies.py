@@ -20,6 +20,8 @@ from bs4 import BeautifulSoup
 from bs4.element import AttributeValueList, ResultSet, Tag
 from django.utils import timezone
 
+from commons.result import Err, Ok
+
 logger = logging.getLogger(__name__)
 
 # Types
@@ -27,7 +29,7 @@ logger = logging.getLogger(__name__)
 URL = NewType("URL", str)
 type NotifData = list[tuple[str, str, URL]]
 type DataDict = None | dict[str, Any]
-type NotifDataOrError = str | NotifData
+type ScrapeResult = Ok[NotifData] | Err[str]
 
 # Used for choices for the Strategy model
 STRATEGY_CHOICES = {}
@@ -71,20 +73,20 @@ class BaseStrategy(ABC):
 
 	@abstractmethod
 	def scrape(self, url: URL, config_data: dict, comparison_data: dict,
-				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+				*args, **kwargs) -> tuple[ScrapeResult, DataDict]:
 		"""
 		This function is the basic functionality. It takes in the URL to be scraped, as well as JSON data/dict.
 		It should return whether there was new stuff found, and if so, what it is.
-		Returns None in case nothing was found, str for errors, and the list of tuples containing a
-		title, description, and link in case of new content. It also returns new data if there is any.
+		Returns Ok(list of (title, description, link)) on success, Err(str) on failure.
+		Also returns new comparison data if there is any.
 
-		NotifDataOrError -> Error str | list of (title, description, link)
+		ScrapeResult -> Ok[NotifData] | Err[str]
 		DataDict -> None | { "attr name": data for comparison }
 		"""
 		pass
 
 	def __call__(self, url: URL, config_data: dict, comparison_data: dict,
-					*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+					*args, **kwargs) -> tuple[ScrapeResult, DataDict]:
 		return self.scrape(url, config_data, comparison_data, args, kwargs)
 
 
@@ -97,7 +99,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 		return True
 
 	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]],
-				*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+				*args, **kwargs) -> tuple[ScrapeResult, DataDict]:
 		selectors: list[str] = config_data['selectors']
 		old_data: dict[str, list[int]] = {
 			selector:
@@ -109,7 +111,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 
 		html_content = _fetch_url_content(url)
 		if html_content is None:
-			return "Empty html_content", None
+			return Err("Empty html_content"), None
 
 		new_data = {
 			selector:
@@ -133,7 +135,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 		if len(updates) == 0:
 			new_data = None
 
-		return updates, new_data
+		return Ok(updates), new_data
 
 
 @dataclass
@@ -185,7 +187,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			'forums.sufficientvelocity.com/threads' in url)
 
 	def scrape(self, url: URL, config_data: dict[str, Any],
-		comparison_data: dict[str, str]) -> tuple[NotifDataOrError, DataDict]:
+		comparison_data: dict[str, str]) -> tuple[ScrapeResult, DataDict]:
 		last_alert_str = comparison_data.get('last_alert')
 
 		last_alert: datetime | None = (
@@ -223,7 +225,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			if latest_mark.pub_date is not None and (last_alert is None or latest_mark.pub_date > last_alert):
 				new_data['last_alert'] = latest_mark.pub_date.strftime(self.time_format)
 
-		return updates, new_data
+		return Ok(updates), new_data
 
 	def _get_threadmarks_url(self, url: URL) -> URL:
 		"""
@@ -378,9 +380,9 @@ class QQAlertsStrategy(BaseStrategy):
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
 
 	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str],
-			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+			*args, **kwargs) -> tuple[ScrapeResult, DataDict]:
 		if not self.can_scrape_url(url):
-			return ("Invalid URL", None)
+			return Err("Invalid URL"), None
 		updates: list[tuple[str, str, URL]] = []
 
 		username: str = config_data['username']
@@ -423,7 +425,7 @@ class QQAlertsStrategy(BaseStrategy):
 					new_data = { "last_alert": alert_dt.strftime("%Y-%m-%d %H:%M:%S") }
 					break
 
-		return updates, new_data
+		return Ok(updates), new_data
 
 	@staticmethod
 	def _extract_alerts(html: str) -> list[AlertInfo]:
@@ -625,9 +627,9 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
 
 	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str],
-			*args, **kwargs) -> tuple[NotifDataOrError, DataDict]:
+			*args, **kwargs) -> tuple[ScrapeResult, DataDict]:
 		if not self.can_scrape_url(url):
-			return ("Invalid URL", None)
+			return Err("Invalid URL"), None
 		updates: list[tuple[str, str, URL]] = []
 
 		username: str = config_data['username']
@@ -659,7 +661,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 				new_data = { "last_update": json_dt }
 				break
 
-		return updates, new_data
+		return Ok(updates), new_data
 
 	def _extract_service(self, card_tag: Tag) -> str | None:
 		service = card_tag.select_one('.user-card__service')
