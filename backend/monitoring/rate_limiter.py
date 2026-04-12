@@ -13,6 +13,9 @@ class DomainRateLimiter:
 		self._delay = delay
 		self._last_request: dict[str, float] = {}
 
+	def set_delay(self, delay: float) -> None:
+		self._delay = delay
+
 	def wait_for_domain(self, url: str) -> None:
 		domain = urlsplit(url).netloc
 		now = time.monotonic()
