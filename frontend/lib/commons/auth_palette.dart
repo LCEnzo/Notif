@@ -3,18 +3,24 @@ import 'package:flutter/material.dart';
 class AuthPalette {
   const AuthPalette._();
 
+  static const double glassRadius = 6;
+  static const double glassBlurSigma = 18;
+  static const double glassShadowBlur = 28;
+  static const double glassShadowOffsetY = 16;
+  static const double panelAlpha = 0.2;
+
   static const Color panel = Color(0xFFE3E3E7);
   static const Color panelBorder = Color(0x29FFFFFF);
   static const Color panelShadow = Color(0x38000000);
-  static const Color fabIcon = panel;
+  static const Color fabIcon = Colors.white;
   static const Color fabGlass = Color(0x40E3E3E7);
   static const Color fabShadow = Color(0x30000000);
   static const Color buttonForeground = Colors.white;
   static const Color secondaryButtonForeground = Colors.white;
-  static const Color primaryButtonBase = Color(0xFF451AAC);
-  static const Color secondaryButtonBase = Color(0xFF5935AD);
-  static const Color buttonBorder = Color(0x33FFFFFF);
-  static const Color buttonShadow = Color(0x18000000);
+  static const Color primaryButtonBase = Color(0xD14B22B5);
+  static const Color secondaryButtonBase = Color(0xD16339C2);
+  static const Color buttonBorder = Color(0x4DFFFFFF);
+  static const Color buttonShadow = Color(0x22000000);
 
   static const List<Color> baseGradientColors = [
     Color(0xFF7716A4),

@@ -43,40 +43,26 @@ class GlassHelpButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(4);
+    final radius = BorderRadius.circular(AuthPalette.glassRadius);
 
-    return Container(
-      decoration: BoxDecoration(
+    return Tooltip(
+      message: tooltip,
+      child: _AuthGlassSurface(
         borderRadius: radius,
-        boxShadow: const [
-          BoxShadow(
-            color: AuthPalette.fabShadow,
-            blurRadius: 22,
-            offset: Offset(0, 12),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AuthPalette.fabGlass,
-              borderRadius: radius,
-              border: Border.all(color: AuthPalette.panelBorder),
-            ),
-            child: FloatingActionButton(
-              onPressed: onPressed,
-              tooltip: tooltip,
-              backgroundColor: Colors.transparent,
-              foregroundColor: AuthPalette.fabIcon,
-              elevation: 0,
-              highlightElevation: 0,
-              hoverElevation: 0,
-              focusElevation: 0,
-              splashColor: Colors.white.withValues(alpha: 0.12),
-              child: child,
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: radius,
+            splashColor: Colors.white.withValues(alpha: 0.12),
+            child: SizedBox.square(
+              dimension: 58,
+              child: Center(
+                child: IconTheme.merge(
+                  data: const IconThemeData(color: AuthPalette.fabIcon),
+                  child: child,
+                ),
+              ),
             ),
           ),
         ),
@@ -92,30 +78,60 @@ class AuthPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(4);
+    return _AuthGlassSurface(
+      borderRadius: BorderRadius.circular(AuthPalette.glassRadius),
+      padding: const EdgeInsets.all(28),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(color: Colors.white),
+        child: IconTheme.merge(
+          data: const IconThemeData(color: Colors.white70),
+          child: child,
+        ),
+      ),
+    );
+  }
+}
 
+class _AuthGlassSurface extends StatelessWidget {
+  final Widget child;
+  final BorderRadius borderRadius;
+  final EdgeInsetsGeometry? padding;
+
+  const _AuthGlassSurface({
+    required this.child,
+    required this.borderRadius,
+    this.padding,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: radius,
+        borderRadius: borderRadius,
         boxShadow: const [
           BoxShadow(
             color: AuthPalette.panelShadow,
-            blurRadius: 36,
-            offset: Offset(0, 18),
+            blurRadius: AuthPalette.glassShadowBlur,
+            offset: Offset(0, AuthPalette.glassShadowOffsetY),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: radius,
+        borderRadius: borderRadius,
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          filter: ImageFilter.blur(
+            sigmaX: AuthPalette.glassBlurSigma,
+            sigmaY: AuthPalette.glassBlurSigma,
+          ),
           child: Container(
+            padding: padding,
             decoration: BoxDecoration(
-              color: AuthPalette.panel.withValues(alpha: 0.42),
-              borderRadius: radius,
+              color: AuthPalette.panel.withValues(
+                alpha: AuthPalette.panelAlpha,
+              ),
+              borderRadius: borderRadius,
               border: Border.all(color: AuthPalette.panelBorder),
             ),
-            padding: const EdgeInsets.all(24),
             child: child,
           ),
         ),

@@ -50,7 +50,7 @@ class _FormContentState extends State<_FormContent> {
     final authService = Provider.of<AuthService>(context, listen: false);
     final theme = Theme.of(context);
     final rememberMeStyle = theme.textTheme.bodyLarge?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
+      color: Colors.white70,
     );
 
     return ConstrainedBox(
@@ -126,11 +126,14 @@ class _FormContentState extends State<_FormContent> {
     if (formKey.currentState?.validate() ?? false) {
       if (kDebugMode) {
         print(
-            "Validated data:\n\tusername: ${usernameController.text}, password: ${passwordController.text}");
+          "Validated data:\n\tusername: ${usernameController.text}, password: ${passwordController.text}",
+        );
       }
       try {
         await authService.login(
-            usernameController.text, passwordController.text);
+          usernameController.text,
+          passwordController.text,
+        );
         return true;
       } catch (e) {
         WidgetsBinding.instance.addPostFrameCallback((_) {

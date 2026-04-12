@@ -4,6 +4,30 @@ import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/auth_validators.dart';
 
+InputDecoration _buildAuthInputDecoration({
+  required String labelText,
+  required String hintText,
+  Widget? prefixIcon,
+  Widget? suffixIcon,
+}) {
+  return InputDecoration(
+    labelText: labelText,
+    hintText: hintText,
+    labelStyle: const TextStyle(color: Colors.white70),
+    hintStyle: const TextStyle(color: Colors.white54),
+    prefixIcon: prefixIcon,
+    suffixIcon: suffixIcon,
+    prefixIconColor: Colors.white70,
+    suffixIconColor: Colors.white70,
+    enabledBorder: const UnderlineInputBorder(
+      borderSide: BorderSide(color: Color(0x40FFFFFF)),
+    ),
+    focusedBorder: const UnderlineInputBorder(
+      borderSide: BorderSide(color: Color(0x99FFFFFF), width: 1.4),
+    ),
+  );
+}
+
 class Logo extends StatelessWidget {
   final String title;
   final Color? textColor;
@@ -27,10 +51,11 @@ class Logo extends StatelessWidget {
           child: Text(
             title,
             textAlign: TextAlign.center,
-            style:
-                baseStyle?.copyWith(color: textColor ?? colorScheme.onSurface),
+            style: baseStyle?.copyWith(
+              color: textColor ?? colorScheme.onSurface,
+            ),
           ),
-        )
+        ),
       ],
     );
   }
@@ -58,7 +83,9 @@ class _UsernameTextFieldState extends State<UsernameTextField> {
     return TextFormField(
       key: widget.key,
       controller: widget.textController,
-      decoration: InputDecoration(
+      style: const TextStyle(color: Colors.white),
+      cursorColor: Colors.white,
+      decoration: _buildAuthInputDecoration(
         labelText: widget.labelText,
         hintText: widget.hintText,
         prefixIcon: const Icon(Icons.account_box_outlined),
@@ -73,12 +100,13 @@ class EmailTextField extends StatefulWidget {
   final String? Function(String?)? validator;
   final TextEditingController textController;
 
-  const EmailTextField(
-      {super.key,
-      required this.labelText,
-      required this.hintText,
-      this.validator,
-      required this.textController});
+  const EmailTextField({
+    super.key,
+    required this.labelText,
+    required this.hintText,
+    this.validator,
+    required this.textController,
+  });
 
   @override
   State<EmailTextField> createState() => _EmailTextFieldState();
@@ -98,8 +126,9 @@ class _EmailTextFieldState extends State<EmailTextField> {
   String? defaultValidator(String? value) {
     if (value == null || value.isEmpty) {
       return 'Please enter an email address';
-    } else if (!RegExp(r"^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+")
-        .hasMatch(value)) {
+    } else if (!RegExp(
+      r"^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+    ).hasMatch(value)) {
       return 'Please enter a valid email address';
     }
     return null;
@@ -110,7 +139,9 @@ class _EmailTextFieldState extends State<EmailTextField> {
     return TextFormField(
       validator: validator,
       controller: widget.textController,
-      decoration: InputDecoration(
+      style: const TextStyle(color: Colors.white),
+      cursorColor: Colors.white,
+      decoration: _buildAuthInputDecoration(
         labelText: widget.labelText,
         hintText: widget.hintText,
         prefixIcon: const Icon(Icons.email_outlined),
@@ -125,12 +156,13 @@ class PasswordTextField extends StatefulWidget {
   final String? Function(String?)? validator;
   final TextEditingController textController;
 
-  const PasswordTextField(
-      {super.key,
-      required this.labelText,
-      required this.hintText,
-      this.validator,
-      required this.textController});
+  const PasswordTextField({
+    super.key,
+    required this.labelText,
+    required this.hintText,
+    this.validator,
+    required this.textController,
+  });
 
   @override
   State<PasswordTextField> createState() => _PasswordTextFieldState();
@@ -154,19 +186,23 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
       controller: widget.textController,
       validator: validator,
       obscureText: !_isPasswordVisible,
-      decoration: InputDecoration(
-          labelText: widget.labelText,
-          hintText: widget.hintText,
-          prefixIcon: const Icon(Icons.lock_outline_rounded),
-          suffixIcon: IconButton(
-            icon: Icon(
-                _isPasswordVisible ? Icons.visibility_off : Icons.visibility),
-            onPressed: () {
-              setState(() {
-                _isPasswordVisible = !_isPasswordVisible;
-              });
-            },
-          )),
+      style: const TextStyle(color: Colors.white),
+      cursorColor: Colors.white,
+      decoration: _buildAuthInputDecoration(
+        labelText: widget.labelText,
+        hintText: widget.hintText,
+        prefixIcon: const Icon(Icons.lock_outline_rounded),
+        suffixIcon: IconButton(
+          icon: Icon(
+            _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
+          ),
+          onPressed: () {
+            setState(() {
+              _isPasswordVisible = !_isPasswordVisible;
+            });
+          },
+        ),
+      ),
     );
   }
 }
@@ -176,11 +212,12 @@ class CustomButton extends StatelessWidget {
   final Function onPressed;
   final Color? buttonColor;
 
-  const CustomButton(
-      {super.key,
-      required this.buttonText,
-      required this.onPressed,
-      this.buttonColor});
+  const CustomButton({
+    super.key,
+    required this.buttonText,
+    required this.onPressed,
+    this.buttonColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -190,7 +227,7 @@ class CustomButton extends StatelessWidget {
         ? AuthPalette.buttonForeground
         : AuthPalette.secondaryButtonForeground;
 
-    final radius = BorderRadius.circular(4);
+    final radius = BorderRadius.circular(AuthPalette.glassRadius);
 
     return SizedBox(
       width: double.infinity,
@@ -200,15 +237,15 @@ class CustomButton extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: AuthPalette.buttonShadow,
-              blurRadius: 10,
-              offset: const Offset(0, 6),
+              blurRadius: 16,
+              offset: const Offset(0, 10),
             ),
           ],
         ),
         child: ClipRRect(
           borderRadius: radius,
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: backgroundColor,
@@ -219,8 +256,12 @@ class CustomButton extends StatelessWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: onPressed as void Function(),
+                  borderRadius: radius,
                   child: Padding(
-                    padding: const EdgeInsets.all(10.0),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 12,
+                      horizontal: 14,
+                    ),
                     child: Center(
                       child: Text(
                         buttonText,

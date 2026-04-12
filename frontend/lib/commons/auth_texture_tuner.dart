@@ -12,8 +12,8 @@ import 'package:notif/commons/auth_palette.dart';
 AuthTextureTunerController enableAuthTextureTuner() {
   final controller = AuthTextureTunerController();
   PageBackground.debugSettingsNotifier = controller;
-  PageBackground.debugOverlayBuilder =
-      (_) => AuthTextureTunerOverlay(controller: controller);
+  PageBackground.debugOverlayBuilder = (_) =>
+      AuthTextureTunerOverlay(controller: controller);
   return controller;
 }
 
@@ -27,9 +27,7 @@ void disableAuthTextureTuner() {
 // ---------------------------------------------------------------------------
 
 class AuthTextureTunerController extends ValueNotifier<AuthTextureSettings> {
-  AuthTextureTunerController([
-    super.initial = AuthTextureSettings.defaults,
-  ]);
+  AuthTextureTunerController([super.initial = AuthTextureSettings.defaults]);
 
   AuthTextureSettings get settings => value;
 
@@ -393,9 +391,7 @@ extension AuthTextureSettingsSnippet on AuthTextureSettings {
       ..writeln('  opacityGrowth: ${_formatDouble(halftoneOpacityGrowth)},')
       ..writeln('  topColor: AuthPalette.halftoneTop,')
       ..writeln('  bottomColor: AuthPalette.halftoneBottom,')
-      ..writeln(
-        '  colorLerpScale: ${_formatDouble(halftoneColorLerpScale)},',
-      )
+      ..writeln('  colorLerpScale: ${_formatDouble(halftoneColorLerpScale)},')
       ..writeln(
         '  convexCurveDepthFactor: ${_formatDouble(halftoneConvexCurveDepthFactor)},',
       )
@@ -460,17 +456,13 @@ class _AuthTextureTunerOverlayState extends State<AuthTextureTunerOverlay> {
             _isExpanded = true;
           });
         },
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AuthPalette.glassRadius),
         child: const Padding(
           padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.tune_rounded,
-                size: 18,
-                color: Colors.white,
-              ),
+              Icon(Icons.tune_rounded, size: 18, color: Colors.white),
               SizedBox(width: 8),
               Text(
                 'Tune',
@@ -519,8 +511,10 @@ class _AuthTextureTunerOverlayState extends State<AuthTextureTunerOverlay> {
                           _isExpanded = false;
                         });
                       },
-                      icon:
-                          const Icon(Icons.close_rounded, color: Colors.white),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
@@ -693,7 +687,7 @@ class _DebugGlassContainer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(16);
+    final radius = BorderRadius.circular(AuthPalette.glassRadius);
 
     return Container(
       decoration: BoxDecoration(
@@ -701,18 +695,23 @@ class _DebugGlassContainer extends StatelessWidget {
         boxShadow: const [
           BoxShadow(
             color: AuthPalette.panelShadow,
-            blurRadius: 28,
-            offset: Offset(0, 16),
+            blurRadius: AuthPalette.glassShadowBlur,
+            offset: Offset(0, AuthPalette.glassShadowOffsetY),
           ),
         ],
       ),
       child: ClipRRect(
         borderRadius: radius,
         child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+          filter: ui.ImageFilter.blur(
+            sigmaX: AuthPalette.glassBlurSigma,
+            sigmaY: AuthPalette.glassBlurSigma,
+          ),
           child: Container(
             decoration: BoxDecoration(
-              color: AuthPalette.panel.withValues(alpha: 0.2),
+              color: AuthPalette.panel.withValues(
+                alpha: AuthPalette.panelAlpha,
+              ),
               borderRadius: radius,
               border: Border.all(color: AuthPalette.panelBorder),
             ),
