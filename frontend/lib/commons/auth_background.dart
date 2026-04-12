@@ -3,13 +3,248 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
 
+// ---------------------------------------------------------------------------
+// Texture settings (production data class)
+// ---------------------------------------------------------------------------
+
+@immutable
+class AuthTextureSettings {
+  final double grainSpacing;
+  final double grainLimitYFactor;
+  final double grainNoiseThreshold;
+  final double grainOpacityScale;
+  final double grainMinRadius;
+  final double grainMaxRadiusDelta;
+  final double grainColorLerpScale;
+  final double grainFadeCenterX;
+  final double grainFadeCenterY;
+  final double grainFadeRadius;
+  final double halftoneSpacing;
+  final double halftoneStartYFactor;
+  final double halftoneBaseRadius;
+  final double halftoneRadiusGrowth;
+  final double halftoneOpacityBase;
+  final double halftoneOpacityGrowth;
+  final double halftoneColorLerpScale;
+  final double halftoneConvexCurveDepthFactor;
+  final double halftoneLandscapeCurveBoost;
+  final double halftoneCurveExponent;
+  final double halftoneLandscapeExponentPull;
+
+  const AuthTextureSettings({
+    required this.grainSpacing,
+    required this.grainLimitYFactor,
+    required this.grainNoiseThreshold,
+    required this.grainOpacityScale,
+    required this.grainMinRadius,
+    required this.grainMaxRadiusDelta,
+    required this.grainColorLerpScale,
+    required this.grainFadeCenterX,
+    required this.grainFadeCenterY,
+    required this.grainFadeRadius,
+    required this.halftoneSpacing,
+    required this.halftoneStartYFactor,
+    required this.halftoneBaseRadius,
+    required this.halftoneRadiusGrowth,
+    required this.halftoneOpacityBase,
+    required this.halftoneOpacityGrowth,
+    required this.halftoneColorLerpScale,
+    required this.halftoneConvexCurveDepthFactor,
+    required this.halftoneLandscapeCurveBoost,
+    required this.halftoneCurveExponent,
+    required this.halftoneLandscapeExponentPull,
+  });
+
+  static const AuthTextureSettings defaults = AuthTextureSettings(
+    grainSpacing: 4.0,
+    grainLimitYFactor: 1.2,
+    grainNoiseThreshold: 0.41,
+    grainOpacityScale: 0.49,
+    grainMinRadius: 0.14,
+    grainMaxRadiusDelta: 0.9,
+    grainColorLerpScale: 1.5,
+    grainFadeCenterX: -0.02,
+    grainFadeCenterY: -0.54,
+    grainFadeRadius: 1.58,
+    halftoneSpacing: 11.0,
+    halftoneStartYFactor: 0.43,
+    halftoneBaseRadius: 0.93,
+    halftoneRadiusGrowth: 13.2,
+    halftoneOpacityBase: 0.45,
+    halftoneOpacityGrowth: 0.3,
+    halftoneColorLerpScale: 0.7,
+    halftoneConvexCurveDepthFactor: 0.13,
+    halftoneLandscapeCurveBoost: 1.73,
+    halftoneCurveExponent: 1.86,
+    halftoneLandscapeExponentPull: 0.48,
+  );
+
+  AuthTextureSettings copyWith({
+    double? grainSpacing,
+    double? grainLimitYFactor,
+    double? grainNoiseThreshold,
+    double? grainOpacityScale,
+    double? grainMinRadius,
+    double? grainMaxRadiusDelta,
+    double? grainColorLerpScale,
+    double? grainFadeCenterX,
+    double? grainFadeCenterY,
+    double? grainFadeRadius,
+    double? halftoneSpacing,
+    double? halftoneStartYFactor,
+    double? halftoneBaseRadius,
+    double? halftoneRadiusGrowth,
+    double? halftoneOpacityBase,
+    double? halftoneOpacityGrowth,
+    double? halftoneColorLerpScale,
+    double? halftoneConvexCurveDepthFactor,
+    double? halftoneLandscapeCurveBoost,
+    double? halftoneCurveExponent,
+    double? halftoneLandscapeExponentPull,
+  }) {
+    return AuthTextureSettings(
+      grainSpacing: grainSpacing ?? this.grainSpacing,
+      grainLimitYFactor: grainLimitYFactor ?? this.grainLimitYFactor,
+      grainNoiseThreshold: grainNoiseThreshold ?? this.grainNoiseThreshold,
+      grainOpacityScale: grainOpacityScale ?? this.grainOpacityScale,
+      grainMinRadius: grainMinRadius ?? this.grainMinRadius,
+      grainMaxRadiusDelta: grainMaxRadiusDelta ?? this.grainMaxRadiusDelta,
+      grainColorLerpScale: grainColorLerpScale ?? this.grainColorLerpScale,
+      grainFadeCenterX: grainFadeCenterX ?? this.grainFadeCenterX,
+      grainFadeCenterY: grainFadeCenterY ?? this.grainFadeCenterY,
+      grainFadeRadius: grainFadeRadius ?? this.grainFadeRadius,
+      halftoneSpacing: halftoneSpacing ?? this.halftoneSpacing,
+      halftoneStartYFactor: halftoneStartYFactor ?? this.halftoneStartYFactor,
+      halftoneBaseRadius: halftoneBaseRadius ?? this.halftoneBaseRadius,
+      halftoneRadiusGrowth: halftoneRadiusGrowth ?? this.halftoneRadiusGrowth,
+      halftoneOpacityBase: halftoneOpacityBase ?? this.halftoneOpacityBase,
+      halftoneOpacityGrowth:
+          halftoneOpacityGrowth ?? this.halftoneOpacityGrowth,
+      halftoneColorLerpScale:
+          halftoneColorLerpScale ?? this.halftoneColorLerpScale,
+      halftoneConvexCurveDepthFactor: halftoneConvexCurveDepthFactor ??
+          this.halftoneConvexCurveDepthFactor,
+      halftoneLandscapeCurveBoost:
+          halftoneLandscapeCurveBoost ?? this.halftoneLandscapeCurveBoost,
+      halftoneCurveExponent:
+          halftoneCurveExponent ?? this.halftoneCurveExponent,
+      halftoneLandscapeExponentPull: halftoneLandscapeExponentPull ??
+          this.halftoneLandscapeExponentPull,
+    );
+  }
+
+  _GrainOp _toGrainOp() {
+    return _GrainOp(
+      spacing: grainSpacing,
+      limitYFactor: grainLimitYFactor,
+      noiseThreshold: grainNoiseThreshold,
+      opacityScale: grainOpacityScale,
+      minRadius: grainMinRadius,
+      maxRadiusDelta: grainMaxRadiusDelta,
+      fromColor: AuthPalette.grainFrom,
+      toColor: AuthPalette.grainTo,
+      colorLerpScale: grainColorLerpScale,
+      fadeCenter: Alignment(grainFadeCenterX, grainFadeCenterY),
+      fadeRadius: grainFadeRadius,
+    );
+  }
+
+  _HalftoneOp _toHalftoneOp() {
+    return _HalftoneOp(
+      spacing: halftoneSpacing,
+      startYFactor: halftoneStartYFactor,
+      baseRadius: halftoneBaseRadius,
+      radiusGrowth: halftoneRadiusGrowth,
+      opacityBase: halftoneOpacityBase,
+      opacityGrowth: halftoneOpacityGrowth,
+      topColor: AuthPalette.halftoneTop,
+      bottomColor: AuthPalette.halftoneBottom,
+      colorLerpScale: halftoneColorLerpScale,
+      convexCurveDepthFactor: halftoneConvexCurveDepthFactor,
+      landscapeCurveBoost: halftoneLandscapeCurveBoost,
+      curveExponent: halftoneCurveExponent,
+      landscapeExponentPull: halftoneLandscapeExponentPull,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is AuthTextureSettings &&
+            other.grainSpacing == grainSpacing &&
+            other.grainLimitYFactor == grainLimitYFactor &&
+            other.grainNoiseThreshold == grainNoiseThreshold &&
+            other.grainOpacityScale == grainOpacityScale &&
+            other.grainMinRadius == grainMinRadius &&
+            other.grainMaxRadiusDelta == grainMaxRadiusDelta &&
+            other.grainColorLerpScale == grainColorLerpScale &&
+            other.grainFadeCenterX == grainFadeCenterX &&
+            other.grainFadeCenterY == grainFadeCenterY &&
+            other.grainFadeRadius == grainFadeRadius &&
+            other.halftoneSpacing == halftoneSpacing &&
+            other.halftoneStartYFactor == halftoneStartYFactor &&
+            other.halftoneBaseRadius == halftoneBaseRadius &&
+            other.halftoneRadiusGrowth == halftoneRadiusGrowth &&
+            other.halftoneOpacityBase == halftoneOpacityBase &&
+            other.halftoneOpacityGrowth == halftoneOpacityGrowth &&
+            other.halftoneColorLerpScale == halftoneColorLerpScale &&
+            other.halftoneConvexCurveDepthFactor ==
+                halftoneConvexCurveDepthFactor &&
+            other.halftoneLandscapeCurveBoost == halftoneLandscapeCurveBoost &&
+            other.halftoneCurveExponent == halftoneCurveExponent &&
+            other.halftoneLandscapeExponentPull ==
+                halftoneLandscapeExponentPull;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hashAll([
+      grainSpacing,
+      grainLimitYFactor,
+      grainNoiseThreshold,
+      grainOpacityScale,
+      grainMinRadius,
+      grainMaxRadiusDelta,
+      grainColorLerpScale,
+      grainFadeCenterX,
+      grainFadeCenterY,
+      grainFadeRadius,
+      halftoneSpacing,
+      halftoneStartYFactor,
+      halftoneBaseRadius,
+      halftoneRadiusGrowth,
+      halftoneOpacityBase,
+      halftoneOpacityGrowth,
+      halftoneColorLerpScale,
+      halftoneConvexCurveDepthFactor,
+      halftoneLandscapeCurveBoost,
+      halftoneCurveExponent,
+      halftoneLandscapeExponentPull,
+    ]);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Page background widget
+// ---------------------------------------------------------------------------
+
 class PageBackground extends StatelessWidget {
+  /// Set by the debug tuner to receive live settings changes.
+  /// Null in release builds — the texture layer uses [AuthTextureSettings.defaults].
+  static ValueNotifier<AuthTextureSettings>? debugSettingsNotifier;
+
+  /// Set by the debug tuner to inject the overlay widget.
+  /// Null in release builds — no overlay is shown.
+  static WidgetBuilder? debugOverlayBuilder;
+
   final Widget child;
 
   const PageBackground({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
+    final notifier = debugSettingsNotifier;
+
     return SizedBox.expand(
       child: Stack(
         fit: StackFit.expand,
@@ -19,33 +254,41 @@ class PageBackground extends StatelessWidget {
               _PosterBackgroundPainter.baseOperations,
             ),
           ),
-          const _PosterTextureLayer(
-            grain: _PosterBackgroundPainter.grain,
-            halftone: _PosterBackgroundPainter.halftone,
-          ),
+          if (notifier != null)
+            ValueListenableBuilder<AuthTextureSettings>(
+              valueListenable: notifier,
+              builder: (context, settings, _) =>
+                  _PosterTextureLayer(settings: settings),
+            )
+          else
+            const _PosterTextureLayer(
+              settings: AuthTextureSettings.defaults,
+            ),
           const CustomPaint(
             painter: _PosterBackgroundPainter(
               _PosterBackgroundPainter.foregroundOperations,
             ),
           ),
           child,
+          if (debugOverlayBuilder != null)
+            Builder(builder: debugOverlayBuilder!),
         ],
       ),
     );
   }
 }
 
+// ---------------------------------------------------------------------------
+// Texture layer (shader)
+// ---------------------------------------------------------------------------
+
 class _PosterTextureLayer extends StatelessWidget {
   static final Future<ui.FragmentProgram> _programFuture =
       ui.FragmentProgram.fromAsset('shaders/auth_texture.frag');
 
-  final _GrainOp grain;
-  final _HalftoneOp halftone;
+  final AuthTextureSettings settings;
 
-  const _PosterTextureLayer({
-    required this.grain,
-    required this.halftone,
-  });
+  const _PosterTextureLayer({required this.settings});
 
   @override
   Widget build(BuildContext context) {
@@ -58,16 +301,16 @@ class _PosterTextureLayer extends StatelessWidget {
         }
 
         return CustomPaint(
-          painter: _PosterTexturePainter(
-            program: program,
-            grain: grain,
-            halftone: halftone,
-          ),
+          painter: _PosterTexturePainter(program: program, settings: settings),
         );
       },
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Background painters
+// ---------------------------------------------------------------------------
 
 class _PosterBackgroundPainter extends CustomPainter {
   static const List<_BackgroundOp> baseOperations = [
@@ -92,36 +335,6 @@ class _PosterBackgroundPainter extends CustomPainter {
       stops: AuthPalette.transitionStops,
     ),
   ];
-
-  static const _GrainOp grain = _GrainOp(
-    spacing: 2.0,
-    limitYFactor: 1.0,
-    noiseThreshold: 0.02, 
-    opacityScale: 1.8,
-    minRadius: 0.8, 
-    maxRadiusDelta: 0.6,
-    fromColor: AuthPalette.grainFrom,
-    toColor: AuthPalette.grainTo,
-    colorLerpScale: 1.0,
-    fadeCenter: Alignment(0, -1),
-    fadeRadius: 4.0, 
-  );
-
-  static const _HalftoneOp halftone = _HalftoneOp(
-    spacing: 13,
-    startYFactor: 0.42,
-    baseRadius: 0.6,
-    radiusGrowth: 12,
-    opacityBase: 0.16,
-    opacityGrowth: 0.26,
-    topColor: AuthPalette.halftoneTop,
-    bottomColor: AuthPalette.halftoneBottom,
-    colorLerpScale: 0.66,
-    convexCurveDepthFactor: 0.12,
-    landscapeCurveBoost: 1.15,
-    curveExponent: 1.7,
-    landscapeExponentPull: 0.35,
-  );
 
   static const List<_BackgroundOp> foregroundOperations = [
     _LinearGradientOp(
@@ -151,17 +364,17 @@ class _PosterBackgroundPainter extends CustomPainter {
 
 class _PosterTexturePainter extends CustomPainter {
   final ui.FragmentProgram program;
-  final _GrainOp grain;
-  final _HalftoneOp halftone;
+  final AuthTextureSettings settings;
 
   const _PosterTexturePainter({
     required this.program,
-    required this.grain,
-    required this.halftone,
+    required this.settings,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
+    final grain = settings._toGrainOp();
+    final halftone = settings._toHalftoneOp();
     final shader = program.fragmentShader();
     var index = 0;
 
@@ -201,11 +414,13 @@ class _PosterTexturePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PosterTexturePainter oldDelegate) {
-    return oldDelegate.program != program ||
-        !identical(oldDelegate.grain, grain) ||
-        !identical(oldDelegate.halftone, halftone);
+    return oldDelegate.program != program || oldDelegate.settings != settings;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Background operation helpers
+// ---------------------------------------------------------------------------
 
 int _setColorUniform(ui.FragmentShader shader, int index, Color color) {
   final argb = color.toARGB32();
@@ -230,18 +445,10 @@ abstract class _BackgroundOp {
 
 enum _BackgroundShape { rect, oval }
 
-/// Defines a shader target rectangle as fractions of the painted canvas.
 class _RelativeRect {
-  /// Left edge as a fraction of the canvas width.
   final double leftFactor;
-
-  /// Top edge as a fraction of the canvas height.
   final double topFactor;
-
-  /// Width as a fraction of the canvas width.
   final double widthFactor;
-
-  /// Height as a fraction of the canvas height.
   final double heightFactor;
 
   const _RelativeRect({
@@ -267,24 +474,12 @@ class _RelativeRect {
   }
 }
 
-/// Paints a linear gradient into a rectangular or oval region.
 class _LinearGradientOp extends _BackgroundOp {
-  /// Gradient start in Flutter's alignment space, e.g. `topCenter`.
   final Alignment begin;
-
-  /// Gradient end in Flutter's alignment space.
   final Alignment end;
-
-  /// Colors sampled across the gradient from [begin] to [end].
   final List<Color> colors;
-
-  /// Optional normalized stop positions for [colors].
   final List<double>? stops;
-
-  /// Region of the canvas that the shader is created against.
   final _RelativeRect rect;
-
-  /// Shape used when drawing the gradient-filled [rect].
   final _BackgroundShape shape;
 
   const _LinearGradientOp({
@@ -311,19 +506,10 @@ class _LinearGradientOp extends _BackgroundOp {
   }
 }
 
-/// Paints a radial bloom whose size and vertical placement scale with the page.
 class _CircularGradientOp extends _BackgroundOp {
-  /// Vertical center as a fraction of canvas height.
-  /// `0` places the bloom center on the top edge, `0.5` in the middle.
   final double centerYFactor;
-
-  /// Circle diameter as a fraction of canvas width.
   final double diameterFactor;
-
-  /// Colors sampled from the middle of the bloom outward.
   final List<Color> colors;
-
-  /// Optional normalized stop positions for [colors].
   final List<double>? stops;
 
   const _CircularGradientOp({
@@ -350,37 +536,16 @@ class _CircularGradientOp extends _BackgroundOp {
 }
 
 class _GrainOp {
-  /// Distance between adjacent grain samples in logical pixels.
   final double spacing;
-
-  /// Vertical extent of the grain field as a fraction of canvas height.
   final double limitYFactor;
-
-  /// Minimum hashed noise value required before a grain dot is drawn.
   final double noiseThreshold;
-
-  /// Multiplier applied to the post-threshold noise value for alpha.
   final double opacityScale;
-
-  /// Smallest possible grain radius.
   final double minRadius;
-
-  /// Extra radius added on top of [minRadius] as noise increases.
   final double maxRadiusDelta;
-
-  /// Color used for lower-noise grain dots.
   final Color fromColor;
-
-  /// Color used for higher-noise grain dots.
   final Color toColor;
-
-  /// Controls how aggressively noise shifts the dot color toward [toColor].
   final double colorLerpScale;
-
-  /// Center of the radial fade in Flutter's alignment space.
   final Alignment fadeCenter;
-
-  /// Radius of the radial fade in normalized canvas space.
   final double fadeRadius;
 
   const _GrainOp({
@@ -399,43 +564,18 @@ class _GrainOp {
 }
 
 class _HalftoneOp {
-  /// Distance between halftone sample points in logical pixels.
   final double spacing;
-
-  /// Baseline top edge of the halftone field as a fraction of canvas height.
   final double startYFactor;
-
-  /// Dot radius right at the local frontier.
   final double baseRadius;
-
-  /// Additional radius gained as a dot moves away from the frontier.
   final double radiusGrowth;
-
-  /// Minimum alpha applied to halftone dots.
   final double opacityBase;
-
-  /// Extra alpha added as dots move toward the top of the field.
   final double opacityGrowth;
-
-  /// Color used near the upper part of the halftone field.
   final Color topColor;
-
-  /// Color used near the lower part of the halftone field.
   final Color bottomColor;
-
-  /// Controls how strongly the vertical gradient interpolates toward [topColor].
   final double colorLerpScale;
-
-  /// Depth of the curved frontier as a fraction of canvas height.
   final double convexCurveDepthFactor;
-
-  /// Extra curve depth applied on wider layouts.
   final double landscapeCurveBoost;
-
-  /// Shapes how quickly the frontier lifts toward the center versus the edges.
   final double curveExponent;
-
-  /// Reduces [curveExponent] on wide layouts to soften the curve.
   final double landscapeExponentPull;
 
   const _HalftoneOp({

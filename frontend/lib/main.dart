@@ -1,9 +1,15 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:notif/commons/auth_texture_tuner.dart';
 import 'package:notif/screens/shared.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 void main() {
+  if (kDebugMode) {
+    enableAuthTextureTuner();
+  }
+
   runApp(
     MultiProvider(
       providers: [
