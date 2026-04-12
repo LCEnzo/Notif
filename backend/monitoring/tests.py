@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from commons.result import Err, Ok
+from commons import Err, Ok
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client
 from monitoring.models import Link, Notification, Update
 from monitoring.services import scrape_link
