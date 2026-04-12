@@ -1,5 +1,6 @@
 import logging
 import os
+from unittest.mock import patch
 from pprint import pprint  # noqa: F401
 
 import requests
@@ -439,6 +440,18 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 			mocker.get(requests_mock.ANY, text=html)
 			# Should not raise
 			call_command('scrape', '--link', str(link.pk), '--delay', '0')
+
+	def test_management_command_bulk_passes_custom_delay(self):
+		rate_limiter = object()
+
+		with (
+			patch("monitoring.management.commands.scrape.DomainRateLimiter", return_value=rate_limiter) as limiter_cls,
+			patch("monitoring.management.commands.scrape.scrape_all_links", return_value={}) as scrape_all,
+		):
+			call_command('scrape', '--delay', '5')
+
+		limiter_cls.assert_called_once_with(delay=5.0)
+		scrape_all.assert_called_once_with(user_id=None, rate_limiter=rate_limiter)
 
 
 class TriggerScrapeEndpointTestCase(SetupMixin, TestCase):

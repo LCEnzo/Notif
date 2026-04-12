@@ -20,7 +20,7 @@ from bs4 import BeautifulSoup
 from bs4.element import AttributeValueList, ResultSet, Tag
 from django.utils import timezone
 
-from commons.result import Err, Ok
+from commons.result import Err, Ok, Result
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ REQUEST_TIMEOUT_SECONDS = 30
 URL = NewType("URL", str)
 type NotifData = list[tuple[str, str, URL]]
 type DataDict = None | dict[str, Any]
-type ScrapeResult = Ok[NotifData] | Err[str]
+type ScrapeResult = Result[NotifData, str]
 
 # Used for choices for the Strategy model
 STRATEGY_CHOICES = {}

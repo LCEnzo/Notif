@@ -30,7 +30,11 @@ class Command(BaseCommand):
 				case Err(error=msg):
 					self.stderr.write(f"Link {link.pk}: error — {msg}")
 		else:
-			results = scrape_all_links(user_id=options.get("user"))
+			rate_limiter = DomainRateLimiter(delay=options["delay"])
+			results = scrape_all_links(
+				user_id=options.get("user"),
+				rate_limiter=rate_limiter,
+			)
 			ok_count = 0
 			err_count = 0
 			total_updates = 0

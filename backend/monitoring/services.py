@@ -66,7 +66,10 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 	return Err("Unexpected result type")  # unreachable, satisfies mypy
 
 
-def scrape_all_links(user_id: int | None = None) -> dict[int, Result[int, str]]:
+def scrape_all_links(
+	user_id: int | None = None,
+	rate_limiter: DomainRateLimiter | None = None,
+) -> dict[int, Result[int, str]]:
 	"""
 	Scrape all links (or all links for a specific user).
 	Returns {link_id: result} dict.
@@ -75,10 +78,10 @@ def scrape_all_links(user_id: int | None = None) -> dict[int, Result[int, str]]:
 	if user_id is not None:
 		queryset = queryset.filter(user_id=user_id)
 
-	rate_limiter = DomainRateLimiter()
+	limiter = rate_limiter if rate_limiter is not None else DomainRateLimiter()
 	results: dict[int, Result[int, str]] = {}
 
 	for link in queryset:
-		results[link.pk] = scrape_link(link, rate_limiter)
+		results[link.pk] = scrape_link(link, limiter)
 
 	return results
