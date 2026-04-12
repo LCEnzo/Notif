@@ -45,41 +45,38 @@ class GlassHelpButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(4);
 
-    return Tooltip(
-      message: tooltip,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          boxShadow: const [
-            BoxShadow(
-              color: AuthPalette.fabShadow,
-              blurRadius: 22,
-              offset: Offset(0, 12),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: const [
+          BoxShadow(
+            color: AuthPalette.fabShadow,
+            blurRadius: 22,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AuthPalette.fabGlass,
+              borderRadius: radius,
+              border: Border.all(color: AuthPalette.panelBorder),
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-            child: Container(
-              decoration: BoxDecoration(
-                color: AuthPalette.fabGlass,
-                borderRadius: radius,
-                border: Border.all(color: AuthPalette.panelBorder),
-              ),
-              child: FloatingActionButton(
-                onPressed: onPressed,
-                tooltip: tooltip,
-                backgroundColor: Colors.transparent,
-                foregroundColor: AuthPalette.fabIcon,
-                elevation: 0,
-                highlightElevation: 0,
-                hoverElevation: 0,
-                focusElevation: 0,
-                splashColor: Colors.white.withValues(alpha: 0.12),
-                child: child,
-              ),
+            child: FloatingActionButton(
+              onPressed: onPressed,
+              tooltip: tooltip,
+              backgroundColor: Colors.transparent,
+              foregroundColor: AuthPalette.fabIcon,
+              elevation: 0,
+              highlightElevation: 0,
+              hoverElevation: 0,
+              focusElevation: 0,
+              splashColor: Colors.white.withValues(alpha: 0.12),
+              child: child,
             ),
           ),
         ),
