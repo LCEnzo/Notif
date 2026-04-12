@@ -82,16 +82,18 @@ class ViewSetMixin(SetupMixin, TestCase):
 			self,
 			list_view_name: str = 'users-list',
 			detail_view_name: str = 'users-detail',
-			model: type[Model] = User
+			model: type[Model] = User,
+			obj: Model | None = None,
 		) -> None:
 		"""
 		Set up the test case by initializing the model and object under test.
+		Pass `obj` explicitly to avoid depending on queryset ordering.
 		"""
 		self.list_view_name = list_view_name
 		self.detail_view_name = detail_view_name
 		self.model = model
 		assert self.model is not None
-		self.obj = self.model_manager.first()
+		self.obj = obj if obj is not None else self.model_manager.first()
 
 	@property
 	def model_manager(self) -> Any:
@@ -192,13 +194,19 @@ class ViewSetMixin(SetupMixin, TestCase):
 
 		return response
 
-	def _test_delete_object(self, pk: int | None = None) -> HttpResponse:
+	def _test_delete_object(self, pk: int | None = None, create_fields: dict[str, Any] | None = None) -> HttpResponse:
 		"""
 		Test that objects can be deleted via the API.
-		`pk` is the primary key of the object we want to retrieve.
-		Defaults to the id of the first instance returned by the model manager.
+
+		To avoid side effects on shared test data, pass `create_fields` to
+		create a disposable object that gets deleted instead of self.obj.
 		"""
-		if pk is None:
+		if create_fields is not None:
+			url = reverse(self.list_view_name)
+			create_resp = self.api_client.post(url, create_fields)
+			self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+			pk = self.model_manager.order_by('-pk').first().pk
+		elif pk is None:
 			assert self.obj is not None
 			pk = self.obj.pk
 

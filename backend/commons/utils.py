@@ -8,7 +8,7 @@ from faker import Faker
 from faker.providers import bank, company, person
 
 from accounts.models import User
-from monitoring.models import Link, Strategy
+from monitoring.models import Link, Notification, Strategy, Update
 
 # Global password variable for ease of access
 password: str = 'password'
@@ -102,3 +102,43 @@ def create_strat_and_links(user: User) -> tuple[Strategy, list[Link]]:
 	)
 
 	return (strat, [link1, link2])
+
+
+def create_update(
+	link: Link,
+	title: str = "New update",
+	description: str = "",
+	item_url: str = "https://example.com/update",
+) -> Update:
+	return Update.objects.create(
+		link=link,
+		title=title,
+		description=description,
+		item_url=item_url,
+	)
+
+
+def create_notification(
+	update: Update | None = None,
+	*,
+	link: Link | None = None,
+	title: str = "New update",
+	description: str = "",
+	item_url: str = "https://example.com/update",
+	status: str = Notification.Status.UNREAD,
+	read_at: datetime.datetime | None = None,
+) -> Notification:
+	if update is None:
+		assert link is not None
+		update = create_update(
+			link=link,
+			title=title,
+			description=description,
+			item_url=item_url,
+		)
+
+	return Notification.objects.create(
+		update=update,
+		status=status,
+		read_at=read_at,
+	)
