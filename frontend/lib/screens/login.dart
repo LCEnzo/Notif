@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:notif/commons/auth_background.dart';
+import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/services/auth.dart';
@@ -12,26 +12,7 @@ class LogInPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: PageBackground(
-        child: const Center(
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: _FormContent(),
-          ),
-        ),
-      ),
-      floatingActionButton: GlassHelpButton(
-        onPressed: () {
-          Navigator.pushNamed(context, '/About');
-        },
-        tooltip: 'About',
-        child: const Icon(
-          Icons.question_mark_rounded,
-          color: AuthPalette.fabIcon,
-        ),
-      ),
-    );
+    return const AuthScaffold(child: _FormContent());
   }
 }
 
