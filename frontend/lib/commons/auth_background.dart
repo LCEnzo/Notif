@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
@@ -11,27 +11,77 @@ class PageBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox.expand(
-      child: CustomPaint(
-        painter: const _PosterBackgroundPainter(),
-        child: child,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const CustomPaint(
+            painter: _PosterBackgroundPainter(
+              _PosterBackgroundPainter.baseOperations,
+            ),
+          ),
+          const _PosterTextureLayer(
+            grain: _PosterBackgroundPainter.grain,
+            halftone: _PosterBackgroundPainter.halftone,
+          ),
+          const CustomPaint(
+            painter: _PosterBackgroundPainter(
+              _PosterBackgroundPainter.foregroundOperations,
+            ),
+          ),
+          child,
+        ],
       ),
     );
   }
 }
 
-class _PosterBackgroundPainter extends CustomPainter {
-  const _PosterBackgroundPainter();
+class _PosterTextureLayer extends StatelessWidget {
+  static final Future<ui.FragmentProgram> _programFuture =
+      ui.FragmentProgram.fromAsset('shaders/auth_texture.frag');
 
-  static const List<_BackgroundOp> _operations = [
+  final _GrainOp grain;
+  final _HalftoneOp halftone;
+
+  const _PosterTextureLayer({
+    required this.grain,
+    required this.halftone,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<ui.FragmentProgram>(
+      future: _programFuture,
+      builder: (context, snapshot) {
+        final program = snapshot.data;
+        if (program == null) {
+          return const SizedBox.expand();
+        }
+
+        return CustomPaint(
+          painter: _PosterTexturePainter(
+            program: program,
+            grain: grain,
+            halftone: halftone,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PosterBackgroundPainter extends CustomPainter {
+  static const List<_BackgroundOp> baseOperations = [
     _LinearGradientOp(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: AuthPalette.baseGradientColors,
       stops: AuthPalette.baseGradientStops,
+      rect: _RelativeRect.full(),
+      shape: _BackgroundShape.rect,
     ),
     _CircularGradientOp(
       centerYFactor: -0.05,
-      diameterFactor: 0.74,
+      diameterFactor: 0.82,
       colors: AuthPalette.bloomColors,
       stops: AuthPalette.bloomStops,
     ),
@@ -41,34 +91,39 @@ class _PosterBackgroundPainter extends CustomPainter {
       colors: AuthPalette.transitionColors,
       stops: AuthPalette.transitionStops,
     ),
-    _GrainOp(
-      spacing: 2.6,
-      limitYFactor: 1,
-      noiseThreshold: 0.09,
-      opacityScale: 0.34,
-      minRadius: 0.26,
-      maxRadiusDelta: 0.38,
-      fromColor: AuthPalette.grainFrom,
-      toColor: AuthPalette.grainTo,
-      colorLerpScale: 0.68,
-      fadeCenter: Alignment(0, -1),
-      fadeRadius: 2.85,
-    ),
-    _HalftoneOp(
-      spacing: 13,
-      startYFactor: 0.42,
-      baseRadius: 0.6,
-      radiusGrowth: 12,
-      opacityBase: 0.16,
-      opacityGrowth: 0.26,
-      topColor: AuthPalette.halftoneTop,
-      bottomColor: AuthPalette.halftoneBottom,
-      colorLerpScale: 0.66,
-      convexCurveDepthFactor: 0.12,
-      landscapeCurveBoost: 1.15,
-      curveExponent: 1.7,
-      landscapeExponentPull: 0.35,
-    ),
+  ];
+
+  static const _GrainOp grain = _GrainOp(
+    spacing: 2.0,
+    limitYFactor: 1.0,
+    noiseThreshold: 0.02, 
+    opacityScale: 1.8,
+    minRadius: 0.8, 
+    maxRadiusDelta: 0.6,
+    fromColor: AuthPalette.grainFrom,
+    toColor: AuthPalette.grainTo,
+    colorLerpScale: 1.0,
+    fadeCenter: Alignment(0, -1),
+    fadeRadius: 4.0, 
+  );
+
+  static const _HalftoneOp halftone = _HalftoneOp(
+    spacing: 13,
+    startYFactor: 0.42,
+    baseRadius: 0.6,
+    radiusGrowth: 12,
+    opacityBase: 0.16,
+    opacityGrowth: 0.26,
+    topColor: AuthPalette.halftoneTop,
+    bottomColor: AuthPalette.halftoneBottom,
+    colorLerpScale: 0.66,
+    convexCurveDepthFactor: 0.12,
+    landscapeCurveBoost: 1.15,
+    curveExponent: 1.7,
+    landscapeExponentPull: 0.35,
+  );
+
+  static const List<_BackgroundOp> foregroundOperations = [
     _LinearGradientOp(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
@@ -77,17 +132,94 @@ class _PosterBackgroundPainter extends CustomPainter {
     ),
   ];
 
+  final List<_BackgroundOp> operations;
+
+  const _PosterBackgroundPainter(this.operations);
+
   @override
   void paint(Canvas canvas, Size size) {
-    for (final operation in _operations) {
+    for (final operation in operations) {
       operation.paint(canvas, size);
     }
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return false;
+  bool shouldRepaint(covariant _PosterBackgroundPainter oldDelegate) {
+    return !identical(oldDelegate.operations, operations);
   }
+}
+
+class _PosterTexturePainter extends CustomPainter {
+  final ui.FragmentProgram program;
+  final _GrainOp grain;
+  final _HalftoneOp halftone;
+
+  const _PosterTexturePainter({
+    required this.program,
+    required this.grain,
+    required this.halftone,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shader = program.fragmentShader();
+    var index = 0;
+
+    shader.setFloat(index++, size.width);
+    shader.setFloat(index++, size.height);
+
+    shader.setFloat(index++, grain.spacing);
+    shader.setFloat(index++, grain.limitYFactor);
+    shader.setFloat(index++, grain.noiseThreshold);
+    shader.setFloat(index++, grain.opacityScale);
+    shader.setFloat(index++, grain.minRadius);
+    shader.setFloat(index++, grain.maxRadiusDelta);
+    index = _setColorUniform(shader, index, grain.fromColor);
+    index = _setColorUniform(shader, index, grain.toColor);
+    shader.setFloat(index++, grain.colorLerpScale);
+    shader.setFloat(index++, grain.fadeCenter.x);
+    shader.setFloat(index++, grain.fadeCenter.y);
+    shader.setFloat(index++, grain.fadeRadius);
+
+    shader.setFloat(index++, halftone.spacing);
+    shader.setFloat(index++, halftone.startYFactor);
+    shader.setFloat(index++, halftone.baseRadius);
+    shader.setFloat(index++, halftone.radiusGrowth);
+    shader.setFloat(index++, halftone.opacityBase);
+    shader.setFloat(index++, halftone.opacityGrowth);
+    index = _setColorUniform(shader, index, halftone.topColor);
+    index = _setColorUniform(shader, index, halftone.bottomColor);
+    shader.setFloat(index++, halftone.colorLerpScale);
+    shader.setFloat(index++, halftone.convexCurveDepthFactor);
+    shader.setFloat(index++, halftone.landscapeCurveBoost);
+    shader.setFloat(index++, halftone.curveExponent);
+    shader.setFloat(index++, halftone.landscapeExponentPull);
+
+    final paint = Paint()..shader = shader;
+    canvas.drawRect(Offset.zero & size, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _PosterTexturePainter oldDelegate) {
+    return oldDelegate.program != program ||
+        !identical(oldDelegate.grain, grain) ||
+        !identical(oldDelegate.halftone, halftone);
+  }
+}
+
+int _setColorUniform(ui.FragmentShader shader, int index, Color color) {
+  final argb = color.toARGB32();
+  final alpha = ((argb >> 24) & 0xFF) / 255.0;
+  final red = ((argb >> 16) & 0xFF) / 255.0;
+  final green = ((argb >> 8) & 0xFF) / 255.0;
+  final blue = (argb & 0xFF) / 255.0;
+
+  shader.setFloat(index++, red);
+  shader.setFloat(index++, green);
+  shader.setFloat(index++, blue);
+  shader.setFloat(index++, alpha);
+
+  return index;
 }
 
 abstract class _BackgroundOp {
@@ -217,7 +349,7 @@ class _CircularGradientOp extends _BackgroundOp {
   }
 }
 
-class _GrainOp extends _BackgroundOp {
+class _GrainOp {
   /// Distance between adjacent grain samples in logical pixels.
   final double spacing;
 
@@ -264,55 +396,9 @@ class _GrainOp extends _BackgroundOp {
     required this.fadeCenter,
     required this.fadeRadius,
   });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-    final limitY = size.height * limitYFactor;
-    final cx = (fadeCenter.x + 1) / 2 * size.width;
-    final cy = (fadeCenter.y + 1) / 2 * size.height;
-    final halfW = size.width * 0.5;
-    final halfH = size.height * 0.5;
-    var rowIndex = 0;
-
-    for (double y = 0; y < limitY; y += spacing) {
-      final offsetX = rowIndex.isEven ? 0.0 : spacing / 2;
-
-      for (double x = -spacing; x < size.width + spacing; x += spacing) {
-        final dotX = x + offsetX;
-        final nx = (dotX - cx) / halfW;
-        final ny = (y - cy) / halfH;
-        final dist = sqrt(nx * nx + ny * ny);
-        final radialFade = (1.0 - dist / fadeRadius).clamp(0.0, 1.0);
-
-        if (radialFade <= 0) continue;
-
-        final noise = _hashNoise(
-          ((x + spacing) / spacing).floor(),
-          (y / spacing).floor(),
-        );
-        if (noise < noiseThreshold) continue;
-
-        final alpha = (noise - noiseThreshold) * opacityScale * radialFade;
-        paint.color = Color.lerp(
-          fromColor,
-          toColor,
-          noise * colorLerpScale,
-        )!.withValues(alpha: alpha);
-
-        canvas.drawCircle(
-          Offset(dotX, y),
-          minRadius + noise * maxRadiusDelta,
-          paint,
-        );
-      }
-
-      rowIndex++;
-    }
-  }
 }
 
-class _HalftoneOp extends _BackgroundOp {
+class _HalftoneOp {
   /// Distance between halftone sample points in logical pixels.
   final double spacing;
 
@@ -367,57 +453,6 @@ class _HalftoneOp extends _BackgroundOp {
     this.curveExponent = 2,
     this.landscapeExponentPull = 0,
   });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-    final startY = size.height * startYFactor;
-    final aspectRatio = size.width / size.height;
-    final landscapeFactor = (aspectRatio - 1).clamp(0.0, 1.8);
-    final curveDepth =
-        size.height *
-        convexCurveDepthFactor *
-        (1 + landscapeFactor * landscapeCurveBoost);
-    final exponent = (curveExponent - landscapeFactor * landscapeExponentPull)
-        .clamp(0.7, 4.0);
-    var rowIndex = 0;
-
-    for (double y = startY; y < size.height + spacing; y += spacing) {
-      final normalized = ((y - startY) / (size.height - startY)).clamp(0.0, 1.0);
-      final contrastFactor = 1 - normalized;
-      final xOffset = rowIndex.isEven ? 0.0 : spacing / 2;
-
-      paint.color = Color.lerp(
-            bottomColor,
-            topColor,
-            contrastFactor * colorLerpScale,
-          )!
-          .withOpacity(opacityBase + contrastFactor * opacityGrowth);
-
-      for (double x = -spacing; x < size.width + spacing; x += spacing) {
-        final currentX = x + xOffset;
-        final centerDistance =
-            ((currentX - (size.width / 2)).abs() / (size.width / 2))
-                .clamp(0.0, 1.0);
-        final edgeLift = 1 - pow(centerDistance, exponent).toDouble();
-        final localStartY = startY + curveDepth * edgeLift;
-        if (y < localStartY) {
-          continue;
-        }
-
-        final availableDepth = size.height - localStartY;
-        final distanceFromFrontier = y - localStartY;
-        final frontierNormalized = availableDepth <= 0
-            ? 1.0
-            : (distanceFromFrontier / availableDepth).clamp(0.0, 1.0);
-        final radius = baseRadius + frontierNormalized * radiusGrowth;
-
-        canvas.drawCircle(Offset(currentX, y), radius, paint);
-      }
-
-      rowIndex++;
-    }
-  }
 }
 
 void _drawShape(
@@ -432,11 +467,4 @@ void _drawShape(
   }
 
   canvas.drawRect(rect, paint);
-}
-
-double _hashNoise(int x, int y) {
-  int value = x * 374761393 + y * 668265263;
-  value = (value ^ (value >> 13)) * 1274126177;
-  value ^= value >> 16;
-  return (value & 0x7fffffff) / 0x7fffffff;
 }
