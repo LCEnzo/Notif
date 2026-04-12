@@ -1,17 +1,155 @@
 import logging
 import os
 from pprint import pprint  # noqa: F401
+from unittest.mock import patch
 
+import requests
 import requests_mock
+from django.core.management import call_command
 from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework.test import APIClient
 
-from commons.test_utils import ViewSetMixin
-from monitoring.models import Link
+from commons import Err, Ok
+from commons.test_utils import SetupMixin, ViewSetMixin, login_client
+from commons.utils import create_notification
+from monitoring.models import Link, Notification, Update
+from monitoring.services import scrape_link
 from monitoring.strategies import URL, GeneralSelectorStrategy, SBSVThreadmarksStrategy
 
 logger = logging.getLogger(__name__)
+
+
+class ResultTypeTestCase(TestCase):
+	def test_ok_basic(self):
+		r = Ok(42)
+		assert r.is_ok()
+		assert not r.is_err()
+		assert r.unwrap() == 42
+		assert r.unwrap_or(0) == 42
+
+	def test_err_basic(self):
+		r = Err("fail")
+		assert not r.is_ok()
+		assert r.is_err()
+		assert r.unwrap_err() == "fail"
+		assert r.unwrap_or(99) == 99
+
+	def test_ok_unwrap_err_raises(self):
+		with self.assertRaises(ValueError):
+			Ok(1).unwrap_err()
+
+	def test_err_unwrap_raises(self):
+		with self.assertRaises(ValueError):
+			Err("bad").unwrap()
+
+	def test_ok_map(self):
+		r = Ok(5).map(lambda x: x * 2)
+		assert isinstance(r, Ok)
+		assert r.unwrap() == 10
+
+	def test_err_map_is_noop(self):
+		r = Err("fail").map(lambda x: x * 2)
+		assert isinstance(r, Err)
+		assert r.unwrap_err() == "fail"
+
+	def test_ok_map_err_is_noop(self):
+		r = Ok(5).map_err(lambda e: e.upper())
+		assert isinstance(r, Ok)
+		assert r.unwrap() == 5
+
+	def test_err_map_err(self):
+		r = Err("fail").map_err(lambda e: e.upper())
+		assert isinstance(r, Err)
+		assert r.unwrap_err() == "FAIL"
+
+	def test_ok_and_then(self):
+		r: Ok[int] | Err[str] = Ok(5).and_then(lambda x: Ok(x + 1))
+		assert isinstance(r, Ok)
+		assert r.unwrap() == 6
+
+	def test_ok_and_then_to_err(self):
+		r: Ok[int] | Err[str] = Ok(5).and_then(lambda x: Err("nope"))
+		assert isinstance(r, Err)
+
+	def test_err_and_then_is_noop(self):
+		r = Err("fail").and_then(lambda x: Ok(x + 1))
+		assert isinstance(r, Err)
+		assert r.unwrap_err() == "fail"
+
+	def test_match_ok(self):
+		match Ok(42):
+			case Ok(value=v):
+				assert v == 42
+			case _:
+				self.fail("Should have matched Ok")
+
+	def test_match_err(self):
+		match Err("bad"):
+			case Err(error=e):
+				assert e == "bad"
+			case _:
+				self.fail("Should have matched Err")
+
+
+class TestSelectorStratErr(TestCase):
+	def test_empty_html_returns_err(self):
+		strat = GeneralSelectorStrategy()
+		url = "https://example.com"
+		config_data = {"selectors": ["div.content"]}
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, status_code=404)
+			result, new_data = strat(URL(url), config_data, {})
+
+		assert isinstance(result, Err)
+		assert new_data is None
+
+	def test_timeout_returns_err(self):
+		strat = GeneralSelectorStrategy()
+		url = "https://example.com"
+		config_data = {"selectors": ["div.content"]}
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, exc=requests.exceptions.ConnectTimeout)
+			result, new_data = strat(URL(url), config_data, {})
+
+		assert isinstance(result, Err)
+		assert new_data is None
+
+	def test_sbsv_timeout_returns_err(self):
+		strat = SBSVThreadmarksStrategy()
+		url = URL("http://forums.spacebattles.com/threads/test.123/threadmarks")
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, exc=requests.exceptions.ReadTimeout)
+			result, new_data = strat.scrape(url, {}, {'last_alert': ''})
+
+		assert isinstance(result, Err)
+		assert "Request failed" in result.error
+
+
+class RateLimiterTestCase(TestCase):
+	def test_same_domain_waits(self):
+		from monitoring.rate_limiter import DomainRateLimiter
+		limiter = DomainRateLimiter(delay=0.15)
+		import time
+		start = time.monotonic()
+		limiter.wait_for_domain("https://example.com/a")
+		limiter.wait_for_domain("https://example.com/b")
+		elapsed = time.monotonic() - start
+		assert elapsed >= 0.14
+
+	def test_different_domains_no_wait(self):
+		from monitoring.rate_limiter import DomainRateLimiter
+		limiter = DomainRateLimiter(delay=0.5)
+		import time
+		start = time.monotonic()
+		limiter.wait_for_domain("https://example.com/a")
+		limiter.wait_for_domain("https://other.com/b")
+		elapsed = time.monotonic() - start
+		assert elapsed < 0.2
 
 
 class TestSelectorStrat(TestCase):
@@ -39,7 +177,8 @@ class TestSelectorStrat(TestCase):
 			f"{new_data = }\n--------------------------\n"
 		)
 
-		assert not isinstance(notif_data, str)
+		assert isinstance(notif_data, Ok)
+		assert len(notif_data.value) > 0
 		assert new_data is not None
 
 
@@ -58,8 +197,8 @@ class SBSVThreadmarksStrategyTestCase(TestCase):
 
 			assert new_data is not None
 			assert ('last_alert' in new_data)
-			assert updates is not None
-			assert len(updates) >= 2
+			assert isinstance(updates, Ok)
+			assert len(updates.value) >= 2
 
 
 class LinkViewSetTestCase(ViewSetMixin):
@@ -68,9 +207,14 @@ class LinkViewSetTestCase(ViewSetMixin):
 			list_view_name: str = "links-list",
 			detail_view_name: str = "links-detail",
 			model: type[Model] = Link,
+			obj: Model | None = None,
 		) -> None:
-		# TODO, have some initialization, so there are instances of Link and Strat in the DB
-		super().setUp(list_view_name=list_view_name, detail_view_name=detail_view_name, model=model)
+		super().setUp(
+			list_view_name=list_view_name,
+			detail_view_name=detail_view_name,
+			model=model,
+			obj=obj or self.links[0],
+		)
 
 	def test_list_links(self):
 		filters = {"user__pk": f"{self.regular_user.pk}"}
@@ -101,7 +245,12 @@ class LinkViewSetTestCase(ViewSetMixin):
 		self._test_update_object()
 
 	def test_delete_link(self):
-		self._test_delete_object()
+		self._test_delete_object(create_fields={
+			"name": "Disposable link",
+			"url": "https://example.com/disposable",
+			"user": f"{self.regular_user.pk}",
+			"strategy": self.strat.pk,
+		})
 
 	def test_regular_link_permissions(self):
 		fields = {
@@ -136,3 +285,214 @@ class LinkViewSetTestCase(ViewSetMixin):
 			update_fields=update_fields,
 			permissions=permissions
 		)
+
+
+class NotificationViewSetTestCase(SetupMixin, TestCase):
+	def setUp(self):
+		# Create an Update and Notification for regular_user's first link
+		self.notification = create_notification(
+			link=self.links[0],
+			title="New chapter posted",
+			description="Chapter 42 is out",
+			item_url="https://example.com/chapter-42",
+		)
+		self.update = self.notification.update
+
+		# Create one for secondary_user's link too
+		secondary_link = Link.objects.filter(user=self.secondary_user).first()
+		assert secondary_link is not None
+		self.other_notification = create_notification(
+			link=secondary_link,
+			title="Other user's update",
+			description="Not yours",
+			item_url="https://example.com/other",
+		)
+
+	def test_list_returns_only_own_notifications(self):
+		response = self.api_client.get(reverse('notifications-list'))
+		self.assertEqual(response.status_code, 200)
+		ids = [n['id'] for n in response.data]
+		self.assertIn(self.notification.pk, ids)
+		self.assertNotIn(self.other_notification.pk, ids)
+
+	def test_filter_by_status(self):
+		response = self.api_client.get(reverse('notifications-list'), {'status': 'unread'})
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data), 1)
+
+		# Mark it read, then filter again
+		self.api_client.patch(
+			reverse('notifications-detail', kwargs={'pk': self.notification.pk}),
+			{'status': 'read'},
+			format='json',
+		)
+		response = self.api_client.get(reverse('notifications-list'), {'status': 'unread'})
+		self.assertEqual(len(response.data), 0)
+
+	def test_patch_mark_as_read_sets_read_at(self):
+		response = self.api_client.patch(
+			reverse('notifications-detail', kwargs={'pk': self.notification.pk}),
+			{'status': 'read'},
+			format='json',
+		)
+		self.assertEqual(response.status_code, 200)
+		self.notification.refresh_from_db()
+		self.assertEqual(self.notification.status, Notification.Status.READ)
+		self.assertIsNotNone(self.notification.read_at)
+
+	def test_other_user_cannot_access(self):
+		other_client = login_client(APIClient(), self.secondary_user.get_username())
+		response = other_client.get(
+			reverse('notifications-detail', kwargs={'pk': self.notification.pk})
+		)
+		self.assertEqual(response.status_code, 404)
+
+	def test_mark_all_read(self):
+		# Create a second notification for regular_user
+		create_notification(
+			link=self.links[0],
+			title="Another update",
+			item_url="https://example.com/2",
+		)
+
+		response = self.api_client.post(reverse('notifications-mark-all-read'))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data['marked_read'], 2)
+
+		unread_count = Notification.objects.filter(
+			update__link__user=self.regular_user, status=Notification.Status.UNREAD
+		).count()
+		self.assertEqual(unread_count, 0)
+
+
+class ScrapeServiceTestCase(SetupMixin, TestCase):
+	def setUp(self):
+		# Fixture links use schemeless URLs like "www.google.com" which
+		# requests can't dispatch. Give them proper URLs for service tests.
+		for link in self.links:
+			link.url = f"https://{link.url}"
+			link.save()
+
+	def test_scrape_link_creates_updates_and_notifications(self):
+		link = self.links[0]
+		html = '<html><body><article class="post-card">New Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			result = scrape_link(link)
+
+		assert isinstance(result, Ok)
+		assert result.value > 0
+		assert Update.objects.filter(link=link).exists()
+		assert Notification.objects.filter(update__link=link).exists()
+
+	def test_scrape_link_no_strategy_returns_err(self):
+		link = self.links[0]
+		link.strategy = None
+		link.save()
+
+		result = scrape_link(link)
+		assert isinstance(result, Err)
+		assert "No strategy" in result.error
+
+	def test_scrape_link_sets_last_scraped(self):
+		link = self.links[0]
+		assert link.last_scraped is None
+
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			scrape_link(link)
+
+		link.refresh_from_db()
+		assert link.last_scraped is not None
+
+	def test_scrape_link_deduplication(self):
+		link = self.links[0]
+		html = '<html><body><article class="post-card">Same Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			scrape_link(link)
+			count_after_first = Update.objects.filter(link=link).count()
+
+			scrape_link(link)
+			count_after_second = Update.objects.filter(link=link).count()
+
+		assert count_after_first == count_after_second
+
+	def test_scrape_link_updates_comparison_info(self):
+		link = self.links[0]
+		assert link.comparison_info == ''
+
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			scrape_link(link)
+
+		link.refresh_from_db()
+		assert link.comparison_info != ''
+
+	def test_management_command_runs(self):
+		link = self.links[0]
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			# Should not raise
+			call_command('scrape', '--link', str(link.pk), '--delay', '0')
+
+	def test_management_command_bulk_passes_custom_delay(self):
+		rate_limiter = object()
+
+		with (
+			patch("monitoring.management.commands.scrape.DomainRateLimiter", return_value=rate_limiter) as limiter_cls,
+			patch("monitoring.management.commands.scrape.scrape_all_links", return_value={}) as scrape_all,
+		):
+			call_command('scrape', '--delay', '5')
+
+		limiter_cls.assert_called_once_with(delay=5.0)
+		scrape_all.assert_called_once_with(user_id=None, rate_limiter=rate_limiter)
+
+
+class TriggerScrapeEndpointTestCase(SetupMixin, TestCase):
+	def setUp(self):
+		for link in self.links:
+			link.url = f"https://{link.url}"
+			link.save()
+
+	def test_trigger_scrape_single_link(self):
+		link = self.links[0]
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			response = self.api_client.post(
+				reverse('trigger-scrape'),
+				{'link_id': link.pk},
+				format='json',
+			)
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data['status'], 'ok')
+
+	def test_trigger_scrape_other_users_link_404(self):
+		other_link = Link.objects.filter(user=self.secondary_user).first()
+		assert other_link is not None
+		response = self.api_client.post(
+			reverse('trigger-scrape'),
+			{'link_id': other_link.pk},
+			format='json',
+		)
+		self.assertEqual(response.status_code, 404)
+
+	def test_trigger_scrape_all(self):
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			response = self.api_client.post(reverse('trigger-scrape'), format='json')
+
+		self.assertEqual(response.status_code, 200)
+		# Should have entries for the authenticated user's links
+		assert len(response.data) > 0

@@ -14,11 +14,13 @@ class UserViewSetTestCase(ViewSetMixin):
 			list_view_name: str = "users-list",
 			detail_view_name: str = "users-detail",
 			model: type[Model] = User,
+			obj: Model | None = None,
 		) -> None:
 		super().setUp(
 			list_view_name=list_view_name,
 			detail_view_name=detail_view_name,
-			model=model
+			model=model,
+			obj=obj or self.regular_user,
 		)
 
 	def test_list_users(self):
@@ -47,6 +49,8 @@ class UserViewSetTestCase(ViewSetMixin):
 		self._test_update_object()
 
 	def test_delete_user(self):
+		# Users can only delete themselves (IsRequestingThemselves permission),
+		# so this deletes self.obj (regular_user). Side effect is accepted here.
 		self._test_delete_object()
 
 	def test_regular_user_permissions(self):
