@@ -63,7 +63,7 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 
 			return Ok(created_count)
 
-	return Err("Unexpected result type")  # unreachable, satisfies mypy
+	return Err("Unexpected scrape_link")
 
 
 def scrape_all_links(
