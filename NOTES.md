@@ -33,6 +33,17 @@ What next:
 		Notification, or at minimum push_sent_at/push_failed_at fields.
 		A single notification may have multiple deliveries (push + email + in-app).
 
+Backend scraping direction:
+	Keep scheduling simple at first: management command + OS cron / scheduled task.
+	If per-link schedules or in-process scheduling become necessary, prefer APScheduler
+	before jumping to Celery/Beat/Redis complexity.
+
+Current scraper limitations worth remembering:
+	GeneralSelectorStrategy hash comparison is still fragile for dynamic content.
+	Requests are still sequential and there is no retry/backoff layer yet.
+	Rate limiting now exists, but it only spaces top-level link scrapes; strategies
+	with multiple internal requests still need their own throttling discipline.
+
 
 ---
 

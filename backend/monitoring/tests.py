@@ -1,7 +1,7 @@
 import logging
 import os
-from unittest.mock import patch
 from pprint import pprint  # noqa: F401
+from unittest.mock import patch
 
 import requests
 import requests_mock
@@ -13,6 +13,7 @@ from rest_framework.test import APIClient
 
 from commons import Err, Ok
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client
+from commons.utils import create_notification
 from monitoring.models import Link, Notification, Update
 from monitoring.services import scrape_link
 from monitoring.strategies import URL, GeneralSelectorStrategy, SBSVThreadmarksStrategy
@@ -289,24 +290,23 @@ class LinkViewSetTestCase(ViewSetMixin):
 class NotificationViewSetTestCase(SetupMixin, TestCase):
 	def setUp(self):
 		# Create an Update and Notification for regular_user's first link
-		self.update = Update.objects.create(
+		self.notification = create_notification(
 			link=self.links[0],
 			title="New chapter posted",
 			description="Chapter 42 is out",
 			item_url="https://example.com/chapter-42",
 		)
-		self.notification = Notification.objects.create(update=self.update)
+		self.update = self.notification.update
 
 		# Create one for secondary_user's link too
 		secondary_link = Link.objects.filter(user=self.secondary_user).first()
 		assert secondary_link is not None
-		other_update = Update.objects.create(
+		self.other_notification = create_notification(
 			link=secondary_link,
 			title="Other user's update",
 			description="Not yours",
 			item_url="https://example.com/other",
 		)
-		self.other_notification = Notification.objects.create(update=other_update)
 
 	def test_list_returns_only_own_notifications(self):
 		response = self.api_client.get(reverse('notifications-list'))
@@ -349,10 +349,11 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 
 	def test_mark_all_read(self):
 		# Create a second notification for regular_user
-		update2 = Update.objects.create(
-			link=self.links[0], title="Another update", item_url="https://example.com/2",
+		create_notification(
+			link=self.links[0],
+			title="Another update",
+			item_url="https://example.com/2",
 		)
-		Notification.objects.create(update=update2)
 
 		response = self.api_client.post(reverse('notifications-mark-all-read'))
 		self.assertEqual(response.status_code, 200)
