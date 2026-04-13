@@ -67,6 +67,9 @@ flutter:
     - shaders/auth_texture.frag
 
   fonts:
+    - family: Awesome
+      fonts:
+        - asset: fonts/Awesome Serif VAR-VF.ttf
     - family: InstrumentSerif
       fonts:
         - asset: fonts/InstrumentSerif-Regular.ttf
