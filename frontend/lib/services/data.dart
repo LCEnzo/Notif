@@ -1,5 +1,6 @@
-import 'package:notif/services/auth.dart' show apiUrl;
 import 'package:http/http.dart' as http;
+import 'package:notif/services/api_client.dart';
+import 'package:notif/services/app_settings.dart';
 
 final List<String> startChoices = <String>[];
 
@@ -25,30 +26,39 @@ class Link {
 }
 
 class LinkProvider {
-  final String _baseUrl = apiUrl;
+  AppSettingsController? _settings;
+
+  void updateSettings(AppSettingsController? settings) {
+    _settings = settings;
+  }
 
   Future<http.Response> createLink(Link link) {
     throw UnimplementedError(
-        'LinkProvider.createLink is not wired up for $_baseUrl yet.');
+      'LinkProvider.createLink is not wired up for ${resolveUrls('', _settings).first} yet.',
+    );
   }
 
   Future<Link> getLink(int id) {
     throw UnimplementedError(
-        'LinkProvider.getLink is not wired up for $_baseUrl yet.');
+      'LinkProvider.getLink is not wired up for ${resolveUrls('', _settings).first} yet.',
+    );
   }
 
   Future<List<Link>> getAllLinks() {
     throw UnimplementedError(
-        'LinkProvider.getAllLinks is not wired up for $_baseUrl yet.');
+      'LinkProvider.getAllLinks is not wired up for ${resolveUrls('', _settings).first} yet.',
+    );
   }
 
   Future<http.Response> updateLink(int id, Link link) {
     throw UnimplementedError(
-        'LinkProvider.updateLink is not wired up for $_baseUrl yet.');
+      'LinkProvider.updateLink is not wired up for ${resolveUrls('', _settings).first} yet.',
+    );
   }
 
   Future<http.Response> deleteLink(int id) {
     throw UnimplementedError(
-        'LinkProvider.deleteLink is not wired up for $_baseUrl yet.');
+      'LinkProvider.deleteLink is not wired up for ${resolveUrls('', _settings).first} yet.',
+    );
   }
 }

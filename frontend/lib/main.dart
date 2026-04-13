@@ -14,10 +14,19 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => AppSettingsController()),
-        ChangeNotifierProvider(create: (context) => AuthService()),
-        ChangeNotifierProvider(
+        ChangeNotifierProvider(create: (_) => AppSettingsController()),
+        ChangeNotifierProxyProvider<AppSettingsController, AuthService>(
+          create: (_) => AuthService(),
+          update: (_, settings, auth) => auth!..updateSettings(settings),
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthService,
+          AppSettingsController,
+          UserDataService
+        >(
           create: (context) => UserDataService(context.read<AuthService>()),
+          update: (_, auth, settings, userData) =>
+              userData!..updateSettings(settings),
         ),
       ],
       child: const App(),
