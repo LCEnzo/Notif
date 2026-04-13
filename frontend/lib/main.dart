@@ -34,6 +34,39 @@ void main() {
   );
 }
 
+class _DarkFadeUpTransitionBuilder extends PageTransitionsBuilder {
+  const _DarkFadeUpTransitionBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    // Fade in + slight upward slide. Uses the dark scaffold color as
+    // transition background instead of the default white.
+    final curve = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0, end: 1).animate(
+        CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+      ),
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.03),
+          end: Offset.zero,
+        ).animate(curve),
+        child: child,
+      ),
+    );
+  }
+}
+
 class App extends StatelessWidget {
   const App({super.key});
 
@@ -50,11 +83,21 @@ class App extends StatelessWidget {
           primary: const Color.fromARGB(255, 69, 26, 172),
           tertiary: const Color.fromARGB(255, 76, 18, 211),
         ),
-        fontFamily: 'Hack Regular',
+        fontFamily: 'Skyling',
         textTheme: const TextTheme(
           displayLarge: TextStyle(fontSize: 72),
           titleLarge: TextStyle(fontSize: 36),
           bodyMedium: TextStyle(fontSize: 14),
+        ),
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: _DarkFadeUpTransitionBuilder(),
+            TargetPlatform.iOS: _DarkFadeUpTransitionBuilder(),
+            TargetPlatform.linux: _DarkFadeUpTransitionBuilder(),
+            TargetPlatform.windows: _DarkFadeUpTransitionBuilder(),
+            TargetPlatform.macOS: _DarkFadeUpTransitionBuilder(),
+            TargetPlatform.fuchsia: _DarkFadeUpTransitionBuilder(),
+          },
         ),
       ),
       home: const LogInPage(),
