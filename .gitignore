@@ -26,3 +26,6 @@ secrets.*
 
 # Misc
 .directory
+gwern.net
+*/icons/*
+*/fonts/*
