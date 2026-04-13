@@ -289,6 +289,7 @@ class _AboutPageState extends State<AboutPage> {
   }) {
     final intro = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.max,
       children: [
         Text('SHOWCASE / NON-AUTH PILOT', style: _labelStyle),
         const SizedBox(height: NotifDesignTokens.spaceSm),
@@ -299,7 +300,10 @@ class _AboutPageState extends State<AboutPage> {
                 'No guarantees that it will work, and I reserve the right to break it at any time without notice.',
           style: _bodyStyle.copyWith(color: NotifDesignTokens.structText2),
         ),
-        const SizedBox(height: NotifDesignTokens.spaceLg),
+        if (isWide)
+          const Spacer()
+        else
+          const SizedBox(height: NotifDesignTokens.spaceLg),
         _HeroActionRow(
           onGitHub: () => _openUri(Uri.parse('https://github.com/LCEnzo/Notif')),
           onContact: () =>
@@ -334,11 +338,6 @@ class _AboutPageState extends State<AboutPage> {
             value: '110–220ms, ease-out, no bounce',
             mono: true,
           ),
-          const SizedBox(height: NotifDesignTokens.spaceMd),
-          const _MetaRow(
-            label: 'Auth',
-            value: 'Glass-forward and intentionally separate',
-          ),
         ],
       ),
     );
@@ -354,13 +353,15 @@ class _AboutPageState extends State<AboutPage> {
       );
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(flex: 5, child: intro),
-        const SizedBox(width: NotifDesignTokens.spaceLg),
-        Expanded(flex: 3, child: metaCard),
-      ],
+  return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(flex: 5, child: intro),
+          const SizedBox(width: NotifDesignTokens.spaceLg),
+          Expanded(flex: 3, child: metaCard),
+        ],
+      ),
     );
   }
 
