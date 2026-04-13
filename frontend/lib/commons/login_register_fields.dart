@@ -3,13 +3,87 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/auth_validators.dart';
+import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/services/app_settings.dart';
+import 'package:provider/provider.dart';
+
+const Color _feedbackError = Color(0xFFC45A6B);
+
+bool _useFramedAuthMode(BuildContext context) {
+  return context.watch<AppSettingsController?>()?.authCardStyle ==
+      AuthCardStyle.framed;
+}
+
+TextStyle _buildAuthFieldTextStyle(BuildContext context) {
+  final isFramed = _useFramedAuthMode(context);
+
+  return TextStyle(
+    color: isFramed ? NotifDesignTokens.structText : Colors.white,
+    fontFamily: isFramed ? NotifDesignTokens.bodyFont : null,
+    fontSize: isFramed ? 15 : null,
+    height: isFramed ? 22 / 15 : null,
+  );
+}
 
 InputDecoration _buildAuthInputDecoration({
+  required BuildContext context,
   required String labelText,
   required String hintText,
   Widget? prefixIcon,
   Widget? suffixIcon,
 }) {
+  final isFramed = _useFramedAuthMode(context);
+
+  if (isFramed) {
+    return InputDecoration(
+      labelText: labelText,
+      hintText: hintText,
+      labelStyle: const TextStyle(
+        color: NotifDesignTokens.structText2,
+        fontFamily: NotifDesignTokens.bodyFont,
+      ),
+      floatingLabelStyle: const TextStyle(
+        color: NotifDesignTokens.accentText,
+        fontFamily: NotifDesignTokens.bodyFont,
+      ),
+      hintStyle: const TextStyle(
+        color: NotifDesignTokens.structText3,
+        fontFamily: NotifDesignTokens.bodyFont,
+      ),
+      prefixIcon: prefixIcon,
+      suffixIcon: suffixIcon,
+      prefixIconColor: NotifDesignTokens.structText2,
+      suffixIconColor: NotifDesignTokens.structText2,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: NotifDesignTokens.spaceMd,
+        vertical: NotifDesignTokens.spaceMd,
+      ),
+      enabledBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.zero,
+        borderSide: BorderSide(color: NotifDesignTokens.structBorder),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.zero,
+        borderSide: BorderSide(
+          color: NotifDesignTokens.accentDim,
+          width: NotifDesignTokens.borderFocusWidth,
+        ),
+      ),
+      errorBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.zero,
+        borderSide: BorderSide(color: _feedbackError),
+      ),
+      focusedErrorBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.zero,
+        borderSide: BorderSide(color: _feedbackError, width: 2),
+      ),
+      disabledBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.zero,
+        borderSide: BorderSide(color: NotifDesignTokens.structDivider),
+      ),
+    );
+  }
+
   return InputDecoration(
     labelText: labelText,
     hintText: hintText,
@@ -24,6 +98,97 @@ InputDecoration _buildAuthInputDecoration({
     ),
     focusedBorder: const UnderlineInputBorder(
       borderSide: BorderSide(color: Color(0x99FFFFFF), width: 1.4),
+    ),
+  );
+}
+
+ButtonStyle _buildFramedAuthButtonStyle({required bool isPrimary}) {
+  return ButtonStyle(
+    animationDuration: NotifDesignTokens.microMotion,
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+    ),
+    minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    shape: const WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    ),
+    textStyle: const WidgetStatePropertyAll(
+      TextStyle(
+        fontFamily: NotifDesignTokens.bodyFont,
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        height: 16 / 12,
+        letterSpacing: 1.2,
+      ),
+    ),
+    foregroundColor: WidgetStateProperty.resolveWith((states) {
+      if (isPrimary) {
+        return NotifDesignTokens.accentOnAccent;
+      }
+      if (states.contains(WidgetState.pressed)) {
+        return NotifDesignTokens.accentOnAccent;
+      }
+      return NotifDesignTokens.accentText;
+    }),
+    backgroundColor: WidgetStateProperty.resolveWith((states) {
+      if (isPrimary) {
+        if (states.contains(WidgetState.pressed)) {
+          return Color.lerp(
+            NotifDesignTokens.accentPrimary,
+            Colors.black,
+            0.12,
+          );
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return Color.lerp(
+            NotifDesignTokens.accentPrimary,
+            NotifDesignTokens.structText,
+            0.08,
+          );
+        }
+        return NotifDesignTokens.accentPrimary;
+      }
+
+      if (states.contains(WidgetState.pressed)) {
+        return NotifDesignTokens.accentMuted;
+      }
+      if (states.contains(WidgetState.hovered)) {
+        return NotifDesignTokens.accentDim;
+      }
+      return Colors.transparent;
+    }),
+    side: WidgetStateProperty.resolveWith((states) {
+      if (isPrimary) {
+        if (states.contains(WidgetState.focused)) {
+          return const BorderSide(
+            color: NotifDesignTokens.accentDim,
+            width: NotifDesignTokens.borderFocusWidth,
+          );
+        }
+        return BorderSide.none;
+      }
+
+      if (states.contains(WidgetState.focused)) {
+        return const BorderSide(
+          color: NotifDesignTokens.accentDim,
+          width: NotifDesignTokens.borderFocusWidth,
+        );
+      }
+      if (states.contains(WidgetState.hovered) ||
+          states.contains(WidgetState.pressed)) {
+        return const BorderSide(
+          color: NotifDesignTokens.accentMuted,
+          width: NotifDesignTokens.borderWidth,
+        );
+      }
+      return const BorderSide(
+        color: NotifDesignTokens.structBorder,
+        width: NotifDesignTokens.borderWidth,
+      );
+    }),
+    overlayColor: WidgetStatePropertyAll(
+      NotifDesignTokens.accentText.withValues(alpha: 0.06),
     ),
   );
 }
@@ -80,12 +245,15 @@ class UsernameTextField extends StatefulWidget {
 class _UsernameTextFieldState extends State<UsernameTextField> {
   @override
   Widget build(BuildContext context) {
+    final isFramed = _useFramedAuthMode(context);
+
     return TextFormField(
       key: widget.key,
       controller: widget.textController,
-      style: const TextStyle(color: Colors.white),
-      cursorColor: Colors.white,
+      style: _buildAuthFieldTextStyle(context),
+      cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
       decoration: _buildAuthInputDecoration(
+        context: context,
         labelText: widget.labelText,
         hintText: widget.hintText,
         prefixIcon: const Icon(Icons.account_box_outlined),
@@ -127,7 +295,7 @@ class _EmailTextFieldState extends State<EmailTextField> {
     if (value == null || value.isEmpty) {
       return 'Please enter an email address';
     } else if (!RegExp(
-      r"^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+      r'^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+',
     ).hasMatch(value)) {
       return 'Please enter a valid email address';
     }
@@ -136,12 +304,15 @@ class _EmailTextFieldState extends State<EmailTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final isFramed = _useFramedAuthMode(context);
+
     return TextFormField(
       validator: validator,
       controller: widget.textController,
-      style: const TextStyle(color: Colors.white),
-      cursorColor: Colors.white,
+      style: _buildAuthFieldTextStyle(context),
+      cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
       decoration: _buildAuthInputDecoration(
+        context: context,
         labelText: widget.labelText,
         hintText: widget.hintText,
         prefixIcon: const Icon(Icons.email_outlined),
@@ -182,13 +353,16 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final isFramed = _useFramedAuthMode(context);
+
     return TextFormField(
       controller: widget.textController,
       validator: validator,
       obscureText: !_isPasswordVisible,
-      style: const TextStyle(color: Colors.white),
-      cursorColor: Colors.white,
+      style: _buildAuthFieldTextStyle(context),
+      cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
       decoration: _buildAuthInputDecoration(
+        context: context,
         labelText: widget.labelText,
         hintText: widget.hintText,
         prefixIcon: const Icon(Icons.lock_outline_rounded),
@@ -209,7 +383,7 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
 
 class CustomButton extends StatelessWidget {
   final String buttonText;
-  final Function onPressed;
+  final VoidCallback onPressed;
   final Color? buttonColor;
 
   const CustomButton({
@@ -221,11 +395,23 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isFramed = _useFramedAuthMode(context);
     final backgroundColor = buttonColor ?? AuthPalette.primaryButtonBase;
     final isPrimary = buttonColor == null;
     final foregroundColor = isPrimary
         ? AuthPalette.buttonForeground
         : AuthPalette.secondaryButtonForeground;
+
+    if (isFramed) {
+      return SizedBox(
+        width: double.infinity,
+        child: TextButton(
+          onPressed: onPressed,
+          style: _buildFramedAuthButtonStyle(isPrimary: isPrimary),
+          child: Text(buttonText),
+        ),
+      );
+    }
 
     final radius = BorderRadius.circular(AuthPalette.glassRadius);
 
@@ -255,7 +441,7 @@ class CustomButton extends StatelessWidget {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: onPressed as void Function(),
+                  onTap: onPressed,
                   borderRadius: radius,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(

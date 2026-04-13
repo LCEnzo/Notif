@@ -66,6 +66,24 @@ flutter:
   shaders:
     - shaders/auth_texture.frag
 
+  fonts:
+    - family: InstrumentSerif
+      fonts:
+        - asset: fonts/InstrumentSerif-Regular.ttf
+        - asset: fonts/InstrumentSerif-Italic.ttf
+          style: italic
+    - family: Skyling
+      fonts:
+        - asset: fonts/SLTFSkylingVF.ttf
+    - family: ZalandoSans
+      fonts:
+        - asset: fonts/ZalandoSansExpanded-VariableFont_wght.ttf
+        - asset: fonts/ZalandoSansExpanded-Italic-VariableFont_wght.ttf
+          style: italic
+    - family: SuisseMono
+      fonts:
+        - asset: fonts/Suisse Mono 15b3dab70b38c29f-s.p.otf
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

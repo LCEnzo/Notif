@@ -17,11 +17,7 @@ class HomePage extends StatelessWidget {
         }
       });
 
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
@@ -36,20 +32,25 @@ class HomePage extends StatelessWidget {
             Navigator.pushReplacementNamed(context, '/LogIn');
           },
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_sharp),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.pushNamed(context, '/Settings');
+            },
+          ),
+        ],
       ),
       body: const Column(
         children: [
           Center(
             child: Padding(
               padding: EdgeInsets.all(16.0),
-              child: Logo(title: "Placeholder"),
+              child: Logo(title: 'Placeholder'),
             ),
           ),
-          Expanded(
-            child: Center(
-              child: NotificationsView(),
-            ),
-          ),
+          Expanded(child: Center(child: NotificationsView())),
         ],
       ),
     );

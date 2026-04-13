@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
+import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -48,9 +50,12 @@ class _FormContentState extends State<_FormContent> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
+    final appSettings = context.watch<AppSettingsController?>();
+    final isFramed = appSettings?.authCardStyle == AuthCardStyle.framed;
     final theme = Theme.of(context);
     final rememberMeStyle = theme.textTheme.bodyLarge?.copyWith(
-      color: Colors.white70,
+      color: isFramed ? NotifDesignTokens.structText2 : Colors.white70,
+      fontFamily: isFramed ? NotifDesignTokens.bodyFont : null,
     );
 
     return ConstrainedBox(
@@ -79,6 +84,23 @@ class _FormContentState extends State<_FormContent> {
               const SizedBox(height: 16),
               CheckboxListTile(
                 value: rememberMe,
+                side: isFramed
+                    ? const BorderSide(color: NotifDesignTokens.structBorder)
+                    : null,
+                checkboxShape: isFramed
+                    ? const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      )
+                    : null,
+                fillColor: isFramed
+                    ? WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return NotifDesignTokens.accentPrimary;
+                        }
+                        return Colors.transparent;
+                      })
+                    : null,
+                checkColor: isFramed ? NotifDesignTokens.accentOnAccent : null,
                 onChanged: (value) {
                   setState(() {
                     if (value == null) return;

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_palette.dart';
+import 'package:notif/services/app_settings.dart';
+import 'package:provider/provider.dart';
 
 // ---------------------------------------------------------------------------
 // Registration
@@ -480,6 +482,7 @@ class _AuthTextureTunerOverlayState extends State<AuthTextureTunerOverlay> {
 
   Widget _buildPanel(BuildContext context) {
     final controller = widget.controller;
+    final appSettings = context.watch<AppSettingsController?>();
 
     return _DebugGlassContainer(
       child: ValueListenableBuilder<AuthTextureSettings>(
@@ -523,6 +526,10 @@ class _AuthTextureTunerOverlayState extends State<AuthTextureTunerOverlay> {
                   'Debug-only live controls for the auth background texture.',
                   style: TextStyle(color: Colors.white70),
                 ),
+                if (appSettings != null) ...[
+                  const SizedBox(height: 12),
+                  _AuthCardStyleSection(appSettings: appSettings),
+                ],
                 const SizedBox(height: 12),
                 Wrap(
                   spacing: 8,
@@ -585,6 +592,92 @@ class _AuthTextureTunerOverlayState extends State<AuthTextureTunerOverlay> {
         content: Text('Copied auth texture snippet to clipboard.'),
         behavior: SnackBarBehavior.floating,
       ),
+    );
+  }
+}
+
+class _AuthCardStyleSection extends StatelessWidget {
+  final AppSettingsController appSettings;
+
+  const _AuthCardStyleSection({required this.appSettings});
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedStyle = appSettings.authCardStyle;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Auth Card Style',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'Swap the login/register card between the glass treatment and the new framed surface.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _AuthCardStyleChip(
+              label: 'Glass',
+              selected: selectedStyle == AuthCardStyle.glass,
+              onSelected: () {
+                appSettings.setAuthCardStyle(AuthCardStyle.glass);
+              },
+            ),
+            _AuthCardStyleChip(
+              label: 'Framed',
+              selected: selectedStyle == AuthCardStyle.framed,
+              onSelected: () {
+                appSettings.setAuthCardStyle(AuthCardStyle.framed);
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AuthCardStyleChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onSelected;
+
+  const _AuthCardStyleChip({
+    required this.label,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      selectedColor: AuthPalette.primaryButtonBase,
+      backgroundColor: AuthPalette.primaryButtonBase.withValues(alpha: 0.12),
+      side: BorderSide(
+        color: selected
+            ? Colors.white70
+            : AuthPalette.secondaryButtonBase.withValues(alpha: 0.72),
+      ),
+      labelStyle: TextStyle(
+        color: selected
+            ? Colors.white
+            : Color.lerp(AuthPalette.secondaryButtonBase, Colors.white, 0.18),
+        fontWeight: FontWeight.w600,
+      ),
+      onSelected: (_) => onSelected(),
     );
   }
 }

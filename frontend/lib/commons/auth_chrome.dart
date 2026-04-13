@@ -1,9 +1,11 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_palette.dart';
+import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/services/app_settings.dart';
+import 'package:provider/provider.dart';
 
 class AuthScaffold extends StatelessWidget {
   final Widget child;
@@ -43,30 +45,42 @@ class GlassHelpButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(AuthPalette.glassRadius);
+    final appSettings = context.watch<AppSettingsController?>();
+    final authCardStyle = appSettings?.authCardStyle ?? AuthCardStyle.glass;
+    final isFramed = authCardStyle == AuthCardStyle.framed;
+    final radius = BorderRadius.circular(
+      isFramed ? NotifDesignTokens.radiusNone : AuthPalette.glassRadius,
+    );
 
-    return Tooltip(
-      message: tooltip,
-      child: _AuthGlassSurface(
+    final button = Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
         borderRadius: radius,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: radius,
-            splashColor: Colors.white.withValues(alpha: 0.12),
-            child: SizedBox.square(
-              dimension: 58,
-              child: Center(
-                child: IconTheme.merge(
-                  data: const IconThemeData(color: AuthPalette.fabIcon),
-                  child: child,
-                ),
+        splashColor: isFramed
+            ? NotifDesignTokens.accentText.withValues(alpha: 0.08)
+            : Colors.white.withValues(alpha: 0.12),
+        child: SizedBox.square(
+          dimension: 58,
+          child: Center(
+            child: IconTheme.merge(
+              data: IconThemeData(
+                color: isFramed
+                    ? NotifDesignTokens.accentText
+                    : AuthPalette.fabIcon,
               ),
+              child: child,
             ),
           ),
         ),
       ),
+    );
+
+    return Tooltip(
+      message: tooltip,
+      child: isFramed
+          ? _AuthFramedSurface(padding: EdgeInsets.zero, child: button)
+          : _AuthGlassSurface(borderRadius: radius, child: button),
     );
   }
 }
@@ -78,16 +92,60 @@ class AuthPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appSettings = context.watch<AppSettingsController?>();
+    final authCardStyle = appSettings?.authCardStyle ?? AuthCardStyle.glass;
+
+    final content = DefaultTextStyle.merge(
+      style: TextStyle(
+        color: authCardStyle == AuthCardStyle.glass
+            ? Colors.white
+            : NotifDesignTokens.structText,
+        fontFamily: authCardStyle == AuthCardStyle.glass
+            ? null
+            : NotifDesignTokens.bodyFont,
+        fontSize: authCardStyle == AuthCardStyle.glass ? null : 15,
+        height: authCardStyle == AuthCardStyle.glass ? null : 22 / 15,
+      ),
+      child: IconTheme.merge(
+        data: IconThemeData(
+          color: authCardStyle == AuthCardStyle.glass
+              ? Colors.white70
+              : NotifDesignTokens.structText2,
+        ),
+        child: child,
+      ),
+    );
+
+    if (authCardStyle == AuthCardStyle.framed) {
+      return _AuthFramedSurface(
+        padding: const EdgeInsets.all(28),
+        child: content,
+      );
+    }
+
     return _AuthGlassSurface(
       borderRadius: BorderRadius.circular(AuthPalette.glassRadius),
       padding: const EdgeInsets.all(28),
-      child: DefaultTextStyle.merge(
-        style: const TextStyle(color: Colors.white),
-        child: IconTheme.merge(
-          data: const IconThemeData(color: Colors.white70),
-          child: child,
-        ),
+      child: content,
+    );
+  }
+}
+
+class _AuthFramedSurface extends StatelessWidget {
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
+
+  const _AuthFramedSurface({required this.child, this.padding});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: NotifDesignTokens.structSurface,
+        border: Border.all(color: NotifDesignTokens.structBorder),
       ),
+      child: child,
     );
   }
 }
