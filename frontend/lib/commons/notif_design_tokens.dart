@@ -1,5 +1,13 @@
 import 'package:flutter/material.dart';
 
+class FeedbackColors {
+  const FeedbackColors._();
+
+  static const Color error = Color(0xFFB04040);
+  static const Color success = Color(0xFF5A8A5E);
+  static const Color warning = Color(0xFFB09040);
+}
+
 class NotifDesignTokens {
   const NotifDesignTokens._();
 

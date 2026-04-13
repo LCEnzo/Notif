@@ -31,10 +31,10 @@ Future<http.Response> apiPost(
       return response;
     } catch (e) {
       if (identical(url, urls.last)) rethrow;
-      if (kDebugMode) print('apiPost: $url failed ($e), trying fallback');
+      if (kDebugMode) debugPrint('apiPost: $url failed ($e), trying fallback');
     }
   }
-  return response!; // unreachable, but satisfies the analyzer
+  throw StateError('apiPost: all URLs exhausted');
 }
 
 Future<http.Response> apiGet(
@@ -50,10 +50,10 @@ Future<http.Response> apiGet(
       return response;
     } catch (e) {
       if (identical(url, urls.last)) rethrow;
-      if (kDebugMode) print('apiGet: $url failed ($e), trying fallback');
+      if (kDebugMode) debugPrint('apiGet: $url failed ($e), trying fallback');
     }
   }
-  return response!;
+  throw StateError('apiGet: all URLs exhausted');
 }
 
 List<String> resolveUrls(String path, AppSettingsController? settings) {

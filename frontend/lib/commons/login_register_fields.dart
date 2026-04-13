@@ -7,8 +7,6 @@ import 'package:notif/commons/notif_design_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:provider/provider.dart';
 
-const Color _feedbackError = Color(0xFFC45A6B);
-
 bool _useFramedAuthMode(BuildContext context) {
   return context.watch<AppSettingsController?>()?.authCardStyle ==
       AuthCardStyle.framed;
@@ -71,11 +69,11 @@ InputDecoration _buildAuthInputDecoration({
       ),
       errorBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: _feedbackError),
+        borderSide: BorderSide(color: FeedbackColors.error),
       ),
       focusedErrorBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: _feedbackError, width: 2),
+        borderSide: BorderSide(color: FeedbackColors.error, width: 2),
       ),
       disabledBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.zero,
