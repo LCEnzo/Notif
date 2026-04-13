@@ -29,6 +29,18 @@ class _FormContentState extends State<_FormContent> {
   final TextEditingController passwordController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      if (authService.jwt != null && context.mounted) {
+        Navigator.pushReplacementNamed(context, '/Home');
+      }
+    });
+  }
+
+  @override
   void dispose() {
     emailController.dispose();
     usernameController.dispose();
@@ -38,15 +50,7 @@ class _FormContentState extends State<_FormContent> {
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context, listen: true);
-
-    if (authService.jwt != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) {
-          Navigator.pushReplacementNamed(context, '/Home');
-        }
-      });
-    }
+    final authService = Provider.of<AuthService>(context, listen: false);
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 330),
@@ -80,10 +84,14 @@ class _FormContentState extends State<_FormContent> {
                 onPressed: () async {
                   if (formKey.currentState?.validate() ?? false) {
                     if (kDebugMode) {
-                      print("Validated data:");
-                      print("\t- username: ${usernameController.text}");
-                      print("\t- email: ${emailController.text}");
-                      print("\t- password: ${passwordController.text}");
+                      final pw = passwordController.text;
+                      final masked = pw.length >= 2
+                          ? '${pw[0]}***${pw[pw.length - 1]}'
+                          : pw.isNotEmpty ? '***' : '(empty)';
+                      debugPrint("Validated data:");
+                      debugPrint("\t- username: ${usernameController.text}");
+                      debugPrint("\t- email: ${emailController.text}");
+                      debugPrint("\t- password: $masked");
                     }
 
                     try {
@@ -93,8 +101,10 @@ class _FormContentState extends State<_FormContent> {
                         passwordController.text,
                       );
                     } catch (e) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        showDialog<dynamic>(
+                      if (context.mounted) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!context.mounted) return;
+                          showDialog<dynamic>(
                           context: context,
                           builder: (context) => AlertDialog(
                             title: const Text('Register Failed'),
@@ -107,7 +117,8 @@ class _FormContentState extends State<_FormContent> {
                             ],
                           ),
                         );
-                      });
+                        });
+                      }
                     }
                   }
                 },

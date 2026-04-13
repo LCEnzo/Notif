@@ -147,9 +147,11 @@ class _FormContentState extends State<_FormContent> {
   Future<bool> loginClick(AuthService authService, BuildContext context) async {
     if (formKey.currentState?.validate() ?? false) {
       if (kDebugMode) {
-        print(
-          "Validated data:\n\tusername: ${usernameController.text}, password: ${passwordController.text}",
-        );
+        final pw = passwordController.text;
+        final masked = pw.length >= 2
+            ? '${pw[0]}***${pw[pw.length - 1]}'
+            : pw.isNotEmpty ? '***' : '(empty)';
+        debugPrint("Validated data:\n\tusername: ${usernameController.text}, password: $masked");
       }
       try {
         await authService.login(
@@ -158,8 +160,10 @@ class _FormContentState extends State<_FormContent> {
         );
         return true;
       } catch (e) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          showDialog<dynamic>(
+        if (context.mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            showDialog<dynamic>(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Login Failed'),
@@ -172,7 +176,8 @@ class _FormContentState extends State<_FormContent> {
               ],
             ),
           );
-        });
+          });
+        }
       }
     }
 
@@ -180,10 +185,10 @@ class _FormContentState extends State<_FormContent> {
   }
 
   Future<void> _loadRememberMe() async {
-    final perfs = await SharedPreferences.getInstance();
-    bool? rememberMe = perfs.getBool('rememberMe');
+    final prefs = await SharedPreferences.getInstance();
+    bool? rememberMe = prefs.getBool('rememberMe');
 
-    if (rememberMe != null) {
+    if (rememberMe != null && mounted) {
       setState(() {
         this.rememberMe = rememberMe;
       });
@@ -191,15 +196,15 @@ class _FormContentState extends State<_FormContent> {
   }
 
   Future<void> _saveRememberMe() async {
-    final perfs = await SharedPreferences.getInstance();
-    perfs.setBool('rememberMe', rememberMe);
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setBool('rememberMe', rememberMe);
   }
 
   Future<void> _loadUsername() async {
     final prefs = await SharedPreferences.getInstance();
     String? username = prefs.getString('username');
 
-    if (username != null) {
+    if (username != null && mounted) {
       setState(() {
         usernameController.text = username;
       });
@@ -207,8 +212,8 @@ class _FormContentState extends State<_FormContent> {
   }
 
   Future<void> _saveUsername() async {
-    final perfs = await SharedPreferences.getInstance();
-    perfs.setString('username', usernameController.text);
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setString('username', usernameController.text);
   }
 
   @override
