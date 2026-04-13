@@ -11,17 +11,30 @@ class RegisterPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AuthScaffold(child: _FormContent());
+    return const AuthScaffold(child: _FormContent());
   }
 }
 
-class _FormContent extends StatelessWidget {
+class _FormContent extends StatefulWidget {
+  const _FormContent();
+
+  @override
+  State<_FormContent> createState() => _FormContentState();
+}
+
+class _FormContentState extends State<_FormContent> {
   final formKey = GlobalKey<FormState>();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  _FormContent();
+  @override
+  void dispose() {
+    emailController.dispose();
+    usernameController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -74,8 +87,11 @@ class _FormContent extends StatelessWidget {
                     }
 
                     try {
-                      await authService.register(usernameController.text,
-                          emailController.text, passwordController.text);
+                      await authService.register(
+                        usernameController.text,
+                        emailController.text,
+                        passwordController.text,
+                      );
                     } catch (e) {
                       WidgetsBinding.instance.addPostFrameCallback((_) {
                         showDialog<dynamic>(
