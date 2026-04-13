@@ -20,7 +20,7 @@ class AppSettingsController extends ChangeNotifier {
   static const String _backendUrlModeKey = 'backendUrlMode';
   static const String _customBackendUrlKey = 'customBackendUrl';
 
-  bool _designDitheringEnabled = false;
+  bool _designDitheringEnabled = true;
   AuthCardStyle _authCardStyle = AuthCardStyle.framed;
   BackendUrlMode _backendUrlMode = BackendUrlMode.builtin;
   String _customBackendUrl = '';
@@ -37,7 +37,7 @@ class AppSettingsController extends ChangeNotifier {
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _designDitheringEnabled = prefs.getBool(_ditheringKey) ?? false;
+      _designDitheringEnabled = prefs.getBool(_ditheringKey) ?? true;
       final rawAuthCardStyle = prefs.getString(_authCardStyleKey);
       _authCardStyle = AuthCardStyle.values.firstWhere(
         (style) => style.name == rawAuthCardStyle,
@@ -51,7 +51,9 @@ class AppSettingsController extends ChangeNotifier {
       _customBackendUrl = prefs.getString(_customBackendUrlKey) ?? '';
       notifyListeners();
     } catch (e) {
-      if (kDebugMode) print('AppSettings._load: $e');
+      if (kDebugMode) debugPrint('AppSettings._load: $e');
+      // SharedPreferences failed (e.g., corrupted storage).
+      // Fall back to defaults already set in field initializers.
     }
   }
 
@@ -67,7 +69,7 @@ class AppSettingsController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_ditheringKey, enabled);
     } catch (e) {
-      if (kDebugMode) print('AppSettings.setDesignDitheringEnabled: $e');
+      if (kDebugMode) debugPrint('AppSettings.setDesignDitheringEnabled: $e');
     }
   }
 
@@ -83,7 +85,7 @@ class AppSettingsController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_authCardStyleKey, style.name);
     } catch (e) {
-      if (kDebugMode) print('AppSettings.setAuthCardStyle: $e');
+      if (kDebugMode) debugPrint('AppSettings.setAuthCardStyle: $e');
     }
   }
 
@@ -95,7 +97,7 @@ class AppSettingsController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_backendUrlModeKey, mode.name);
     } catch (e) {
-      if (kDebugMode) print('AppSettings.setBackendUrlMode: $e');
+      if (kDebugMode) debugPrint('AppSettings.setBackendUrlMode: $e');
     }
   }
 
@@ -108,7 +110,7 @@ class AppSettingsController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_customBackendUrlKey, trimmed);
     } catch (e) {
-      if (kDebugMode) print('AppSettings.setCustomBackendUrl: $e');
+      if (kDebugMode) debugPrint('AppSettings.setCustomBackendUrl: $e');
     }
   }
 }
