@@ -54,6 +54,7 @@ class _SettingsPageState extends State<SettingsPage> {
             children: [
               if (settings.designDitheringEnabled) const DitherOverlay(),
               SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(
                   NotifDesignTokens.spaceLg,
                   NotifDesignTokens.spaceLg,
@@ -64,9 +65,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   alignment: Alignment.topCenter,
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 860),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.only(bottom: NotifDesignTokens.spaceLg),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                         Text('Preferences', style: _displayStyle),
                         const SizedBox(height: NotifDesignTokens.spaceBase),
                         Text(
@@ -164,7 +168,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             ],
                           ),
                         ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),

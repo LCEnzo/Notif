@@ -43,7 +43,7 @@ class _AboutPageState extends State<AboutPage> {
   @override
   Widget build(BuildContext context) {
     final appSettings = context.watch<AppSettingsController?>();
-    final ditheringEnabled = appSettings?.designDitheringEnabled ?? false;
+    final ditheringEnabled = appSettings?.designDitheringEnabled ?? true;
 
     return Scaffold(
       backgroundColor: NotifDesignTokens.structBg,
@@ -78,7 +78,7 @@ class _AboutPageState extends State<AboutPage> {
               final packageInfo = snapshot.data;
 
               return TweenAnimationBuilder<double>(
-                duration: NotifDesignTokens.pageMotion,
+                duration: const Duration(milliseconds: 100),
                 curve: Curves.easeOutCubic,
                 tween: Tween(begin: 0, end: 1),
                 builder: (context, value, child) {
@@ -92,11 +92,12 @@ class _AboutPageState extends State<AboutPage> {
                 },
                 child: SelectionArea(
                   child: SingleChildScrollView(
+                    physics: const ClampingScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(
                       NotifDesignTokens.spaceLg,
                       NotifDesignTokens.spaceLg,
                       NotifDesignTokens.spaceLg,
-                      NotifDesignTokens.space2xl,
+                      NotifDesignTokens.spaceBase,
                     ),
                     child: Align(
                       alignment: Alignment.topCenter,
