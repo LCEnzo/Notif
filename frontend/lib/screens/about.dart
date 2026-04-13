@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:notif/commons/notif_design_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:package_info_plus/package_info_plus.dart';
@@ -421,7 +422,22 @@ class _HeroActionRow extends StatelessWidget {
         const SizedBox(width: NotifDesignTokens.spaceSm),
         const Expanded(child: _HeroActionTile.placeholder()),
         const SizedBox(width: NotifDesignTokens.spaceSm),
-        const Expanded(child: _HeroActionTile.placeholder()),
+        Expanded(
+          child: _HeroActionTile(
+            label: 'DISCORD',
+            icon: Icons.discord,
+            onPressed: () async {
+              await Clipboard.setData(const ClipboardData(text: 'lcenzo'));
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Copied Discord handle: lcenzo'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
+          ),
+        ),
         const SizedBox(width: NotifDesignTokens.spaceSm),
         Expanded(
           child: _HeroActionTile(
@@ -441,7 +457,7 @@ class _HeroActionTile extends StatelessWidget {
   final bool filled;
   final VoidCallback? onPressed;
 
-  const _HeroActionTile({
+  _HeroActionTile({
     required this.label,
     this.icon,
     this.filled = false,
