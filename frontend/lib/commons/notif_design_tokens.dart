@@ -51,4 +51,81 @@ class NotifDesignTokens {
   static BorderRadius get flatRadius => BorderRadius.circular(radiusNone);
 
   static BorderRadius get softRadius => BorderRadius.circular(radiusSm);
+
+  static const TextStyle buttonTextStyle = TextStyle(
+    fontFamily: bodyFont,
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    height: 16 / 12,
+    letterSpacing: 1.2,
+  );
+
+  static ButtonStyle framedButtonStyle({required bool isPrimary}) {
+    return ButtonStyle(
+      animationDuration: microMotion,
+      padding: const WidgetStatePropertyAll(
+        EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      ),
+      minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      shape: const WidgetStatePropertyAll(
+        RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      ),
+      textStyle: const WidgetStatePropertyAll(
+        TextStyle(
+          fontFamily: bodyFont,
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          height: 16 / 12,
+          letterSpacing: 1.2,
+        ),
+      ),
+      foregroundColor: WidgetStateProperty.resolveWith((states) {
+        if (isPrimary) {
+          return accentOnAccent;
+        }
+        if (states.contains(WidgetState.pressed)) {
+          return accentOnAccent;
+        }
+        return accentText;
+      }),
+      backgroundColor: WidgetStateProperty.resolveWith((states) {
+        if (isPrimary) {
+          if (states.contains(WidgetState.pressed)) {
+            return Color.lerp(accentPrimary, Colors.black, 0.12);
+          }
+          if (states.contains(WidgetState.hovered)) {
+            return Color.lerp(accentPrimary, structText, 0.08);
+          }
+          return accentPrimary;
+        }
+
+        if (states.contains(WidgetState.pressed)) {
+          return accentMuted;
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return accentDim;
+        }
+        return Colors.transparent;
+      }),
+      side: WidgetStateProperty.resolveWith((states) {
+        if (isPrimary) {
+          if (states.contains(WidgetState.focused)) {
+            return const BorderSide(color: accentDim, width: borderFocusWidth);
+          }
+          return BorderSide.none;
+        }
+
+        if (states.contains(WidgetState.focused)) {
+          return const BorderSide(color: accentDim, width: borderFocusWidth);
+        }
+        if (states.contains(WidgetState.hovered) ||
+            states.contains(WidgetState.pressed)) {
+          return const BorderSide(color: accentMuted, width: borderWidth);
+        }
+        return const BorderSide(color: structBorder, width: borderWidth);
+      }),
+      overlayColor: WidgetStatePropertyAll(accentText.withValues(alpha: 0.06)),
+    );
+  }
 }

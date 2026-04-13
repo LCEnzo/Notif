@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:notif/commons/dither_overlay.dart';
 import 'package:notif/commons/notif_design_tokens.dart';
-import 'package:notif/services/app_settings.dart';
+import 'package:notif/services/app_settings.dart' show AppSettingsController;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -70,14 +71,7 @@ class _AboutPageState extends State<AboutPage> {
       ),
       body: Stack(
         children: [
-          if (ditheringEnabled)
-            const Positioned.fill(
-              child: IgnorePointer(
-                child: RepaintBoundary(
-                  child: CustomPaint(painter: _DitherOverlayPainter()),
-                ),
-              ),
-            ),
+          if (ditheringEnabled) const DitherOverlay(),
           FutureBuilder<PackageInfo>(
             future: _packageInfoFuture,
             builder: (context, snapshot) {
@@ -298,7 +292,7 @@ class _AboutPageState extends State<AboutPage> {
         const SizedBox(height: NotifDesignTokens.spaceBase),
         Text(
           'Notif aggregates updates from pages, feeds, and accounts you care about, and notifies you when something changes. Notif is a personal project I made for my own needs, and to expand my skills and experience. As such, it\'s provided as is. '
-                'No guarantees that it will work, and I reserve the right to break it at any time without notice.',
+          'No guarantees that it will work, and I reserve the right to break it at any time without notice.',
           style: _bodyStyle.copyWith(color: NotifDesignTokens.structText2),
         ),
         if (isWide)
@@ -306,7 +300,8 @@ class _AboutPageState extends State<AboutPage> {
         else
           const SizedBox(height: NotifDesignTokens.spaceLg),
         _HeroActionRow(
-          onGitHub: () => _openUri(Uri.parse('https://github.com/LCEnzo/Notif')),
+          onGitHub: () =>
+              _openUri(Uri.parse('https://github.com/LCEnzo/Notif')),
           onContact: () =>
               _openUri(Uri(scheme: 'mailto', path: 'lcenzo@protonmail.ch')),
         ),
@@ -354,7 +349,7 @@ class _AboutPageState extends State<AboutPage> {
       );
     }
 
-  return IntrinsicHeight(
+    return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -386,11 +381,13 @@ class _AboutPageState extends State<AboutPage> {
           IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(child: panels[index]),
-                const SizedBox(width: NotifDesignTokens.spaceBase),
-                Expanded(child: panels[index + 1]),
-              ],
+              children: index < panels.length - 1
+                  ? [
+                      Expanded(child: panels[index]),
+                      const SizedBox(width: NotifDesignTokens.spaceBase),
+                      Expanded(child: panels[index + 1]),
+                    ]
+                  : [Expanded(child: panels[index])],
             ),
           ),
           if (index < panels.length - 2)
@@ -428,7 +425,7 @@ class _HeroActionRow extends StatelessWidget {
             icon: Icons.discord,
             onPressed: () async {
               await Clipboard.setData(const ClipboardData(text: 'lcenzo'));
-
+              if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
                   content: Text('Copied Discord handle: lcenzo'),
@@ -457,7 +454,7 @@ class _HeroActionTile extends StatelessWidget {
   final bool filled;
   final VoidCallback? onPressed;
 
-  _HeroActionTile({
+  const _HeroActionTile({
     required this.label,
     this.icon,
     this.filled = false,
@@ -465,10 +462,10 @@ class _HeroActionTile extends StatelessWidget {
   });
 
   const _HeroActionTile.placeholder()
-      : label = null,
-        icon = null,
-        filled = false,
-        onPressed = null;
+    : label = null,
+      icon = null,
+      filled = false,
+      onPressed = null;
 
   @override
   Widget build(BuildContext context) {
@@ -501,7 +498,7 @@ class _HeroActionTile extends StatelessWidget {
                 ],
                 Text(
                   label!,
-                  style: _buttonTextStyle.copyWith(
+                  style: NotifDesignTokens.buttonTextStyle.copyWith(
                     color: filled
                         ? NotifDesignTokens.accentOnAccent
                         : NotifDesignTokens.accentText,
@@ -517,7 +514,9 @@ class _HeroActionTile extends StatelessWidget {
         color: background,
         border: Border.fromBorderSide(border),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: NotifDesignTokens.spaceSm),
+      padding: const EdgeInsets.symmetric(
+        horizontal: NotifDesignTokens.spaceSm,
+      ),
       alignment: Alignment.center,
       child: content,
     );
@@ -528,10 +527,7 @@ class _HeroActionTile extends StatelessWidget {
 
     return Material(
       color: Colors.transparent,
-      child: InkWell(
-        onTap: onPressed,
-        child: tile,
-      ),
+      child: InkWell(onTap: onPressed, child: tile),
     );
   }
 }
@@ -597,90 +593,7 @@ class _ActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextButton.icon(
       onPressed: onPressed,
-      style: ButtonStyle(
-        animationDuration: NotifDesignTokens.microMotion,
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(
-            horizontal: NotifDesignTokens.spaceBase,
-            vertical: NotifDesignTokens.spaceMd,
-          ),
-        ),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
-        shape: const WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        ),
-        textStyle: const WidgetStatePropertyAll(_buttonTextStyle),
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          if (filled) {
-            return NotifDesignTokens.accentOnAccent;
-          }
-          if (states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.pressed)) {
-            return NotifDesignTokens.accentOnAccent;
-          }
-          return NotifDesignTokens.accentText;
-        }),
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (filled) {
-            if (states.contains(WidgetState.pressed)) {
-              return Color.lerp(
-                NotifDesignTokens.accentPrimary,
-                Colors.black,
-                0.12,
-              );
-            }
-            if (states.contains(WidgetState.hovered)) {
-              return Color.lerp(
-                NotifDesignTokens.accentPrimary,
-                NotifDesignTokens.structText,
-                0.08,
-              );
-            }
-            return NotifDesignTokens.accentPrimary;
-          }
-
-          if (states.contains(WidgetState.pressed)) {
-            return NotifDesignTokens.accentMuted;
-          }
-          if (states.contains(WidgetState.hovered)) {
-            return NotifDesignTokens.accentDim;
-          }
-          return Colors.transparent;
-        }),
-        side: WidgetStateProperty.resolveWith((states) {
-          if (filled) {
-            if (states.contains(WidgetState.focused)) {
-              return const BorderSide(
-                color: NotifDesignTokens.accentDim,
-                width: NotifDesignTokens.borderFocusWidth,
-              );
-            }
-            return BorderSide.none;
-          }
-
-          if (states.contains(WidgetState.focused)) {
-            return const BorderSide(
-              color: NotifDesignTokens.accentDim,
-              width: NotifDesignTokens.borderFocusWidth,
-            );
-          }
-          if (states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.pressed)) {
-            return const BorderSide(
-              color: NotifDesignTokens.accentMuted,
-              width: NotifDesignTokens.borderWidth,
-            );
-          }
-          return const BorderSide(
-            color: NotifDesignTokens.structBorder,
-            width: NotifDesignTokens.borderWidth,
-          );
-        }),
-        overlayColor: WidgetStatePropertyAll(
-          NotifDesignTokens.accentText.withValues(alpha: 0.06),
-        ),
-      ),
+      style: NotifDesignTokens.framedButtonStyle(isPrimary: filled),
       icon: Icon(icon, size: 18),
       label: Text(label),
     );
@@ -750,36 +663,6 @@ class _SignalRow extends StatelessWidget {
   }
 }
 
-class _DitherOverlayPainter extends CustomPainter {
-  const _DitherOverlayPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final neutralPaint = Paint()
-      ..color = NotifDesignTokens.structText.withValues(alpha: 0.018);
-    final accentPaint = Paint()
-      ..color = NotifDesignTokens.accentText.withValues(alpha: 0.014);
-    const step = 5.0;
-
-    for (double y = 0; y < size.height; y += step) {
-      for (double x = 0; x < size.width; x += step) {
-        final cellX = (x / step).floor();
-        final cellY = (y / step).floor();
-        final hash = ((cellX * 73856093) ^ (cellY * 19349663)) & 7;
-
-        if (hash == 0) {
-          canvas.drawRect(Rect.fromLTWH(x, y, 1, 1), neutralPaint);
-        } else if (hash == 1 && y < size.height * 0.42) {
-          canvas.drawRect(Rect.fromLTWH(x + 1, y + 1, 1, 1), accentPaint);
-        }
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DitherOverlayPainter oldDelegate) => false;
-}
-
 const TextStyle _displayStyle = TextStyle(
   fontFamily: NotifDesignTokens.displayFont,
   fontSize: 34,
@@ -824,12 +707,4 @@ const TextStyle _labelStyle = TextStyle(
   height: 16 / 12,
   letterSpacing: 1.2,
   color: NotifDesignTokens.structText2,
-);
-
-const TextStyle _buttonTextStyle = TextStyle(
-  fontFamily: NotifDesignTokens.bodyFont,
-  fontSize: 12,
-  fontWeight: FontWeight.w500,
-  height: 16 / 12,
-  letterSpacing: 1.2,
 );

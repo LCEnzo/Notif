@@ -102,97 +102,6 @@ InputDecoration _buildAuthInputDecoration({
   );
 }
 
-ButtonStyle _buildFramedAuthButtonStyle({required bool isPrimary}) {
-  return ButtonStyle(
-    animationDuration: NotifDesignTokens.microMotion,
-    padding: const WidgetStatePropertyAll(
-      EdgeInsets.symmetric(vertical: 12, horizontal: 14),
-    ),
-    minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
-    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-    shape: const WidgetStatePropertyAll(
-      RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-    ),
-    textStyle: const WidgetStatePropertyAll(
-      TextStyle(
-        fontFamily: NotifDesignTokens.bodyFont,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-        height: 16 / 12,
-        letterSpacing: 1.2,
-      ),
-    ),
-    foregroundColor: WidgetStateProperty.resolveWith((states) {
-      if (isPrimary) {
-        return NotifDesignTokens.accentOnAccent;
-      }
-      if (states.contains(WidgetState.pressed)) {
-        return NotifDesignTokens.accentOnAccent;
-      }
-      return NotifDesignTokens.accentText;
-    }),
-    backgroundColor: WidgetStateProperty.resolveWith((states) {
-      if (isPrimary) {
-        if (states.contains(WidgetState.pressed)) {
-          return Color.lerp(
-            NotifDesignTokens.accentPrimary,
-            Colors.black,
-            0.12,
-          );
-        }
-        if (states.contains(WidgetState.hovered)) {
-          return Color.lerp(
-            NotifDesignTokens.accentPrimary,
-            NotifDesignTokens.structText,
-            0.08,
-          );
-        }
-        return NotifDesignTokens.accentPrimary;
-      }
-
-      if (states.contains(WidgetState.pressed)) {
-        return NotifDesignTokens.accentMuted;
-      }
-      if (states.contains(WidgetState.hovered)) {
-        return NotifDesignTokens.accentDim;
-      }
-      return Colors.transparent;
-    }),
-    side: WidgetStateProperty.resolveWith((states) {
-      if (isPrimary) {
-        if (states.contains(WidgetState.focused)) {
-          return const BorderSide(
-            color: NotifDesignTokens.accentDim,
-            width: NotifDesignTokens.borderFocusWidth,
-          );
-        }
-        return BorderSide.none;
-      }
-
-      if (states.contains(WidgetState.focused)) {
-        return const BorderSide(
-          color: NotifDesignTokens.accentDim,
-          width: NotifDesignTokens.borderFocusWidth,
-        );
-      }
-      if (states.contains(WidgetState.hovered) ||
-          states.contains(WidgetState.pressed)) {
-        return const BorderSide(
-          color: NotifDesignTokens.accentMuted,
-          width: NotifDesignTokens.borderWidth,
-        );
-      }
-      return const BorderSide(
-        color: NotifDesignTokens.structBorder,
-        width: NotifDesignTokens.borderWidth,
-      );
-    }),
-    overlayColor: WidgetStatePropertyAll(
-      NotifDesignTokens.accentText.withValues(alpha: 0.06),
-    ),
-  );
-}
-
 class Logo extends StatelessWidget {
   final String title;
   final Color? textColor;
@@ -289,17 +198,6 @@ class _EmailTextFieldState extends State<EmailTextField> {
   void initState() {
     super.initState();
     validator = widget.validator ?? validateEmail;
-  }
-
-  String? defaultValidator(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please enter an email address';
-    } else if (!RegExp(
-      r'^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+',
-    ).hasMatch(value)) {
-      return 'Please enter a valid email address';
-    }
-    return null;
   }
 
   @override
@@ -407,7 +305,7 @@ class CustomButton extends StatelessWidget {
         width: double.infinity,
         child: TextButton(
           onPressed: onPressed,
-          style: _buildFramedAuthButtonStyle(isPrimary: isPrimary),
+          style: NotifDesignTokens.framedButtonStyle(isPrimary: isPrimary),
           child: Text(buttonText),
         ),
       );
