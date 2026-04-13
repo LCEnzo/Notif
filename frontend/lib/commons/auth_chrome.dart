@@ -1,23 +1,65 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/notif_design_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:provider/provider.dart';
 
-class AuthScaffold extends StatelessWidget {
+class AuthScaffold extends StatefulWidget {
   final Widget child;
 
   const AuthScaffold({super.key, required this.child});
 
   @override
+  State<AuthScaffold> createState() => _AuthScaffoldState();
+}
+
+class _AuthScaffoldState extends State<AuthScaffold> {
+  @override
+  void initState() {
+    super.initState();
+    // Lock to portrait on phones so the auth card doesn't break in landscape.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final shortestSide = MediaQuery.of(context).size.shortestSide;
+      if (shortestSide < 600) {
+        SystemChrome.setPreferredOrientations([
+          DeviceOrientation.portraitUp,
+          DeviceOrientation.portraitDown,
+        ]);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    // Restore all orientations when leaving auth screens.
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: PageBackground(
-        child: Center(
-          child: Padding(padding: const EdgeInsets.all(32), child: child),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: widget.child,
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
       floatingActionButton: GlassHelpButton(
