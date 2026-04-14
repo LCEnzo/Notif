@@ -384,12 +384,12 @@ class _PosterTexturePainter extends CustomPainter {
     final shader = program.fragmentShader();
     var index = 0;
 
-    // uSize — physical pixels to match FlutterFragCoord().xy
-    shader.setFloat(index++, size.width * dpr);
-    shader.setFloat(index++, size.height * dpr);
+    // uSize — logical pixels to match CustomPainter size
+    shader.setFloat(index++, size.width);
+    shader.setFloat(index++, size.height);
 
-    // uPixelScale — shader multiplies pixel-unit uniforms by this
-    shader.setFloat(index++, dpr);
+    // uPixelScale — kept at 1.0 (params are in logical pixel units)
+    shader.setFloat(index++, 1.0);
 
     shader.setFloat(index++, grain.spacing);
     shader.setFloat(index++, grain.limitYFactor);
