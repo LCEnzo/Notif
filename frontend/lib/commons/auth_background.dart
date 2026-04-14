@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
 
@@ -292,9 +293,15 @@ class _PosterTextureLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // GLSL shaders are unsupported on web.
+    if (kIsWeb) return const SizedBox.expand();
+
     return FutureBuilder<ui.FragmentProgram>(
       future: _programFuture,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const SizedBox.expand();
+        }
         final program = snapshot.data;
         if (program == null) {
           return const SizedBox.expand();

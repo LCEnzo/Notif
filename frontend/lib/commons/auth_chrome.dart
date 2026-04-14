@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/notif_design_tokens.dart';
@@ -64,7 +65,7 @@ class _AuthScaffoldState extends State<AuthScaffold> {
       ),
       floatingActionButton: GlassHelpButton(
         onPressed: () {
-          Navigator.pushNamed(context, '/About');
+          context.push('/about');
         },
         tooltip: 'About',
         child: const Icon(Icons.question_mark_rounded),

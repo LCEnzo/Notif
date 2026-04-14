@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
@@ -31,13 +32,6 @@ class _FormContentState extends State<_FormContent> {
   @override
   void initState() {
     super.initState();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      if (authService.jwt != null && context.mounted) {
-        Navigator.pushReplacementNamed(context, '/Home');
-      }
-    });
   }
 
   @override
@@ -111,7 +105,7 @@ class _FormContentState extends State<_FormContent> {
                             content: Text('$e'),
                             actions: [
                               TextButton(
-                                onPressed: () => {Navigator.pop(context)},
+                                onPressed: () => context.pop(),
                                 child: const Text('OK'),
                               ),
                             ],
@@ -128,10 +122,10 @@ class _FormContentState extends State<_FormContent> {
                 buttonText: 'Back',
                 buttonColor: AuthPalette.secondaryButtonBase,
                 onPressed: () {
-                  if (Navigator.canPop(context)) {
-                    Navigator.pop(context);
+                  if (context.canPop()) {
+                    context.pop();
                   } else {
-                    Navigator.pushReplacementNamed(context, '/LogIn');
+                    context.go('/login');
                   }
                 },
               ),

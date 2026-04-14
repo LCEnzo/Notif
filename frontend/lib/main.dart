@@ -4,6 +4,7 @@ import 'package:notif/commons/auth_texture_tuner.dart';
 import 'package:notif/screens/shared.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/router.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -72,7 +73,9 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    final authService = context.watch<AuthService>();
+
+    return MaterialApp.router(
       title: 'Notif',
       theme: ThemeData(
         useMaterial3: true,
@@ -100,14 +103,7 @@ class App extends StatelessWidget {
           },
         ),
       ),
-      home: const LogInPage(),
-      routes: {
-        '/Home': (context) => const HomePage(),
-        '/LogIn': (context) => const LogInPage(),
-        '/Register': (context) => const RegisterPage(),
-        '/About': (context) => const AboutPage(),
-        '/Settings': (context) => const SettingsPage(),
-      },
+      routerConfig: createRouter(authService),
     );
   }
 }
