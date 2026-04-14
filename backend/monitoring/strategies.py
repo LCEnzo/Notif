@@ -161,7 +161,7 @@ class SThreadmarkInfo:
 		return json.dumps(json_dict)
 
 	@classmethod
-	def from_json(cls, json_str: str) -> 'SThreadmarkInfo':
+	def from_json(cls, json_str: str) -> SThreadmarkInfo:
 		json_dict = json.loads(json_str)
 		pub_date = None if json_dict['pub_date'] is None else datetime.fromisoformat(json_dict['pub_date'])
 		return cls(
@@ -342,7 +342,7 @@ class AlertInfo:
 		return json.dumps(json_dict)
 
 	@classmethod
-	def from_json(cls, json_str: str) -> 'AlertInfo':
+	def from_json(cls, json_str: str) -> AlertInfo:
 		json_dict = json.loads(json_str)
 		post_date = None if json_dict['post_date'] is None else date.fromisoformat(json_dict['post_date'])
 		post_time = None if json_dict['post_time'] is None else time.fromisoformat(json_dict['post_time'])
@@ -602,7 +602,7 @@ class KemonoCardInfo:
 		return json.dumps(json_dict)
 
 	@classmethod
-	def from_json(cls, json_str: str) -> 'KemonoCardInfo':
+	def from_json(cls, json_str: str) -> KemonoCardInfo:
 		json_dict = json.loads(json_str)
 		date_time = None if json_dict['date_time'] is None else datetime.fromisoformat(json_dict['date_time'])
 		return cls(
