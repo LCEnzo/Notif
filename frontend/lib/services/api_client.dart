@@ -10,6 +10,19 @@ const String builtinApiUrl = String.fromEnvironment(
 const Duration connectTimeout = Duration(seconds: 10);
 const Duration receiveTimeout = Duration(seconds: 15);
 
+/// Shared Dio instance — connection pooling happens here.
+final Dio _dio = Dio(BaseOptions(
+  connectTimeout: connectTimeout,
+  receiveTimeout: receiveTimeout,
+))..interceptors.addAll([
+    if (kDebugMode)
+      LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+        logPrint: (o) => debugPrint(o.toString()),
+      ),
+  ]);
+
 /// Sends a POST request to [path], respecting [BackendUrlMode] from [settings].
 ///
 /// In [BackendUrlMode.builtin] mode the built-in compile-time URL is used.
@@ -25,8 +38,9 @@ Future<Response> apiPost(
   final urls = resolveUrls(path, settings);
   for (final url in urls) {
     try {
-      final dio = _createDio(url, headers);
-      final response = await dio.post(path, data: body);
+      final response = await _dio.post(path, data: body,
+        options: Options(baseUrl: url, headers: headers),
+      );
       return response;
     } catch (e) {
       if (identical(url, urls.last)) rethrow;
@@ -44,8 +58,9 @@ Future<Response> apiGet(
   final urls = resolveUrls(path, settings);
   for (final url in urls) {
     try {
-      final dio = _createDio(url, headers);
-      final response = await dio.get(path);
+      final response = await _dio.get(path,
+        options: Options(baseUrl: url, headers: headers),
+      );
       return response;
     } catch (e) {
       if (identical(url, urls.last)) rethrow;
@@ -53,29 +68,6 @@ Future<Response> apiGet(
     }
   }
   throw StateError('apiGet: all URLs exhausted');
-}
-
-Dio _createDio(String baseUrl, Map<String, String> headers) {
-  final dio = Dio(
-    BaseOptions(
-      baseUrl: baseUrl,
-      connectTimeout: connectTimeout,
-      receiveTimeout: receiveTimeout,
-      headers: headers,
-    ),
-  );
-
-  if (kDebugMode) {
-    dio.interceptors.add(
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        logPrint: (o) => debugPrint(o.toString()),
-      ),
-    );
-  }
-
-  return dio;
 }
 
 List<String> resolveUrls(String path, AppSettingsController? settings) {
