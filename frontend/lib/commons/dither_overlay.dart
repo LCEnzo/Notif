@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:notif/commons/notif_design_tokens.dart';
 
@@ -9,43 +11,105 @@ class DitherOverlay extends StatelessWidget {
     return const Positioned.fill(
       child: IgnorePointer(
         child: RepaintBoundary(
-          child: CustomPaint(painter: _DitherOverlayPainter()),
+          child: _DitherShaderLayer(),
         ),
       ),
     );
   }
 }
 
-class _DitherOverlayPainter extends CustomPainter {
-  const _DitherOverlayPainter();
+// ---------------------------------------------------------------------------
+// Shader program — compiled once, cached forever.
+// ---------------------------------------------------------------------------
 
-  static const _step = 5.0;
-  static const _neutralAlpha = 0.018;
-  static const _accentAlpha = 0.014;
-  static const _accentCutoff = 0.42;
+final Future<ui.FragmentProgram> _ditherProgram =
+    ui.FragmentProgram.fromAsset('shaders/dither_overlay.frag');
+
+// ---------------------------------------------------------------------------
+// Widget — waits for the shader to load, then paints with it.
+// ---------------------------------------------------------------------------
+
+class _DitherShaderLayer extends StatelessWidget {
+  const _DitherShaderLayer();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<ui.FragmentProgram>(
+      future: _ditherProgram,
+      builder: (context, snapshot) {
+        final program = snapshot.data;
+        if (program == null) {
+          return const SizedBox.expand();
+        }
+        final dpr = MediaQuery.devicePixelRatioOf(context);
+        return CustomPaint(
+          painter: _DitherShaderPainter(program: program, dpr: dpr),
+        );
+      },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Painter — sets uniforms and draws a full-viewport rect.
+// ---------------------------------------------------------------------------
+
+class _DitherShaderPainter extends CustomPainter {
+  /// Grid cell size in logical pixels (matches the original CustomPainter).
+  static const double _stepLogical = 5.0;
+  static const double _neutralAlpha = 0.018;
+  static const double _accentAlpha = 0.014;
+  static const double _accentCutoff = 0.42;
+
+  final ui.FragmentProgram program;
+  final double dpr;
+
+  const _DitherShaderPainter({required this.program, required this.dpr});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final neutralPaint = Paint()
-      ..color = NotifDesignTokens.structText.withValues(alpha: _neutralAlpha);
-    final accentPaint = Paint()
-      ..color = NotifDesignTokens.accentText.withValues(alpha: _accentAlpha);
+    final shader = program.fragmentShader();
+    var i = 0;
 
-    for (double y = 0; y < size.height; y += _step) {
-      for (double x = 0; x < size.width; x += _step) {
-        final cellX = (x / _step).floor();
-        final cellY = (y / _step).floor();
-        final hash = ((cellX * 73856093) ^ (cellY * 19349663)) & 7;
+    // uSize — physical pixels so it matches FlutterFragCoord().xy
+    shader.setFloat(i++, size.width * dpr);
+    shader.setFloat(i++, size.height * dpr);
 
-        if (hash == 0) {
-          canvas.drawRect(Rect.fromLTWH(x, y, 1, 1), neutralPaint);
-        } else if (hash == 1 && y < size.height * _accentCutoff) {
-          canvas.drawRect(Rect.fromLTWH(x + 1, y + 1, 1, 1), accentPaint);
-        }
-      }
-    }
+    // uNeutralColor — structText with neutral alpha
+    i = _setColorRGBA(shader, i, NotifDesignTokens.structText, _neutralAlpha);
+
+    // uAccentColor — accentText with accent alpha
+    i = _setColorRGBA(shader, i, NotifDesignTokens.accentText, _accentAlpha);
+
+    // uAccentCutoff
+    shader.setFloat(i++, _accentCutoff);
+
+    // uStep — scaled to physical pixels so grid density is
+    // resolution-independent (same number of dots per logical inch).
+    shader.setFloat(i++, _stepLogical * dpr);
+
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      Paint()..shader = shader,
+    );
   }
 
   @override
-  bool shouldRepaint(covariant _DitherOverlayPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _DitherShaderPainter oldDelegate) {
+    return oldDelegate.program != program || oldDelegate.dpr != dpr;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Pass [color]'s RGB plus an explicit [alpha] as 4 floats (R, G, B, A).
+int _setColorRGBA(ui.FragmentShader shader, int index, Color color, double alpha) {
+  final argb = color.toARGB32();
+  shader.setFloat(index++, ((argb >> 16) & 0xFF) / 255.0); // R
+  shader.setFloat(index++, ((argb >> 8) & 0xFF) / 255.0);  // G
+  shader.setFloat(index++, (argb & 0xFF) / 255.0);          // B
+  shader.setFloat(index++, alpha);                           // A (override)
+  return index;
 }

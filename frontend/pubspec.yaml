@@ -65,6 +65,7 @@ flutter:
 
   shaders:
     - shaders/auth_texture.frag
+    - shaders/dither_overlay.frag
 
   fonts:
     - family: Awesome

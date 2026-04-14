@@ -1,6 +1,7 @@
 #include <flutter/runtime_effect.glsl>
 
 uniform vec2 uSize;
+uniform float uPixelScale; // device pixel ratio (1.0, 2.0, 3.0, …)
 
 uniform float uGrainSpacing;
 uniform float uGrainLimitYFactor;
@@ -46,7 +47,7 @@ vec4 composite(vec4 back, vec4 front) {
 
 float circleCoverage(vec2 fragCoord, vec2 center, float radius) {
   float distanceToCenter = length(fragCoord - center);
-  float antialias = 0.75;
+  float antialias = 0.75 * uPixelScale;
   return 1.0 - smoothstep(
     radius - antialias,
     radius + antialias,
@@ -55,8 +56,12 @@ float circleCoverage(vec2 fragCoord, vec2 center, float radius) {
 }
 
 vec4 grainLayer(vec2 fragCoord) {
+  float spacing = uGrainSpacing * uPixelScale;
+  float minRadius = uGrainMinRadius * uPixelScale;
+  float maxRadiusDelta = uGrainMaxRadiusDelta * uPixelScale;
+
   float limitY = uSize.y * uGrainLimitYFactor;
-  if (fragCoord.y > limitY + uGrainSpacing) {
+  if (fragCoord.y > limitY + spacing) {
     return vec4(0.0);
   }
 
@@ -67,7 +72,7 @@ vec4 grainLayer(vec2 fragCoord) {
   float halfW = max(uSize.x * 0.5, 0.0001);
   float halfH = max(uSize.y * 0.5, 0.0001);
   vec4 result = vec4(0.0);
-  float baseRow = floor(fragCoord.y / uGrainSpacing);
+  float baseRow = floor(fragCoord.y / spacing);
 
   for (int rowOffset = -1; rowOffset <= 1; rowOffset++) {
     float row = baseRow + float(rowOffset);
@@ -75,17 +80,17 @@ vec4 grainLayer(vec2 fragCoord) {
       continue;
     }
 
-    float centerY = row * uGrainSpacing;
+    float centerY = row * spacing;
     if (centerY > limitY) {
       continue;
     }
 
-    float offsetX = mod(row, 2.0) < 0.5 ? 0.0 : uGrainSpacing * 0.5;
-    float baseColumn = floor((fragCoord.x - offsetX) / uGrainSpacing);
+    float offsetX = mod(row, 2.0) < 0.5 ? 0.0 : spacing * 0.5;
+    float baseColumn = floor((fragCoord.x - offsetX) / spacing);
 
     for (int colOffset = -1; colOffset <= 1; colOffset++) {
       float column = baseColumn + float(colOffset);
-      float centerX = column * uGrainSpacing + offsetX;
+      float centerX = column * spacing + offsetX;
       vec2 center = vec2(centerX, centerY);
 
       vec2 normalizedCenter = vec2(
@@ -104,7 +109,7 @@ vec4 grainLayer(vec2 fragCoord) {
         continue;
       }
 
-      float radius = uGrainMinRadius + noise * uGrainMaxRadiusDelta;
+      float radius = minRadius + noise * maxRadiusDelta;
       float coverage = circleCoverage(fragCoord, center, radius);
       if (coverage <= 0.0) {
         continue;
@@ -125,11 +130,15 @@ vec4 grainLayer(vec2 fragCoord) {
 }
 
 vec4 halftoneLayer(vec2 fragCoord) {
+  float spacing = uHalftoneSpacing * uPixelScale;
+  float baseRadius = uHalftoneBaseRadius * uPixelScale;
+  float radiusGrowth = uHalftoneRadiusGrowth * uPixelScale;
+
   float startY = uSize.y * uHalftoneStartYFactor;
   float heightSpan = max(uSize.y - startY, 0.0001);
   if (
-    fragCoord.y < startY - uHalftoneSpacing ||
-    fragCoord.y > uSize.y + uHalftoneSpacing
+    fragCoord.y < startY - spacing ||
+    fragCoord.y > uSize.y + spacing
   ) {
     return vec4(0.0);
   }
@@ -146,7 +155,7 @@ vec4 halftoneLayer(vec2 fragCoord) {
     4.0
   );
   vec4 result = vec4(0.0);
-  float baseRow = floor((fragCoord.y - startY) / uHalftoneSpacing);
+  float baseRow = floor((fragCoord.y - startY) / spacing);
 
   for (int rowOffset = -2; rowOffset <= 2; rowOffset++) {
     float row = baseRow + float(rowOffset);
@@ -154,8 +163,8 @@ vec4 halftoneLayer(vec2 fragCoord) {
       continue;
     }
 
-    float centerY = startY + row * uHalftoneSpacing;
-    if (centerY > uSize.y + uHalftoneSpacing) {
+    float centerY = startY + row * spacing;
+    if (centerY > uSize.y + spacing) {
       continue;
     }
 
@@ -166,12 +175,12 @@ vec4 halftoneLayer(vec2 fragCoord) {
     );
     float colorMix = saturate(contrastFactor * uHalftoneColorLerpScale);
     vec3 rgb = mix(uHalftoneBottom.rgb, uHalftoneTop.rgb, colorMix);
-    float offsetX = mod(row, 2.0) < 0.5 ? 0.0 : uHalftoneSpacing * 0.5;
-    float baseColumn = floor((fragCoord.x - offsetX) / uHalftoneSpacing);
+    float offsetX = mod(row, 2.0) < 0.5 ? 0.0 : spacing * 0.5;
+    float baseColumn = floor((fragCoord.x - offsetX) / spacing);
 
     for (int colOffset = -2; colOffset <= 2; colOffset++) {
       float column = baseColumn + float(colOffset);
-      float centerX = column * uHalftoneSpacing + offsetX;
+      float centerX = column * spacing + offsetX;
       float centerDistance = clamp(
         abs(centerX - (uSize.x * 0.5)) / max(uSize.x * 0.5, 0.0001),
         0.0,
@@ -187,8 +196,8 @@ vec4 halftoneLayer(vec2 fragCoord) {
       float frontierNormalized = availableDepth <= 0.0
           ? 1.0
           : saturate((centerY - localStartY) / availableDepth);
-      float radius = uHalftoneBaseRadius +
-          frontierNormalized * uHalftoneRadiusGrowth;
+      float radius = baseRadius +
+          frontierNormalized * radiusGrowth;
       float coverage = circleCoverage(fragCoord, vec2(centerX, centerY), radius);
       if (coverage <= 0.0) {
         continue;

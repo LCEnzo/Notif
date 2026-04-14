@@ -299,9 +299,13 @@ class _PosterTextureLayer extends StatelessWidget {
         if (program == null) {
           return const SizedBox.expand();
         }
-
+        final dpr = MediaQuery.devicePixelRatioOf(context);
         return CustomPaint(
-          painter: _PosterTexturePainter(program: program, settings: settings),
+          painter: _PosterTexturePainter(
+            program: program,
+            settings: settings,
+            dpr: dpr,
+          ),
         );
       },
     );
@@ -365,10 +369,12 @@ class _PosterBackgroundPainter extends CustomPainter {
 class _PosterTexturePainter extends CustomPainter {
   final ui.FragmentProgram program;
   final AuthTextureSettings settings;
+  final double dpr;
 
   const _PosterTexturePainter({
     required this.program,
     required this.settings,
+    required this.dpr,
   });
 
   @override
@@ -378,8 +384,12 @@ class _PosterTexturePainter extends CustomPainter {
     final shader = program.fragmentShader();
     var index = 0;
 
-    shader.setFloat(index++, size.width);
-    shader.setFloat(index++, size.height);
+    // uSize — physical pixels to match FlutterFragCoord().xy
+    shader.setFloat(index++, size.width * dpr);
+    shader.setFloat(index++, size.height * dpr);
+
+    // uPixelScale — shader multiplies pixel-unit uniforms by this
+    shader.setFloat(index++, dpr);
 
     shader.setFloat(index++, grain.spacing);
     shader.setFloat(index++, grain.limitYFactor);
@@ -414,7 +424,9 @@ class _PosterTexturePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PosterTexturePainter oldDelegate) {
-    return oldDelegate.program != program || oldDelegate.settings != settings;
+    return oldDelegate.program != program ||
+        oldDelegate.settings != settings ||
+        oldDelegate.dpr != dpr;
   }
 }
 
