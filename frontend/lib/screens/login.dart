@@ -60,18 +60,19 @@ class _FormContentState extends State<_FormContent> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              UsernameTextField(
+              AppTextField(
                 key: const Key('usernameField'),
                 labelText: 'Username',
                 hintText: 'Enter your username',
-                textController: usernameController,
+                controller: usernameController,
+                prefixIcon: Icons.account_box_outlined,
               ),
               const SizedBox(height: 16),
               PasswordTextField(
                 key: const Key('passwordField'),
                 labelText: 'Password',
                 hintText: 'Enter your password',
-                textController: passwordController,
+                controller: passwordController,
                 validator: noValidate,
               ),
               const SizedBox(height: 16),
