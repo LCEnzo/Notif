@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_texture_tuner.dart';
 import 'package:notif/screens/login.dart';
@@ -78,19 +79,22 @@ void main() {
       (WidgetTester tester) async {
     final controller = enableAuthTextureTuner();
     final authService = AuthService();
+    final router = GoRouter(
+      initialLocation: '/login',
+      routes: [
+        GoRoute(path: '/login', builder: (context, state) => const LogInPage()),
+        GoRoute(path: '/register', builder: (context, state) => const RegisterPage()),
+        GoRoute(path: '/about', builder: (context, state) => const Scaffold(body: SizedBox())),
+      ],
+    );
 
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider<AuthService>.value(value: authService),
         ],
-        child: MaterialApp(
-          home: const LogInPage(),
-          routes: {
-            '/Register': (context) => const RegisterPage(),
-            '/LogIn': (context) => const LogInPage(),
-            '/About': (context) => const Scaffold(body: SizedBox()),
-          },
+        child: MaterialApp.router(
+          routerConfig: router,
         ),
       ),
     );

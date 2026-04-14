@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
@@ -10,16 +11,6 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: true);
 
-    if (authService.jwt == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) {
-          Navigator.pushReplacementNamed(context, '/LogIn');
-        }
-      });
-
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notif'),
@@ -29,7 +20,7 @@ class HomePage extends StatelessWidget {
           icon: const Icon(Icons.logout),
           onPressed: () {
             authService.logout();
-            Navigator.pushReplacementNamed(context, '/LogIn');
+            context.go('/login');
           },
         ),
         actions: [
@@ -37,7 +28,7 @@ class HomePage extends StatelessWidget {
             icon: const Icon(Icons.settings_sharp),
             tooltip: 'Settings',
             onPressed: () {
-              Navigator.pushNamed(context, '/Settings');
+              context.push('/settings');
             },
           ),
         ],
