@@ -133,49 +133,24 @@ class Logo extends StatelessWidget {
   }
 }
 
-class UsernameTextField extends StatelessWidget {
+class AppTextField extends StatelessWidget {
   final String labelText;
   final String hintText;
-  final TextEditingController textController;
-
-  const UsernameTextField({
-    super.key,
-    required this.labelText,
-    required this.hintText,
-    required this.textController,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isFramed = _useFramedAuthMode(context);
-
-    return TextFormField(
-      key: key,
-      controller: textController,
-      style: _buildAuthFieldTextStyle(context),
-      cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
-      decoration: _buildAuthInputDecoration(
-        context: context,
-        labelText: labelText,
-        hintText: hintText,
-        prefixIcon: const Icon(Icons.account_box_outlined),
-      ),
-    );
-  }
-}
-
-class EmailTextField extends StatelessWidget {
-  final String labelText;
-  final String hintText;
+  final TextEditingController controller;
+  final IconData prefixIcon;
   final String? Function(String?)? validator;
-  final TextEditingController textController;
+  final bool obscureText;
+  final Widget? suffixIcon;
 
-  const EmailTextField({
+  const AppTextField({
     super.key,
     required this.labelText,
     required this.hintText,
+    required this.controller,
+    required this.prefixIcon,
     this.validator,
-    required this.textController,
+    this.obscureText = false,
+    this.suffixIcon,
   });
 
   @override
@@ -183,15 +158,17 @@ class EmailTextField extends StatelessWidget {
     final isFramed = _useFramedAuthMode(context);
 
     return TextFormField(
-      validator: validator ?? validateEmail,
-      controller: textController,
+      controller: controller,
+      validator: validator,
+      obscureText: obscureText,
       style: _buildAuthFieldTextStyle(context),
       cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
       decoration: _buildAuthInputDecoration(
         context: context,
         labelText: labelText,
         hintText: hintText,
-        prefixIcon: const Icon(Icons.email_outlined),
+        prefixIcon: Icon(prefixIcon),
+        suffixIcon: suffixIcon,
       ),
     );
   }
@@ -201,14 +178,14 @@ class PasswordTextField extends StatefulWidget {
   final String labelText;
   final String hintText;
   final String? Function(String?)? validator;
-  final TextEditingController textController;
+  final TextEditingController controller;
 
   const PasswordTextField({
     super.key,
     required this.labelText,
     required this.hintText,
     this.validator,
-    required this.textController,
+    required this.controller,
   });
 
   @override
@@ -216,42 +193,20 @@ class PasswordTextField extends StatefulWidget {
 }
 
 class _PasswordTextFieldState extends State<PasswordTextField> {
-  bool _isPasswordVisible = false;
-  late String? Function(String?) validator;
-
-  _PasswordTextFieldState();
-
-  @override
-  void initState() {
-    super.initState();
-    validator = widget.validator ?? EntropyValidator().validate;
-  }
+  bool _visible = false;
 
   @override
   Widget build(BuildContext context) {
-    final isFramed = _useFramedAuthMode(context);
-
-    return TextFormField(
-      controller: widget.textController,
-      validator: validator,
-      obscureText: !_isPasswordVisible,
-      style: _buildAuthFieldTextStyle(context),
-      cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
-      decoration: _buildAuthInputDecoration(
-        context: context,
-        labelText: widget.labelText,
-        hintText: widget.hintText,
-        prefixIcon: const Icon(Icons.lock_outline_rounded),
-        suffixIcon: IconButton(
-          icon: Icon(
-            _isPasswordVisible ? Icons.visibility_off : Icons.visibility,
-          ),
-          onPressed: () {
-            setState(() {
-              _isPasswordVisible = !_isPasswordVisible;
-            });
-          },
-        ),
+    return AppTextField(
+      labelText: widget.labelText,
+      hintText: widget.hintText,
+      controller: widget.controller,
+      prefixIcon: Icons.lock_outline_rounded,
+      validator: widget.validator ?? const EntropyValidator().validate,
+      obscureText: !_visible,
+      suffixIcon: IconButton(
+        icon: Icon(_visible ? Icons.visibility_off : Icons.visibility),
+        onPressed: () => setState(() => _visible = !_visible),
       ),
     );
   }

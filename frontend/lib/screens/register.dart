@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
+import 'package:notif/commons/auth_validators.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
@@ -55,22 +56,25 @@ class _FormContentState extends State<_FormContent> {
             mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              UsernameTextField(
+              AppTextField(
                 labelText: 'Username',
                 hintText: 'Enter your username',
-                textController: usernameController,
+                controller: usernameController,
+                prefixIcon: Icons.account_box_outlined,
               ),
               const SizedBox(height: 16),
-              EmailTextField(
+              AppTextField(
                 labelText: 'Email',
                 hintText: 'Enter your email',
-                textController: emailController,
+                controller: emailController,
+                prefixIcon: Icons.email_outlined,
+                validator: validateEmail,
               ),
               const SizedBox(height: 16),
               PasswordTextField(
                 labelText: 'Password',
                 hintText: 'Enter your password',
-                textController: passwordController,
+                controller: passwordController,
               ),
               const SizedBox(height: 16),
               CustomButton(
