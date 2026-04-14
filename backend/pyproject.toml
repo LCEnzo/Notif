@@ -35,7 +35,7 @@ default-groups = ["dev"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py312"
+target-version = "py314"
 exclude = [
 	"**/node_modules",
 	"**/__pycache__",
