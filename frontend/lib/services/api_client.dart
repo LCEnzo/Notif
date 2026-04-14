@@ -67,7 +67,7 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
       if (custom.isEmpty) return ['$builtinApiUrl$path'];
       return ['$custom$path', '$builtinApiUrl$path'];
     case BackendUrlMode.customOnly:
-      if (custom.isEmpty) return ['$builtinApiUrl$path'];
+      if (custom.isEmpty) return [];
       return ['$custom$path'];
   }
 }

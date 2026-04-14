@@ -39,6 +39,7 @@ class _FormContentState extends State<_FormContent> {
     _loadRememberMe();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
       final AuthService authService;
       authService = Provider.of<AuthService>(context, listen: false);
       if (authService.jwt != null) {

@@ -65,7 +65,7 @@ void main() {
       expect(urls.first, '$builtinApiUrl/users');
     });
 
-    test('customOnly with empty custom falls back to builtin', () async {
+    test('customOnly with empty custom returns empty list', () async {
       final settings = AppSettingsController();
       await Future<void>.delayed(Duration.zero);
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);
@@ -73,8 +73,7 @@ void main() {
 
       final urls = resolveUrls('/users', settings);
 
-      expect(urls, hasLength(1));
-      expect(urls.first, '$builtinApiUrl/users');
+      expect(urls, isEmpty);
     });
 
     test('custom URL is trimmed', () async {

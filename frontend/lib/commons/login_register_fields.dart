@@ -133,7 +133,7 @@ class Logo extends StatelessWidget {
   }
 }
 
-class UsernameTextField extends StatefulWidget {
+class UsernameTextField extends StatelessWidget {
   final String labelText;
   final String hintText;
   final TextEditingController textController;
@@ -146,30 +146,25 @@ class UsernameTextField extends StatefulWidget {
   });
 
   @override
-  State<UsernameTextField> createState() => _UsernameTextFieldState();
-}
-
-class _UsernameTextFieldState extends State<UsernameTextField> {
-  @override
   Widget build(BuildContext context) {
     final isFramed = _useFramedAuthMode(context);
 
     return TextFormField(
-      key: widget.key,
-      controller: widget.textController,
+      key: key,
+      controller: textController,
       style: _buildAuthFieldTextStyle(context),
       cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
       decoration: _buildAuthInputDecoration(
         context: context,
-        labelText: widget.labelText,
-        hintText: widget.hintText,
+        labelText: labelText,
+        hintText: hintText,
         prefixIcon: const Icon(Icons.account_box_outlined),
       ),
     );
   }
 }
 
-class EmailTextField extends StatefulWidget {
+class EmailTextField extends StatelessWidget {
   final String labelText;
   final String hintText;
   final String? Function(String?)? validator;
@@ -184,33 +179,18 @@ class EmailTextField extends StatefulWidget {
   });
 
   @override
-  State<EmailTextField> createState() => _EmailTextFieldState();
-}
-
-class _EmailTextFieldState extends State<EmailTextField> {
-  late String? Function(String?) validator;
-
-  _EmailTextFieldState();
-
-  @override
-  void initState() {
-    super.initState();
-    validator = widget.validator ?? validateEmail;
-  }
-
-  @override
   Widget build(BuildContext context) {
     final isFramed = _useFramedAuthMode(context);
 
     return TextFormField(
-      validator: validator,
-      controller: widget.textController,
+      validator: validator ?? validateEmail,
+      controller: textController,
       style: _buildAuthFieldTextStyle(context),
       cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
       decoration: _buildAuthInputDecoration(
         context: context,
-        labelText: widget.labelText,
-        hintText: widget.hintText,
+        labelText: labelText,
+        hintText: hintText,
         prefixIcon: const Icon(Icons.email_outlined),
       ),
     );
