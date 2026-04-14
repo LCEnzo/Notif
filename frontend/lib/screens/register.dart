@@ -1,146 +1,144 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:notif/commons/auth_chrome.dart';
+import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 class RegisterPage extends StatelessWidget {
-  const RegisterPage({Key? key}) : super(key: key);
+  const RegisterPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    const String appTitle = "Welcome to Notif!";
-    final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
-
-    return Scaffold(
-      body: Center(
-          child: isSmallScreen
-              ? Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Logo(title: appTitle),
-                    _FormContent(),
-                  ],
-                )
-              : Container(
-                  padding: const EdgeInsets.all(32.0),
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  child: Row(
-                    children: [
-                      const Expanded(child: Logo(title: appTitle)),
-                      Expanded(
-                        child: Center(child: _FormContent()),
-                      ),
-                    ],
-                  ),
-                )),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushNamed(context, '/About');
-        },
-        tooltip: 'About',
-        backgroundColor: Theme.of(context).primaryColor,
-        child: const Icon(Icons.question_mark_rounded),
-      ),
-    );
+    return const AuthScaffold(child: _FormContent());
   }
 }
 
-class _FormContent extends StatelessWidget {
+class _FormContent extends StatefulWidget {
+  const _FormContent();
+
+  @override
+  State<_FormContent> createState() => _FormContentState();
+}
+
+class _FormContentState extends State<_FormContent> {
   final formKey = GlobalKey<FormState>();
   final TextEditingController emailController = TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  _FormContent({Key? key}) : super(key: key);
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      if (authService.jwt != null && context.mounted) {
+        Navigator.pushReplacementNamed(context, '/Home');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    emailController.dispose();
+    usernameController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context, listen: true);
+    final authService = Provider.of<AuthService>(context, listen: false);
 
-    if (authService.jwt != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) {
-          Navigator.pushReplacementNamed(context, '/Home');
-        }
-      });
-    }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 330),
+      child: AuthPanel(
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              UsernameTextField(
+                labelText: 'Username',
+                hintText: 'Enter your username',
+                textController: usernameController,
+              ),
+              const SizedBox(height: 16),
+              EmailTextField(
+                labelText: 'Email',
+                hintText: 'Enter your email',
+                textController: emailController,
+              ),
+              const SizedBox(height: 16),
+              PasswordTextField(
+                labelText: 'Password',
+                hintText: 'Enter your password',
+                textController: passwordController,
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                buttonText: 'Register',
+                onPressed: () async {
+                  if (formKey.currentState?.validate() ?? false) {
+                    if (kDebugMode) {
+                      final pw = passwordController.text;
+                      final masked = pw.length >= 2
+                          ? '${pw[0]}***${pw[pw.length - 1]}'
+                          : pw.isNotEmpty ? '***' : '(empty)';
+                      debugPrint("Validated data:");
+                      debugPrint("\t- username: ${usernameController.text}");
+                      debugPrint("\t- email: ${emailController.text}");
+                      debugPrint("\t- password: $masked");
+                    }
 
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 300),
-      child: Form(
-        key: formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            UsernameTextField(
-              labelText: 'Username',
-              hintText: 'Enter your username',
-              textController: usernameController,
-            ),
-            const SizedBox(height: 16),
-            EmailTextField(
-              labelText: 'Email',
-              hintText: 'Enter your email',
-              textController: emailController,
-            ),
-            const SizedBox(height: 16),
-            PasswordTextField(
-              labelText: 'Password',
-              hintText: 'Enter your password',
-              textController: passwordController,
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              buttonText: 'Register',
-              onPressed: () async {
-                if (formKey.currentState?.validate() ?? false) {
-                  if (kDebugMode) {
-                    print("Validated data:");
-                    print("\t- username: ${usernameController.text}");
-                    print("\t- email: ${emailController.text}");
-                    print("\t- password: ${passwordController.text}");
-                  }
-
-                  try {
-                    await authService.register(usernameController.text,
-                        emailController.text, passwordController.text);
-                  } catch (e) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      showDialog<dynamic>(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: const Text('Register Failed'),
-                          content: Text('$e'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => {Navigator.pop(context)},
-                              child: const Text('OK'),
-                            ),
-                          ],
-                        ),
+                    try {
+                      await authService.register(
+                        usernameController.text,
+                        emailController.text,
+                        passwordController.text,
                       );
-                    });
+                    } catch (e) {
+                      if (context.mounted) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!context.mounted) return;
+                          showDialog<dynamic>(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text('Register Failed'),
+                            content: Text('$e'),
+                            actions: [
+                              TextButton(
+                                onPressed: () => {Navigator.pop(context)},
+                                child: const Text('OK'),
+                              ),
+                            ],
+                          ),
+                        );
+                        });
+                      }
+                    }
                   }
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              buttonText: 'Back',
-              buttonColor: Theme.of(context).primaryColorLight,
-              onPressed: () {
-                if (Navigator.canPop(context)) {
-                  Navigator.pop(context);
-                } else {
-                  Navigator.pushReplacementNamed(context, '/LogIn');
-                }
-              },
-            ),
+                },
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                buttonText: 'Back',
+                buttonColor: AuthPalette.secondaryButtonBase,
+                onPressed: () {
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    Navigator.pushReplacementNamed(context, '/LogIn');
+                  }
+                },
+              ),
 
-            /// TODO: add logic and/or navigation for password recovery
-          ],
+              /// TODO: add logic and/or navigation for password recovery
+            ],
+          ),
         ),
       ),
     );

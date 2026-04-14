@@ -4,7 +4,7 @@ import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({Key? key}) : super(key: key);
+  const HomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -17,18 +17,14 @@ class HomePage extends StatelessWidget {
         }
       });
 
-      return const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Notif'),
         centerTitle: true,
-        backgroundColor: Theme.of(context).primaryColor,
+        backgroundColor: Theme.of(context).colorScheme.primary,
         leading: IconButton(
           icon: const Icon(Icons.logout),
           onPressed: () {
@@ -36,20 +32,25 @@ class HomePage extends StatelessWidget {
             Navigator.pushReplacementNamed(context, '/LogIn');
           },
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_sharp),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.pushNamed(context, '/Settings');
+            },
+          ),
+        ],
       ),
       body: const Column(
         children: [
           Center(
             child: Padding(
               padding: EdgeInsets.all(16.0),
-              child: Logo(title: "Placeholder"),
+              child: Logo(title: 'Placeholder'),
             ),
           ),
-          Expanded(
-            child: Center(
-              child: NotificationsView(),
-            ),
-          ),
+          Expanded(child: Center(child: NotificationsView())),
         ],
       ),
     );

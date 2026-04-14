@@ -1,54 +1,25 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:notif/commons/auth_chrome.dart';
+import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
+import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class LogInPage extends StatelessWidget {
-  const LogInPage({Key? key}) : super(key: key);
+  const LogInPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    const String appTitle = "Welcome to Notif!";
-    final bool isSmallScreen = MediaQuery.of(context).size.width < 600;
-
-    return Scaffold(
-      body: Center(
-          child: isSmallScreen
-              ? const Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Logo(title: appTitle),
-                    _FormContent(),
-                  ],
-                )
-              : Container(
-                  padding: const EdgeInsets.all(32.0),
-                  constraints: const BoxConstraints(maxWidth: 800),
-                  child: const Row(
-                    children: [
-                      Expanded(child: Logo(title: appTitle)),
-                      Expanded(
-                        child: Center(child: _FormContent()),
-                      ),
-                    ],
-                  ),
-                )),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushNamed(context, '/About');
-        },
-        tooltip: 'About',
-        backgroundColor: Theme.of(context).primaryColor,
-        child: const Icon(Icons.question_mark_rounded),
-      ),
-    );
+    return const AuthScaffold(child: _FormContent());
   }
 }
 
 class _FormContent extends StatefulWidget {
-  const _FormContent({Key? key}) : super(key: key);
+  const _FormContent();
 
   @override
   _FormContentState createState() => _FormContentState();
@@ -68,6 +39,7 @@ class _FormContentState extends State<_FormContent> {
     _loadRememberMe();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
       final AuthService authService;
       authService = Provider.of<AuthService>(context, listen: false);
       if (authService.jwt != null) {
@@ -79,69 +51,95 @@ class _FormContentState extends State<_FormContent> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
+    final appSettings = context.watch<AppSettingsController?>();
+    final isFramed = appSettings?.authCardStyle == AuthCardStyle.framed;
+    final theme = Theme.of(context);
+    final rememberMeStyle = theme.textTheme.bodyLarge?.copyWith(
+      color: isFramed ? NotifDesignTokens.structText2 : Colors.white70,
+      fontFamily: isFramed ? NotifDesignTokens.bodyFont : null,
+    );
 
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 300),
-      child: Form(
-        key: formKey,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            UsernameTextField(
-              key: const Key('usernameField'),
-              labelText: 'Username',
-              hintText: 'Enter your username',
-              textController: usernameController,
-            ),
-            const SizedBox(height: 16),
-            PasswordTextField(
-              key: const Key('passwordField'),
-              labelText: 'Password',
-              hintText: 'Enter your password',
-              textController: passwordController,
-              validator: noValidate,
-            ),
-            const SizedBox(height: 16),
-            CheckboxListTile(
-              value: rememberMe,
-              onChanged: (value) {
-                setState(() {
-                  if (value == null) return;
-                  rememberMe = value;
-                  _saveRememberMe();
-                });
-              },
-              title: const Text('Remember me'),
-              controlAffinity: ListTileControlAffinity.leading,
-              dense: true,
-              contentPadding: const EdgeInsets.all(0),
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              buttonText: 'Sign in',
-              onPressed: () async {
-                if (rememberMe) {
-                  _saveUsername();
-                }
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 330),
+      child: AuthPanel(
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              UsernameTextField(
+                key: const Key('usernameField'),
+                labelText: 'Username',
+                hintText: 'Enter your username',
+                textController: usernameController,
+              ),
+              const SizedBox(height: 16),
+              PasswordTextField(
+                key: const Key('passwordField'),
+                labelText: 'Password',
+                hintText: 'Enter your password',
+                textController: passwordController,
+                validator: noValidate,
+              ),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                value: rememberMe,
+                side: isFramed
+                    ? const BorderSide(color: NotifDesignTokens.structBorder)
+                    : null,
+                checkboxShape: isFramed
+                    ? const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      )
+                    : null,
+                fillColor: isFramed
+                    ? WidgetStateProperty.resolveWith((states) {
+                        if (states.contains(WidgetState.selected)) {
+                          return NotifDesignTokens.accentPrimary;
+                        }
+                        return Colors.transparent;
+                      })
+                    : null,
+                checkColor: isFramed ? NotifDesignTokens.accentOnAccent : null,
+                onChanged: (value) {
+                  setState(() {
+                    if (value == null) return;
+                    rememberMe = value;
+                    _saveRememberMe();
+                  });
+                },
+                title: Text('Remember me', style: rememberMeStyle),
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                contentPadding: const EdgeInsets.all(0),
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                buttonText: 'Log in',
+                onPressed: () async {
+                  if (rememberMe) {
+                    _saveUsername();
+                  }
 
-                bool loggedIn = await loginClick(authService, context);
-                if (loggedIn && context.mounted) {
-                  Navigator.pushReplacementNamed(context, '/Home');
-                }
-              },
-            ),
-            const SizedBox(height: 16),
-            CustomButton(
-              buttonText: 'Register',
-              buttonColor: Theme.of(context).primaryColorLight,
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, '/Register');
-              },
-            ),
+                  bool loggedIn = await loginClick(authService, context);
+                  if (loggedIn && context.mounted) {
+                    Navigator.pushReplacementNamed(context, '/Home');
+                  }
+                },
+              ),
+              const SizedBox(height: 16),
+              CustomButton(
+                buttonText: 'Register',
+                buttonColor: AuthPalette.secondaryButtonBase,
+                onPressed: () {
+                  Navigator.pushReplacementNamed(context, '/Register');
+                },
+              ),
 
-            // TODO: add logic and/or navigation for password recovery
-          ],
+              // TODO: add logic and/or navigation for password recovery
+            ],
+          ),
         ),
       ),
     );
@@ -150,16 +148,23 @@ class _FormContentState extends State<_FormContent> {
   Future<bool> loginClick(AuthService authService, BuildContext context) async {
     if (formKey.currentState?.validate() ?? false) {
       if (kDebugMode) {
-        print(
-            "Validated data:\n\tusername: ${usernameController.text}, password: ${passwordController.text}");
+        final pw = passwordController.text;
+        final masked = pw.length >= 2
+            ? '${pw[0]}***${pw[pw.length - 1]}'
+            : pw.isNotEmpty ? '***' : '(empty)';
+        debugPrint("Validated data:\n\tusername: ${usernameController.text}, password: $masked");
       }
       try {
         await authService.login(
-            usernameController.text, passwordController.text);
+          usernameController.text,
+          passwordController.text,
+        );
         return true;
       } catch (e) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          showDialog<dynamic>(
+        if (context.mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            showDialog<dynamic>(
             context: context,
             builder: (context) => AlertDialog(
               title: const Text('Login Failed'),
@@ -172,7 +177,8 @@ class _FormContentState extends State<_FormContent> {
               ],
             ),
           );
-        });
+          });
+        }
       }
     }
 
@@ -180,10 +186,10 @@ class _FormContentState extends State<_FormContent> {
   }
 
   Future<void> _loadRememberMe() async {
-    final perfs = await SharedPreferences.getInstance();
-    bool? rememberMe = perfs.getBool('rememberMe');
+    final prefs = await SharedPreferences.getInstance();
+    bool? rememberMe = prefs.getBool('rememberMe');
 
-    if (rememberMe != null) {
+    if (rememberMe != null && mounted) {
       setState(() {
         this.rememberMe = rememberMe;
       });
@@ -191,15 +197,15 @@ class _FormContentState extends State<_FormContent> {
   }
 
   Future<void> _saveRememberMe() async {
-    final perfs = await SharedPreferences.getInstance();
-    perfs.setBool('rememberMe', rememberMe);
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setBool('rememberMe', rememberMe);
   }
 
   Future<void> _loadUsername() async {
     final prefs = await SharedPreferences.getInstance();
     String? username = prefs.getString('username');
 
-    if (username != null) {
+    if (username != null && mounted) {
       setState(() {
         usernameController.text = username;
       });
@@ -207,8 +213,8 @@ class _FormContentState extends State<_FormContent> {
   }
 
   Future<void> _saveUsername() async {
-    final perfs = await SharedPreferences.getInstance();
-    perfs.setString('username', usernameController.text);
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setString('username', usernameController.text);
   }
 
   @override
