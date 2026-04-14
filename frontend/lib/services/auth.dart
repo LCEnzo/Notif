@@ -17,6 +17,8 @@ class JWT {
   JWT({required this.access, required this.refresh});
 }
 
+const _jsonHeaders = {'Content-Type': 'application/json'};
+
 class AuthService extends ChangeNotifier {
   JWT? _jwt;
   AppSettingsController? _settings;
@@ -29,22 +31,15 @@ class AuthService extends ChangeNotifier {
     final response = await apiPost(
       '/token/',
       settings: _settings,
-      headers: const {'Content-Type': 'application/json'},
+      headers: _jsonHeaders,
       body: {'username': username, 'password': password},
     );
-
-    if (response.statusCode == 200) {
-      final data = response.data as Map<String, dynamic>;
-      _jwt = JWT(
-        access: data['access'] as String,
-        refresh: data['refresh'] as String,
-      );
-      notifyListeners();
-    } else {
-      throw Exception(
-        'Failed to log in, response: (${response.statusCode}) ${response.data}',
-      );
-    }
+    final data = expectSuccessJson(response, 'Login');
+    _jwt = JWT(
+      access: data['access'] as String,
+      refresh: data['refresh'] as String,
+    );
+    notifyListeners();
   }
 
   void logout() {
@@ -61,13 +56,14 @@ class AuthService extends ChangeNotifier {
     final response = await apiPost(
       '/accounts/users/',
       settings: _settings,
-      headers: const {'Content-Type': 'application/json'},
+      headers: _jsonHeaders,
       body: {'username': username, 'email': email, 'password': password},
     );
 
+    // Registration may return 200 or 201.
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(
-        'Failed to register, response: (${response.statusCode}) ${response.data}',
+        'Registration failed: (${response.statusCode}) ${response.data}',
       );
     }
 
@@ -80,29 +76,21 @@ class AuthService extends ChangeNotifier {
     final response = await apiPost(
       '/token/refresh/',
       settings: _settings,
-      headers: const {'Content-Type': 'application/json'},
+      headers: _jsonHeaders,
       body: {'refresh': refreshToken},
     );
-
-    if (response.statusCode == 200) {
-      final data = response.data as Map<String, dynamic>;
-      _jwt = JWT(access: data['access'] as String, refresh: refreshToken);
-      notifyListeners();
-    } else {
-      throw Exception(
-        'Failed to refresh token, response: (${response.statusCode}) ${response.data}',
-      );
-    }
+    final data = expectSuccessJson(response, 'Token refresh');
+    _jwt = JWT(access: data['access'] as String, refresh: refreshToken);
+    notifyListeners();
   }
 
   Future<bool> verifyToken(String token) async {
     final response = await apiPost(
       '/token/verify/',
       settings: _settings,
-      headers: const {'Content-Type': 'application/json'},
+      headers: _jsonHeaders,
       body: {'token': token},
     );
-
     return response.statusCode == 200;
   }
 
@@ -140,24 +128,17 @@ class UserDataService extends ChangeNotifier {
       '/accounts/users/get_my_info/',
       settings: _settings,
       headers: {
-        'Content-Type': 'application/json',
+        ..._jsonHeaders,
         'Authorization': 'Bearer ${jwt.access}',
       },
     );
-
-    if (response.statusCode == 200) {
-      final data = response.data as Map<String, dynamic>;
-      _userData = UserData(
-        email: data['email'] as String,
-        username: data['username'] as String,
-        name: data['name'] as String,
-      );
-      notifyListeners();
-    } else {
-      throw Exception(
-        'Failed to fetch user info, response: (${response.statusCode}) ${response.data}',
-      );
-    }
+    final data = expectSuccessJson(response, 'Fetch user info');
+    _userData = UserData(
+      email: data['email'] as String,
+      username: data['username'] as String,
+      name: data['name'] as String,
+    );
+    notifyListeners();
   }
 
   @override

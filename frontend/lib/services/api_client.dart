@@ -85,3 +85,14 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
       return [custom];
   }
 }
+
+/// Validates [response] is 200 and returns decoded JSON as `Map<String, dynamic>`.
+/// Throws a descriptive [Exception] on any non-200 status.
+Map<String, dynamic> expectSuccessJson(Response response, String context) {
+  if (response.statusCode == 200) {
+    return response.data as Map<String, dynamic>;
+  }
+  throw Exception(
+    '$context failed: (${response.statusCode}) ${response.data}',
+  );
+}
