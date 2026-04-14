@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/notif_design_tokens.dart';
 
@@ -8,6 +9,9 @@ class DitherOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // GLSL shaders are unsupported on web — skip the overlay entirely.
+    if (kIsWeb) return const SizedBox.shrink();
+
     return const Positioned.fill(
       child: IgnorePointer(
         child: RepaintBoundary(
@@ -37,6 +41,9 @@ class _DitherShaderLayer extends StatelessWidget {
     return FutureBuilder<ui.FragmentProgram>(
       future: _ditherProgram,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const SizedBox.expand();
+        }
         final program = snapshot.data;
         if (program == null) {
           return const SizedBox.expand();

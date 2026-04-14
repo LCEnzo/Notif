@@ -1,5 +1,5 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 import 'package:notif/services/app_settings.dart';
 
 const String builtinApiUrl = String.fromEnvironment(
@@ -7,27 +7,40 @@ const String builtinApiUrl = String.fromEnvironment(
   defaultValue: 'http://localhost:8000/api/v1',
 );
 
-const Map<String, String> jsonHeaders = {
-  'Content-Type': 'application/json; charset=UTF-8',
-};
+const Duration connectTimeout = Duration(seconds: 10);
+const Duration receiveTimeout = Duration(seconds: 15);
 
-/// Posts to [path] respecting the [BackendUrlMode] from [settings].
+/// Shared Dio instance — connection pooling happens here.
+final Dio _dio = Dio(BaseOptions(
+  connectTimeout: connectTimeout,
+  receiveTimeout: receiveTimeout,
+))..interceptors.addAll([
+    if (kDebugMode)
+      LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+        logPrint: (o) => debugPrint(o.toString()),
+      ),
+  ]);
+
+/// Sends a POST request to [path], respecting [BackendUrlMode] from [settings].
 ///
 /// In [BackendUrlMode.builtin] mode the built-in compile-time URL is used.
 /// In [BackendUrlMode.customWithFallback] mode the custom URL is tried first;
 /// on any network error the request is retried against the built-in URL.
 /// In [BackendUrlMode.customOnly] mode only the custom URL is tried.
-Future<http.Response> apiPost(
+Future<Response> apiPost(
   String path, {
   required AppSettingsController? settings,
   required Map<String, String> headers,
-  required String body,
+  required dynamic body,
 }) async {
   final urls = resolveUrls(path, settings);
-  http.Response? response;
   for (final url in urls) {
     try {
-      response = await http.post(Uri.parse(url), headers: headers, body: body);
+      final response = await _dio.post(path, data: body,
+        options: Options(baseUrl: url, headers: headers),
+      );
       return response;
     } catch (e) {
       if (identical(url, urls.last)) rethrow;
@@ -37,16 +50,17 @@ Future<http.Response> apiPost(
   throw StateError('apiPost: all URLs exhausted');
 }
 
-Future<http.Response> apiGet(
+Future<Response> apiGet(
   String path, {
   required AppSettingsController? settings,
   required Map<String, String> headers,
 }) async {
   final urls = resolveUrls(path, settings);
-  http.Response? response;
   for (final url in urls) {
     try {
-      response = await http.get(Uri.parse(url), headers: headers);
+      final response = await _dio.get(path,
+        options: Options(baseUrl: url, headers: headers),
+      );
       return response;
     } catch (e) {
       if (identical(url, urls.last)) rethrow;
@@ -62,12 +76,12 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
 
   switch (mode) {
     case BackendUrlMode.builtin:
-      return ['$builtinApiUrl$path'];
+      return [builtinApiUrl];
     case BackendUrlMode.customWithFallback:
-      if (custom.isEmpty) return ['$builtinApiUrl$path'];
-      return ['$custom$path', '$builtinApiUrl$path'];
+      if (custom.isEmpty) return [builtinApiUrl];
+      return [custom, builtinApiUrl];
     case BackendUrlMode.customOnly:
       if (custom.isEmpty) return [];
-      return ['$custom$path'];
+      return [custom];
   }
 }
