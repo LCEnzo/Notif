@@ -39,6 +39,6 @@ void main() {
     } else if (h < 1.5 && coord.y < uSize.y * uAccentCutoff) {
         fragColor = uAccentColor;
     } else {
-        fragColor = vec4(0.0);
+        discard;
     }
 }
