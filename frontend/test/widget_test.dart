@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/commons/auth_texture_tuner.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/data.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,13 +22,21 @@ void main() {
   ) async {
     enableAuthTextureTuner();
 
+    final authService = AuthService();
+
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => AppSettingsController()),
-          ChangeNotifierProvider(create: (_) => AuthService()),
+          ChangeNotifierProvider<AuthService>.value(value: authService),
           ChangeNotifierProvider(
-            create: (context) => UserDataService(context.read<AuthService>()),
+            create: (_) => UserDataService(authService),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => LinkService(authService),
+          ),
+          ChangeNotifierProvider(
+            create: (_) => NotificationService(authService),
           ),
         ],
         child: const App(),

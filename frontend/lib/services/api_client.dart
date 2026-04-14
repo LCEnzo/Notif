@@ -36,15 +36,16 @@ Future<Response> apiPost(
   required dynamic body,
 }) async {
   final urls = resolveUrls(path, settings);
-  for (final url in urls) {
+  for (final baseUrl in urls) {
     try {
-      final response = await _dio.post(path, data: body,
-        options: Options(baseUrl: url, headers: headers),
+      final fullUrl = '$baseUrl$path';
+      final response = await _dio.post(fullUrl, data: body,
+        options: Options(headers: headers),
       );
       return response;
     } catch (e) {
-      if (identical(url, urls.last)) rethrow;
-      if (kDebugMode) debugPrint('apiPost: $url failed ($e), trying fallback');
+      if (identical(baseUrl, urls.last)) rethrow;
+      if (kDebugMode) debugPrint('apiPost: $baseUrl failed ($e), trying fallback');
     }
   }
   throw StateError('apiPost: all URLs exhausted');
@@ -56,15 +57,16 @@ Future<Response> apiGet(
   required Map<String, String> headers,
 }) async {
   final urls = resolveUrls(path, settings);
-  for (final url in urls) {
+  for (final baseUrl in urls) {
     try {
-      final response = await _dio.get(path,
-        options: Options(baseUrl: url, headers: headers),
+      final fullUrl = '$baseUrl$path';
+      final response = await _dio.get(fullUrl,
+        options: Options(headers: headers),
       );
       return response;
     } catch (e) {
-      if (identical(url, urls.last)) rethrow;
-      if (kDebugMode) debugPrint('apiGet: $url failed ($e), trying fallback');
+      if (identical(baseUrl, urls.last)) rethrow;
+      if (kDebugMode) debugPrint('apiGet: $baseUrl failed ($e), trying fallback');
     }
   }
   throw StateError('apiGet: all URLs exhausted');
@@ -84,4 +86,15 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
       if (custom.isEmpty) return [];
       return [custom];
   }
+}
+
+/// Validates [response] is 200 and returns decoded JSON as `Map<String, dynamic>`.
+/// Throws a descriptive [Exception] on any non-200 status.
+Map<String, dynamic> expectSuccessJson(Response response, String context) {
+  if (response.statusCode == 200) {
+    return response.data as Map<String, dynamic>;
+  }
+  throw Exception(
+    '$context failed: (${response.statusCode}) ${response.data}',
+  );
 }

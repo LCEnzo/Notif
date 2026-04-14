@@ -4,6 +4,7 @@ import 'package:notif/commons/auth_texture_tuner.dart';
 import 'package:notif/screens/shared.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/data.dart';
 import 'package:notif/services/router.dart';
 import 'package:provider/provider.dart';
 
@@ -28,6 +29,24 @@ void main() {
           create: (context) => UserDataService(context.read<AuthService>()),
           update: (_, auth, settings, userData) =>
               userData!..updateSettings(settings),
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthService,
+          AppSettingsController,
+          LinkService
+        >(
+          create: (context) => LinkService(context.read<AuthService>()),
+          update: (_, auth, settings, linkService) =>
+              linkService!..updateSettings(settings),
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthService,
+          AppSettingsController,
+          NotificationService
+        >(
+          create: (context) => NotificationService(context.read<AuthService>()),
+          update: (_, auth, settings, notifService) =>
+              notifService!..updateSettings(settings),
         ),
       ],
       child: const App(),
