@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_texture_tuner.dart';
+import 'package:notif/commons/notif_theme.dart';
 import 'package:notif/screens/shared.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
@@ -45,8 +46,6 @@ class _DarkFadeUpTransitionBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    // Fade in + slight upward slide. Uses the dark scaffold color as
-    // transition background instead of the default white.
     final curve = CurvedAnimation(
       parent: animation,
       curve: Curves.easeOutCubic,
@@ -72,23 +71,17 @@ class App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<AppSettingsController>();
+
+    final theme = buildNotifTheme(
+      colorway: settings.colorway,
+      scheme: settings.colorScheme,
+      fontSet: settings.fontSet,
+    );
+
     return MaterialApp(
       title: 'Notif',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color.fromARGB(255, 69, 26, 172),
-          brightness: Brightness.light,
-          primaryContainer: const Color.fromARGB(255, 89, 53, 173),
-          primary: const Color.fromARGB(255, 69, 26, 172),
-          tertiary: const Color.fromARGB(255, 76, 18, 211),
-        ),
-        fontFamily: 'Skyling',
-        textTheme: const TextTheme(
-          displayLarge: TextStyle(fontSize: 72),
-          titleLarge: TextStyle(fontSize: 36),
-          bodyMedium: TextStyle(fontSize: 14),
-        ),
+      theme: theme.copyWith(
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
             TargetPlatform.android: _DarkFadeUpTransitionBuilder(),

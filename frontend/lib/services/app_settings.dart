@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 enum AuthCardStyle { glass, framed }
@@ -14,18 +16,47 @@ enum BackendUrlMode {
   customOnly,
 }
 
+/// Thrown when SharedPreferences read/write fails. The controller surfaces
+/// failures via [AppSettingsController.persistenceError] so UI can show a
+/// diagnostic rather than silently losing user changes.
+class AppSettingsPersistenceException implements Exception {
+  final String operation;
+  final Object cause;
+  final StackTrace stackTrace;
+
+  AppSettingsPersistenceException(this.operation, this.cause, this.stackTrace);
+
+  @override
+  String toString() => 'AppSettingsPersistenceException($operation): $cause';
+}
+
 class AppSettingsController extends ChangeNotifier {
   static const String _ditheringKey = 'designDitheringEnabled';
   static const String _authCardStyleKey = 'debugAuthCardStyle';
   static const String _backendUrlModeKey = 'backendUrlMode';
   static const String _customBackendUrlKey = 'customBackendUrl';
+  static const String _colorwayKey = 'colorway';
+  static const String _colorSchemeKey = 'colorScheme';
+  static const String _fontSetKey = 'fontSet';
 
   bool _designDitheringEnabled = true;
   AuthCardStyle _authCardStyle = AuthCardStyle.framed;
   BackendUrlMode _backendUrlMode = BackendUrlMode.builtin;
   String _customBackendUrl = '';
+  NotifColorway _colorway = NotifColorway.dusk1;
+  NotifColorScheme _colorScheme = NotifColorway.dusk1.defaultScheme;
+  NotifFontSet _fontSet = NotifFontSet.current;
+
+  /// Surface the most recent persistence failure so UI can show a banner.
+  /// Cleared to `null` on the next successful operation.
+  AppSettingsPersistenceException? _persistenceError;
+  AppSettingsPersistenceException? get persistenceError => _persistenceError;
+
+  bool _loaded = false;
+  bool get loaded => _loaded;
 
   AppSettingsController() {
+    // ignore: discarded_futures — fire-and-forget initial load.
     _load();
   }
 
@@ -33,72 +64,111 @@ class AppSettingsController extends ChangeNotifier {
   AuthCardStyle get authCardStyle => _authCardStyle;
   BackendUrlMode get backendUrlMode => _backendUrlMode;
   String get customBackendUrl => _customBackendUrl;
+  NotifColorway get colorway => _colorway;
+  NotifColorScheme get colorScheme => _colorScheme;
+  NotifFontSet get fontSet => _fontSet;
 
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      _designDitheringEnabled = prefs.getBool(_ditheringKey) ?? true;
-      final rawAuthCardStyle = prefs.getString(_authCardStyleKey);
-      _authCardStyle = AuthCardStyle.values.firstWhere(
-        (style) => style.name == rawAuthCardStyle,
-        orElse: () => AuthCardStyle.framed,
+
+      final designDitheringEnabled = prefs.getBool(_ditheringKey) ?? true;
+      final authCardStyle = _parseEnum(
+        prefs.getString(_authCardStyleKey),
+        AuthCardStyle.values,
+        AuthCardStyle.framed,
       );
-      final rawBackendUrlMode = prefs.getString(_backendUrlModeKey);
-      _backendUrlMode = BackendUrlMode.values.firstWhere(
-        (mode) => mode.name == rawBackendUrlMode,
-        orElse: () => BackendUrlMode.builtin,
+      final backendUrlMode = _parseEnum(
+        prefs.getString(_backendUrlModeKey),
+        BackendUrlMode.values,
+        BackendUrlMode.builtin,
       );
-      _customBackendUrl = prefs.getString(_customBackendUrlKey) ?? '';
+      final colorway = _parseEnum(
+        prefs.getString(_colorwayKey),
+        NotifColorway.values,
+        NotifColorway.dusk1,
+      );
+      final storedScheme = _parseEnumOrNull(
+        prefs.getString(_colorSchemeKey),
+        NotifColorScheme.values,
+      );
+      final colorScheme = _resolveScheme(colorway, storedScheme);
+      final fontSet = _parseEnum(
+        prefs.getString(_fontSetKey),
+        NotifFontSet.values,
+        NotifFontSet.current,
+      );
+      final customBackendUrl = prefs.getString(_customBackendUrlKey) ?? '';
+
+      _designDitheringEnabled = designDitheringEnabled;
+      _authCardStyle = authCardStyle;
+      _backendUrlMode = backendUrlMode;
+      _colorway = colorway;
+      _colorScheme = colorScheme;
+      _fontSet = fontSet;
+      _customBackendUrl = customBackendUrl;
+      _persistenceError = null;
+    } catch (e, st) {
+      _persistenceError = AppSettingsPersistenceException('load', e, st);
+      if (kDebugMode) debugPrint('AppSettings._load failed: $e');
+    } finally {
+      _loaded = true;
       notifyListeners();
-    } catch (e) {
-      if (kDebugMode) debugPrint('AppSettings._load: $e');
-      // SharedPreferences failed (e.g., corrupted storage).
-      // Fall back to defaults already set in field initializers.
+    }
+  }
+
+  /// Try to persist a change; on failure, capture the exception, keep the
+  /// in-memory state, and notify listeners. Callers do not need to handle
+  /// the future — the error is observable via [persistenceError].
+  Future<void> _write(
+    String operation,
+    Future<bool> Function(SharedPreferences prefs) writer,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ok = await writer(prefs);
+      if (!ok) {
+        throw StateError('SharedPreferences refused the write');
+      }
+      if (_persistenceError != null) {
+        _persistenceError = null;
+        notifyListeners();
+      }
+    } catch (e, st) {
+      _persistenceError = AppSettingsPersistenceException(operation, e, st);
+      if (kDebugMode) debugPrint('AppSettings.$operation failed: $e');
+      notifyListeners();
     }
   }
 
   Future<void> setDesignDitheringEnabled(bool enabled) async {
-    if (_designDitheringEnabled == enabled) {
-      return;
-    }
-
+    if (_designDitheringEnabled == enabled) return;
     _designDitheringEnabled = enabled;
     notifyListeners();
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_ditheringKey, enabled);
-    } catch (e) {
-      if (kDebugMode) debugPrint('AppSettings.setDesignDitheringEnabled: $e');
-    }
+    await _write(
+      'setDesignDitheringEnabled',
+      (prefs) => prefs.setBool(_ditheringKey, enabled),
+    );
   }
 
   Future<void> setAuthCardStyle(AuthCardStyle style) async {
-    if (_authCardStyle == style) {
-      return;
-    }
-
+    if (_authCardStyle == style) return;
     _authCardStyle = style;
     notifyListeners();
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_authCardStyleKey, style.name);
-    } catch (e) {
-      if (kDebugMode) debugPrint('AppSettings.setAuthCardStyle: $e');
-    }
+    await _write(
+      'setAuthCardStyle',
+      (prefs) => prefs.setString(_authCardStyleKey, style.name),
+    );
   }
 
   Future<void> setBackendUrlMode(BackendUrlMode mode) async {
     if (_backendUrlMode == mode) return;
     _backendUrlMode = mode;
     notifyListeners();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_backendUrlModeKey, mode.name);
-    } catch (e) {
-      if (kDebugMode) debugPrint('AppSettings.setBackendUrlMode: $e');
-    }
+    await _write(
+      'setBackendUrlMode',
+      (prefs) => prefs.setString(_backendUrlModeKey, mode.name),
+    );
   }
 
   Future<void> setCustomBackendUrl(String url) async {
@@ -106,11 +176,93 @@ class AppSettingsController extends ChangeNotifier {
     if (_customBackendUrl == trimmed) return;
     _customBackendUrl = trimmed;
     notifyListeners();
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_customBackendUrlKey, trimmed);
-    } catch (e) {
-      if (kDebugMode) debugPrint('AppSettings.setCustomBackendUrl: $e');
+    await _write(
+      'setCustomBackendUrl',
+      (prefs) => prefs.setString(_customBackendUrlKey, trimmed),
+    );
+  }
+
+  /// Change the active colorway. If the currently-selected scheme isn't
+  /// supported by the new colorway, the scheme snaps to the colorway's
+  /// default — we don't render an invalid combination.
+  Future<void> setColorway(NotifColorway colorway) async {
+    final resolvedScheme = _resolveScheme(colorway, _colorScheme);
+    final changed = _colorway != colorway || _colorScheme != resolvedScheme;
+    if (!changed) return;
+
+    _colorway = colorway;
+    _colorScheme = resolvedScheme;
+    notifyListeners();
+
+    await _write('setColorway', (prefs) async {
+      final okColorway = await prefs.setString(_colorwayKey, colorway.name);
+      final okScheme = await prefs.setString(
+        _colorSchemeKey,
+        resolvedScheme.name,
+      );
+      return okColorway && okScheme;
+    });
+  }
+
+  /// Change the scheme within the active colorway. Throws
+  /// [ArgumentError] if the scheme isn't supported — use
+  /// [NotifColorwayMeta.supportedSchemes] to guard the UI.
+  Future<void> setColorScheme(NotifColorScheme scheme) async {
+    if (!_colorway.supportedSchemes.contains(scheme)) {
+      throw ArgumentError.value(
+        scheme,
+        'scheme',
+        'Colorway ${_colorway.displayName} does not support $scheme '
+            '(supported: ${_colorway.supportedSchemes}).',
+      );
     }
+    if (_colorScheme == scheme) return;
+    _colorScheme = scheme;
+    notifyListeners();
+    await _write(
+      'setColorScheme',
+      (prefs) => prefs.setString(_colorSchemeKey, scheme.name),
+    );
+  }
+
+  Future<void> setFontSet(NotifFontSet set) async {
+    if (_fontSet == set) return;
+    _fontSet = set;
+    notifyListeners();
+    await _write(
+      'setFontSet',
+      (prefs) => prefs.setString(_fontSetKey, set.name),
+    );
+  }
+
+  /// Resolve a stored scheme against the active colorway's support set.
+  /// Used on load and on colorway change. If the stored value is invalid
+  /// we fall back to the colorway's default scheme rather than throwing —
+  /// this is recoverable state, not a programmer error.
+  static NotifColorScheme _resolveScheme(
+    NotifColorway colorway,
+    NotifColorScheme? desired,
+  ) {
+    if (desired != null && colorway.supportedSchemes.contains(desired)) {
+      return desired;
+    }
+    return colorway.defaultScheme;
+  }
+
+  static T _parseEnum<T extends Enum>(String? raw, List<T> values, T fallback) {
+    if (raw == null) return fallback;
+    for (final v in values) {
+      if (v.name == raw) return v;
+    }
+    if (kDebugMode) debugPrint('AppSettings: unknown enum value "$raw"');
+    return fallback;
+  }
+
+  static T? _parseEnumOrNull<T extends Enum>(String? raw, List<T> values) {
+    if (raw == null) return null;
+    for (final v in values) {
+      if (v.name == raw) return v;
+    }
+    return null;
   }
 }
