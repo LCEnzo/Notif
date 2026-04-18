@@ -1,14 +1,21 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
-import 'package:notif/commons/notif_design_tokens.dart';
-import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+const _debugLoginUsername = String.fromEnvironment(
+  'DEV_LOGIN_USERNAME',
+  defaultValue: 'LCEnzo',
+);
+const _debugLoginPassword = String.fromEnvironment(
+  'DEV_LOGIN_PASSWORD',
+  defaultValue: '1ukacolic',
+);
 
 class LogInPage extends StatelessWidget {
   const LogInPage({super.key});
@@ -30,112 +37,93 @@ class _FormContentState extends State<_FormContent> {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final formKey = GlobalKey<FormState>();
-  bool rememberMe = false;
 
   @override
   void initState() {
     super.initState();
 
     _loadUsername();
-    _loadRememberMe();
   }
 
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
-    final appSettings = context.watch<AppSettingsController?>();
-    final isFramed = appSettings?.authCardStyle == AuthCardStyle.framed;
-    final theme = Theme.of(context);
-    final rememberMeStyle = theme.textTheme.bodyLarge?.copyWith(
-      color: isFramed ? NotifDesignTokens.structText2 : Colors.white70,
-      fontFamily: isFramed ? NotifDesignTokens.bodyFont : null,
-    );
 
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 330),
       child: AuthPanel(
-        child: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AppTextField(
-                key: const Key('usernameField'),
-                labelText: 'Username',
-                hintText: 'Enter your username',
-                controller: usernameController,
-                prefixIcon: Icons.account_box_outlined,
-              ),
-              const SizedBox(height: 16),
-              PasswordTextField(
-                key: const Key('passwordField'),
-                labelText: 'Password',
-                hintText: 'Enter your password',
-                controller: passwordController,
-                validator: noValidate,
-              ),
-              const SizedBox(height: 16),
-              CheckboxListTile(
-                value: rememberMe,
-                side: isFramed
-                    ? const BorderSide(color: NotifDesignTokens.structBorder)
-                    : null,
-                checkboxShape: isFramed
-                    ? const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.zero,
-                      )
-                    : null,
-                fillColor: isFramed
-                    ? WidgetStateProperty.resolveWith((states) {
-                        if (states.contains(WidgetState.selected)) {
-                          return NotifDesignTokens.accentPrimary;
-                        }
-                        return Colors.transparent;
-                      })
-                    : null,
-                checkColor: isFramed ? NotifDesignTokens.accentOnAccent : null,
-                onChanged: (value) {
-                  setState(() {
-                    if (value == null) return;
-                    rememberMe = value;
-                    _saveRememberMe();
-                  });
-                },
-                title: Text('Remember me', style: rememberMeStyle),
-                controlAffinity: ListTileControlAffinity.leading,
-                dense: true,
-                contentPadding: const EdgeInsets.all(0),
-              ),
-              const SizedBox(height: 16),
-              CustomButton(
-                buttonText: 'Log in',
-                onPressed: () async {
-                  if (rememberMe) {
-                    _saveUsername();
-                  }
+        child: AutofillGroup(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AppTextField(
+                  key: const Key('usernameField'),
+                  labelText: 'Username',
+                  hintText: 'Enter your username',
+                  controller: usernameController,
+                  prefixIcon: Icons.account_box_outlined,
+                  autofillHints: const [AutofillHints.username],
+                  textInputAction: TextInputAction.next,
+                  autocorrect: false,
+                ),
+                const SizedBox(height: 16),
+                PasswordTextField(
+                  key: const Key('passwordField'),
+                  labelText: 'Password',
+                  hintText: 'Enter your password',
+                  controller: passwordController,
+                  validator: noValidate,
+                  autofillHints: const [AutofillHints.password],
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _submitLogin(authService),
+                ),
+                const SizedBox(height: 16),
+                CustomButton(
+                  buttonText: 'Log in',
+                  onPressed: () => _submitLogin(authService),
+                ),
+                if (kDebugMode) ...[
+                  const SizedBox(height: 16),
+                  CustomButton(
+                    buttonText: 'Debug login',
+                    buttonColor: const Color(0x805E4A92),
+                    onPressed: () => _submitDebugLogin(authService),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                CustomButton(
+                  buttonText: 'Register',
+                  buttonColor: AuthPalette.secondaryButtonBase,
+                  onPressed: () {
+                    context.go('/register');
+                  },
+                ),
 
-                  bool loggedIn = await loginClick(authService, context);
-                  if (loggedIn && context.mounted) {
-                    context.go('/home');
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              CustomButton(
-                buttonText: 'Register',
-                buttonColor: AuthPalette.secondaryButtonBase,
-                onPressed: () {
-                  context.go('/register');
-                },
-              ),
-
-              // TODO: add logic and/or navigation for password recovery
-            ],
+                // TODO: add logic and/or navigation for password recovery
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _submitLogin(AuthService authService) async {
+    final loggedIn = await loginClick(authService, context);
+    if (!mounted || !loggedIn) {
+      return;
+    }
+    TextInput.finishAutofillContext(shouldSave: true);
+    context.go('/home');
+  }
+
+  Future<void> _submitDebugLogin(AuthService authService) async {
+    usernameController.text = _debugLoginUsername;
+    passwordController.text = _debugLoginPassword;
+    await _submitLogin(authService);
   }
 
   Future<bool> loginClick(AuthService authService, BuildContext context) async {
@@ -144,12 +132,16 @@ class _FormContentState extends State<_FormContent> {
         final pw = passwordController.text;
         final masked = pw.length >= 2
             ? '${pw[0]}***${pw[pw.length - 1]}'
-            : pw.isNotEmpty ? '***' : '(empty)';
-        debugPrint("Validated data:\n\tusername: ${usernameController.text}, password: $masked");
+            : pw.isNotEmpty
+            ? '***'
+            : '(empty)';
+        debugPrint(
+          "Validated data:\n\tusername: ${usernameController.text}, password: $masked",
+        );
       }
       try {
         await authService.login(
-          usernameController.text,
+          usernameController.text.trim(),
           passwordController.text,
         );
         return true;
@@ -158,18 +150,18 @@ class _FormContentState extends State<_FormContent> {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!context.mounted) return;
             showDialog<dynamic>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Login Failed'),
-              content: Text('$e'),
-              actions: [
-                TextButton(
-                  onPressed: () => context.pop(),
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Login Failed'),
+                content: Text('$e'),
+                actions: [
+                  TextButton(
+                    onPressed: () => context.pop(),
+                    child: const Text('OK'),
+                  ),
+                ],
+              ),
+            );
           });
         }
       }
@@ -178,36 +170,14 @@ class _FormContentState extends State<_FormContent> {
     return false;
   }
 
-  Future<void> _loadRememberMe() async {
-    final prefs = await SharedPreferences.getInstance();
-    bool? rememberMe = prefs.getBool('rememberMe');
-
-    if (rememberMe != null && mounted) {
-      setState(() {
-        this.rememberMe = rememberMe;
-      });
-    }
-  }
-
-  Future<void> _saveRememberMe() async {
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setBool('rememberMe', rememberMe);
-  }
-
   Future<void> _loadUsername() async {
-    final prefs = await SharedPreferences.getInstance();
-    String? username = prefs.getString('username');
+    final username = await loadLastSuccessfulUsername();
 
     if (username != null && mounted) {
       setState(() {
         usernameController.text = username;
       });
     }
-  }
-
-  Future<void> _saveUsername() async {
-    final prefs = await SharedPreferences.getInstance();
-    prefs.setString('username', usernameController.text);
   }
 
   @override

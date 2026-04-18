@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
 
@@ -123,14 +122,14 @@ class AuthTextureSettings {
           halftoneOpacityGrowth ?? this.halftoneOpacityGrowth,
       halftoneColorLerpScale:
           halftoneColorLerpScale ?? this.halftoneColorLerpScale,
-      halftoneConvexCurveDepthFactor: halftoneConvexCurveDepthFactor ??
-          this.halftoneConvexCurveDepthFactor,
+      halftoneConvexCurveDepthFactor:
+          halftoneConvexCurveDepthFactor ?? this.halftoneConvexCurveDepthFactor,
       halftoneLandscapeCurveBoost:
           halftoneLandscapeCurveBoost ?? this.halftoneLandscapeCurveBoost,
       halftoneCurveExponent:
           halftoneCurveExponent ?? this.halftoneCurveExponent,
-      halftoneLandscapeExponentPull: halftoneLandscapeExponentPull ??
-          this.halftoneLandscapeExponentPull,
+      halftoneLandscapeExponentPull:
+          halftoneLandscapeExponentPull ?? this.halftoneLandscapeExponentPull,
     );
   }
 
@@ -262,9 +261,7 @@ class PageBackground extends StatelessWidget {
                   _PosterTextureLayer(settings: settings),
             )
           else
-            const _PosterTextureLayer(
-              settings: AuthTextureSettings.defaults,
-            ),
+            const _PosterTextureLayer(settings: AuthTextureSettings.defaults),
           const CustomPaint(
             painter: _PosterBackgroundPainter(
               _PosterBackgroundPainter.foregroundOperations,
@@ -293,9 +290,6 @@ class _PosterTextureLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // GLSL shaders are unsupported on web.
-    if (kIsWeb) return const SizedBox.expand();
-
     return FutureBuilder<ui.FragmentProgram>(
       future: _programFuture,
       builder: (context, snapshot) {
@@ -478,10 +472,10 @@ class _RelativeRect {
   });
 
   const _RelativeRect.full()
-      : leftFactor = 0,
-        topFactor = 0,
-        widthFactor = 1,
-        heightFactor = 1;
+    : leftFactor = 0,
+      topFactor = 0,
+      widthFactor = 1,
+      heightFactor = 1;
 
   Rect resolve(Size size) {
     return Rect.fromLTWH(
@@ -614,12 +608,7 @@ class _HalftoneOp {
   });
 }
 
-void _drawShape(
-  Canvas canvas,
-  Rect rect,
-  Paint paint,
-  _BackgroundShape shape,
-) {
+void _drawShape(Canvas canvas, Rect rect, Paint paint, _BackgroundShape shape) {
   if (shape == _BackgroundShape.oval) {
     canvas.drawOval(rect, paint);
     return;

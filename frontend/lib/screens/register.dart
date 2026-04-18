@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
@@ -50,95 +51,116 @@ class _FormContentState extends State<_FormContent> {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 330),
       child: AuthPanel(
-        child: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              AppTextField(
-                labelText: 'Username',
-                hintText: 'Enter your username',
-                controller: usernameController,
-                prefixIcon: Icons.account_box_outlined,
-              ),
-              const SizedBox(height: 16),
-              AppTextField(
-                labelText: 'Email',
-                hintText: 'Enter your email',
-                controller: emailController,
-                prefixIcon: Icons.email_outlined,
-                validator: validateEmail,
-              ),
-              const SizedBox(height: 16),
-              PasswordTextField(
-                labelText: 'Password',
-                hintText: 'Enter your password',
-                controller: passwordController,
-              ),
-              const SizedBox(height: 16),
-              CustomButton(
-                buttonText: 'Register',
-                onPressed: () async {
-                  if (formKey.currentState?.validate() ?? false) {
-                    if (kDebugMode) {
-                      final pw = passwordController.text;
-                      final masked = pw.length >= 2
-                          ? '${pw[0]}***${pw[pw.length - 1]}'
-                          : pw.isNotEmpty ? '***' : '(empty)';
-                      debugPrint("Validated data:");
-                      debugPrint("\t- username: ${usernameController.text}");
-                      debugPrint("\t- email: ${emailController.text}");
-                      debugPrint("\t- password: $masked");
+        child: AutofillGroup(
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AppTextField(
+                  labelText: 'Username',
+                  hintText: 'Enter your username',
+                  controller: usernameController,
+                  prefixIcon: Icons.account_box_outlined,
+                  autofillHints: const [AutofillHints.newUsername],
+                  textInputAction: TextInputAction.next,
+                  autocorrect: false,
+                ),
+                const SizedBox(height: 16),
+                AppTextField(
+                  labelText: 'Email',
+                  hintText: 'Enter your email',
+                  controller: emailController,
+                  prefixIcon: Icons.email_outlined,
+                  validator: validateEmail,
+                  autofillHints: const [AutofillHints.email],
+                  keyboardType: TextInputType.emailAddress,
+                  textInputAction: TextInputAction.next,
+                  autocorrect: false,
+                ),
+                const SizedBox(height: 16),
+                PasswordTextField(
+                  labelText: 'Password',
+                  hintText: 'Enter your password',
+                  controller: passwordController,
+                  autofillHints: const [AutofillHints.newPassword],
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _submitRegister(authService),
+                ),
+                const SizedBox(height: 16),
+                CustomButton(
+                  buttonText: 'Register',
+                  onPressed: () => _submitRegister(authService),
+                ),
+                const SizedBox(height: 16),
+                CustomButton(
+                  buttonText: 'Back',
+                  buttonColor: AuthPalette.secondaryButtonBase,
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/login');
                     }
+                  },
+                ),
 
-                    try {
-                      await authService.register(
-                        usernameController.text,
-                        emailController.text,
-                        passwordController.text,
-                      );
-                    } catch (e) {
-                      if (context.mounted) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (!context.mounted) return;
-                          showDialog<dynamic>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Register Failed'),
-                            content: Text('$e'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => context.pop(),
-                                child: const Text('OK'),
-                              ),
-                            ],
-                          ),
-                        );
-                        });
-                      }
-                    }
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              CustomButton(
-                buttonText: 'Back',
-                buttonColor: AuthPalette.secondaryButtonBase,
-                onPressed: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go('/login');
-                  }
-                },
-              ),
-
-              /// TODO: add logic and/or navigation for password recovery
-            ],
+                /// TODO: add logic and/or navigation for password recovery
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _submitRegister(AuthService authService) async {
+    if (!(formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    if (kDebugMode) {
+      final pw = passwordController.text;
+      final masked = pw.length >= 2
+          ? '${pw[0]}***${pw[pw.length - 1]}'
+          : pw.isNotEmpty
+          ? '***'
+          : '(empty)';
+      debugPrint("Validated data:");
+      debugPrint("\t- username: ${usernameController.text}");
+      debugPrint("\t- email: ${emailController.text}");
+      debugPrint("\t- password: $masked");
+    }
+
+    try {
+      await authService.register(
+        usernameController.text.trim(),
+        emailController.text.trim(),
+        passwordController.text,
+      );
+      if (mounted) {
+        TextInput.finishAutofillContext(shouldSave: true);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!context.mounted) return;
+          showDialog<dynamic>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Register Failed'),
+              content: Text('$e'),
+              actions: [
+                TextButton(
+                  onPressed: () => context.pop(),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+        });
+      }
+    }
   }
 }
