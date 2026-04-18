@@ -141,6 +141,12 @@ class AppTextField extends StatelessWidget {
   final String? Function(String?)? validator;
   final bool obscureText;
   final Widget? suffixIcon;
+  final Iterable<String>? autofillHints;
+  final TextInputAction? textInputAction;
+  final TextInputType? keyboardType;
+  final ValueChanged<String>? onFieldSubmitted;
+  final bool enableSuggestions;
+  final bool autocorrect;
 
   const AppTextField({
     super.key,
@@ -151,6 +157,12 @@ class AppTextField extends StatelessWidget {
     this.validator,
     this.obscureText = false,
     this.suffixIcon,
+    this.autofillHints,
+    this.textInputAction,
+    this.keyboardType,
+    this.onFieldSubmitted,
+    this.enableSuggestions = true,
+    this.autocorrect = true,
   });
 
   @override
@@ -161,6 +173,12 @@ class AppTextField extends StatelessWidget {
       controller: controller,
       validator: validator,
       obscureText: obscureText,
+      autofillHints: autofillHints,
+      textInputAction: textInputAction,
+      keyboardType: keyboardType,
+      onFieldSubmitted: onFieldSubmitted,
+      enableSuggestions: enableSuggestions,
+      autocorrect: autocorrect,
       style: _buildAuthFieldTextStyle(context),
       cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
       decoration: _buildAuthInputDecoration(
@@ -179,6 +197,9 @@ class PasswordTextField extends StatefulWidget {
   final String hintText;
   final String? Function(String?)? validator;
   final TextEditingController controller;
+  final Iterable<String>? autofillHints;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onFieldSubmitted;
 
   const PasswordTextField({
     super.key,
@@ -186,6 +207,9 @@ class PasswordTextField extends StatefulWidget {
     required this.hintText,
     this.validator,
     required this.controller,
+    this.autofillHints,
+    this.textInputAction,
+    this.onFieldSubmitted,
   });
 
   @override
@@ -204,6 +228,11 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
       prefixIcon: Icons.lock_outline_rounded,
       validator: widget.validator ?? const EntropyValidator().validate,
       obscureText: !_visible,
+      autofillHints: widget.autofillHints,
+      textInputAction: widget.textInputAction,
+      onFieldSubmitted: widget.onFieldSubmitted,
+      enableSuggestions: false,
+      autocorrect: false,
       suffixIcon: IconButton(
         icon: Icon(_visible ? Icons.visibility_off : Icons.visibility),
         onPressed: () => setState(() => _visible = !_visible),
