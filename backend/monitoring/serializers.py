@@ -15,6 +15,7 @@ class LinkSerializer(ModelSerializer):
 		model = Link
 
 		fields = [
+			'id',
 			'name',
 			'url',
 			'user',
@@ -24,6 +25,7 @@ class LinkSerializer(ModelSerializer):
 		]
 
 		read_only_fields = [
+			'id',
 			'comparison_info',
 			'last_scraped'
 		]

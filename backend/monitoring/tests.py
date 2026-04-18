@@ -14,7 +14,7 @@ from rest_framework.test import APIClient
 from commons import Err, Ok
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client
 from commons.utils import create_notification
-from monitoring.models import Link, Notification, Update
+from monitoring.models import Link, Notification, Strategy, Update
 from monitoring.services import scrape_link
 from monitoring.strategies import URL, GeneralSelectorStrategy, SBSVThreadmarksStrategy
 
@@ -285,6 +285,51 @@ class LinkViewSetTestCase(ViewSetMixin):
 			update_fields=update_fields,
 			permissions=permissions
 		)
+
+
+class StrategyViewSetTestCase(SetupMixin, TestCase):
+	def test_list_includes_orphaned_strategies(self):
+		orphan = Strategy.objects.create(
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["body"]},
+		)
+
+		response = self.api_client.get(reverse('strategies-list'))
+
+		self.assertEqual(response.status_code, 200)
+		ids = [item['id'] for item in response.data]
+		self.assertIn(orphan.pk, ids)
+
+	def test_list_excludes_other_users_non_orphaned_strategies(self):
+		other_only_strategy = Strategy.objects.create(
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["article.post-card"]},
+		)
+		Link.objects.create(
+			name="Other user's private strategy",
+			url="https://example.com/private",
+			user=self.secondary_user,
+			strategy=other_only_strategy,
+		)
+
+		response = self.api_client.get(reverse('strategies-list'))
+
+		self.assertEqual(response.status_code, 200)
+		ids = [item['id'] for item in response.data]
+		self.assertNotIn(other_only_strategy.pk, ids)
+
+	def test_delete_orphaned_strategy(self):
+		orphan = Strategy.objects.create(
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["body"]},
+		)
+
+		response = self.api_client.delete(
+			reverse('strategies-detail', kwargs={'pk': orphan.pk})
+		)
+
+		self.assertEqual(response.status_code, 204)
+		self.assertFalse(Strategy.objects.filter(pk=orphan.pk).exists())
 
 
 class NotificationViewSetTestCase(SetupMixin, TestCase):

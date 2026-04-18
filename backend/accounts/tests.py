@@ -1,7 +1,9 @@
+from django.conf import settings
 from django.db.models import Model
-from django.test import TestCase  # noqa: F401
-from rest_framework import status  # noqa: F401
-from rest_framework.test import APIClient  # noqa: F401
+from django.test import TestCase
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient
 
 from accounts.models import User
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client  # noqa: F401
@@ -69,4 +71,43 @@ class UserViewSetTestCase(ViewSetMixin):
 			fields=fields,
 			update_fields=update_fields,
 			permissions=permissions
+		)
+
+
+class DevBootstrapTokenViewTestCase(TestCase):
+	def test_dev_login_bootstraps_user_when_missing(self):
+		self.assertFalse(
+			User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists()
+		)
+
+		response = APIClient().post(
+			reverse('token_obtain_pair'),
+			{
+				'username': settings.DEV_BOOTSTRAP_USERNAME,
+				'password': settings.DEV_BOOTSTRAP_PASSWORD,
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertIn('access', response.data)
+		self.assertIn('refresh', response.data)
+
+		user = User._base_manager.get(username=settings.DEV_BOOTSTRAP_USERNAME)
+		self.assertEqual(user.email, settings.DEV_BOOTSTRAP_EMAIL)
+		self.assertEqual(user.name, settings.DEV_BOOTSTRAP_NAME)
+
+	def test_wrong_password_does_not_bootstrap_dev_user(self):
+		response = APIClient().post(
+			reverse('token_obtain_pair'),
+			{
+				'username': settings.DEV_BOOTSTRAP_USERNAME,
+				'password': 'definitely-not-the-dev-password',
+			},
+			format='json',
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertFalse(
+			User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists()
 		)

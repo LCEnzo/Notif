@@ -1,4 +1,5 @@
 
+from django.conf import settings
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -6,6 +7,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.viewsets import ModelViewSet
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from accounts.models import User
 from accounts.serializers import (
@@ -14,6 +17,43 @@ from accounts.serializers import (
 	UserMinimalReadSerializer,
 )
 from commons.permissions import IsRequestingThemselves, ReadOnly
+
+
+class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
+	def validate(self, attrs):
+		self._ensure_dev_user(attrs)
+		return super().validate(attrs)
+
+	def _ensure_dev_user(self, attrs: dict) -> None:
+		if not settings.DEV_BOOTSTRAP_LOGIN_ENABLED:
+			return
+
+		username = attrs.get(self.username_field)
+		password = attrs.get('password')
+		if (
+			username != settings.DEV_BOOTSTRAP_USERNAME or
+			password != settings.DEV_BOOTSTRAP_PASSWORD
+		):
+			return
+
+		existing_user = User._base_manager.filter(username=username).first()
+		if existing_user is not None:
+			if existing_user.date_deleted is not None or not existing_user.is_active:
+				existing_user.date_deleted = None
+				existing_user.is_active = True
+				existing_user.save(update_fields=['date_deleted', 'is_active', 'date_modified'])
+			return
+
+		User.objects.create_user(
+			email=settings.DEV_BOOTSTRAP_EMAIL,
+			username=settings.DEV_BOOTSTRAP_USERNAME,
+			password=settings.DEV_BOOTSTRAP_PASSWORD,
+			name=settings.DEV_BOOTSTRAP_NAME,
+		)
+
+
+class DevBootstrapTokenObtainPairView(TokenObtainPairView):
+	serializer_class = DevBootstrapTokenObtainPairSerializer
 
 
 class UserViewSet(ModelViewSet):
