@@ -1,5 +1,6 @@
 from typing import cast
 
+from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
@@ -51,7 +52,9 @@ class StrategyViewSet(ModelViewSet):
 		if user_is_admin:
 			return queryset
 
-		return queryset.filter(link_set__user=user).distinct()
+		return queryset.filter(
+			Q(link_set__user=user) | Q(link_set__isnull=True)
+		).distinct()
 
 
 class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):

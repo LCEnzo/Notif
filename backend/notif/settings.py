@@ -30,6 +30,17 @@ SECRET_KEY = getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = getenv("DEBUG", "True") == "True"
+DEV_BOOTSTRAP_LOGIN_ENABLED = getenv(
+	"DEV_BOOTSTRAP_LOGIN_ENABLED",
+	"True" if DEBUG else "False",
+) == "True"
+DEV_BOOTSTRAP_USERNAME = getenv("DEV_BOOTSTRAP_USERNAME", "LCEnzo")
+DEV_BOOTSTRAP_PASSWORD = getenv("DEV_BOOTSTRAP_PASSWORD", "1ukacolic")
+DEV_BOOTSTRAP_EMAIL = getenv(
+	"DEV_BOOTSTRAP_EMAIL",
+	"lcenzo@notif.local",
+)
+DEV_BOOTSTRAP_NAME = getenv("DEV_BOOTSTRAP_NAME", DEV_BOOTSTRAP_USERNAME)
 
 ALLOWED_HOSTS = [
 	host.strip()
