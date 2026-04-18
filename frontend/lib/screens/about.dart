@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:notif/commons/components/primitives.dart';
 import 'package:notif/commons/dither_overlay.dart';
-import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart' show AppSettingsController;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class AboutPage extends StatefulWidget {
-  const AboutPage({super.key});
+  final Future<PackageInfo>? packageInfoFuture;
+
+  const AboutPage({super.key, this.packageInfoFuture});
 
   @override
   State<AboutPage> createState() => _AboutPageState();
@@ -20,17 +24,29 @@ class _AboutPageState extends State<AboutPage> {
   @override
   void initState() {
     super.initState();
-    _packageInfoFuture = PackageInfo.fromPlatform();
+    _packageInfoFuture = widget.packageInfoFuture ?? PackageInfo.fromPlatform();
   }
 
   Future<void> _openUri(Uri uri) async {
-    if (await launchUrl(uri)) {
+    // launchUrl can throw (e.g., no handler registered) — report rather
+    // than swallow. We still show a snackbar in the recoverable "false"
+    // case; unexpected exceptions propagate to a visible error.
+    final bool launched;
+    try {
+      launched = await launchUrl(uri);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Launcher error: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 
-    if (!mounted) {
-      return;
-    }
+    if (launched) return;
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -42,31 +58,44 @@ class _AboutPageState extends State<AboutPage> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
     final appSettings = context.watch<AppSettingsController?>();
     final ditheringEnabled = appSettings?.designDitheringEnabled ?? true;
 
     return Scaffold(
-      backgroundColor: NotifDesignTokens.structBg,
+      backgroundColor: tokens.bg1,
       appBar: AppBar(
-        backgroundColor: NotifDesignTokens.structSurface,
-        foregroundColor: NotifDesignTokens.structText,
+        backgroundColor: tokens.bg1,
+        foregroundColor: tokens.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleSpacing: NotifDesignTokens.spaceLg,
-        title: Text('About', style: _headlineStyle),
+        titleSpacing: 24,
+        title: Row(
+          children: [
+            Text(
+              'notif',
+              style: text$.heading.copyWith(
+                color: tokens.ink,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('/ about', style: text$.micro.copyWith(color: tokens.inkMute)),
+          ],
+        ),
         actions: [
           IconButton(
             tooltip: 'Settings',
-            onPressed: () {
-              Navigator.pushNamed(context, '/Settings');
-            },
-            icon: const Icon(Icons.settings_sharp),
+            onPressed: () => Navigator.pushNamed(context, '/Settings'),
+            icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
           ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: NotifDesignTokens.structBorder),
+          child: Container(height: 1, color: tokens.rule),
         ),
       ),
       body: Stack(
@@ -76,29 +105,26 @@ class _AboutPageState extends State<AboutPage> {
             future: _packageInfoFuture,
             builder: (context, snapshot) {
               final packageInfo = snapshot.data;
-
+              final isLoading =
+                  snapshot.connectionState == ConnectionState.waiting;
+              if (snapshot.hasError) {
+                return _ErrorSlab(error: snapshot.error!);
+              }
               return TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 100),
+                duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOutCubic,
                 tween: Tween(begin: 0, end: 1),
-                builder: (context, value, child) {
-                  return Opacity(
-                    opacity: value,
-                    child: Transform.translate(
-                      offset: Offset(0, (1 - value) * 10),
-                      child: child,
-                    ),
-                  );
-                },
+                builder: (context, value, child) => Opacity(
+                  opacity: value,
+                  child: Transform.translate(
+                    offset: Offset(0, (1 - value) * 10),
+                    child: child,
+                  ),
+                ),
                 child: SelectionArea(
                   child: SingleChildScrollView(
                     physics: const ClampingScrollPhysics(),
-                    padding: const EdgeInsets.fromLTRB(
-                      NotifDesignTokens.spaceLg,
-                      NotifDesignTokens.spaceLg,
-                      NotifDesignTokens.spaceLg,
-                      NotifDesignTokens.spaceBase,
-                    ),
+                    padding: const EdgeInsets.fromLTRB(24, 32, 24, 48),
                     child: Align(
                       alignment: Alignment.topCenter,
                       child: ConstrainedBox(
@@ -106,144 +132,55 @@ class _AboutPageState extends State<AboutPage> {
                         child: LayoutBuilder(
                           builder: (context, constraints) {
                             final isWide = constraints.maxWidth >= 900;
-                            final panels = [
-                              _FramedPanel(
-                                icon: Icons.radar_sharp,
-                                label: 'Page Notes',
-                                title: 'Why This Page Exists',
-                                child: Text(
-                                  'This page is the first deliberate pass at the new non-auth design language. I am using it to work through surfaces, typography, spacing, buttons, and motion before I apply the system more broadly.',
-                                  style: _bodyStyle.copyWith(
-                                    color: NotifDesignTokens.structText2,
-                                  ),
+                            void onGitHub() {
+                              _openUri(
+                                Uri.parse('https://github.com/LCEnzo/Notif'),
+                              );
+                            }
+
+                            void onContact() {
+                              _openUri(
+                                Uri(
+                                  scheme: 'mailto',
+                                  path: 'lcenzo@protonmail.ch',
                                 ),
-                              ),
-                              const _FramedPanel(
-                                icon: Icons.design_services_sharp,
-                                label: 'Design System',
-                                title: 'What This Page Tests',
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    _SignalRow(
-                                      label: 'Surface',
-                                      value:
-                                          'Warm dark panels with 1px borders',
-                                    ),
-                                    SizedBox(height: NotifDesignTokens.spaceSm),
-                                    _SignalRow(
-                                      label: 'Typography',
-                                      value:
-                                          'Serif display, sans body, mono metadata',
-                                    ),
-                                    SizedBox(height: NotifDesignTokens.spaceSm),
-                                    _SignalRow(
-                                      label: 'Shape',
-                                      value:
-                                          'Rectangular default, auth-only glass exception',
-                                    ),
-                                    SizedBox(height: NotifDesignTokens.spaceSm),
-                                    _SignalRow(
-                                      label: 'Texture',
-                                      value:
-                                          'Optional scaffold dithering, settings-controlled',
-                                    ),
-                                    SizedBox(height: NotifDesignTokens.spaceSm),
-                                    _SignalRow(
-                                      label: 'Motion',
-                                      value:
-                                          'Fast and quiet, no bounce, no lag',
-                                    ),
-                                  ],
+                              );
+                            }
+
+                            final sections = [
+                              const _AboutSection(
+                                key: ValueKey('aboutSectionPageNotes'),
+                                header: IndexRule(
+                                  index: 1,
+                                  title: 'Page notes',
                                 ),
+                                child: _IntroCard(),
                               ),
-                              _FramedPanel(
-                                icon: Icons.text_fields_sharp,
-                                label: 'Type System',
-                                title: 'Typeface Sample',
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Printed systems, not dashboards.',
-                                      style: _titleStyle,
-                                    ),
-                                    const SizedBox(
-                                      height: NotifDesignTokens.spaceSm,
-                                    ),
-                                    Text(
-                                      'This page uses Instrument Serif for hierarchy, Skyling for body copy, Suisse Mono for compact readouts, and Zalando Sans as the wider utilitarian alternate.',
-                                      style: _bodyStyle.copyWith(
-                                        color: NotifDesignTokens.structText2,
-                                      ),
-                                    ),
-                                    const SizedBox(
-                                      height: NotifDesignTokens.spaceMd,
-                                    ),
-                                    Text(
-                                      'Pseudo-URI Sample',
-                                      style: _labelStyle,
-                                    ),
-                                    const SizedBox(
-                                      height: NotifDesignTokens.spaceXs,
-                                    ),
-                                    Text(
-                                      'notif://about/showcase/non-auth',
-                                      style: _monoStyle.copyWith(
-                                        color: NotifDesignTokens.accentText,
-                                      ),
-                                    ),
-                                  ],
+                              _AboutSection(
+                                key: const ValueKey('aboutSectionDesignSystem'),
+                                header: const IndexRule(
+                                  index: 2,
+                                  title: 'Design system',
                                 ),
+                                child: _SystemGrid(isWide: isWide),
                               ),
-                              _FramedPanel(
-                                icon: Icons.link_sharp,
-                                label: 'Contact & Source',
-                                title: 'Useful Links',
-                                fillChild: isWide,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.max,
-                                  children: [
-                                    Text(
-                                      'About doubles as the prototype page for the non-auth system, so the key actions live here as first-class components.',
-                                      style: _bodyStyle.copyWith(
-                                        color: NotifDesignTokens.structText2,
-                                      ),
-                                    ),
-                                    if (isWide)
-                                      const Spacer()
-                                    else
-                                      const SizedBox(
-                                        height: NotifDesignTokens.spaceBase,
-                                      ),
-                                    Wrap(
-                                      spacing: NotifDesignTokens.spaceSm,
-                                      runSpacing: NotifDesignTokens.spaceSm,
-                                      children: [
-                                        _ActionButton(
-                                          label: 'VIEW SOURCE',
-                                          icon: Icons.open_in_new_sharp,
-                                          filled: true,
-                                          onPressed: () => _openUri(
-                                            Uri.parse(
-                                              'https://github.com/LCEnzo/Notif',
-                                            ),
-                                          ),
-                                        ),
-                                        _ActionButton(
-                                          label: 'EMAIL',
-                                          icon: Icons.mail_sharp,
-                                          onPressed: () => _openUri(
-                                            Uri(
-                                              scheme: 'mailto',
-                                              path: 'lcenzo@protonmail.ch',
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
+                              const _AboutSection(
+                                key: ValueKey('aboutSectionTypography'),
+                                header: IndexRule(
+                                  index: 3,
+                                  title: 'Typography',
+                                ),
+                                child: _TypefaceCard(),
+                              ),
+                              _AboutSection(
+                                key: const ValueKey('aboutSectionContact'),
+                                header: const IndexRule(
+                                  index: 4,
+                                  title: 'Contact & source',
+                                ),
+                                child: _ContactRow(
+                                  onGitHub: onGitHub,
+                                  onContact: onContact,
                                 ),
                               ),
                             ];
@@ -251,17 +188,19 @@ class _AboutPageState extends State<AboutPage> {
                             return Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildHero(
+                                _Hero(
                                   packageInfo: packageInfo,
-                                  isLoading:
-                                      snapshot.connectionState ==
-                                      ConnectionState.waiting,
+                                  isLoading: isLoading,
                                   isWide: isWide,
+                                  onGitHub: onGitHub,
+                                  onContact: onContact,
                                 ),
-                                const SizedBox(
-                                  height: NotifDesignTokens.spaceLg,
+                                const SizedBox(height: 48),
+                                _AboutSections(
+                                  isWide: isWide,
+                                  maxWidth: constraints.maxWidth,
+                                  sections: sections,
                                 ),
-                                _buildPanelGrid(isWide: isWide, panels: panels),
                               ],
                             );
                           },
@@ -277,63 +216,94 @@ class _AboutPageState extends State<AboutPage> {
       ),
     );
   }
+}
 
-  Widget _buildHero({
-    required PackageInfo? packageInfo,
-    required bool isLoading,
-    required bool isWide,
-  }) {
+// ═══════════════════════════════════════════════════════════════
+// Hero — oversized serif title with a meta card (CornerMarks).
+// ═══════════════════════════════════════════════════════════════
+
+class _Hero extends StatelessWidget {
+  final PackageInfo? packageInfo;
+  final bool isLoading;
+  final bool isWide;
+  final VoidCallback onGitHub;
+  final VoidCallback onContact;
+
+  const _Hero({
+    required this.packageInfo,
+    required this.isLoading,
+    required this.isWide,
+    required this.onGitHub,
+    required this.onContact,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
     final intro = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.max,
       children: [
-        Text('SHOWCASE / NON-AUTH PILOT', style: _labelStyle),
-        const SizedBox(height: NotifDesignTokens.spaceSm),
-        Text('About Notif', style: _displayStyle),
-        const SizedBox(height: NotifDesignTokens.spaceBase),
+        Eyebrow('Showcase · non-auth pilot', tone: EyebrowTone.accent),
+        const SizedBox(height: 12),
+        Text('About Notif', style: text$.display.copyWith(color: tokens.ink)),
+        const SizedBox(height: 16),
         Text(
-          'Notif aggregates updates from pages, feeds, and accounts you care about, and notifies you when something changes. Notif is a personal project I made for my own needs, and to expand my skills and experience. As such, it\'s provided as is. '
-          'No guarantees that it will work, and I reserve the right to break it at any time without notice.',
-          style: _bodyStyle.copyWith(color: NotifDesignTokens.structText2),
+          'Notif aggregates updates from pages, feeds, and accounts you care '
+          'about, and surfaces them when something changes. It is a personal '
+          'project built for my own needs and to sharpen the craft.',
+          style: text$.bodyLong.copyWith(color: tokens.inkDim),
         ),
-        if (isWide)
-          const Spacer()
-        else
-          const SizedBox(height: NotifDesignTokens.spaceLg),
-        _HeroActionRow(
-          onGitHub: () =>
-              _openUri(Uri.parse('https://github.com/LCEnzo/Notif')),
-          onContact: () =>
-              _openUri(Uri(scheme: 'mailto', path: 'lcenzo@protonmail.ch')),
+        const SizedBox(height: 12),
+        Text(
+          'No guarantees it will work. I reserve the right to break it at any '
+          'time without notice.',
+          style: text$.bodyLong.copyWith(color: tokens.inkDim),
+        ),
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            NotifButton(
+              label: 'View source',
+              icon: Icons.open_in_new_sharp,
+              onPressed: onGitHub,
+              variant: NotifButtonVariant.primary,
+            ),
+            const SizedBox(width: 12),
+            NotifButton(
+              label: 'Contact',
+              icon: Icons.alternate_email_sharp,
+              onPressed: onContact,
+              variant: NotifButtonVariant.ghost,
+            ),
+          ],
         ),
       ],
     );
 
-    final metaCard = _FramedPanel(
-      icon: Icons.inventory_2_sharp,
-      label: 'Current Build',
-      title: 'Prototype Status',
+    final meta = NotifCard(
+      cornerMarks: true,
+      padding: const EdgeInsets.fromLTRB(24, 20, 24, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _MetaRow(
+          Eyebrow('Current build'),
+          const SizedBox(height: 8),
+          Text(
+            'Prototype status',
+            style: text$.heading.copyWith(color: tokens.ink),
+          ),
+          const SizedBox(height: 16),
+          _VersionRow(
             label: 'Version',
-            value: packageInfo == null
-                ? null
-                : '${packageInfo.version}+${packageInfo.buildNumber}',
-            mono: true,
+            packageInfo: packageInfo,
             isLoading: isLoading,
           ),
-          const SizedBox(height: NotifDesignTokens.spaceMd),
-          const _MetaRow(
-            label: 'Fonts',
-            value: 'Instrument Serif / Skyling / Zalando Sans / Suisse Mono',
-          ),
-          const SizedBox(height: NotifDesignTokens.spaceMd),
-          const _MetaRow(
+          const KV(label: 'Scheme', value: _ActiveSchemeText()),
+          const KV(
             label: 'Motion',
-            value: '110–220ms, ease-out, no bounce',
-            mono: true,
+            value: _StaticText('110–220ms, ease-out, no bounce'),
           ),
         ],
       ),
@@ -342,11 +312,7 @@ class _AboutPageState extends State<AboutPage> {
     if (!isWide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          intro,
-          const SizedBox(height: NotifDesignTokens.spaceBase),
-          metaCard,
-        ],
+        children: [intro, const SizedBox(height: 24), meta],
       );
     }
 
@@ -355,289 +321,247 @@ class _AboutPageState extends State<AboutPage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(flex: 5, child: intro),
-          const SizedBox(width: NotifDesignTokens.spaceLg),
-          Expanded(flex: 3, child: metaCard),
+          const SizedBox(width: 32),
+          Expanded(flex: 3, child: meta),
         ],
       ),
     );
   }
+}
 
-  Widget _buildPanelGrid({required bool isWide, required List<Widget> panels}) {
+class _AboutSections extends StatelessWidget {
+  final bool isWide;
+  final double maxWidth;
+  final List<Widget> sections;
+
+  const _AboutSections({
+    required this.isWide,
+    required this.maxWidth,
+    required this.sections,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     if (!isWide) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (var index = 0; index < panels.length; index++) ...[
-            panels[index],
-            if (index != panels.length - 1)
-              const SizedBox(height: NotifDesignTokens.spaceBase),
+          for (var i = 0; i < sections.length; i++) ...[
+            sections[i],
+            if (i != sections.length - 1) const SizedBox(height: 32),
           ],
         ],
       );
     }
 
-    return Column(
+    const gap = 32.0;
+    final itemWidth = (maxWidth - gap) / 2;
+    return Wrap(
+      spacing: gap,
+      runSpacing: gap,
       children: [
-        for (var index = 0; index < panels.length; index += 2) ...[
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: index < panels.length - 1
-                  ? [
-                      Expanded(child: panels[index]),
-                      const SizedBox(width: NotifDesignTokens.spaceBase),
-                      Expanded(child: panels[index + 1]),
-                    ]
-                  : [Expanded(child: panels[index])],
-            ),
-          ),
-          if (index < panels.length - 2)
-            const SizedBox(height: NotifDesignTokens.spaceBase),
-        ],
+        for (final section in sections)
+          SizedBox(width: itemWidth, child: section),
       ],
     );
   }
 }
 
-class _HeroActionRow extends StatelessWidget {
-  final VoidCallback onGitHub;
-  final VoidCallback onContact;
-
-  const _HeroActionRow({required this.onGitHub, required this.onContact});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _HeroActionTile(
-            label: 'GITHUB',
-            icon: Icons.open_in_new_sharp,
-            filled: true,
-            onPressed: onGitHub,
-          ),
-        ),
-        const SizedBox(width: NotifDesignTokens.spaceSm),
-        const Expanded(child: _HeroActionTile.placeholder()),
-        const SizedBox(width: NotifDesignTokens.spaceSm),
-        Expanded(
-          child: _HeroActionTile(
-            label: 'DISCORD',
-            icon: Icons.discord,
-            onPressed: () async {
-              await Clipboard.setData(const ClipboardData(text: 'lcenzo'));
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Copied Discord handle: lcenzo'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: NotifDesignTokens.spaceSm),
-        Expanded(
-          child: _HeroActionTile(
-            label: 'CONTACT',
-            icon: Icons.alternate_email_sharp,
-            onPressed: onContact,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _HeroActionTile extends StatelessWidget {
-  final String? label;
-  final IconData? icon;
-  final bool filled;
-  final VoidCallback? onPressed;
-
-  const _HeroActionTile({
-    required this.label,
-    this.icon,
-    this.filled = false,
-    this.onPressed,
-  });
-
-  const _HeroActionTile.placeholder()
-    : label = null,
-      icon = null,
-      filled = false,
-      onPressed = null;
-
-  @override
-  Widget build(BuildContext context) {
-    final border = filled
-        ? BorderSide.none
-        : const BorderSide(
-            color: NotifDesignTokens.structBorder,
-            width: NotifDesignTokens.borderWidth,
-          );
-    final background = filled
-        ? NotifDesignTokens.accentPrimary
-        : Colors.transparent;
-    final content = label == null
-        ? const SizedBox.shrink()
-        : FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (icon != null) ...[
-                  Icon(
-                    icon,
-                    size: 18,
-                    color: filled
-                        ? NotifDesignTokens.accentOnAccent
-                        : NotifDesignTokens.accentText,
-                  ),
-                  const SizedBox(width: 6),
-                ],
-                Text(
-                  label!,
-                  style: NotifDesignTokens.buttonTextStyle.copyWith(
-                    color: filled
-                        ? NotifDesignTokens.accentOnAccent
-                        : NotifDesignTokens.accentText,
-                  ),
-                ),
-              ],
-            ),
-          );
-
-    Widget tile = Container(
-      height: 44,
-      decoration: BoxDecoration(
-        color: background,
-        border: Border.fromBorderSide(border),
-      ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: NotifDesignTokens.spaceSm,
-      ),
-      alignment: Alignment.center,
-      child: content,
-    );
-
-    if (onPressed == null) {
-      return tile;
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(onTap: onPressed, child: tile),
-    );
-  }
-}
-
-class _FramedPanel extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String title;
+class _AboutSection extends StatelessWidget {
+  final Widget header;
   final Widget child;
-  final bool fillChild;
 
-  const _FramedPanel({
-    required this.icon,
-    required this.label,
-    required this.title,
-    required this.child,
-    this.fillChild = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: NotifDesignTokens.structSurface,
-        border: Border.all(color: NotifDesignTokens.structBorder),
-        borderRadius: NotifDesignTokens.flatRadius,
-      ),
-      padding: const EdgeInsets.all(NotifDesignTokens.spaceBase),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: NotifDesignTokens.structText2),
-              const SizedBox(width: NotifDesignTokens.spaceSm),
-              Expanded(child: Text(label, style: _labelStyle)),
-            ],
-          ),
-          const SizedBox(height: NotifDesignTokens.spaceBase),
-          Text(title, style: _titleStyle),
-          const SizedBox(height: NotifDesignTokens.spaceSm),
-          if (fillChild) Expanded(child: child) else child,
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool filled;
-  final VoidCallback onPressed;
-
-  const _ActionButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.filled = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton.icon(
-      onPressed: onPressed,
-      style: NotifDesignTokens.framedButtonStyle(isPrimary: filled),
-      icon: Icon(icon, size: 18),
-      label: Text(label),
-    );
-  }
-}
-
-class _MetaRow extends StatelessWidget {
-  final String label;
-  final String? value;
-  final bool mono;
-  final bool isLoading;
-
-  const _MetaRow({
-    required this.label,
-    required this.value,
-    this.mono = false,
-    this.isLoading = false,
-  });
+  const _AboutSection({required this.header, required this.child, super.key});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: _labelStyle),
-        const SizedBox(height: NotifDesignTokens.spaceXs),
-        if (isLoading && value == null)
-          const SizedBox(
-            height: 18,
-            width: 18,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: NotifDesignTokens.accentPrimary,
-            ),
-          )
-        else
-          Text(
-            value ?? 'Unavailable',
-            style: (mono ? _monoStyle : _bodyStyle).copyWith(
-              color: NotifDesignTokens.structText,
+      children: [header, child],
+    );
+  }
+}
+
+class _VersionRow extends StatelessWidget {
+  final String label;
+  final PackageInfo? packageInfo;
+  final bool isLoading;
+
+  const _VersionRow({
+    required this.label,
+    required this.packageInfo,
+    required this.isLoading,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final versionText = packageInfo == null
+        ? 'Unavailable'
+        : '${packageInfo!.version}+${packageInfo!.buildNumber}';
+
+    return KV(
+      label: label,
+      value: isLoading && packageInfo == null
+          ? _LoadingVersionText(color: NotifTokens.of(context).accent)
+          : _VersionText(text: versionText),
+    );
+  }
+}
+
+class _InlineSpinner extends StatelessWidget {
+  final Color color;
+  const _InlineSpinner({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 14,
+      height: 14,
+      child: CircularProgressIndicator(strokeWidth: 1.5, color: color),
+    );
+  }
+}
+
+class _LoadingVersionText extends StatelessWidget {
+  final Color color;
+
+  const _LoadingVersionText({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final text$ = NotifTextTheme.of(context);
+    return Text.rich(
+      TextSpan(
+        children: [
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _InlineSpinner(color: color),
             ),
           ),
-      ],
+          const TextSpan(text: 'Loading…'),
+        ],
+      ),
+      style: text$.code.copyWith(color: color),
+    );
+  }
+}
+
+class _VersionText extends StatelessWidget {
+  final String text;
+  const _VersionText({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    return Text(text, style: text$.code.copyWith(color: tokens.accent));
+  }
+}
+
+class _StaticText extends StatelessWidget {
+  final String text;
+  const _StaticText(this.text);
+
+  @override
+  Widget build(BuildContext context) => Text(text);
+}
+
+class _ActiveSchemeText extends StatelessWidget {
+  const _ActiveSchemeText();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    return Text('${tokens.colorway.displayName} · ${tokens.scheme.name}');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Narrative & system sections
+// ═══════════════════════════════════════════════════════════════
+
+class _IntroCard extends StatelessWidget {
+  const _IntroCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return NotifCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Eyebrow('Why this page exists'),
+          const SizedBox(height: 12),
+          Text(
+            'About is the testbed for the non-auth design language.',
+            style: text$.heading.copyWith(color: tokens.ink),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Surfaces, typography, spacing, buttons, and motion all get '
+            'exercised here before the system is applied more broadly. If a '
+            'decision feels wrong on this page, it is wrong everywhere.',
+            style: text$.bodyLong.copyWith(color: tokens.inkDim),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SystemGrid extends StatelessWidget {
+  final bool isWide;
+  const _SystemGrid({required this.isWide});
+
+  static const _rows = [
+    _SignalRow(
+      label: 'Surface',
+      value: 'Printed panels, translucent hairlines.',
+    ),
+    _SignalRow(
+      label: 'Typography',
+      value: 'Serif display, mono body, mono metadata.',
+    ),
+    _SignalRow(
+      label: 'Shape',
+      value: 'Rectangular default; auth-only 6dp glass exception.',
+    ),
+    _SignalRow(
+      label: 'Texture',
+      value: 'Optional scaffold dithering, settings-controlled.',
+    ),
+    _SignalRow(label: 'Motion', value: 'Fast and quiet, no bounce, no lag.'),
+    _SignalRow(
+      label: 'Borders',
+      value: 'Hairlines carry elevation in place of shadow.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final columns = isWide ? 2 : 1;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final gap = 16.0;
+        final itemWidth = columns == 1
+            ? constraints.maxWidth
+            : (constraints.maxWidth - gap) / 2;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final row in _rows)
+              SizedBox(
+                width: itemWidth,
+                child: NotifCard(child: row),
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -645,67 +569,182 @@ class _MetaRow extends StatelessWidget {
 class _SignalRow extends StatelessWidget {
   final String label;
   final String value;
-
   const _SignalRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: _labelStyle),
-        const SizedBox(height: NotifDesignTokens.spaceXs),
-        Text(
-          value,
-          style: _bodyStyle.copyWith(color: NotifDesignTokens.structText),
-        ),
+        Eyebrow(label),
+        const SizedBox(height: 8),
+        Text(value, style: text$.body.copyWith(color: tokens.ink)),
       ],
     );
   }
 }
 
-const TextStyle _displayStyle = TextStyle(
-  fontFamily: NotifDesignTokens.displayFont,
-  fontSize: 34,
-  height: 42 / 34,
-  letterSpacing: -0.5,
-  color: NotifDesignTokens.structText,
-);
+class _TypefaceCard extends StatelessWidget {
+  const _TypefaceCard();
 
-const TextStyle _headlineStyle = TextStyle(
-  fontFamily: NotifDesignTokens.displayFont,
-  fontSize: 24,
-  height: 30 / 24,
-  color: NotifDesignTokens.structText,
-);
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
 
-const TextStyle _titleStyle = TextStyle(
-  fontFamily: NotifDesignTokens.displayFont,
-  fontSize: 26,
-  height: 32 / 26,
-  color: NotifDesignTokens.structText,
-);
+    return NotifCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Eyebrow('Typeface sample'),
+          const SizedBox(height: 12),
+          Text(
+            'Printed systems, not dashboards.',
+            style: text$.title.copyWith(color: tokens.ink),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'The active font set is chosen in Settings. Roles resolve through '
+            'the Theme extension, so changing set updates every surface at '
+            'once without touching the screens.',
+            style: text$.bodyLong.copyWith(color: tokens.inkDim),
+          ),
+          const SizedBox(height: 20),
+          Eyebrow('Pseudo-URI sample'),
+          const SizedBox(height: 6),
+          Text(
+            'notif://about/showcase/non-auth',
+            style: text$.code.copyWith(color: tokens.accent),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Tag('Colorway', tone: TagTone.defaultTone),
+              const SizedBox(width: 6),
+              Tag(tokens.colorway.displayName, tone: TagTone.accent),
+              const SizedBox(width: 6),
+              Tag(tokens.scheme.name, tone: TagTone.muted),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-const TextStyle _bodyStyle = TextStyle(
-  fontFamily: NotifDesignTokens.bodyFont,
-  fontSize: 15,
-  height: 22 / 15,
-  letterSpacing: 0.1,
-  color: NotifDesignTokens.structText,
-);
+class _ContactRow extends StatelessWidget {
+  final VoidCallback onGitHub;
+  final VoidCallback onContact;
 
-const TextStyle _monoStyle = TextStyle(
-  fontFamily: NotifDesignTokens.monoFont,
-  fontSize: 14,
-  height: 20 / 14,
-  color: NotifDesignTokens.structText,
-);
+  const _ContactRow({required this.onGitHub, required this.onContact});
 
-const TextStyle _labelStyle = TextStyle(
-  fontFamily: NotifDesignTokens.bodyFont,
-  fontSize: 12,
-  fontWeight: FontWeight.w500,
-  height: 16 / 12,
-  letterSpacing: 1.2,
-  color: NotifDesignTokens.structText2,
-);
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return NotifCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Eyebrow('Links'),
+          const SizedBox(height: 12),
+          Text('Talk to me.', style: text$.heading.copyWith(color: tokens.ink)),
+          const SizedBox(height: 8),
+          Text(
+            'About doubles as the prototype for the non-auth system, so the '
+            'key actions live here as first-class components.',
+            style: text$.body.copyWith(color: tokens.inkDim),
+          ),
+          const SizedBox(height: 20),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              NotifButton(
+                label: 'GitHub',
+                icon: Icons.open_in_new_sharp,
+                onPressed: onGitHub,
+                variant: NotifButtonVariant.primary,
+              ),
+              NotifButton(
+                label: 'Email',
+                icon: Icons.mail_sharp,
+                onPressed: onContact,
+                variant: NotifButtonVariant.ghost,
+              ),
+              NotifButton(
+                label: 'Copy Discord',
+                icon: Icons.discord,
+                onPressed: () => _copyDiscord(context),
+                variant: NotifButtonVariant.ghost,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _copyDiscord(BuildContext context) async {
+    try {
+      await Clipboard.setData(const ClipboardData(text: 'lcenzo'));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Clipboard error: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Copied Discord handle: lcenzo'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Error slab — replaces the body when PackageInfo fails outright.
+// ═══════════════════════════════════════════════════════════════
+
+class _ErrorSlab extends StatelessWidget {
+  final Object error;
+  const _ErrorSlab({required this.error});
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Eyebrow('Error', tone: EyebrowTone.accent),
+              const SizedBox(height: 8),
+              Text(
+                'Could not load build info.',
+                style: text$.heading.copyWith(color: tokens.ink),
+              ),
+              const SizedBox(height: 8),
+              Text('$error', style: text$.code.copyWith(color: tokens.inkDim)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
