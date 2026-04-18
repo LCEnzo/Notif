@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Notif — Style Guide & Initial Screens</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..600&family=JetBrains+Mono:wght@300;400;500;600&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; }
+  body { font-family: 'JetBrains Mono', monospace; }
+  input[type=range] { height: 2px; }
+  ::selection { background: rgba(255,255,255,0.2); }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="android-frame.jsx"></script>
+<script type="text/babel" src="browser-window.jsx"></script>
+<script type="text/babel" src="tokens.jsx"></script>
+<script type="text/babel" src="textures.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="screens-auth.jsx"></script>
+<script type="text/babel" src="screens-onboarding.jsx"></script>
+<script type="text/babel" src="screens-settings.jsx"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+// ═══════════════════════════════════════════════════════════════
+// Tweakable defaults (host rewrites this block)
+// ═══════════════════════════════════════════════════════════════
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "colorway": "library",
+  "scheme": "dark",
+  "texture": 8,
+  "showTweaks": true
+}/*EDITMODE-END*/;
+
+// ═══════════════════════════════════════════════════════════════
+// Tweaks panel — floating, Figma-ish
+// ═══════════════════════════════════════════════════════════════
+function TweaksPanel({ state, set, visible, onClose }) {
+  if (!visible) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 20, right: 20, zIndex: 1000,
+      width: 300,
+      background: '#1a1611',
+      color: '#e6dcc5',
+      border: '1px solid rgba(230,220,197,0.3)',
+      fontFamily: "'JetBrains Mono', monospace",
+      fontSize: 11,
+      boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+    }}>
+      <div style={{
+        padding: '10px 14px',
+        borderBottom: '1px solid rgba(230,220,197,0.2)',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      }}>
+        <span style={{ letterSpacing: '0.2em', textTransform: 'uppercase', fontSize: 10 }}>Tweaks</span>
+        <span onClick={onClose} style={{ cursor: 'pointer', opacity: 0.7 }}>×</span>
+      </div>
+
+      <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* Colorway */}
+        <div>
+          <div style={{ opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: 9, marginBottom: 8 }}>
+            Colorway
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 }}>
+            {Object.keys(COLORWAYS).map(k => {
+              const cw = COLORWAYS[k];
+              const p = cw.dark;
+              const active = state.colorway === k;
+              return (
+                <div key={k}
+                  onClick={() => set({ colorway: k })}
+                  style={{
+                    padding: '6px 8px',
+                    border: active ? `1px solid ${p.accent}` : '1px solid rgba(230,220,197,0.15)',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    background: active ? 'rgba(230,220,197,0.05)' : 'transparent',
+                  }}>
+                  <div style={{
+                    width: 14, height: 14,
+                    background: `linear-gradient(135deg, ${p.halo1}, ${p.bg1})`,
+                    flexShrink: 0,
+                  }} />
+                  <div style={{ fontSize: 10 }}>{cw.name}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Scheme */}
+        <div>
+          <div style={{ opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: 9, marginBottom: 8 }}>
+            Scheme
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4 }}>
+            {['dark', 'light'].map(s => {
+              const avail = !!COLORWAYS[state.colorway][s];
+              const active = state.scheme === s;
+              return (
+                <div key={s}
+                  onClick={() => avail && set({ scheme: s })}
+                  style={{
+                    padding: '6px 8px',
+                    border: active ? '1px solid #d4b07a' : '1px solid rgba(230,220,197,0.15)',
+                    cursor: avail ? 'pointer' : 'not-allowed',
+                    opacity: avail ? 1 : 0.35,
+                    textTransform: 'capitalize', fontSize: 10,
+                    textAlign: 'center',
+                    background: active ? 'rgba(230,220,197,0.05)' : 'transparent',
+                  }}>
+                  {s}{!avail && ' —'}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Texture */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+            <span style={{ opacity: 0.6, textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: 9 }}>Texture</span>
+            <span style={{ fontSize: 9, opacity: 0.7 }}>{state.texture}/10</span>
+          </div>
+          <input type="range" min={0} max={10} step={1}
+            value={state.texture}
+            onChange={(e) => set({ texture: +e.target.value })}
+            style={{ width: '100%', accentColor: '#d4b07a' }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Themed screen — wraps a screen in ThemeProvider + clipping
+// ═══════════════════════════════════════════════════════════════
+function Themed({ colorway, scheme, texture, children }) {
+  return (
+    <ThemeProvider colorway={colorway} scheme={scheme} texture={texture}>
+      {children}
+    </ThemeProvider>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Screen slot — wraps in either desktop or mobile frame
+// ═══════════════════════════════════════════════════════════════
+function DesktopFrame({ children, url = 'notif.local:8443', title = 'Notif' }) {
+  return (
+    <div style={{
+      width: 1180, height: 780, borderRadius: 8, overflow: 'hidden',
+      boxShadow: '0 30px 90px rgba(0,0,0,0.18)',
+    }}>
+      <ChromeWindow tabs={[{ title }, { title: 'home — lcenzo' }]} activeIndex={0} url={url} width={1180} height={780}>
+        {children}
+      </ChromeWindow>
+    </div>
+  );
+}
+
+function PhoneFrame({ children, dark = true }) {
+  return (
+    <AndroidDevice dark={dark} width={380} height={780}>
+      <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+        {children}
+      </div>
+    </AndroidDevice>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Style guide block — palette swatches, type specimens
+// ═══════════════════════════════════════════════════════════════
+function StyleGuide({ colorway, scheme, texture }) {
+  return (
+    <ThemeProvider colorway={colorway} scheme={scheme} texture={texture}>
+      <StyleGuideInner />
+    </ThemeProvider>
+  );
+}
+
+function StyleGuideInner() {
+  const { t, cwMeta } = useTheme();
+
+  return (
+    <div style={{
+      width: 1600, padding: 48, background: t.bg1, color: t.ink,
+      position: 'relative', overflow: 'hidden',
+      fontFamily: TYPE.mono,
+    }}>
+      <Grain opacity={0.18} blend="overlay" scale={1} />
+
+      <div style={{ position: 'relative', zIndex: 2 }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 32 }}>
+          <div>
+            <Eyebrow style={{ marginBottom: 10, color: t.accent }}>{cwMeta.code} · {cwMeta.name.toUpperCase()}</Eyebrow>
+            <div style={{ ...typeStyle('display', { type: TYPE }), fontStyle: 'italic', color: t.ink, lineHeight: 0.95 }}>
+              Notif — System Atlas
+            </div>
+            <div style={{ ...typeStyle('body', { type: TYPE }), color: t.inkDim, maxWidth: 640, marginTop: 12, fontSize: 13 }}>
+              {cwMeta.description} A system for a quiet aggregator, specified for Django + Flutter, deployable to Desktop and Android.
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <Eyebrow>v0.4.2 · 2026-04-18</Eyebrow>
+            <div style={{ marginTop: 8, ...typeStyle('body', { type: TYPE }), color: t.inkMute, fontSize: 11 }}>by lcenzo</div>
+          </div>
+        </div>
+
+        {/* Palette */}
+        <IndexRule index={1} title="Palette · 12 tokens" right={`${cwMeta.name} / ${t.scheme}`} />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginTop: 18, marginBottom: 48 }}>
+          {[
+            ['bg0', 'void'],
+            ['bg1', 'ground'],
+            ['bg2', 'card'],
+            ['bg3', 'raised'],
+            ['halo1', 'halo·1'],
+            ['halo2', 'halo·2'],
+            ['ink', 'ink'],
+            ['inkDim', 'ink·dim'],
+            ['inkMute', 'ink·mute'],
+            ['accent', 'accent'],
+            ['accent2', 'accent·2'],
+            ['rule', 'rule'],
+          ].map(([key, label]) => (
+            <div key={key} style={{ border: `1px solid ${t.rule}` }}>
+              <div style={{ background: t[key], height: 84, borderBottom: `1px solid ${t.rule}` }} />
+              <div style={{ padding: '8px 10px' }}>
+                <div style={{ ...typeStyle('micro', { type: TYPE }), color: t.inkDim }}>{label}</div>
+                <div style={{ fontFamily: TYPE.mono, fontSize: 10, color: t.inkMute, marginTop: 2, wordBreak: 'break-all' }}>
+                  {typeof t[key] === 'string' ? t[key] : ''}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Typography */}
+        <IndexRule index={2} title="Typography" right="3 families · 8 styles" />
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 32, marginTop: 18, marginBottom: 48 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <SpecRow name="display" label="Display — Instrument Serif Italic 64">
+              <span style={{ fontStyle: 'italic' }}>The signals before the noise.</span>
+            </SpecRow>
+            <SpecRow name="title" label="Title — Instrument Serif Italic 40">
+              <span style={{ fontStyle: 'italic' }}>Dress the room.</span>
+            </SpecRow>
+            <SpecRow name="heading" label="Heading — Instrument Serif Italic 22">
+              <span style={{ fontStyle: 'italic' }}>Tell me what's worth watching.</span>
+            </SpecRow>
+            <SpecRow name="bodyLong" label="Long-form body — Newsreader 15">
+              Notif aggregates updates from the forums, feeds and niche sites you actually read — so your phone stops asking for your attention.
+            </SpecRow>
+            <SpecRow name="body" label="Body / interface — JetBrains Mono 13">
+              Poll every 15 min · digest 3× daily · quiet from 22:30 until 07:00.
+            </SpecRow>
+            <SpecRow name="eyebrow" label="Eyebrow — JBM 11 · tracked · upper">
+              01 · CONFIGURE SOURCES
+            </SpecRow>
+            <SpecRow name="micro" label="Micro — JBM 10.5 · tracked · upper">
+              HN · 324 PTS · 87 COMMENTS
+            </SpecRow>
+          </div>
+          <div style={{ border: `1px solid ${t.rule}`, padding: 18, background: `${t.bg2}66`, position: 'relative' }}>
+            <CornerMarks color={t.accent} />
+            <Eyebrow style={{ marginBottom: 8 }}>Principle</Eyebrow>
+            <div style={{ fontFamily: TYPE.serifLong, fontSize: 15, lineHeight: 1.55, color: t.ink }}>
+              Italic serif for voice. Monospace for metadata. Nothing decorative — the system is the <em style={{ color: t.accent }}>writing</em>, not the chrome.
+            </div>
+          </div>
+        </div>
+
+        {/* Components */}
+        <IndexRule index={3} title="Components" right="buttons · inputs · chrome" />
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 20, marginTop: 18, marginBottom: 48 }}>
+          <CompBox title="Buttons">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'start' }}>
+              <Button>Primary</Button>
+              <Button variant="ghost">Ghost</Button>
+              <Button variant="accent">Accent</Button>
+              <Button variant="link">Link →</Button>
+            </div>
+          </CompBox>
+          <CompBox title="Inputs">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <Field label="Handle"><Input value="lcenzo" prefix={<Icon name="user" size={12} />} /></Field>
+              <Field label="Search"><Input placeholder="find a source…" prefix={<Icon name="search" size={12} />} /></Field>
+            </div>
+          </CompBox>
+          <CompBox title="Tags">
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <Tag>RSS</Tag><Tag>FORUM</Tag><Tag tone="accent">NEW</Tag><Tag tone="muted">archived</Tag>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', gap: 10 }}>
+              <StatusDot label="LIVE" color={t.accent} />
+              <StatusDot label="IDLE" />
+            </div>
+          </CompBox>
+          <CompBox title="Controls">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Checkbox checked label="Remember device" />
+              <Checkbox checked={false} label="Weekends quiet" />
+            </div>
+          </CompBox>
+        </div>
+
+        {/* Texture demonstration */}
+        <IndexRule index={4} title="Texture · signature backdrop" right="grain + halo + halftone" />
+        <div style={{ marginTop: 18, height: 280, position: 'relative', border: `1px solid ${t.rule}`, overflow: 'hidden' }}>
+          <SignatureBackdrop haloHeight="70%" floorHeight={180} />
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2 }}>
+            <div style={{ ...typeStyle('title', { type: TYPE }), fontStyle: 'italic', color: t.ink, textAlign: 'center' }}>
+              the room the app lives in
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SpecRow({ label, children }) {
+  const { t } = useTheme();
+  return (
+    <div>
+      <Eyebrow style={{ marginBottom: 4, color: t.inkMute }}>{label}</Eyebrow>
+      <div style={{ color: t.ink }}>
+        {React.Children.map(children, (c) => (
+          <span>{c}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CompBox({ title, children }) {
+  const { t } = useTheme();
+  return (
+    <div style={{ padding: 18, border: `1px solid ${t.rule}`, background: `${t.bg1}55`, position: 'relative', minHeight: 180 }}>
+      <Eyebrow style={{ marginBottom: 14 }}>{title}</Eyebrow>
+      {children}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// App — DesignCanvas layout
+// ═══════════════════════════════════════════════════════════════
+function App() {
+  const [state, setState] = React.useState(TWEAK_DEFAULTS);
+  const [tweaksOn, setTweaksOn] = React.useState(false);
+
+  const set = (partial) => {
+    const next = { ...state, ...partial };
+    setState(next);
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits: partial }, '*');
+  };
+
+  // Tweaks host integration
+  React.useEffect(() => {
+    const handler = (e) => {
+      const d = e.data;
+      if (!d || !d.type) return;
+      if (d.type === '__activate_edit_mode') setTweaksOn(true);
+      if (d.type === '__deactivate_edit_mode') setTweaksOn(false);
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const { colorway, scheme, texture } = state;
+
+  const screens = [
+    { k: 'landing', label: '01 · Auth Landing', Comp: AuthLanding, note: 'First open. Signature backdrop + two actions.' },
+    { k: 'login', label: '02 · Login', Comp: AuthLogin },
+    { k: 'register', label: '03 · Register', Comp: AuthRegister, note: 'Self-hosted — no email recovery, seed phrase instead.' },
+    { k: 'onb2', label: '04 · Onboarding / Sources', Comp: OnbSources },
+    { k: 'onb3', label: '05 · Onboarding / Rhythm', Comp: OnbRhythm, note: 'Set the pace. Live-preview cadence histograms.' },
+    { k: 'empty', label: '06 · Empty State', Comp: EmptyState },
+    { k: 'feed', label: '07 · Feed Teaser', Comp: FeedTeaser, note: 'Where the app lives. Compact, time → source groups.' },
+    { k: 'settings', label: '08 · Settings / Appearance', Comp: Settings, extraProps: { colorway, scheme, texture, setColorway: (v) => set({ colorway: v }), setScheme: (v) => set({ scheme: v }), setTexture: (v) => set({ texture: v }) } },
+  ];
+
+  return (
+    <>
+      <DesignCanvas>
+        <DCPostIt top={80} left={60} rotate={-3} width={220}>
+          NOTIF — style guide + 8 screens. Drag to pan, pinch/scroll to zoom.
+          Toggle Tweaks in the toolbar to swap colorways.
+        </DCPostIt>
+
+        <DCSection
+          title="System Atlas"
+          subtitle="Tokens, type & components in the live colorway."
+        >
+          <DCArtboard label="style guide" width={1600} height="auto">
+            <StyleGuide colorway={colorway} scheme={scheme} texture={texture} />
+          </DCArtboard>
+        </DCSection>
+
+        {screens.map(({ k, label, Comp, note, extraProps = {} }) => (
+          <DCSection
+            key={k}
+            title={label}
+            subtitle={note}
+          >
+            <DCArtboard label="desktop · 1180 × 780" width={1180} height={780}>
+              <DesktopFrame url={`notif.local/${k}`}>
+                <Themed colorway={colorway} scheme={scheme} texture={texture}>
+                  <Comp platform="desktop" {...extraProps} />
+                </Themed>
+              </DesktopFrame>
+            </DCArtboard>
+            <DCArtboard label="android · 380 × 780" width={380} height={780}>
+              <PhoneFrame dark={scheme === 'dark'}>
+                <Themed colorway={colorway} scheme={scheme} texture={texture}>
+                  <Comp platform="mobile" {...extraProps} />
+                </Themed>
+              </PhoneFrame>
+            </DCArtboard>
+          </DCSection>
+        ))}
+
+        <DCPostIt bottom={80} left={60} rotate={2} width={260}>
+          Next: feed detail, source-manager CRUD, thread reader, summarizer,
+          twitter/bsky bridge. Ask when ready.
+        </DCPostIt>
+      </DesignCanvas>
+
+      {/* Colorway quick-switch — visible whether tweaks mode is on or off so the exploration is legible */}
+      <ColorwayTabs state={state} set={set} />
+
+      <TweaksPanel
+        state={state} set={set}
+        visible={tweaksOn}
+        onClose={() => { setTweaksOn(false); window.parent.postMessage({ type: '__edit_mode_toggle_off' }, '*'); }}
+      />
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Colorway quick-switch pinned to top of canvas (non-tweaks)
+// ═══════════════════════════════════════════════════════════════
+function ColorwayTabs({ state, set }) {
+  return (
+    <div style={{
+      position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+      zIndex: 100,
+      background: '#1a1611', color: '#e6dcc5',
+      border: '1px solid rgba(230,220,197,0.25)',
+      display: 'flex', alignItems: 'stretch',
+      fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
+      letterSpacing: '0.12em', textTransform: 'uppercase',
+      boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+    }}>
+      {Object.keys(COLORWAYS).map(k => {
+        const cw = COLORWAYS[k];
+        const p = cw.dark;
+        const active = state.colorway === k;
+        return (
+          <div key={k}
+            onClick={() => set({ colorway: k })}
+            style={{
+              padding: '9px 14px',
+              borderRight: '1px solid rgba(230,220,197,0.15)',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: active ? 'rgba(230,220,197,0.08)' : 'transparent',
+              color: active ? '#fff' : 'rgba(230,220,197,0.7)',
+            }}>
+            <span style={{
+              width: 10, height: 10,
+              background: `linear-gradient(135deg, ${p.halo1}, ${p.bg1})`,
+              border: `1px solid ${active ? p.accent : 'transparent'}`,
+            }} />
+            {cw.code} · {cw.name}
+          </div>
+        );
+      })}
+      <div style={{ display: 'flex' }}>
+        {['dark','light'].map(s => {
+          const avail = !!COLORWAYS[state.colorway][s];
+          const active = state.scheme === s;
+          return (
+            <div key={s}
+              onClick={() => avail && set({ scheme: s })}
+              style={{
+                padding: '9px 12px',
+                borderRight: s === 'dark' ? '1px solid rgba(230,220,197,0.15)' : 'none',
+                cursor: avail ? 'pointer' : 'not-allowed',
+                opacity: avail ? 1 : 0.3,
+                background: active ? 'rgba(230,220,197,0.08)' : 'transparent',
+                color: active ? '#fff' : 'rgba(230,220,197,0.7)',
+              }}>
+              {s === 'dark' ? '☾' : '☀'} {s}{!avail && '·na'}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
