@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/screens/about.dart';
 import 'package:notif/screens/homescreen.dart';
@@ -16,8 +15,9 @@ GoRouter createRouter(AuthService authService) {
       final isAuthRoute =
           state.matchedLocation == '/login' ||
           state.matchedLocation == '/register';
+      final isPublicRoute = state.matchedLocation.startsWith('/about');
 
-      if (!loggedIn && !isAuthRoute) return '/login';
+      if (!loggedIn && !isAuthRoute && !isPublicRoute) return '/login';
       if (loggedIn && isAuthRoute) return '/home';
       return null;
     },
