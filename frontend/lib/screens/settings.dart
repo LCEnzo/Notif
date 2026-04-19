@@ -436,7 +436,7 @@ class _FontSetTile extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      set.description,
+                      _fontRoleSummary(preview),
                       style: text$.body.copyWith(color: tokens.inkDim),
                     ),
                     const SizedBox(height: 8),
@@ -456,6 +456,46 @@ class _FontSetTile extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+String _fontRoleSummary(NotifTextTheme preview) {
+  final roles = <(String, String?)>[
+    ('Display', preview.display.fontFamily),
+    ('Title', preview.title.fontFamily),
+    ('Heading', preview.heading.fontFamily),
+    ('Eyebrow', preview.eyebrow.fontFamily),
+    ('Body', preview.body.fontFamily),
+    ('Body long', preview.bodyLong.fontFamily),
+    ('Micro', preview.micro.fontFamily),
+    ('Code', preview.code.fontFamily),
+  ];
+
+  return roles
+      .map((role) => '${role.$1}: ${_friendlyFontFamilyName(role.$2)}')
+      .join(' · ');
+}
+
+String _friendlyFontFamilyName(String? family) {
+  switch (family) {
+    case NotifFontFamilies.instrumentSerif:
+      return 'Instrument Serif';
+    case NotifFontFamilies.interTight:
+      return 'Inter Tight';
+    case NotifFontFamilies.jetBrainsMono:
+      return 'JetBrains Mono';
+    case NotifFontFamilies.newsreader:
+      return 'Newsreader';
+    case NotifFontFamilies.skyling:
+      return 'Skyling';
+    case NotifFontFamilies.zalandoSans:
+      return 'Zalando Sans';
+    case NotifFontFamilies.suisseMono:
+      return 'Suisse Mono';
+    case null:
+      return 'System';
+    default:
+      return family;
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
+import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
@@ -51,96 +52,143 @@ class _FormContentState extends State<_FormContent> {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context, listen: false);
+    final isFramed =
+        context.watch<AppSettingsController?>()?.authCardStyle ==
+        AuthCardStyle.framed;
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 330),
+      constraints: BoxConstraints(maxWidth: isFramed ? 460 : 330),
       child: AuthPanel(
         child: Form(
           key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              UsernameTextField(
-                labelText: 'Username',
-                hintText: 'Enter your username',
-                textController: usernameController,
-              ),
-              const SizedBox(height: 16),
-              EmailTextField(
-                labelText: 'Email',
-                hintText: 'Enter your email',
-                textController: emailController,
-              ),
-              const SizedBox(height: 16),
-              PasswordTextField(
-                labelText: 'Password',
-                hintText: 'Enter your password',
-                textController: passwordController,
-              ),
-              const SizedBox(height: 16),
-              CustomButton(
-                buttonText: 'Register',
-                onPressed: () async {
-                  if (formKey.currentState?.validate() ?? false) {
-                    if (kDebugMode) {
-                      final pw = passwordController.text;
-                      final masked = pw.length >= 2
-                          ? '${pw[0]}***${pw[pw.length - 1]}'
-                          : pw.isNotEmpty ? '***' : '(empty)';
-                      debugPrint("Validated data:");
-                      debugPrint("\t- username: ${usernameController.text}");
-                      debugPrint("\t- email: ${emailController.text}");
-                      debugPrint("\t- password: $masked");
-                    }
-
-                    try {
-                      await authService.register(
-                        usernameController.text,
-                        emailController.text,
-                        passwordController.text,
-                      );
-                    } catch (e) {
-                      if (context.mounted) {
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (!context.mounted) return;
-                          showDialog<dynamic>(
-                          context: context,
-                          builder: (context) => AlertDialog(
-                            title: const Text('Register Failed'),
-                            content: Text('$e'),
-                            actions: [
-                              TextButton(
-                                onPressed: () => {Navigator.pop(context)},
-                                child: const Text('OK'),
-                              ),
-                            ],
-                          ),
-                        );
-                        });
-                      }
-                    }
-                  }
-                },
-              ),
-              const SizedBox(height: 16),
-              CustomButton(
-                buttonText: 'Back',
-                buttonColor: AuthPalette.secondaryButtonBase,
-                onPressed: () {
-                  if (Navigator.canPop(context)) {
-                    Navigator.pop(context);
-                  } else {
-                    Navigator.pushReplacementNamed(context, '/LogIn');
-                  }
-                },
-              ),
-
-              /// TODO: add logic and/or navigation for password recovery
-            ],
-          ),
+          child: isFramed
+              ? _buildFramedForm(context, authService)
+              : _buildGlassForm(context, authService),
         ),
       ),
     );
+  }
+
+  Widget _buildFramedForm(BuildContext context, AuthService authService) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        UsernameTextField(
+          labelText: 'Username',
+          hintText: '',
+          textController: usernameController,
+        ),
+        const SizedBox(height: 16),
+        EmailTextField(
+          labelText: 'Email',
+          hintText: '',
+          textController: emailController,
+        ),
+        const SizedBox(height: 16),
+        PasswordTextField(
+          labelText: 'Password',
+          hintText: '',
+          textController: passwordController,
+        ),
+        const SizedBox(height: 18),
+        CustomButton(
+          buttonText: 'Create account',
+          trailingIcon: const Icon(Icons.arrow_forward_rounded, size: 16),
+          onPressed: () => _submit(authService, context),
+        ),
+        const SizedBox(height: 12),
+        const AuthRuleDivider(),
+        const SizedBox(height: 12),
+        CustomButton(
+          buttonText: 'Back to log in',
+          buttonColor: AuthPalette.secondaryButtonBase,
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushReplacementNamed(context, '/LogIn');
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGlassForm(BuildContext context, AuthService authService) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        UsernameTextField(
+          labelText: 'Username',
+          hintText: 'Enter your username',
+          textController: usernameController,
+        ),
+        const SizedBox(height: 16),
+        EmailTextField(
+          labelText: 'Email',
+          hintText: 'Enter your email',
+          textController: emailController,
+        ),
+        const SizedBox(height: 16),
+        PasswordTextField(
+          labelText: 'Password',
+          hintText: 'Enter your password',
+          textController: passwordController,
+        ),
+        const SizedBox(height: 16),
+        CustomButton(
+          buttonText: 'Register',
+          onPressed: () => _submit(authService, context),
+        ),
+        const SizedBox(height: 16),
+        CustomButton(
+          buttonText: 'Back',
+          buttonColor: AuthPalette.secondaryButtonBase,
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushReplacementNamed(context, '/LogIn');
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _submit(AuthService authService, BuildContext context) async {
+    if (formKey.currentState?.validate() ?? false) {
+      if (kDebugMode) {
+        final pw = passwordController.text;
+        final masked = pw.length >= 2
+            ? '${pw[0]}***${pw[pw.length - 1]}'
+            : pw.isNotEmpty ? '***' : '(empty)';
+        debugPrint("Validated data:");
+        debugPrint("\t- username: ${usernameController.text}");
+        debugPrint("\t- email: ${emailController.text}");
+        debugPrint("\t- password: $masked");
+      }
+
+      try {
+        await authService.register(
+          usernameController.text,
+          emailController.text,
+          passwordController.text,
+        );
+      } catch (e) {
+        if (context.mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!context.mounted) return;
+            showAuthFailureDialog(
+              context,
+              title: 'Register failed',
+              message: '$e',
+            );
+          });
+        }
+      }
+    }
   }
 }

@@ -73,33 +73,19 @@ class _FormContentState extends State<_FormContent> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const AuthPanelHeader(
-          eyebrow: '01 / auth',
-          title: 'Welcome back',
-          description: 'Use your handle and passphrase.',
+        UsernameTextField(
+          key: const Key('usernameField'),
+          labelText: 'Username',
+          hintText: '',
+          textController: usernameController,
         ),
-        const SizedBox(height: 24),
-        AuthField(
-          label: 'Handle',
-          meta: 'required',
-          child: UsernameTextField(
-            key: const Key('usernameField'),
-            labelText: 'Username',
-            hintText: 'Enter your username',
-            textController: usernameController,
-          ),
-        ),
-        const SizedBox(height: 20),
-        AuthField(
-          label: 'Passphrase',
-          meta: 'required',
-          child: PasswordTextField(
-            key: const Key('passwordField'),
-            labelText: 'Password',
-            hintText: 'Enter your password',
-            textController: passwordController,
-            validator: noValidate,
-          ),
+        const SizedBox(height: 16),
+        PasswordTextField(
+          key: const Key('passwordField'),
+          labelText: 'Password',
+          hintText: '',
+          textController: passwordController,
+          validator: noValidate,
         ),
         const SizedBox(height: 14),
         LayoutBuilder(
@@ -253,18 +239,10 @@ class _FormContentState extends State<_FormContent> {
         if (context.mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!context.mounted) return;
-            showDialog<dynamic>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Login Failed'),
-                content: Text('$e'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('OK'),
-                  ),
-                ],
-              ),
+            showAuthFailureDialog(
+              context,
+              title: 'Login failed',
+              message: '$e',
             );
           });
         }

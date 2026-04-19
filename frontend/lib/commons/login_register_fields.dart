@@ -35,7 +35,7 @@ InputDecoration _buildAuthInputDecoration({
     final text$ = NotifTextTheme.of(context);
 
     return InputDecoration(
-      hintText: hintText,
+      hintText: hintText.isEmpty ? null : hintText,
       hintStyle: text$.body.copyWith(color: tokens.inkMute),
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
@@ -151,52 +151,6 @@ class AuthPanelHeader extends StatelessWidget {
             style: text$.body.copyWith(color: tokens.inkDim),
           ),
         ],
-      ],
-    );
-  }
-}
-
-class AuthField extends StatelessWidget {
-  final String label;
-  final String? meta;
-  final Widget child;
-
-  const AuthField({
-    super.key,
-    required this.label,
-    this.meta,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_useFramedAuthMode(context)) {
-      return child;
-    }
-
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                label,
-                style: text$.eyebrow.copyWith(color: tokens.ink),
-              ),
-            ),
-            if (meta != null)
-              Text(
-                meta!.toUpperCase(),
-                style: text$.micro.copyWith(color: tokens.inkMute),
-              ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        child,
       ],
     );
   }

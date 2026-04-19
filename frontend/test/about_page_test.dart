@@ -61,6 +61,40 @@ void main() {
     final contact = tester.getTopLeft(
       find.byKey(const ValueKey('aboutSectionContact')),
     );
+    final pageNotesSize = tester.getSize(
+      find.byKey(const ValueKey('aboutSectionPageNotes')),
+    );
+    final designSystemSize = tester.getSize(
+      find.byKey(const ValueKey('aboutSectionDesignSystem')),
+    );
+    final typographySize = tester.getSize(
+      find.byKey(const ValueKey('aboutSectionTypography')),
+    );
+    final contactSize = tester.getSize(
+      find.byKey(const ValueKey('aboutSectionContact')),
+    );
+    final heroIntro = tester.getTopLeft(
+      find.byKey(const ValueKey('aboutHeroIntro')),
+    );
+    final heroMeta = tester.getTopLeft(find.byKey(const ValueKey('aboutHeroMeta')));
+    final heroIntroSize = tester.getSize(
+      find.byKey(const ValueKey('aboutHeroIntro')),
+    );
+    final heroMetaSize = tester.getSize(
+      find.byKey(const ValueKey('aboutHeroMeta')),
+    );
+    final heroGitHub = tester.getTopLeft(
+      find.byKey(const ValueKey('aboutHeroActionGitHub')),
+    );
+    final heroPlaceholder = tester.getTopLeft(
+      find.byKey(const ValueKey('aboutHeroActionPlaceholder')),
+    );
+    final heroDiscord = tester.getTopLeft(
+      find.byKey(const ValueKey('aboutHeroActionDiscord')),
+    );
+    final heroContact = tester.getTopLeft(
+      find.byKey(const ValueKey('aboutHeroActionContact')),
+    );
 
     expect(designSystem.dy, moreOrLessEquals(pageNotes.dy, epsilon: 1));
     expect(designSystem.dx, greaterThan(pageNotes.dx + 100));
@@ -68,6 +102,13 @@ void main() {
     expect(typography.dy, greaterThan(pageNotes.dy + 40));
     expect(contact.dy, moreOrLessEquals(typography.dy, epsilon: 1));
     expect(contact.dx, greaterThan(typography.dx + 100));
+    expect(designSystemSize.height, moreOrLessEquals(pageNotesSize.height, epsilon: 1));
+    expect(contactSize.height, moreOrLessEquals(typographySize.height, epsilon: 1));
+    expect(heroMeta.dx, greaterThan(heroIntro.dx + 100));
+    expect(heroMetaSize.height, moreOrLessEquals(heroIntroSize.height, epsilon: 1));
+    expect(heroPlaceholder.dy, moreOrLessEquals(heroGitHub.dy, epsilon: 1));
+    expect(heroDiscord.dy, moreOrLessEquals(heroGitHub.dy, epsilon: 1));
+    expect(heroContact.dy, moreOrLessEquals(heroGitHub.dy, epsilon: 1));
   });
 }
 

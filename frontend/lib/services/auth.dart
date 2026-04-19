@@ -27,6 +27,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> login(String username, String password) async {
+    final urls = resolveUrls('/token/', _settings);
     final response = await apiPost(
       '/token/',
       settings: _settings,
@@ -43,7 +44,8 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
     } else {
       throw Exception(
-        'Failed to log in, response: (${response.statusCode}) ${response.body}',
+        'Failed to log in via ${urls.join(' -> ')}, '
+        'response: (${response.statusCode}) ${response.body}',
       );
     }
   }
@@ -59,6 +61,7 @@ class AuthService extends ChangeNotifier {
     String password, {
     bool autoLogIn = true,
   }) async {
+    final urls = resolveUrls('/accounts/users/', _settings);
     final response = await apiPost(
       '/accounts/users/',
       settings: _settings,
@@ -72,7 +75,8 @@ class AuthService extends ChangeNotifier {
 
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception(
-        'Failed to register, response: (${response.statusCode}) ${response.body}',
+        'Failed to register via ${urls.join(' -> ')}, '
+        'response: (${response.statusCode}) ${response.body}',
       );
     }
 
@@ -82,6 +86,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> refreshToken(String refreshToken) async {
+    final urls = resolveUrls('/token/refresh/', _settings);
     final response = await apiPost(
       '/token/refresh/',
       settings: _settings,
@@ -95,7 +100,8 @@ class AuthService extends ChangeNotifier {
       notifyListeners();
     } else {
       throw Exception(
-        'Failed to refresh token, response: (${response.statusCode}) ${response.body}',
+        'Failed to refresh token via ${urls.join(' -> ')}, '
+        'response: (${response.statusCode}) ${response.body}',
       );
     }
   }
@@ -140,6 +146,7 @@ class UserDataService extends ChangeNotifier {
   Future<void> getUserInfo() async {
     JWT? jwt = _authService.jwt;
     if (jwt == null) return;
+    final urls = resolveUrls('/accounts/users/get_my_info/', _settings);
 
     final response = await apiGet(
       '/accounts/users/get_my_info/',
@@ -157,7 +164,8 @@ class UserDataService extends ChangeNotifier {
       notifyListeners();
     } else {
       throw Exception(
-        'Failed to fetch user info, response: (${response.statusCode}) ${response.body}',
+        'Failed to fetch user info via ${urls.join(' -> ')}, '
+        'response: (${response.statusCode}) ${response.body}',
       );
     }
   }

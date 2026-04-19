@@ -76,7 +76,7 @@ class _AboutPageState extends State<AboutPage> {
         title: Row(
           children: [
             Text(
-              'notif',
+              'Notif',
               style: text$.heading.copyWith(
                 color: tokens.ink,
                 fontStyle: FontStyle.italic,
@@ -148,41 +148,20 @@ class _AboutPageState extends State<AboutPage> {
                             }
 
                             final sections = [
-                              const _AboutSection(
+                              const _IntroCard(
                                 key: ValueKey('aboutSectionPageNotes'),
-                                header: IndexRule(
-                                  index: 1,
-                                  title: 'Page notes',
-                                ),
-                                child: _IntroCard(),
                               ),
-                              _AboutSection(
-                                key: const ValueKey('aboutSectionDesignSystem'),
-                                header: const IndexRule(
-                                  index: 2,
-                                  title: 'Design system',
-                                ),
-                                child: _SystemGrid(isWide: isWide),
+                              const _SystemGrid(
+                                key: ValueKey('aboutSectionDesignSystem'),
                               ),
-                              const _AboutSection(
+                              const _TypefaceCard(
                                 key: ValueKey('aboutSectionTypography'),
-                                header: IndexRule(
-                                  index: 3,
-                                  title: 'Typography',
-                                ),
-                                child: _TypefaceCard(),
                               ),
-                              _AboutSection(
+                              _ContactRow(
                                 key: const ValueKey('aboutSectionContact'),
-                                header: const IndexRule(
-                                  index: 4,
-                                  title: 'Contact & source',
-                                ),
-                                child: _ContactRow(
-                                  isWide: isWide,
-                                  onGitHub: onGitHub,
-                                  onContact: onContact,
-                                ),
+                                isWide: isWide,
+                                onGitHub: onGitHub,
+                                onContact: onContact,
                               ),
                             ];
 
@@ -196,7 +175,7 @@ class _AboutPageState extends State<AboutPage> {
                                   onGitHub: onGitHub,
                                   onContact: onContact,
                                 ),
-                                const SizedBox(height: 48),
+                                const SizedBox(height: 32),
                                 _AboutSections(
                                   isWide: isWide,
                                   sections: sections,
@@ -243,6 +222,7 @@ class _Hero extends StatelessWidget {
     final text$ = NotifTextTheme.of(context);
 
     final intro = Column(
+      mainAxisSize: MainAxisSize.max,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Eyebrow('Showcase · non-auth pilot', tone: EyebrowTone.accent),
@@ -252,17 +232,20 @@ class _Hero extends StatelessWidget {
         Text(
           'Notif aggregates updates from pages, feeds, and accounts you care '
           'about, and surfaces them when something changes. It is a personal '
-          'project built for my own needs and to sharpen the craft.',
+          'project built for my own needs and to sharpen the craft. As such, '
+          'it is provided as-is. No guarantees it will work. I reserve the '
+          'right to break it at any time without notice.',
           style: text$.bodyLong.copyWith(color: tokens.inkDim),
         ),
-        const SizedBox(height: 12),
-        Text(
-          'No guarantees it will work. I reserve the right to break it at any '
-          'time without notice.',
-          style: text$.bodyLong.copyWith(color: tokens.inkDim),
+        if (isWide)
+          const Spacer()
+        else
+          const SizedBox(height: 24),
+        _HeroActionGrid(
+          isWide: isWide,
+          onGitHub: onGitHub,
+          onContact: onContact,
         ),
-        const SizedBox(height: 24),
-        _HeroActionGrid(onGitHub: onGitHub, onContact: onContact),
       ],
     );
 
@@ -300,13 +283,27 @@ class _Hero extends StatelessWidget {
       );
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(flex: 5, child: intro),
-        const SizedBox(width: 32),
-        Expanded(flex: 3, child: meta),
-      ],
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            flex: 5,
+            child: KeyedSubtree(
+              key: const ValueKey('aboutHeroIntro'),
+              child: intro,
+            ),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            flex: 3,
+            child: KeyedSubtree(
+              key: const ValueKey('aboutHeroMeta'),
+              child: meta,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -334,34 +331,21 @@ class _AboutSections extends StatelessWidget {
     return Column(
       children: [
         for (var index = 0; index < sections.length; index += 2) ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: index < sections.length - 1
-                ? [
-                    Expanded(child: sections[index]),
-                    const SizedBox(width: 32),
-                    Expanded(child: sections[index + 1]),
-                  ]
-                : [Expanded(child: sections[index])],
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: index < sections.length - 1
+                  ? [
+                      Expanded(child: sections[index]),
+                      const SizedBox(width: 24),
+                      Expanded(child: sections[index + 1]),
+                    ]
+                  : [Expanded(child: sections[index])],
+            ),
           ),
-          if (index < sections.length - 2) const SizedBox(height: 32),
+          if (index < sections.length - 2) const SizedBox(height: 24),
         ],
       ],
-    );
-  }
-}
-
-class _AboutSection extends StatelessWidget {
-  final Widget header;
-  final Widget child;
-
-  const _AboutSection({required this.header, required this.child, super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [header, child],
     );
   }
 }
@@ -467,7 +451,7 @@ class _ActiveColorwayText extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _IntroCard extends StatelessWidget {
-  const _IntroCard();
+  const _IntroCard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -478,10 +462,10 @@ class _IntroCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Eyebrow('Why this page exists'),
+          const _CardLead(icon: Icons.radar_sharp, label: 'Page notes'),
           const SizedBox(height: 12),
           Text(
-            'About is the testbed for the non-auth design language.',
+            'Why this page exists',
             style: text$.heading.copyWith(color: tokens.ink),
           ),
           const SizedBox(height: 12),
@@ -498,8 +482,7 @@ class _IntroCard extends StatelessWidget {
 }
 
 class _SystemGrid extends StatelessWidget {
-  final bool isWide;
-  const _SystemGrid({required this.isWide});
+  const _SystemGrid({super.key});
 
   static const _rows = [
     _SignalRow(
@@ -527,25 +510,29 @@ class _SystemGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final columns = isWide ? 2 : 1;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final gap = 16.0;
-        final itemWidth = columns == 1
-            ? constraints.maxWidth
-            : (constraints.maxWidth - gap) / 2;
-        return Wrap(
-          spacing: gap,
-          runSpacing: gap,
-          children: [
-            for (final row in _rows)
-              SizedBox(
-                width: itemWidth,
-                child: NotifCard(child: row),
-              ),
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return NotifCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _CardLead(
+            icon: Icons.design_services_sharp,
+            label: 'Design system',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'What this page tests',
+            style: text$.heading.copyWith(color: tokens.ink),
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < _rows.length; i++) ...[
+            _rows[i],
+            if (i != _rows.length - 1) const SizedBox(height: 8),
           ],
-        );
-      },
+        ],
+      ),
     );
   }
 }
@@ -572,7 +559,7 @@ class _SignalRow extends StatelessWidget {
 }
 
 class _TypefaceCard extends StatelessWidget {
-  const _TypefaceCard();
+  const _TypefaceCard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -625,6 +612,7 @@ class _ContactRow extends StatelessWidget {
   final VoidCallback onContact;
 
   const _ContactRow({
+    super.key,
     required this.isWide,
     required this.onGitHub,
     required this.onContact,
@@ -634,7 +622,30 @@ class _ContactRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
-    final buttons = Wrap(
+    final wideButtons = Row(
+      children: [
+        Expanded(
+          child: NotifButton(
+            label: 'GitHub',
+            icon: Icons.open_in_new_sharp,
+            onPressed: onGitHub,
+            variant: NotifButtonVariant.primary,
+            expand: true,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: NotifButton(
+            label: 'Email',
+            icon: Icons.mail_sharp,
+            onPressed: onContact,
+            variant: NotifButtonVariant.ghost,
+            expand: true,
+          ),
+        ),
+      ],
+    );
+    final narrowButtons = Wrap(
       spacing: 12,
       runSpacing: 12,
       children: [
@@ -655,31 +666,29 @@ class _ContactRow extends StatelessWidget {
 
     return NotifCard(
       child: isWide
-          ? SizedBox(
-              height: 260,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const _CardLead(
-                    icon: Icons.link_sharp,
-                    label: 'Contact & source',
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Useful links.',
-                    style: text$.heading.copyWith(color: tokens.ink),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'About doubles as the prototype for the non-auth system, '
-                    'so the key actions live here as first-class '
-                    'components.',
-                    style: text$.body.copyWith(color: tokens.inkDim),
-                  ),
-                  const Spacer(),
-                  buttons,
-                ],
-              ),
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                const _CardLead(
+                  icon: Icons.link_sharp,
+                  label: 'Contact & source',
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Useful links.',
+                  style: text$.heading.copyWith(color: tokens.ink),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'About doubles as the prototype for the non-auth system, '
+                  'so the key actions live here as first-class '
+                  'components.',
+                  style: text$.body.copyWith(color: tokens.inkDim),
+                ),
+                const Spacer(),
+                wideButtons,
+              ],
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -700,7 +709,7 @@ class _ContactRow extends StatelessWidget {
                   style: text$.body.copyWith(color: tokens.inkDim),
                 ),
                 const SizedBox(height: 20),
-                buttons,
+                narrowButtons,
               ],
             ),
     );
@@ -708,27 +717,34 @@ class _ContactRow extends StatelessWidget {
 }
 
 class _HeroActionGrid extends StatelessWidget {
+  final bool isWide;
   final VoidCallback onGitHub;
   final VoidCallback onContact;
 
-  const _HeroActionGrid({required this.onGitHub, required this.onContact});
+  const _HeroActionGrid({
+    required this.isWide,
+    required this.onGitHub,
+    required this.onContact,
+  });
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 720 ? 4 : 2;
-        final itemWidth = (constraints.maxWidth - (columns - 1) * 12) / columns;
         final children = <Widget>[
           NotifButton(
+            key: const ValueKey('aboutHeroActionGitHub'),
             label: 'GitHub',
             icon: Icons.open_in_new_sharp,
             onPressed: onGitHub,
             variant: NotifButtonVariant.primary,
             expand: true,
           ),
-          const _HeroActionPlaceholder(),
+          const _HeroActionPlaceholder(
+            key: ValueKey('aboutHeroActionPlaceholder'),
+          ),
           NotifButton(
+            key: const ValueKey('aboutHeroActionDiscord'),
             label: 'Discord',
             icon: Icons.discord,
             onPressed: () => _copyDiscordHandle(context),
@@ -736,6 +752,7 @@ class _HeroActionGrid extends StatelessWidget {
             expand: true,
           ),
           NotifButton(
+            key: const ValueKey('aboutHeroActionContact'),
             label: 'Contact',
             icon: Icons.alternate_email_sharp,
             onPressed: onContact,
@@ -744,6 +761,19 @@ class _HeroActionGrid extends StatelessWidget {
           ),
         ];
 
+        if (isWide) {
+          return Row(
+            children: [
+              for (var i = 0; i < children.length; i++) ...[
+                Expanded(child: children[i]),
+                if (i != children.length - 1) const SizedBox(width: 12),
+              ],
+            ],
+          );
+        }
+
+        final columns = 2;
+        final itemWidth = (constraints.maxWidth - (columns - 1) * 12) / columns;
         return Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -758,7 +788,7 @@ class _HeroActionGrid extends StatelessWidget {
 }
 
 class _HeroActionPlaceholder extends StatelessWidget {
-  const _HeroActionPlaceholder();
+  const _HeroActionPlaceholder({super.key});
 
   @override
   Widget build(BuildContext context) {

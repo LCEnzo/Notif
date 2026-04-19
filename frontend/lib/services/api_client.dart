@@ -24,17 +24,25 @@ Future<http.Response> apiPost(
   required String body,
 }) async {
   final urls = resolveUrls(path, settings);
+  if (urls.isEmpty) {
+    throw StateError(
+      'No API URL resolved for POST $path. '
+      'Set a custom backend URL or switch the network mode.',
+    );
+  }
   http.Response? response;
+  Object? lastError;
   for (final url in urls) {
     try {
+      if (kDebugMode) debugPrint('apiPost: POST $url');
       response = await http.post(Uri.parse(url), headers: headers, body: body);
       return response;
     } catch (e) {
-      if (identical(url, urls.last)) rethrow;
+      lastError = e;
       if (kDebugMode) debugPrint('apiPost: $url failed ($e), trying fallback');
     }
   }
-  throw StateError('apiPost: all URLs exhausted');
+  throw Exception('API POST failed for ${urls.join(' -> ')}: $lastError');
 }
 
 Future<http.Response> apiGet(
@@ -43,17 +51,25 @@ Future<http.Response> apiGet(
   required Map<String, String> headers,
 }) async {
   final urls = resolveUrls(path, settings);
+  if (urls.isEmpty) {
+    throw StateError(
+      'No API URL resolved for GET $path. '
+      'Set a custom backend URL or switch the network mode.',
+    );
+  }
   http.Response? response;
+  Object? lastError;
   for (final url in urls) {
     try {
+      if (kDebugMode) debugPrint('apiGet: GET $url');
       response = await http.get(Uri.parse(url), headers: headers);
       return response;
     } catch (e) {
-      if (identical(url, urls.last)) rethrow;
+      lastError = e;
       if (kDebugMode) debugPrint('apiGet: $url failed ($e), trying fallback');
     }
   }
-  throw StateError('apiGet: all URLs exhausted');
+  throw Exception('API GET failed for ${urls.join(' -> ')}: $lastError');
 }
 
 List<String> resolveUrls(String path, AppSettingsController? settings) {
