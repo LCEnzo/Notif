@@ -22,7 +22,6 @@ void main() {
     expect(controller.loaded, isTrue);
     expect(controller.designDitheringEnabled, isTrue);
     expect(controller.colorway, NotifColorway.dusk1);
-    expect(controller.colorScheme, NotifColorway.dusk1.defaultScheme);
     expect(controller.persistenceError, isNotNull);
     expect(controller.persistenceError!.operation, 'load');
   });

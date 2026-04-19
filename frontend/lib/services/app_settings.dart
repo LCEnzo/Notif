@@ -36,7 +36,6 @@ class AppSettingsController extends ChangeNotifier {
   static const String _backendUrlModeKey = 'backendUrlMode';
   static const String _customBackendUrlKey = 'customBackendUrl';
   static const String _colorwayKey = 'colorway';
-  static const String _colorSchemeKey = 'colorScheme';
   static const String _fontSetKey = 'fontSet';
 
   bool _designDitheringEnabled = true;
@@ -44,7 +43,6 @@ class AppSettingsController extends ChangeNotifier {
   BackendUrlMode _backendUrlMode = BackendUrlMode.builtin;
   String _customBackendUrl = '';
   NotifColorway _colorway = NotifColorway.dusk1;
-  NotifColorScheme _colorScheme = NotifColorway.dusk1.defaultScheme;
   NotifFontSet _fontSet = NotifFontSet.current;
 
   /// Surface the most recent persistence failure so UI can show a banner.
@@ -65,7 +63,6 @@ class AppSettingsController extends ChangeNotifier {
   BackendUrlMode get backendUrlMode => _backendUrlMode;
   String get customBackendUrl => _customBackendUrl;
   NotifColorway get colorway => _colorway;
-  NotifColorScheme get colorScheme => _colorScheme;
   NotifFontSet get fontSet => _fontSet;
 
   Future<void> _load() async {
@@ -88,11 +85,6 @@ class AppSettingsController extends ChangeNotifier {
         NotifColorway.values,
         NotifColorway.dusk1,
       );
-      final storedScheme = _parseEnumOrNull(
-        prefs.getString(_colorSchemeKey),
-        NotifColorScheme.values,
-      );
-      final colorScheme = _resolveScheme(colorway, storedScheme);
       final fontSet = _parseEnum(
         prefs.getString(_fontSetKey),
         NotifFontSet.values,
@@ -104,7 +96,6 @@ class AppSettingsController extends ChangeNotifier {
       _authCardStyle = authCardStyle;
       _backendUrlMode = backendUrlMode;
       _colorway = colorway;
-      _colorScheme = colorScheme;
       _fontSet = fontSet;
       _customBackendUrl = customBackendUrl;
       _persistenceError = null;
@@ -182,46 +173,15 @@ class AppSettingsController extends ChangeNotifier {
     );
   }
 
-  /// Change the active colorway. If the currently-selected scheme isn't
-  /// supported by the new colorway, the scheme snaps to the colorway's
-  /// default — we don't render an invalid combination.
   Future<void> setColorway(NotifColorway colorway) async {
-    final resolvedScheme = _resolveScheme(colorway, _colorScheme);
-    final changed = _colorway != colorway || _colorScheme != resolvedScheme;
-    if (!changed) return;
+    if (_colorway == colorway) return;
 
     _colorway = colorway;
-    _colorScheme = resolvedScheme;
     notifyListeners();
 
-    await _write('setColorway', (prefs) async {
-      final okColorway = await prefs.setString(_colorwayKey, colorway.name);
-      final okScheme = await prefs.setString(
-        _colorSchemeKey,
-        resolvedScheme.name,
-      );
-      return okColorway && okScheme;
-    });
-  }
-
-  /// Change the scheme within the active colorway. Throws
-  /// [ArgumentError] if the scheme isn't supported — use
-  /// [NotifColorwayMeta.supportedSchemes] to guard the UI.
-  Future<void> setColorScheme(NotifColorScheme scheme) async {
-    if (!_colorway.supportedSchemes.contains(scheme)) {
-      throw ArgumentError.value(
-        scheme,
-        'scheme',
-        'Colorway ${_colorway.displayName} does not support $scheme '
-            '(supported: ${_colorway.supportedSchemes}).',
-      );
-    }
-    if (_colorScheme == scheme) return;
-    _colorScheme = scheme;
-    notifyListeners();
     await _write(
-      'setColorScheme',
-      (prefs) => prefs.setString(_colorSchemeKey, scheme.name),
+      'setColorway',
+      (prefs) => prefs.setString(_colorwayKey, colorway.name),
     );
   }
 
@@ -235,20 +195,6 @@ class AppSettingsController extends ChangeNotifier {
     );
   }
 
-  /// Resolve a stored scheme against the active colorway's support set.
-  /// Used on load and on colorway change. If the stored value is invalid
-  /// we fall back to the colorway's default scheme rather than throwing —
-  /// this is recoverable state, not a programmer error.
-  static NotifColorScheme _resolveScheme(
-    NotifColorway colorway,
-    NotifColorScheme? desired,
-  ) {
-    if (desired != null && colorway.supportedSchemes.contains(desired)) {
-      return desired;
-    }
-    return colorway.defaultScheme;
-  }
-
   static T _parseEnum<T extends Enum>(String? raw, List<T> values, T fallback) {
     if (raw == null) return fallback;
     for (final v in values) {
@@ -256,13 +202,5 @@ class AppSettingsController extends ChangeNotifier {
     }
     if (kDebugMode) debugPrint('AppSettings: unknown enum value "$raw"');
     return fallback;
-  }
-
-  static T? _parseEnumOrNull<T extends Enum>(String? raw, List<T> values) {
-    if (raw == null) return null;
-    for (final v in values) {
-      if (v.name == raw) return v;
-    }
-    return null;
   }
 }

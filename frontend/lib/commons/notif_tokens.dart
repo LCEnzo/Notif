@@ -6,8 +6,6 @@ import 'package:flutter/material.dart';
 /// compiler flags the gap.
 enum NotifColorway { dusk1, dusk2, midnight, sage, daybreak }
 
-enum NotifColorScheme { dark, light }
-
 extension NotifColorwayMeta on NotifColorway {
   String get code {
     switch (this) {
@@ -54,21 +52,17 @@ extension NotifColorwayMeta on NotifColorway {
     }
   }
 
-  /// Schemes this colorway ships with. Dark-only or light-only for now; the
-  /// spec (§16) reserves the option to generate the missing scheme later.
-  Set<NotifColorScheme> get supportedSchemes {
+  Brightness get brightness {
     switch (this) {
       case NotifColorway.dusk1:
       case NotifColorway.dusk2:
       case NotifColorway.midnight:
-        return const {NotifColorScheme.dark};
+        return Brightness.dark;
       case NotifColorway.sage:
       case NotifColorway.daybreak:
-        return const {NotifColorScheme.light};
+        return Brightness.light;
     }
   }
-
-  NotifColorScheme get defaultScheme => supportedSchemes.first;
 }
 
 /// Shared feedback colors — same across every colorway. Revisit light-scheme
@@ -87,7 +81,6 @@ class NotifFeedback {
 class NotifTokens extends ThemeExtension<NotifTokens> {
   const NotifTokens({
     required this.colorway,
-    required this.scheme,
     required this.bg0,
     required this.bg1,
     required this.bg2,
@@ -113,7 +106,6 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
   });
 
   final NotifColorway colorway;
-  final NotifColorScheme scheme;
 
   // Structural
   final Color bg0;
@@ -151,27 +143,11 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
   final BlendMode halftoneBlend;
   final double grainOpacity;
 
-  Brightness get brightness =>
-      scheme == NotifColorScheme.dark ? Brightness.dark : Brightness.light;
+  Brightness get brightness => colorway.brightness;
 
-  /// Build the tokens for a given `(colorway, scheme)` pair. Throws
-  /// `ArgumentError` if the pair isn't supported — callers should have already
-  /// resolved the scheme via [NotifColorwayMeta.supportedSchemes].
-  factory NotifTokens.build(
-    NotifColorway colorway, {
-    NotifColorScheme? scheme,
-  }) {
-    final supported = colorway.supportedSchemes;
-    final resolved = scheme ?? colorway.defaultScheme;
-    if (!supported.contains(resolved)) {
-      throw ArgumentError.value(
-        resolved,
-        'scheme',
-        'Colorway ${colorway.displayName} does not ship the $resolved '
-            'scheme; supported: $supported',
-      );
-    }
-
+  /// Build the tokens for a given colorway. Each colorway owns its own
+  /// brightness, so there is no separate scheme selection to resolve.
+  factory NotifTokens.build(NotifColorway colorway) {
     final build = _NotifColorwayRegistry.tokens[colorway];
     if (build == null) {
       throw StateError(
@@ -185,7 +161,6 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
   @override
   NotifTokens copyWith({
     NotifColorway? colorway,
-    NotifColorScheme? scheme,
     Color? bg0,
     Color? bg1,
     Color? bg2,
@@ -211,7 +186,6 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
   }) {
     return NotifTokens(
       colorway: colorway ?? this.colorway,
-      scheme: scheme ?? this.scheme,
       bg0: bg0 ?? this.bg0,
       bg1: bg1 ?? this.bg1,
       bg2: bg2 ?? this.bg2,
@@ -244,10 +218,9 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
   @override
   NotifTokens lerp(ThemeExtension<NotifTokens>? other, double t) {
     if (other is! NotifTokens) return this;
-    if (colorway == other.colorway && scheme == other.scheme) {
+    if (colorway == other.colorway) {
       return NotifTokens(
         colorway: colorway,
-        scheme: scheme,
         bg0: Color.lerp(bg0, other.bg0, t)!,
         bg1: Color.lerp(bg1, other.bg1, t)!,
         bg2: Color.lerp(bg2, other.bg2, t)!,
@@ -307,13 +280,11 @@ class _NotifColorwayRegistry {
     NotifColorway.daybreak: _buildDaybreak,
   };
 
-  // Each builder emits the tokens for a single (colorway, scheme) pair. When a
-  // colorway later ships multiple schemes, split its builder into per-scheme
-  // variants and add a tiny dispatcher in the registry.
+  // Each builder emits the tokens for a single colorway. When a colorway later
+  // changes, update the corresponding builder in-place.
   static NotifTokens _buildDusk1() {
     return const NotifTokens(
       colorway: NotifColorway.dusk1,
-      scheme: NotifColorScheme.dark,
       bg0: Color(0xFF0D0B0F),
       bg1: Color(0xFF16131A),
       bg2: Color(0xFF1E1A24),
@@ -342,7 +313,6 @@ class _NotifColorwayRegistry {
   static NotifTokens _buildDusk2() {
     return const NotifTokens(
       colorway: NotifColorway.dusk2,
-      scheme: NotifColorScheme.dark,
       bg0: Color(0xFF0A0310),
       bg1: Color(0xFF1A0A26),
       bg2: Color(0xFF2D1244),
@@ -371,7 +341,6 @@ class _NotifColorwayRegistry {
   static NotifTokens _buildMidnight() {
     return const NotifTokens(
       colorway: NotifColorway.midnight,
-      scheme: NotifColorScheme.dark,
       bg0: Color(0xFF030A12),
       bg1: Color(0xFF081624),
       bg2: Color(0xFF0F2438),
@@ -400,7 +369,6 @@ class _NotifColorwayRegistry {
   static NotifTokens _buildSage() {
     return const NotifTokens(
       colorway: NotifColorway.sage,
-      scheme: NotifColorScheme.light,
       bg0: Color(0xFFE8E2C8),
       bg1: Color(0xFFDED7B8),
       bg2: Color(0xFFD2CAA6),
@@ -429,7 +397,6 @@ class _NotifColorwayRegistry {
   static NotifTokens _buildDaybreak() {
     return const NotifTokens(
       colorway: NotifColorway.daybreak,
-      scheme: NotifColorScheme.light,
       bg0: Color(0xFFE4EEF2),
       bg1: Color(0xFFD5E3EA),
       bg2: Color(0xFFC2D5DF),

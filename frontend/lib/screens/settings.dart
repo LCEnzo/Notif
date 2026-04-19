@@ -46,8 +46,10 @@ class _SettingsPageState extends State<SettingsPage> {
             elevation: 0,
             scrolledUnderElevation: 0,
             titleSpacing: 24,
-            title: Text('Settings',
-                style: text$.heading.copyWith(color: tokens.ink)),
+            title: Text(
+              'Settings',
+              style: text$.heading.copyWith(color: tokens.ink),
+            ),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),
               child: Container(height: 1, color: tokens.rule),
@@ -81,9 +83,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         if (settings.persistenceError != null) ...[
                           const SizedBox(height: 16),
-                          _PersistenceBanner(
-                            error: settings.persistenceError!,
-                          ),
+                          _PersistenceBanner(error: settings.persistenceError!),
                         ],
                         const SizedBox(height: 32),
 
@@ -91,16 +91,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         _ColorwayPicker(
                           selected: settings.colorway,
                           onChanged: (cw) => settings.setColorway(cw),
-                        ),
-                        const SizedBox(height: 24),
-                        _SchemeToggle(
-                          colorway: settings.colorway,
-                          scheme: settings.colorScheme,
-                          onChanged: (s) {
-                            // UI already constrains to supported schemes, but
-                            // the setter also validates defensively.
-                            settings.setColorScheme(s);
-                          },
                         ),
                         const SizedBox(height: 32),
 
@@ -160,8 +150,7 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Colorway picker — grid of swatches. Disabled (but present) for
-// colorways incompatible with the current scheme.
+// Colorway picker — each card previews its own palette directly.
 // ═══════════════════════════════════════════════════════════════
 
 class _ColorwayPicker extends StatelessWidget {
@@ -208,55 +197,102 @@ class _ColorwayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
+    final preview = NotifTokens.build(colorway);
+    final borderColor = selected ? preview.accent : preview.ruleStrong;
 
-    final preview = NotifTokens.build(
-      colorway,
-      scheme: colorway.defaultScheme,
+    final surface = AspectRatio(
+      aspectRatio: 1.42,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: preview.bg1,
+          border: Border.all(color: borderColor, width: selected ? 2 : 1),
+        ),
+        child: ClipRect(
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: const Alignment(0, -1.05),
+                      radius: 1.16,
+                      colors: [
+                        preview.halo1,
+                        preview.halo2,
+                        preview.halo3,
+                        preview.bg1,
+                      ],
+                      stops: const [0, 0.28, 0.56, 0.9],
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SizedBox(
+                  height: 44,
+                  child: CustomPaint(
+                    painter: _HalftoneStripPainter(
+                      color: preview.halftone.withValues(alpha: 0.34),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          colorway.code,
+                          style: text$.micro.copyWith(color: preview.inkDim),
+                        ),
+                        if (selected)
+                          Text(
+                            'ACTIVE',
+                            style: text$.micro.copyWith(
+                              color: preview.accent,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      colorway.displayName,
+                      style: text$.heading.copyWith(color: preview.ink),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      colorway.description,
+                      style: text$.body.copyWith(color: preview.inkDim),
+                    ),
+                    const Spacer(),
+                    _Swatches(preview: preview),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: tokens.bg2,
-            border: Border.all(
-              color: selected ? tokens.accent : tokens.rule,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(colorway.code,
-                      style: text$.micro.copyWith(color: tokens.inkMute)),
-                  if (selected)
-                    Eyebrow('Active',
-                        size: EyebrowSize.micro, tone: EyebrowTone.accent),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                colorway.displayName,
-                style: text$.heading.copyWith(color: tokens.ink),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                colorway.description,
-                style: text$.body.copyWith(color: tokens.inkDim),
-              ),
-              const SizedBox(height: 12),
-              _Swatches(preview: preview),
-            ],
-          ),
-        ),
+        splashColor: preview.accent.withValues(alpha: 0.08),
+        highlightColor: preview.accent.withValues(alpha: 0.04),
+        child: selected
+            ? CornerMarks(color: preview.ruleStrong, child: surface)
+            : surface,
       ),
     );
   }
@@ -268,7 +304,6 @@ class _Swatches extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
     final chips = <Color>[
       preview.bg0,
       preview.bg1,
@@ -287,7 +322,7 @@ class _Swatches extends StatelessWidget {
               height: 20,
               decoration: BoxDecoration(
                 color: chips[i],
-                border: Border.all(color: tokens.rule, width: 1),
+                border: Border.all(color: preview.ruleStrong, width: 1),
               ),
             ),
           ),
@@ -296,117 +331,30 @@ class _Swatches extends StatelessWidget {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Scheme toggle — only offers schemes the active colorway supports.
-// ═══════════════════════════════════════════════════════════════
+class _HalftoneStripPainter extends CustomPainter {
+  final Color color;
 
-class _SchemeToggle extends StatelessWidget {
-  final NotifColorway colorway;
-  final NotifColorScheme scheme;
-  final ValueChanged<NotifColorScheme> onChanged;
-
-  const _SchemeToggle({
-    required this.colorway,
-    required this.scheme,
-    required this.onChanged,
-  });
+  const _HalftoneStripPainter({required this.color});
 
   @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-    final supported = colorway.supportedSchemes;
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    const step = 6.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Scheme', style: text$.heading.copyWith(color: tokens.ink)),
-        const SizedBox(height: 8),
-        Text(
-          supported.length > 1
-              ? 'This colorway ships both dark and light variants.'
-              : 'This colorway is ${scheme.name}-only for now. Switch '
-                    'colorway to access the other scheme.',
-          style: text$.body.copyWith(color: tokens.inkDim),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            for (final s in NotifColorScheme.values) ...[
-              _SchemePill(
-                scheme: s,
-                active: s == scheme,
-                enabled: supported.contains(s),
-                onTap: supported.contains(s) ? () => onChanged(s) : null,
-              ),
-              const SizedBox(width: 12),
-            ],
-          ],
-        ),
-      ],
-    );
-  }
-}
+    for (double y = 3; y < size.height + step; y += step) {
+      final row = (y / step).floor();
+      final radius = 0.7 + (y / size.height) * 0.9;
+      final startX = row.isOdd ? step / 2 : 0.0;
 
-class _SchemePill extends StatelessWidget {
-  final NotifColorScheme scheme;
-  final bool active;
-  final bool enabled;
-  final VoidCallback? onTap;
-
-  const _SchemePill({
-    required this.scheme,
-    required this.active,
-    required this.enabled,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-
-    final Color fg;
-    final Color border;
-    final Color bg;
-
-    if (!enabled) {
-      fg = tokens.inkMute;
-      border = tokens.rule;
-      bg = Colors.transparent;
-    } else if (active) {
-      fg = tokens.btnInk;
-      border = tokens.btnBg;
-      bg = tokens.btnBg;
-    } else {
-      fg = tokens.ink;
-      border = tokens.ruleStrong;
-      bg = Colors.transparent;
+      for (double x = startX + 2; x < size.width + step; x += step) {
+        canvas.drawCircle(Offset(x, y), radius, paint);
+      }
     }
+  }
 
-    final label = scheme.name.toUpperCase();
-    return Opacity(
-      opacity: enabled ? 1 : 0.5,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: bg,
-              border: Border.all(color: border, width: 1),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              label,
-              style: text$.eyebrow.copyWith(color: fg, letterSpacing: 1.5),
-            ),
-          ),
-        ),
-      ),
-    );
+  @override
+  bool shouldRepaint(covariant _HalftoneStripPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 
@@ -460,9 +408,7 @@ class _FontSetTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: tokens.rule, width: 1),
-            ),
+            border: Border(bottom: BorderSide(color: tokens.rule, width: 1)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -577,11 +523,12 @@ class _LabeledSwitch extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title,
-                  style: text$.heading.copyWith(color: tokens.ink)),
+              Text(title, style: text$.heading.copyWith(color: tokens.ink)),
               const SizedBox(height: 4),
-              Text(description,
-                  style: text$.body.copyWith(color: tokens.inkDim)),
+              Text(
+                description,
+                style: text$.body.copyWith(color: tokens.inkDim),
+              ),
             ],
           ),
         ),
@@ -650,9 +597,7 @@ class _BackendUrlModeSelector extends StatelessWidget {
                           Text(
                             _modeLabels[mode]!,
                             style: text$.body.copyWith(
-                              color: mode == value
-                                  ? tokens.ink
-                                  : tokens.inkDim,
+                              color: mode == value ? tokens.ink : tokens.inkDim,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -737,8 +682,7 @@ class _PersistenceBanner extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Eyebrow('Persistence error',
-              tone: EyebrowTone.accent),
+          Eyebrow('Persistence error', tone: EyebrowTone.accent),
           const SizedBox(height: 4),
           Text(
             'Changes are active this session but could not be saved.',

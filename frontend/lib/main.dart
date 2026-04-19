@@ -52,9 +52,10 @@ class _DarkFadeUpTransitionBuilder extends PageTransitionsBuilder {
       reverseCurve: Curves.easeInCubic,
     );
     return FadeTransition(
-      opacity: Tween<double>(begin: 0, end: 1).animate(
-        CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-      ),
+      opacity: Tween<double>(
+        begin: 0,
+        end: 1,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
       child: SlideTransition(
         position: Tween<Offset>(
           begin: const Offset(0, 0.03),
@@ -75,7 +76,6 @@ class App extends StatelessWidget {
 
     final theme = buildNotifTheme(
       colorway: settings.colorway,
-      scheme: settings.colorScheme,
       fontSet: settings.fontSet,
     );
 

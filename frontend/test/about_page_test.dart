@@ -79,11 +79,7 @@ Widget _buildAboutApp({
   return ChangeNotifierProvider<AppSettingsController>.value(
     value: controller,
     child: MaterialApp(
-      theme: buildNotifTheme(
-        colorway: colorway,
-        scheme: colorway.defaultScheme,
-        fontSet: NotifFontSet.current,
-      ),
+      theme: buildNotifTheme(colorway: colorway, fontSet: NotifFontSet.current),
       home: AboutPage(packageInfoFuture: packageInfoFuture),
     ),
   );
