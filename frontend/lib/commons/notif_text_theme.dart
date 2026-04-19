@@ -5,10 +5,8 @@ import 'package:flutter/material.dart';
 ///
 /// - [current]    — existing 6-role scale (Instrument Serif / Skyling / Suisse
 ///                  Mono / Zalando Sans). Ships today.
-/// - [experiment] — 8-role scale. The target fonts (Newsreader, JetBrains
-///                  Mono, Inter Tight) aren't registered yet; until they are,
-///                  this set falls back to the registered fonts (spec §15
-///                  step 7 will add them).
+/// - [experiment] — 8-role scale using Newsreader, JetBrains Mono, and
+///                  Inter Tight.
 /// - [hybrid]     — 8-role scale with the *current* registered fonts.
 enum NotifFontSet { current, experiment, hybrid }
 
@@ -30,9 +28,8 @@ extension NotifFontSetMeta on NotifFontSet {
         return 'Instrument Serif · Skyling · Suisse Mono. '
             'Six-role scale, ships today.';
       case NotifFontSet.experiment:
-        return 'Eight-role scale. Target fonts (Newsreader, JetBrains Mono, '
-            'Inter Tight) not yet registered; falls back to Suisse Mono + '
-            'Zalando Sans for now.';
+        return 'Eight-role scale with Newsreader, JetBrains Mono, and '
+            'Inter Tight.';
       case NotifFontSet.hybrid:
         return 'Eight-role scale on the current fonts. '
             'Long-read body borrows Instrument Serif italic.';
@@ -44,6 +41,9 @@ extension NotifFontSetMeta on NotifFontSet {
 class NotifFontFamilies {
   const NotifFontFamilies._();
   static const String instrumentSerif = 'InstrumentSerif';
+  static const String interTight = 'InterTight';
+  static const String jetBrainsMono = 'JetBrainsMono';
+  static const String newsreader = 'Newsreader';
   static const String skyling = 'Skyling';
   static const String zalandoSans = 'ZalandoSans';
   static const String suisseMono = 'SuisseMono';
@@ -263,18 +263,14 @@ NotifTextTheme _buildCurrent() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Experiment set — 8-role scale. Target fonts (Newsreader, JetBrains Mono,
-// Inter Tight) are not registered in pubspec yet. Until they land, the
-// role shapes match §6.1 but render with Zalando Sans (utility sans) and
-// Suisse Mono (body/mono/code). This keeps the font-set picker functional
-// and reversible.
+// Experiment set — 8-role scale using the full experiment families.
+// Inter Tight is the registered utility sans even though the current eight
+// canonical roles do not resolve to it by default.
 // ─────────────────────────────────────────────────────────────
 NotifTextTheme _buildExperiment() {
-  // Newsreader / JetBrains Mono / Inter Tight aren't registered yet; swap
-  // in once pubspec.yaml adds them (spec §15 step 7).
   const serif = NotifFontFamilies.instrumentSerif;
-  const serifLong = NotifFontFamilies.instrumentSerif;
-  const mono = NotifFontFamilies.suisseMono;
+  const serifLong = NotifFontFamilies.newsreader;
+  const mono = NotifFontFamilies.jetBrainsMono;
 
   return NotifTextTheme(
     fontSet: NotifFontSet.experiment,

@@ -79,6 +79,21 @@ flutter:
     - family: Skyling
       fonts:
         - asset: fonts/SLTFSkylingVF.ttf
+    - family: InterTight
+      fonts:
+        - asset: fonts/InterTight-VariableFont_wght.ttf
+        - asset: fonts/InterTight-Italic-VariableFont_wght.ttf
+          style: italic
+    - family: JetBrainsMono
+      fonts:
+        - asset: fonts/JetBrainsMono[wght].ttf
+        - asset: fonts/JetBrainsMono-Italic[wght].ttf
+          style: italic
+    - family: Newsreader
+      fonts:
+        - asset: fonts/Newsreader-VariableFont_opsz,wght.ttf
+        - asset: fonts/Newsreader-Italic-VariableFont_opsz,wght.ttf
+          style: italic
     - family: ZalandoSans
       fonts:
         - asset: fonts/ZalandoSansExpanded-VariableFont_wght.ttf
