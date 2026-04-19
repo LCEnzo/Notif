@@ -179,6 +179,7 @@ class _AboutPageState extends State<AboutPage> {
                                   title: 'Contact & source',
                                 ),
                                 child: _ContactRow(
+                                  isWide: isWide,
                                   onGitHub: onGitHub,
                                   onContact: onContact,
                                 ),
@@ -198,7 +199,6 @@ class _AboutPageState extends State<AboutPage> {
                                 const SizedBox(height: 48),
                                 _AboutSections(
                                   isWide: isWide,
-                                  maxWidth: constraints.maxWidth,
                                   sections: sections,
                                 ),
                               ],
@@ -262,23 +262,7 @@ class _Hero extends StatelessWidget {
           style: text$.bodyLong.copyWith(color: tokens.inkDim),
         ),
         const SizedBox(height: 24),
-        Row(
-          children: [
-            NotifButton(
-              label: 'View source',
-              icon: Icons.open_in_new_sharp,
-              onPressed: onGitHub,
-              variant: NotifButtonVariant.primary,
-            ),
-            const SizedBox(width: 12),
-            NotifButton(
-              label: 'Contact',
-              icon: Icons.alternate_email_sharp,
-              onPressed: onContact,
-              variant: NotifButtonVariant.ghost,
-            ),
-          ],
-        ),
+        _HeroActionGrid(onGitHub: onGitHub, onContact: onContact),
       ],
     );
 
@@ -300,7 +284,7 @@ class _Hero extends StatelessWidget {
             packageInfo: packageInfo,
             isLoading: isLoading,
           ),
-          const KV(label: 'Scheme', value: _ActiveSchemeText()),
+          const KV(label: 'Colorway', value: _ActiveColorwayText()),
           const KV(
             label: 'Motion',
             value: _StaticText('110–220ms, ease-out, no bounce'),
@@ -316,29 +300,22 @@ class _Hero extends StatelessWidget {
       );
     }
 
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(flex: 5, child: intro),
-          const SizedBox(width: 32),
-          Expanded(flex: 3, child: meta),
-        ],
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 5, child: intro),
+        const SizedBox(width: 32),
+        Expanded(flex: 3, child: meta),
+      ],
     );
   }
 }
 
 class _AboutSections extends StatelessWidget {
   final bool isWide;
-  final double maxWidth;
   final List<Widget> sections;
 
-  const _AboutSections({
-    required this.isWide,
-    required this.maxWidth,
-    required this.sections,
-  });
+  const _AboutSections({required this.isWide, required this.sections});
 
   @override
   Widget build(BuildContext context) {
@@ -354,14 +331,21 @@ class _AboutSections extends StatelessWidget {
       );
     }
 
-    const gap = 32.0;
-    final itemWidth = (maxWidth - gap) / 2;
-    return Wrap(
-      spacing: gap,
-      runSpacing: gap,
+    return Column(
       children: [
-        for (final section in sections)
-          SizedBox(width: itemWidth, child: section),
+        for (var index = 0; index < sections.length; index += 2) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: index < sections.length - 1
+                ? [
+                    Expanded(child: sections[index]),
+                    const SizedBox(width: 32),
+                    Expanded(child: sections[index + 1]),
+                  ]
+                : [Expanded(child: sections[index])],
+          ),
+          if (index < sections.length - 2) const SizedBox(height: 32),
+        ],
       ],
     );
   }
@@ -468,13 +452,13 @@ class _StaticText extends StatelessWidget {
   Widget build(BuildContext context) => Text(text);
 }
 
-class _ActiveSchemeText extends StatelessWidget {
-  const _ActiveSchemeText();
+class _ActiveColorwayText extends StatelessWidget {
+  const _ActiveColorwayText();
 
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
-    return Text('${tokens.colorway.displayName} · ${tokens.scheme.name}');
+    return Text('${tokens.colorway.displayName} · ${tokens.brightness.name}');
   }
 }
 
@@ -599,7 +583,7 @@ class _TypefaceCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Eyebrow('Typeface sample'),
+          const _CardLead(icon: Icons.text_fields_sharp, label: 'Type system'),
           const SizedBox(height: 12),
           Text(
             'Printed systems, not dashboards.',
@@ -626,7 +610,7 @@ class _TypefaceCard extends StatelessWidget {
               const SizedBox(width: 6),
               Tag(tokens.colorway.displayName, tone: TagTone.accent),
               const SizedBox(width: 6),
-              Tag(tokens.scheme.name, tone: TagTone.muted),
+              Tag(tokens.brightness.name, tone: TagTone.muted),
             ],
           ),
         ],
@@ -636,80 +620,202 @@ class _TypefaceCard extends StatelessWidget {
 }
 
 class _ContactRow extends StatelessWidget {
+  final bool isWide;
   final VoidCallback onGitHub;
   final VoidCallback onContact;
 
-  const _ContactRow({required this.onGitHub, required this.onContact});
+  const _ContactRow({
+    required this.isWide,
+    required this.onGitHub,
+    required this.onContact,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final buttons = Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        NotifButton(
+          label: 'GitHub',
+          icon: Icons.open_in_new_sharp,
+          onPressed: onGitHub,
+          variant: NotifButtonVariant.primary,
+        ),
+        NotifButton(
+          label: 'Email',
+          icon: Icons.mail_sharp,
+          onPressed: onContact,
+          variant: NotifButtonVariant.ghost,
+        ),
+      ],
+    );
+
+    return NotifCard(
+      child: isWide
+          ? SizedBox(
+              height: 260,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _CardLead(
+                    icon: Icons.link_sharp,
+                    label: 'Contact & source',
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Useful links.',
+                    style: text$.heading.copyWith(color: tokens.ink),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'About doubles as the prototype for the non-auth system, '
+                    'so the key actions live here as first-class '
+                    'components.',
+                    style: text$.body.copyWith(color: tokens.inkDim),
+                  ),
+                  const Spacer(),
+                  buttons,
+                ],
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _CardLead(
+                  icon: Icons.link_sharp,
+                  label: 'Contact & source',
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Useful links.',
+                  style: text$.heading.copyWith(color: tokens.ink),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'About doubles as the prototype for the non-auth system, so '
+                  'the key actions live here as first-class components.',
+                  style: text$.body.copyWith(color: tokens.inkDim),
+                ),
+                const SizedBox(height: 20),
+                buttons,
+              ],
+            ),
+    );
+  }
+}
+
+class _HeroActionGrid extends StatelessWidget {
+  final VoidCallback onGitHub;
+  final VoidCallback onContact;
+
+  const _HeroActionGrid({required this.onGitHub, required this.onContact});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 720 ? 4 : 2;
+        final itemWidth = (constraints.maxWidth - (columns - 1) * 12) / columns;
+        final children = <Widget>[
+          NotifButton(
+            label: 'GitHub',
+            icon: Icons.open_in_new_sharp,
+            onPressed: onGitHub,
+            variant: NotifButtonVariant.primary,
+            expand: true,
+          ),
+          const _HeroActionPlaceholder(),
+          NotifButton(
+            label: 'Discord',
+            icon: Icons.discord,
+            onPressed: () => _copyDiscordHandle(context),
+            variant: NotifButtonVariant.ghost,
+            expand: true,
+          ),
+          NotifButton(
+            label: 'Contact',
+            icon: Icons.alternate_email_sharp,
+            onPressed: onContact,
+            variant: NotifButtonVariant.ghost,
+            expand: true,
+          ),
+        ];
+
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            for (final child in children)
+              SizedBox(width: itemWidth, child: child),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _HeroActionPlaceholder extends StatelessWidget {
+  const _HeroActionPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        border: Border.all(color: tokens.rule, width: 1),
+      ),
+    );
+  }
+}
+
+class _CardLead extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _CardLead({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
 
-    return NotifCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Eyebrow('Links'),
-          const SizedBox(height: 12),
-          Text('Talk to me.', style: text$.heading.copyWith(color: tokens.ink)),
-          const SizedBox(height: 8),
-          Text(
-            'About doubles as the prototype for the non-auth system, so the '
-            'key actions live here as first-class components.',
-            style: text$.body.copyWith(color: tokens.inkDim),
-          ),
-          const SizedBox(height: 20),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: [
-              NotifButton(
-                label: 'GitHub',
-                icon: Icons.open_in_new_sharp,
-                onPressed: onGitHub,
-                variant: NotifButtonVariant.primary,
-              ),
-              NotifButton(
-                label: 'Email',
-                icon: Icons.mail_sharp,
-                onPressed: onContact,
-                variant: NotifButtonVariant.ghost,
-              ),
-              NotifButton(
-                label: 'Copy Discord',
-                icon: Icons.discord,
-                onPressed: () => _copyDiscord(context),
-                variant: NotifButtonVariant.ghost,
-              ),
-            ],
-          ),
-        ],
-      ),
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: tokens.inkDim),
+        const SizedBox(width: 8),
+        Text(
+          label.toUpperCase(),
+          style: text$.eyebrow.copyWith(color: tokens.inkMute),
+        ),
+      ],
     );
   }
+}
 
-  Future<void> _copyDiscord(BuildContext context) async {
-    try {
-      await Clipboard.setData(const ClipboardData(text: 'lcenzo'));
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Clipboard error: $e'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
+Future<void> _copyDiscordHandle(BuildContext context) async {
+  try {
+    await Clipboard.setData(const ClipboardData(text: 'lcenzo'));
+  } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Copied Discord handle: lcenzo'),
+      SnackBar(
+        content: Text('Clipboard error: $e'),
         behavior: SnackBarBehavior.floating,
       ),
     );
+    return;
   }
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(
+      content: Text('Copied Discord handle: lcenzo'),
+      behavior: SnackBarBehavior.floating,
+    ),
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
