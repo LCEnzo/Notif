@@ -98,6 +98,7 @@ class App extends StatelessWidget {
         '/Home': (context) => const HomePage(),
         '/LogIn': (context) => const LogInPage(),
         '/Register': (context) => const RegisterPage(),
+        '/ForgotPassword': (context) => const ForgotPasswordPage(),
         '/About': (context) => const AboutPage(),
         '/Settings': (context) => const SettingsPage(),
       },

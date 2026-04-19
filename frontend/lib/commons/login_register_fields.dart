@@ -3,7 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/auth_validators.dart';
-import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:provider/provider.dart';
 
@@ -13,14 +14,13 @@ bool _useFramedAuthMode(BuildContext context) {
 }
 
 TextStyle _buildAuthFieldTextStyle(BuildContext context) {
-  final isFramed = _useFramedAuthMode(context);
+  if (_useFramedAuthMode(context)) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    return text$.body.copyWith(color: tokens.ink);
+  }
 
-  return TextStyle(
-    color: isFramed ? NotifDesignTokens.structText : Colors.white,
-    fontFamily: isFramed ? NotifDesignTokens.bodyFont : null,
-    fontSize: isFramed ? 15 : null,
-    height: isFramed ? 22 / 15 : null,
-  );
+  return const TextStyle(color: Colors.white);
 }
 
 InputDecoration _buildAuthInputDecoration({
@@ -30,54 +30,42 @@ InputDecoration _buildAuthInputDecoration({
   Widget? prefixIcon,
   Widget? suffixIcon,
 }) {
-  final isFramed = _useFramedAuthMode(context);
+  if (_useFramedAuthMode(context)) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
 
-  if (isFramed) {
     return InputDecoration(
-      labelText: labelText,
       hintText: hintText,
-      labelStyle: const TextStyle(
-        color: NotifDesignTokens.structText2,
-        fontFamily: NotifDesignTokens.bodyFont,
-      ),
-      floatingLabelStyle: const TextStyle(
-        color: NotifDesignTokens.accentText,
-        fontFamily: NotifDesignTokens.bodyFont,
-      ),
-      hintStyle: const TextStyle(
-        color: NotifDesignTokens.structText3,
-        fontFamily: NotifDesignTokens.bodyFont,
-      ),
+      hintStyle: text$.body.copyWith(color: tokens.inkMute),
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
-      prefixIconColor: NotifDesignTokens.structText2,
-      suffixIconColor: NotifDesignTokens.structText2,
+      prefixIconColor: tokens.inkDim,
+      suffixIconColor: tokens.inkDim,
       contentPadding: const EdgeInsets.symmetric(
-        horizontal: NotifDesignTokens.spaceMd,
-        vertical: NotifDesignTokens.spaceMd,
+        horizontal: 12,
+        vertical: 12,
       ),
-      enabledBorder: const OutlineInputBorder(
+      filled: true,
+      fillColor: tokens.bg0,
+      enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: NotifDesignTokens.structBorder),
+        borderSide: BorderSide(color: tokens.rule),
       ),
-      focusedBorder: const OutlineInputBorder(
+      focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(
-          color: NotifDesignTokens.accentDim,
-          width: NotifDesignTokens.borderFocusWidth,
-        ),
+        borderSide: BorderSide(color: tokens.accent, width: 2),
       ),
       errorBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: FeedbackColors.error),
+        borderSide: BorderSide(color: NotifFeedback.error),
       ),
       focusedErrorBorder: const OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: FeedbackColors.error, width: 2),
+        borderSide: BorderSide(color: NotifFeedback.error, width: 2),
       ),
-      disabledBorder: const OutlineInputBorder(
+      disabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.zero,
-        borderSide: BorderSide(color: NotifDesignTokens.structDivider),
+        borderSide: BorderSide(color: tokens.rule),
       ),
     );
   }
@@ -98,6 +86,212 @@ InputDecoration _buildAuthInputDecoration({
       borderSide: BorderSide(color: Color(0x99FFFFFF), width: 1.4),
     ),
   );
+}
+
+class AuthPanelHeader extends StatelessWidget {
+  final String title;
+  final String eyebrow;
+  final String? description;
+
+  const AuthPanelHeader({
+    super.key,
+    required this.title,
+    required this.eyebrow,
+    this.description,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isFramed = _useFramedAuthMode(context);
+
+    if (!isFramed) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          if (description != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              description!,
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ],
+        ],
+      );
+    }
+
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          eyebrow.toUpperCase(),
+          style: text$.eyebrow.copyWith(color: tokens.accent),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          title,
+          style: text$.title.copyWith(
+            color: tokens.ink,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        if (description != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            description!,
+            style: text$.body.copyWith(color: tokens.inkDim),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class AuthField extends StatelessWidget {
+  final String label;
+  final String? meta;
+  final Widget child;
+
+  const AuthField({
+    super.key,
+    required this.label,
+    this.meta,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_useFramedAuthMode(context)) {
+      return child;
+    }
+
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: text$.eyebrow.copyWith(color: tokens.ink),
+              ),
+            ),
+            if (meta != null)
+              Text(
+                meta!.toUpperCase(),
+                style: text$.micro.copyWith(color: tokens.inkMute),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
+    );
+  }
+}
+
+class AuthInlineAction extends StatelessWidget {
+  final String label;
+  final VoidCallback onPressed;
+
+  const AuthInlineAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isFramed = _useFramedAuthMode(context);
+
+    if (!isFramed) {
+      return TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white70,
+          padding: EdgeInsets.zero,
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          visualDensity: VisualDensity.compact,
+        ),
+        child: Text(label),
+      );
+    }
+
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: tokens.accent,
+        textStyle: text$.eyebrow,
+        padding: EdgeInsets.zero,
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+      ),
+      child: Text(label.toUpperCase()),
+    );
+  }
+}
+
+class AuthRuleDivider extends StatelessWidget {
+  final String label;
+
+  const AuthRuleDivider({super.key, this.label = 'or'});
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_useFramedAuthMode(context)) {
+      return Row(
+        children: [
+          const Expanded(child: Divider(color: Colors.white24)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white54),
+            ),
+          ),
+          const Expanded(child: Divider(color: Colors.white24)),
+        ],
+      );
+    }
+
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Row(
+      children: [
+        Expanded(
+          child: Divider(color: tokens.rule, thickness: 1, height: 1),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label.toUpperCase(),
+            style: text$.eyebrow.copyWith(color: tokens.inkMute),
+          ),
+        ),
+        Expanded(
+          child: Divider(color: tokens.rule, thickness: 1, height: 1),
+        ),
+      ],
+    );
+  }
 }
 
 class Logo extends StatelessWidget {
@@ -147,13 +341,10 @@ class UsernameTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isFramed = _useFramedAuthMode(context);
-
     return TextFormField(
-      key: key,
       controller: textController,
       style: _buildAuthFieldTextStyle(context),
-      cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
+      cursorColor: _cursorColor(context),
       decoration: _buildAuthInputDecoration(
         context: context,
         labelText: labelText,
@@ -180,13 +371,11 @@ class EmailTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isFramed = _useFramedAuthMode(context);
-
     return TextFormField(
       validator: validator ?? validateEmail,
       controller: textController,
       style: _buildAuthFieldTextStyle(context),
-      cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
+      cursorColor: _cursorColor(context),
       decoration: _buildAuthInputDecoration(
         context: context,
         labelText: labelText,
@@ -229,14 +418,12 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
 
   @override
   Widget build(BuildContext context) {
-    final isFramed = _useFramedAuthMode(context);
-
     return TextFormField(
       controller: widget.textController,
       validator: validator,
       obscureText: !_isPasswordVisible,
       style: _buildAuthFieldTextStyle(context),
-      cursorColor: isFramed ? NotifDesignTokens.accentText : Colors.white,
+      cursorColor: _cursorColor(context),
       decoration: _buildAuthInputDecoration(
         context: context,
         labelText: widget.labelText,
@@ -257,38 +444,61 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
   }
 }
 
+Color _cursorColor(BuildContext context) {
+  if (!_useFramedAuthMode(context)) return Colors.white;
+  return NotifTokens.of(context).accent;
+}
+
 class CustomButton extends StatelessWidget {
   final String buttonText;
   final VoidCallback onPressed;
   final Color? buttonColor;
+  final Widget? trailingIcon;
 
   const CustomButton({
     super.key,
     required this.buttonText,
     required this.onPressed,
     this.buttonColor,
+    this.trailingIcon,
   });
 
   @override
   Widget build(BuildContext context) {
     final isFramed = _useFramedAuthMode(context);
-    final backgroundColor = buttonColor ?? AuthPalette.primaryButtonBase;
     final isPrimary = buttonColor == null;
-    final foregroundColor = isPrimary
-        ? AuthPalette.buttonForeground
-        : AuthPalette.secondaryButtonForeground;
 
     if (isFramed) {
+      final tokens = NotifTokens.of(context);
+      final text$ = NotifTextTheme.of(context);
       return SizedBox(
         width: double.infinity,
         child: TextButton(
           onPressed: onPressed,
-          style: NotifDesignTokens.framedButtonStyle(isPrimary: isPrimary),
-          child: Text(buttonText),
+          style: _framedAuthButtonStyle(
+            isPrimary: isPrimary,
+            tokens: tokens,
+            text$: text$,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(buttonText),
+              if (trailingIcon != null) ...[
+                const SizedBox(width: 8),
+                trailingIcon!,
+              ],
+            ],
+          ),
         ),
       );
     }
 
+    final backgroundColor = buttonColor ?? AuthPalette.primaryButtonBase;
+    final foregroundColor = isPrimary
+        ? AuthPalette.buttonForeground
+        : AuthPalette.secondaryButtonForeground;
     final radius = BorderRadius.circular(AuthPalette.glassRadius);
 
     return SizedBox(
@@ -342,4 +552,73 @@ class CustomButton extends StatelessWidget {
       ),
     );
   }
+}
+
+ButtonStyle _framedAuthButtonStyle({
+  required bool isPrimary,
+  required NotifTokens tokens,
+  required NotifTextTheme text$,
+}) {
+  final labelStyle = text$.eyebrow.copyWith(
+    fontWeight: FontWeight.w600,
+    letterSpacing: 1.2,
+  );
+
+  return ButtonStyle(
+    animationDuration: const Duration(milliseconds: 110),
+    padding: const WidgetStatePropertyAll(
+      EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+    ),
+    minimumSize: const WidgetStatePropertyAll(Size(0, 44)),
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    shape: const WidgetStatePropertyAll(
+      RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+    ),
+    textStyle: WidgetStatePropertyAll(labelStyle),
+    foregroundColor: WidgetStateProperty.resolveWith((states) {
+      if (isPrimary) return tokens.btnInk;
+      if (states.contains(WidgetState.pressed)) return tokens.btnInk;
+      return tokens.accent;
+    }),
+    backgroundColor: WidgetStateProperty.resolveWith((states) {
+      if (isPrimary) {
+        if (states.contains(WidgetState.pressed)) {
+          return Color.lerp(tokens.btnBg, Colors.black, 0.12);
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return Color.lerp(tokens.btnBg, tokens.ink, 0.08);
+        }
+        return tokens.btnBg;
+      }
+      if (states.contains(WidgetState.pressed)) {
+        return tokens.accent.withValues(alpha: 0.20);
+      }
+      if (states.contains(WidgetState.hovered)) {
+        return tokens.accent.withValues(alpha: 0.10);
+      }
+      return Colors.transparent;
+    }),
+    side: WidgetStateProperty.resolveWith((states) {
+      if (isPrimary) {
+        if (states.contains(WidgetState.focused)) {
+          return BorderSide(color: tokens.accent, width: 2);
+        }
+        return BorderSide.none;
+      }
+      if (states.contains(WidgetState.focused)) {
+        return BorderSide(color: tokens.accent, width: 2);
+      }
+      if (states.contains(WidgetState.hovered) ||
+          states.contains(WidgetState.pressed)) {
+        return BorderSide(
+          color: tokens.accent.withValues(alpha: 0.4),
+          width: 1,
+        );
+      }
+      return BorderSide(color: tokens.rule, width: 1);
+    }),
+    overlayColor: WidgetStatePropertyAll(
+      tokens.accent.withValues(alpha: 0.06),
+    ),
+  );
 }

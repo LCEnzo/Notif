@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_palette.dart';
-import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/commons/components/primitives.dart';
+import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:provider/provider.dart';
 
@@ -90,9 +92,10 @@ class GlassHelpButton extends StatelessWidget {
     final appSettings = context.watch<AppSettingsController?>();
     final authCardStyle = appSettings?.authCardStyle ?? AuthCardStyle.glass;
     final isFramed = authCardStyle == AuthCardStyle.framed;
-    final radius = BorderRadius.circular(
-      isFramed ? NotifDesignTokens.radiusNone : AuthPalette.glassRadius,
-    );
+    final tokens = NotifTokens.of(context);
+    final radius = isFramed
+        ? BorderRadius.zero
+        : BorderRadius.circular(AuthPalette.glassRadius);
 
     final button = Material(
       color: Colors.transparent,
@@ -100,16 +103,14 @@ class GlassHelpButton extends StatelessWidget {
         onTap: onPressed,
         borderRadius: radius,
         splashColor: isFramed
-            ? NotifDesignTokens.accentText.withValues(alpha: 0.08)
+            ? tokens.accent.withValues(alpha: 0.08)
             : Colors.white.withValues(alpha: 0.12),
         child: SizedBox.square(
           dimension: 58,
           child: Center(
             child: IconTheme.merge(
               data: IconThemeData(
-                color: isFramed
-                    ? NotifDesignTokens.accentText
-                    : AuthPalette.fabIcon,
+                color: isFramed ? tokens.accent : AuthPalette.fabIcon,
               ),
               child: child,
             ),
@@ -136,32 +137,28 @@ class AuthPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final appSettings = context.watch<AppSettingsController?>();
     final authCardStyle = appSettings?.authCardStyle ?? AuthCardStyle.glass;
+    final isFramed = authCardStyle == AuthCardStyle.framed;
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
 
     final content = DefaultTextStyle.merge(
-      style: TextStyle(
-        color: authCardStyle == AuthCardStyle.glass
-            ? Colors.white
-            : NotifDesignTokens.structText,
-        fontFamily: authCardStyle == AuthCardStyle.glass
-            ? null
-            : NotifDesignTokens.bodyFont,
-        fontSize: authCardStyle == AuthCardStyle.glass ? null : 15,
-        height: authCardStyle == AuthCardStyle.glass ? null : 22 / 15,
-      ),
+      style: isFramed
+          ? text$.body.copyWith(color: tokens.ink)
+          : const TextStyle(color: Colors.white),
       child: IconTheme.merge(
         data: IconThemeData(
-          color: authCardStyle == AuthCardStyle.glass
-              ? Colors.white70
-              : NotifDesignTokens.structText2,
+          color: isFramed ? tokens.inkDim : Colors.white70,
         ),
         child: child,
       ),
     );
 
-    if (authCardStyle == AuthCardStyle.framed) {
-      return _AuthFramedSurface(
-        padding: const EdgeInsets.all(28),
-        child: content,
+    if (isFramed) {
+      return CornerMarks(
+        child: _AuthFramedSurface(
+          padding: const EdgeInsets.all(28),
+          child: content,
+        ),
       );
     }
 
@@ -181,11 +178,12 @@ class _AuthFramedSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: NotifDesignTokens.structSurface,
-        border: Border.all(color: NotifDesignTokens.structBorder),
+        color: tokens.bg1,
+        border: Border.all(color: tokens.ruleStrong),
       ),
       child: child,
     );

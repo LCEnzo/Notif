@@ -207,6 +207,22 @@ TextStyle _serif({
   );
 }
 
+TextStyle _sans({
+  required String family,
+  required double size,
+  required double lineHeight,
+  double letterSpacing = 0,
+  FontWeight weight = FontWeight.w400,
+}) {
+  return TextStyle(
+    fontFamily: family,
+    fontSize: size,
+    height: lineHeight / size,
+    letterSpacing: letterSpacing,
+    fontWeight: weight,
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Current set — 6-role scale, preserved verbatim from the existing app.
 // Roles that don't exist in the 6-role scale (eyebrow, bodyLong, micro,
@@ -270,15 +286,19 @@ NotifTextTheme _buildCurrent() {
 NotifTextTheme _buildExperiment() {
   const serif = NotifFontFamilies.instrumentSerif;
   const serifLong = NotifFontFamilies.newsreader;
+  const sans = NotifFontFamilies.interTight;
   const mono = NotifFontFamilies.jetBrainsMono;
 
+  // Utility sans (Inter Tight) carries body copy. bodyLong stays on the
+  // long-read serif; eyebrow/micro/code stay on mono. Matches §6.3 intent:
+  // "Newsreader, JetBrains Mono, and Inter Tight."
   return NotifTextTheme(
     fontSet: NotifFontSet.experiment,
     display: _serif(family: serif, size: 64, lineHeight: 61, letterSpacing: -1.28),
     title: _serif(family: serif, size: 40, lineHeight: 41, letterSpacing: -0.60),
     heading: _serif(family: serif, size: 22, lineHeight: 25, letterSpacing: -0.22),
     eyebrow: _mono(family: mono, size: 11, lineHeight: 11, letterSpacing: 2.2, weight: FontWeight.w500),
-    body: _mono(family: mono, size: 13, lineHeight: 20),
+    body: _sans(family: sans, size: 14, lineHeight: 22),
     bodyLong: _serif(family: serifLong, size: 15, lineHeight: 23),
     micro: _mono(family: mono, size: 10.5, lineHeight: 14, letterSpacing: 1.26, weight: FontWeight.w500),
     code: _mono(family: mono, size: 12, lineHeight: 18),

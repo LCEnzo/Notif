@@ -16,7 +16,7 @@ void main() {
     disableAuthTextureTuner();
   });
 
-  testWidgets('App shows the login screen by default', (
+  testWidgets('App shows the framed login screen by default', (
     WidgetTester tester,
   ) async {
     enableAuthTextureTuner();
@@ -34,7 +34,34 @@ void main() {
       ),
     );
 
+    expect(find.text('Welcome back'), findsOneWidget);
     expect(find.text('Log in'), findsOneWidget);
-    expect(find.text('Register'), findsOneWidget);
+    expect(find.text('Create account'), findsOneWidget);
+    expect(find.text('Forgot password?'), findsOneWidget);
+  });
+
+  testWidgets('Forgot password CTA opens the recovery screen', (
+    WidgetTester tester,
+  ) async {
+    enableAuthTextureTuner();
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => AppSettingsController()),
+          ChangeNotifierProvider(create: (_) => AuthService()),
+          ChangeNotifierProvider(
+            create: (context) => UserDataService(context.read<AuthService>()),
+          ),
+        ],
+        child: const App(),
+      ),
+    );
+
+    await tester.tap(find.text('Forgot password?'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Forgot the passphrase?'), findsOneWidget);
+    expect(find.text('Back to log in'), findsOneWidget);
   });
 }
