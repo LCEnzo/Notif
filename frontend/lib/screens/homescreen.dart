@@ -39,11 +39,19 @@ class HomePage extends StatelessWidget {
         foregroundColor: tokens.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
-        titleSpacing: 24,
+        leading: IconButton(
+          icon: Icon(Icons.logout, color: tokens.inkDim),
+          tooltip: 'Log out',
+          onPressed: () {
+            authService.logout();
+            Navigator.pushReplacementNamed(context, '/LogIn');
+          },
+        ),
+        titleSpacing: 0,
         title: Row(
           children: [
             Text(
-              'notif',
+              'Notif',
               style: text$.heading.copyWith(
                 color: tokens.ink,
                 fontStyle: FontStyle.italic,
@@ -75,38 +83,10 @@ class HomePage extends StatelessWidget {
             onPressed: () => Navigator.pushNamed(context, '/Settings'),
             icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
           ),
-          PopupMenuButton<_HomeMenuAction>(
-            tooltip: 'More',
-            color: tokens.bg3,
-            surfaceTintColor: Colors.transparent,
-            itemBuilder: (context) => [
-              PopupMenuItem<_HomeMenuAction>(
-                value: _HomeMenuAction.about,
-                child: Text(
-                  'About',
-                  style: text$.body.copyWith(color: tokens.ink),
-                ),
-              ),
-              PopupMenuItem<_HomeMenuAction>(
-                value: _HomeMenuAction.logout,
-                child: Text(
-                  'Log out',
-                  style: text$.body.copyWith(color: tokens.ink),
-                ),
-              ),
-            ],
-            onSelected: (action) {
-              switch (action) {
-                case _HomeMenuAction.about:
-                  Navigator.pushNamed(context, '/About');
-                  break;
-                case _HomeMenuAction.logout:
-                  authService.logout();
-                  Navigator.pushReplacementNamed(context, '/LogIn');
-                  break;
-              }
-            },
-            icon: Icon(Icons.more_horiz_sharp, color: tokens.inkDim),
+          IconButton(
+            tooltip: 'About',
+            onPressed: () => Navigator.pushNamed(context, '/About'),
+            icon: Icon(Icons.info_outline_rounded, color: tokens.inkDim),
           ),
         ],
         bottom: PreferredSize(
@@ -140,8 +120,6 @@ class HomePage extends StatelessWidget {
     );
   }
 }
-
-enum _HomeMenuAction { about, logout }
 
 class _HomeLoadingState extends StatelessWidget {
   const _HomeLoadingState();

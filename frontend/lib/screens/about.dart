@@ -148,20 +148,45 @@ class _AboutPageState extends State<AboutPage> {
                             }
 
                             final sections = [
-                              const _IntroCard(
-                                key: ValueKey('aboutSectionPageNotes'),
+                              _AboutSection(
+                                key: const ValueKey('aboutSectionPageNotes'),
+                                isWide: isWide,
+                                header: const IndexRule(
+                                  index: 1,
+                                  title: 'Page notes',
+                                ),
+                                child: const _IntroCard(),
                               ),
-                              const _SystemGrid(
-                                key: ValueKey('aboutSectionDesignSystem'),
+                              _AboutSection(
+                                key: const ValueKey('aboutSectionDesignSystem'),
+                                isWide: isWide,
+                                header: const IndexRule(
+                                  index: 2,
+                                  title: 'Design system',
+                                ),
+                                child: const _SystemGrid(),
                               ),
-                              const _TypefaceCard(
-                                key: ValueKey('aboutSectionTypography'),
+                              _AboutSection(
+                                key: const ValueKey('aboutSectionTypography'),
+                                isWide: isWide,
+                                header: const IndexRule(
+                                  index: 3,
+                                  title: 'Typography',
+                                ),
+                                child: const _TypefaceCard(),
                               ),
-                              _ContactRow(
+                              _AboutSection(
                                 key: const ValueKey('aboutSectionContact'),
                                 isWide: isWide,
-                                onGitHub: onGitHub,
-                                onContact: onContact,
+                                header: const IndexRule(
+                                  index: 4,
+                                  title: 'Contact & source',
+                                ),
+                                child: _ContactRow(
+                                  isWide: isWide,
+                                  onGitHub: onGitHub,
+                                  onContact: onContact,
+                                ),
                               ),
                             ];
 
@@ -221,8 +246,7 @@ class _Hero extends StatelessWidget {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
 
-    final intro = Column(
-      mainAxisSize: MainAxisSize.max,
+    final introTop = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Eyebrow('Showcase · non-auth pilot', tone: EyebrowTone.accent),
@@ -237,15 +261,22 @@ class _Hero extends StatelessWidget {
           'right to break it at any time without notice.',
           style: text$.bodyLong.copyWith(color: tokens.inkDim),
         ),
-        if (isWide)
-          const Spacer()
-        else
-          const SizedBox(height: 24),
-        _HeroActionGrid(
-          isWide: isWide,
-          onGitHub: onGitHub,
-          onContact: onContact,
-        ),
+      ],
+    );
+    final introBottom = _HeroActionGrid(
+      isWide: isWide,
+      onGitHub: onGitHub,
+      onContact: onContact,
+    );
+    final intro = Column(
+      mainAxisSize: MainAxisSize.max,
+      mainAxisAlignment:
+          isWide ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        introTop,
+        if (!isWide) const SizedBox(height: 24),
+        introBottom,
       ],
     );
 
@@ -345,6 +376,30 @@ class _AboutSections extends StatelessWidget {
           ),
           if (index < sections.length - 2) const SizedBox(height: 24),
         ],
+      ],
+    );
+  }
+}
+
+class _AboutSection extends StatelessWidget {
+  final bool isWide;
+  final Widget header;
+  final Widget child;
+
+  const _AboutSection({
+    required this.isWide,
+    required this.header,
+    required this.child,
+    super.key,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        header,
+        if (isWide) Expanded(child: child) else child,
       ],
     );
   }
@@ -451,7 +506,7 @@ class _ActiveColorwayText extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _IntroCard extends StatelessWidget {
-  const _IntroCard({super.key});
+  const _IntroCard();
 
   @override
   Widget build(BuildContext context) {
@@ -482,7 +537,7 @@ class _IntroCard extends StatelessWidget {
 }
 
 class _SystemGrid extends StatelessWidget {
-  const _SystemGrid({super.key});
+  const _SystemGrid();
 
   static const _rows = [
     _SignalRow(
@@ -559,7 +614,7 @@ class _SignalRow extends StatelessWidget {
 }
 
 class _TypefaceCard extends StatelessWidget {
-  const _TypefaceCard({super.key});
+  const _TypefaceCard();
 
   @override
   Widget build(BuildContext context) {
@@ -612,7 +667,6 @@ class _ContactRow extends StatelessWidget {
   final VoidCallback onContact;
 
   const _ContactRow({
-    super.key,
     required this.isWide,
     required this.onGitHub,
     required this.onContact,
@@ -669,24 +723,29 @@ class _ContactRow extends StatelessWidget {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.max,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const _CardLead(
-                  icon: Icons.link_sharp,
-                  label: 'Contact & source',
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _CardLead(
+                      icon: Icons.link_sharp,
+                      label: 'Contact & source',
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Useful links.',
+                      style: text$.heading.copyWith(color: tokens.ink),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'About doubles as the prototype for the non-auth system, '
+                      'so the key actions live here as first-class '
+                      'components.',
+                      style: text$.body.copyWith(color: tokens.inkDim),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'Useful links.',
-                  style: text$.heading.copyWith(color: tokens.ink),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'About doubles as the prototype for the non-auth system, '
-                  'so the key actions live here as first-class '
-                  'components.',
-                  style: text$.body.copyWith(color: tokens.inkDim),
-                ),
-                const Spacer(),
                 wideButtons,
               ],
             )
@@ -727,51 +786,55 @@ class _HeroActionGrid extends StatelessWidget {
     required this.onContact,
   });
 
+  List<Widget> _buildChildren(BuildContext context) {
+    return <Widget>[
+      NotifButton(
+        key: const ValueKey('aboutHeroActionGitHub'),
+        label: 'GitHub',
+        icon: Icons.open_in_new_sharp,
+        onPressed: onGitHub,
+        variant: NotifButtonVariant.primary,
+        expand: true,
+      ),
+      const _HeroActionPlaceholder(
+        key: ValueKey('aboutHeroActionPlaceholder'),
+      ),
+      NotifButton(
+        key: const ValueKey('aboutHeroActionDiscord'),
+        label: 'Discord',
+        icon: Icons.discord,
+        onPressed: () => _copyDiscordHandle(context),
+        variant: NotifButtonVariant.ghost,
+        expand: true,
+      ),
+      NotifButton(
+        key: const ValueKey('aboutHeroActionContact'),
+        label: 'Contact',
+        icon: Icons.alternate_email_sharp,
+        onPressed: onContact,
+        variant: NotifButtonVariant.ghost,
+        expand: true,
+      ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
+    final children = _buildChildren(context);
+
+    if (isWide) {
+      return Row(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            Expanded(child: children[i]),
+            if (i != children.length - 1) const SizedBox(width: 12),
+          ],
+        ],
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        final children = <Widget>[
-          NotifButton(
-            key: const ValueKey('aboutHeroActionGitHub'),
-            label: 'GitHub',
-            icon: Icons.open_in_new_sharp,
-            onPressed: onGitHub,
-            variant: NotifButtonVariant.primary,
-            expand: true,
-          ),
-          const _HeroActionPlaceholder(
-            key: ValueKey('aboutHeroActionPlaceholder'),
-          ),
-          NotifButton(
-            key: const ValueKey('aboutHeroActionDiscord'),
-            label: 'Discord',
-            icon: Icons.discord,
-            onPressed: () => _copyDiscordHandle(context),
-            variant: NotifButtonVariant.ghost,
-            expand: true,
-          ),
-          NotifButton(
-            key: const ValueKey('aboutHeroActionContact'),
-            label: 'Contact',
-            icon: Icons.alternate_email_sharp,
-            onPressed: onContact,
-            variant: NotifButtonVariant.ghost,
-            expand: true,
-          ),
-        ];
-
-        if (isWide) {
-          return Row(
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                Expanded(child: children[i]),
-                if (i != children.length - 1) const SizedBox(width: 12),
-              ],
-            ],
-          );
-        }
-
         final columns = 2;
         final itemWidth = (constraints.maxWidth - (columns - 1) * 12) / columns;
         return Wrap(
