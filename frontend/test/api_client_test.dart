@@ -9,14 +9,14 @@ void main() {
   });
 
   group('resolveUrls', () {
-    test('null settings returns builtin URL only', () {
+    test('null settings returns builtin base URL only', () {
       final urls = resolveUrls('/auth/login', null);
 
       expect(urls, hasLength(1));
-      expect(urls.first, '$builtinApiUrl/auth/login');
+      expect(urls.first, builtinApiUrl);
     });
 
-    test('builtin mode returns builtin URL only', () async {
+    test('builtin mode returns builtin base URL only', () async {
       final settings = AppSettingsController();
       // default mode is builtin
       await Future<void>.delayed(Duration.zero);
@@ -24,7 +24,7 @@ void main() {
       final urls = resolveUrls('/ping', settings);
 
       expect(urls, hasLength(1));
-      expect(urls.first, '$builtinApiUrl/ping');
+      expect(urls.first, builtinApiUrl);
     });
 
     test('customWithFallback returns custom first, then builtin', () async {
@@ -36,11 +36,11 @@ void main() {
       final urls = resolveUrls('/status', settings);
 
       expect(urls, hasLength(2));
-      expect(urls[0], 'https://example.com/api/v1/status');
-      expect(urls[1], '$builtinApiUrl/status');
+      expect(urls[0], 'https://example.com/api/v1');
+      expect(urls[1], builtinApiUrl);
     });
 
-    test('customOnly returns custom URL only', () async {
+    test('customOnly returns custom base URL only', () async {
       final settings = AppSettingsController();
       await Future<void>.delayed(Duration.zero);
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);
@@ -49,7 +49,7 @@ void main() {
       final urls = resolveUrls('/health', settings);
 
       expect(urls, hasLength(1));
-      expect(urls.first, 'https://prod.example.com/api/health');
+      expect(urls.first, 'https://prod.example.com/api');
     });
 
     test('customWithFallback with empty custom falls back to builtin',
@@ -62,7 +62,7 @@ void main() {
       final urls = resolveUrls('/users', settings);
 
       expect(urls, hasLength(1));
-      expect(urls.first, '$builtinApiUrl/users');
+      expect(urls.first, builtinApiUrl);
     });
 
     test('customOnly with empty custom returns empty list', () async {
@@ -85,20 +85,20 @@ void main() {
         () => apiPost(
           '/token/',
           settings: settings,
-          headers: jsonHeaders,
+          headers: const {'Content-Type': 'application/json'},
           body: '{}',
         ),
         throwsA(
           isA<StateError>().having(
             (error) => error.message,
             'message',
-            contains('No API URL resolved for POST /token/'),
+            contains('POST /token/ failed: no backend URL configured'),
           ),
         ),
       );
     });
 
-    test('custom URL is trimmed', () async {
+    test('custom base URL is trimmed', () async {
       final settings = AppSettingsController();
       await Future<void>.delayed(Duration.zero);
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);
@@ -107,17 +107,17 @@ void main() {
       final urls = resolveUrls('/ping', settings);
 
       expect(urls, hasLength(1));
-      expect(urls.first, 'https://trim.example.com/api/ping');
+      expect(urls.first, 'https://trim.example.com/api');
     });
 
-    test('path with query parameters is preserved', () async {
+    test('builtin base URL returned for any path', () async {
       final urls = resolveUrls('/search?q=test&page=2', null);
 
       expect(urls, hasLength(1));
-      expect(urls.first, '$builtinApiUrl/search?q=test&page=2');
+      expect(urls.first, builtinApiUrl);
     });
 
-    test('builtin mode from SharedPreferences preloaded values', () async {
+    test('customOnly from SharedPreferences preloaded values', () async {
       SharedPreferences.setMockInitialValues({
         'backendUrlMode': 'customOnly',
         'customBackendUrl': 'https://cached.example.com/v2',
@@ -129,7 +129,7 @@ void main() {
       final urls = resolveUrls('/data', settings);
 
       expect(urls, hasLength(1));
-      expect(urls.first, 'https://cached.example.com/v2/data');
+      expect(urls.first, 'https://cached.example.com/v2');
     });
   });
 }

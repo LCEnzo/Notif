@@ -1,10 +1,14 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_texture_tuner.dart';
+import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_theme.dart';
-import 'package:notif/screens/shared.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/data.dart';
+import 'package:notif/services/router.dart';
 import 'package:provider/provider.dart';
 
 void main() {
@@ -28,6 +32,24 @@ void main() {
           create: (context) => UserDataService(context.read<AuthService>()),
           update: (_, auth, settings, userData) =>
               userData!..updateSettings(settings),
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthService,
+          AppSettingsController,
+          LinkService
+        >(
+          create: (context) => LinkService(context.read<AuthService>()),
+          update: (_, auth, settings, linkService) =>
+              linkService!..updateDependencies(auth, settings),
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthService,
+          AppSettingsController,
+          NotificationService
+        >(
+          create: (context) => NotificationService(context.read<AuthService>()),
+          update: (_, auth, settings, notificationService) =>
+              notificationService!..updateDependencies(auth, settings),
         ),
       ],
       child: const App(),
@@ -67,21 +89,55 @@ class _DarkFadeUpTransitionBuilder extends PageTransitionsBuilder {
   }
 }
 
-class App extends StatelessWidget {
+class App extends StatefulWidget {
   const App({super.key});
+
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  late final GoRouter _router;
+
+  @override
+  void initState() {
+    super.initState();
+    _router = createRouter(context.read<AuthService>());
+  }
+
+  @override
+  void dispose() {
+    _router.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<AppSettingsController>();
-
-    final theme = buildNotifTheme(
+    final baseTheme = buildNotifTheme(
       colorway: settings.colorway,
       fontSet: settings.fontSet,
     );
+    final tokens = baseTheme.extension<NotifTokens>()!;
+    final text$ = baseTheme.extension<NotifTextTheme>()!;
 
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Notif',
-      theme: theme.copyWith(
+      theme: baseTheme.copyWith(
+        dialogTheme: DialogThemeData(
+          backgroundColor: tokens.bg2,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          titleTextStyle: text$.title.copyWith(color: tokens.ink),
+          contentTextStyle: text$.body.copyWith(color: tokens.inkDim),
+        ),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: tokens.bg2,
+          contentTextStyle: text$.body.copyWith(color: tokens.ink),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          behavior: SnackBarBehavior.floating,
+          actionTextColor: tokens.accent,
+        ),
+        dividerColor: tokens.rule,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
             TargetPlatform.android: _DarkFadeUpTransitionBuilder(),
@@ -93,15 +149,7 @@ class App extends StatelessWidget {
           },
         ),
       ),
-      home: const LogInPage(),
-      routes: {
-        '/Home': (context) => const HomePage(),
-        '/LogIn': (context) => const LogInPage(),
-        '/Register': (context) => const RegisterPage(),
-        '/ForgotPassword': (context) => const ForgotPasswordPage(),
-        '/About': (context) => const AboutPage(),
-        '/Settings': (context) => const SettingsPage(),
-      },
+      routerConfig: _router,
     );
   }
 }

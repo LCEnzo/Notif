@@ -122,14 +122,14 @@ class AuthTextureSettings {
           halftoneOpacityGrowth ?? this.halftoneOpacityGrowth,
       halftoneColorLerpScale:
           halftoneColorLerpScale ?? this.halftoneColorLerpScale,
-      halftoneConvexCurveDepthFactor: halftoneConvexCurveDepthFactor ??
-          this.halftoneConvexCurveDepthFactor,
+      halftoneConvexCurveDepthFactor:
+          halftoneConvexCurveDepthFactor ?? this.halftoneConvexCurveDepthFactor,
       halftoneLandscapeCurveBoost:
           halftoneLandscapeCurveBoost ?? this.halftoneLandscapeCurveBoost,
       halftoneCurveExponent:
           halftoneCurveExponent ?? this.halftoneCurveExponent,
-      halftoneLandscapeExponentPull: halftoneLandscapeExponentPull ??
-          this.halftoneLandscapeExponentPull,
+      halftoneLandscapeExponentPull:
+          halftoneLandscapeExponentPull ?? this.halftoneLandscapeExponentPull,
     );
   }
 
@@ -403,6 +403,9 @@ class _PosterTextureLayer extends StatelessWidget {
     return FutureBuilder<ui.FragmentProgram>(
       future: _programFuture,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const SizedBox.expand();
+        }
         final program = snapshot.data;
         if (program == null) {
           return const SizedBox.expand();
@@ -551,10 +554,10 @@ class _RelativeRect {
   });
 
   const _RelativeRect.full()
-      : leftFactor = 0,
-        topFactor = 0,
-        widthFactor = 1,
-        heightFactor = 1;
+    : leftFactor = 0,
+      topFactor = 0,
+      widthFactor = 1,
+      heightFactor = 1;
 
   Rect resolve(Size size) {
     return Rect.fromLTWH(
@@ -687,12 +690,7 @@ class _HalftoneOp {
   });
 }
 
-void _drawShape(
-  Canvas canvas,
-  Rect rect,
-  Paint paint,
-  _BackgroundShape shape,
-) {
+void _drawShape(Canvas canvas, Rect rect, Paint paint, _BackgroundShape shape) {
   if (shape == _BackgroundShape.oval) {
     canvas.drawOval(rect, paint);
     return;

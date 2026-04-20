@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:notif/commons/components/primitives.dart';
 import 'package:notif/commons/dither_overlay.dart';
 import 'package:notif/commons/notif_text_theme.dart';
@@ -89,7 +90,10 @@ class _AboutPageState extends State<AboutPage> {
         actions: [
           IconButton(
             tooltip: 'Settings',
-            onPressed: () => Navigator.pushNamed(context, '/Settings'),
+
+            onPressed: () {
+              context.push('/settings');
+            },
             icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
           ),
         ],
