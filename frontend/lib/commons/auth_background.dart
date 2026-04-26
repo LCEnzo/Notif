@@ -122,14 +122,14 @@ class AuthTextureSettings {
           halftoneOpacityGrowth ?? this.halftoneOpacityGrowth,
       halftoneColorLerpScale:
           halftoneColorLerpScale ?? this.halftoneColorLerpScale,
-      halftoneConvexCurveDepthFactor:
-          halftoneConvexCurveDepthFactor ?? this.halftoneConvexCurveDepthFactor,
+      halftoneConvexCurveDepthFactor: halftoneConvexCurveDepthFactor ??
+          this.halftoneConvexCurveDepthFactor,
       halftoneLandscapeCurveBoost:
           halftoneLandscapeCurveBoost ?? this.halftoneLandscapeCurveBoost,
       halftoneCurveExponent:
           halftoneCurveExponent ?? this.halftoneCurveExponent,
-      halftoneLandscapeExponentPull:
-          halftoneLandscapeExponentPull ?? this.halftoneLandscapeExponentPull,
+      halftoneLandscapeExponentPull: halftoneLandscapeExponentPull ??
+          this.halftoneLandscapeExponentPull,
     );
   }
 
@@ -255,6 +255,13 @@ class _AuthBackdropPalette {
   });
 
   factory _AuthBackdropPalette.fromTokens(NotifTokens tokens) {
+    final bloomCore = Color.lerp(tokens.halo1, tokens.accent, 0.12)!;
+    final bloomMid = Color.lerp(tokens.halo2, tokens.halo1, 0.08)!;
+    final bloomEdge = Color.lerp(tokens.halo3, tokens.bg1, 0.12)!;
+    final grainFrom = Color.lerp(tokens.bg0, tokens.halo3, 0.18)!;
+    final grainTo = Color.lerp(tokens.halo1, tokens.accent, 0.42)!;
+    final halftoneTop = Color.lerp(tokens.bg0, tokens.halftone, 0.55)!;
+
     return _AuthBackdropPalette(
       baseGradientColors: [
         tokens.bg0,
@@ -265,16 +272,16 @@ class _AuthBackdropPalette {
       ],
       baseGradientStops: const [0.0, 0.3, 0.58, 0.82, 1.0],
       bloomColors: [
-        tokens.halo1,
-        tokens.halo2,
-        tokens.halo3,
-        tokens.bg1,
-        tokens.bg0,
+        bloomCore.withValues(alpha: 0.96),
+        bloomMid.withValues(alpha: 0.84),
+        bloomEdge.withValues(alpha: 0.48),
+        tokens.bg1.withValues(alpha: 0.12),
+        Colors.transparent,
       ],
-      bloomStops: const [0.0, 0.30, 0.55, 0.78, 1.0],
+      bloomStops: const [0.0, 0.28, 0.55, 0.8, 1.0],
       transitionColors: [
         Colors.transparent,
-        tokens.halo3.withValues(alpha: 0.18),
+        tokens.halo3.withValues(alpha: 0.12),
         tokens.bg1.withValues(alpha: 0.54),
         tokens.bg0,
       ],
@@ -285,9 +292,9 @@ class _AuthBackdropPalette {
         tokens.bg0,
       ],
       floorFadeStops: const [0.72, 0.9, 1.0],
-      grainFrom: Color.lerp(tokens.bg0, tokens.halo3, 0.18)!,
-      grainTo: Color.lerp(tokens.halo2, tokens.halo1, 0.3)!,
-      halftoneTop: Color.lerp(tokens.bg0, tokens.halftone, 0.55)!,
+      grainFrom: grainFrom,
+      grainTo: grainTo,
+      halftoneTop: halftoneTop,
       halftoneBottom: tokens.halftone,
     );
   }
@@ -328,9 +335,15 @@ class PageBackground extends StatelessWidget {
       ),
       _CircularGradientOp(
         centerYFactor: 0.0,
-        diameterFactor: 1.1,
+        diameterFactor: 1.12,
         colors: palette.bloomColors,
         stops: palette.bloomStops,
+      ),
+      _LinearGradientOp(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: palette.transitionColors,
+        stops: palette.transitionStops,
       ),
     ];
     final foregroundOperations = [
@@ -390,9 +403,6 @@ class _PosterTextureLayer extends StatelessWidget {
     return FutureBuilder<ui.FragmentProgram>(
       future: _programFuture,
       builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return const SizedBox.expand();
-        }
         final program = snapshot.data;
         if (program == null) {
           return const SizedBox.expand();
@@ -541,10 +551,10 @@ class _RelativeRect {
   });
 
   const _RelativeRect.full()
-    : leftFactor = 0,
-      topFactor = 0,
-      widthFactor = 1,
-      heightFactor = 1;
+      : leftFactor = 0,
+        topFactor = 0,
+        widthFactor = 1,
+        heightFactor = 1;
 
   Rect resolve(Size size) {
     return Rect.fromLTWH(
@@ -603,7 +613,7 @@ class _CircularGradientOp extends _BackgroundOp {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final radius = size.height * diameterFactor / 2;
+    final radius = size.width * diameterFactor / 2;
     final center = Offset(size.width / 2, size.height * centerYFactor);
     final paint = Paint()
       ..shader = RadialGradient(
@@ -677,7 +687,12 @@ class _HalftoneOp {
   });
 }
 
-void _drawShape(Canvas canvas, Rect rect, Paint paint, _BackgroundShape shape) {
+void _drawShape(
+  Canvas canvas,
+  Rect rect,
+  Paint paint,
+  _BackgroundShape shape,
+) {
   if (shape == _BackgroundShape.oval) {
     canvas.drawOval(rect, paint);
     return;
