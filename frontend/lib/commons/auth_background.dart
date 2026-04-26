@@ -255,13 +255,6 @@ class _AuthBackdropPalette {
   });
 
   factory _AuthBackdropPalette.fromTokens(NotifTokens tokens) {
-    final bloomCore = Color.lerp(tokens.halo1, tokens.accent, 0.12)!;
-    final bloomMid = Color.lerp(tokens.halo2, tokens.halo1, 0.08)!;
-    final bloomEdge = Color.lerp(tokens.halo3, tokens.bg1, 0.12)!;
-    final grainFrom = Color.lerp(tokens.bg0, tokens.halo3, 0.18)!;
-    final grainTo = Color.lerp(tokens.halo1, tokens.accent, 0.42)!;
-    final halftoneTop = Color.lerp(tokens.bg0, tokens.halftone, 0.55)!;
-
     return _AuthBackdropPalette(
       baseGradientColors: [
         tokens.bg0,
@@ -272,16 +265,16 @@ class _AuthBackdropPalette {
       ],
       baseGradientStops: const [0.0, 0.3, 0.58, 0.82, 1.0],
       bloomColors: [
-        bloomCore.withValues(alpha: 0.96),
-        bloomMid.withValues(alpha: 0.84),
-        bloomEdge.withValues(alpha: 0.48),
-        tokens.bg1.withValues(alpha: 0.12),
-        Colors.transparent,
+        tokens.halo1,
+        tokens.halo2,
+        tokens.halo3,
+        tokens.bg1,
+        tokens.bg0,
       ],
-      bloomStops: const [0.0, 0.28, 0.55, 0.8, 1.0],
+      bloomStops: const [0.0, 0.30, 0.55, 0.78, 1.0],
       transitionColors: [
         Colors.transparent,
-        tokens.halo3.withValues(alpha: 0.12),
+        tokens.halo3.withValues(alpha: 0.18),
         tokens.bg1.withValues(alpha: 0.54),
         tokens.bg0,
       ],
@@ -292,9 +285,9 @@ class _AuthBackdropPalette {
         tokens.bg0,
       ],
       floorFadeStops: const [0.72, 0.9, 1.0],
-      grainFrom: grainFrom,
-      grainTo: grainTo,
-      halftoneTop: halftoneTop,
+      grainFrom: Color.lerp(tokens.bg0, tokens.halo3, 0.18)!,
+      grainTo: Color.lerp(tokens.halo2, tokens.halo1, 0.3)!,
+      halftoneTop: Color.lerp(tokens.bg0, tokens.halftone, 0.55)!,
       halftoneBottom: tokens.halftone,
     );
   }
