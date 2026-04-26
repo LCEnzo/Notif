@@ -46,9 +46,21 @@ class _SettingsPageState extends State<SettingsPage> {
             elevation: 0,
             scrolledUnderElevation: 0,
             titleSpacing: 24,
-            title: Text(
-              'Settings',
-              style: text$.heading.copyWith(color: tokens.ink),
+            title: Row(
+              children: [
+                Text(
+                  'Notif',
+                  style: text$.heading.copyWith(
+                    color: tokens.ink,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '/ settings',
+                  style: text$.micro.copyWith(color: tokens.inkMute),
+                ),
+              ],
             ),
             bottom: PreferredSize(
               preferredSize: const Size.fromHeight(1),

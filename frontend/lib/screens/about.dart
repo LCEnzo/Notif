@@ -6,6 +6,7 @@ import 'package:notif/commons/dither_overlay.dart';
 import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart' show AppSettingsController;
+import 'package:notif/services/auth.dart' show AuthService;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -64,6 +65,7 @@ class _AboutPageState extends State<AboutPage> {
 
     final appSettings = context.watch<AppSettingsController?>();
     final ditheringEnabled = appSettings?.designDitheringEnabled ?? true;
+    final loggedIn = context.watch<AuthService>().jwt != null;
 
     return Scaffold(
       backgroundColor: tokens.bg1,
@@ -88,14 +90,14 @@ class _AboutPageState extends State<AboutPage> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'Settings',
-
-            onPressed: () {
-              context.push('/settings');
-            },
-            icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
-          ),
+          if (loggedIn)
+            IconButton(
+              tooltip: 'Settings',
+              onPressed: () {
+                context.push('/settings');
+              },
+              icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
+            ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
