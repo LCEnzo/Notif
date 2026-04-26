@@ -328,15 +328,9 @@ class PageBackground extends StatelessWidget {
       ),
       _CircularGradientOp(
         centerYFactor: 0.0,
-        diameterFactor: 1.12,
+        diameterFactor: 1.1,
         colors: palette.bloomColors,
         stops: palette.bloomStops,
-      ),
-      _LinearGradientOp(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: palette.transitionColors,
-        stops: palette.transitionStops,
       ),
     ];
     final foregroundOperations = [
@@ -609,7 +603,7 @@ class _CircularGradientOp extends _BackgroundOp {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final radius = size.width * diameterFactor / 2;
+    final radius = size.height * diameterFactor / 2;
     final center = Offset(size.width / 2, size.height * centerYFactor);
     final paint = Paint()
       ..shader = RadialGradient(
