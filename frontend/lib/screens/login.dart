@@ -93,6 +93,14 @@ class _FormContentState extends State<_FormContent> {
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => _submitLogin(authService),
         ),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerRight,
+          child: AuthInlineAction(
+            label: 'Forgot password?',
+            onPressed: () => context.go('/forgot-password'),
+          ),
+        ),
         const SizedBox(height: 18),
         CustomButton(
           buttonText: 'Log in',
@@ -144,6 +152,14 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.password],
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => _submitLogin(authService),
+        ),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerRight,
+          child: AuthInlineAction(
+            label: 'Forgot password?',
+            onPressed: () => context.go('/forgot-password'),
+          ),
         ),
         const SizedBox(height: 16),
         CustomButton(

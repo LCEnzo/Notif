@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
@@ -83,21 +84,13 @@ class _ForgotPasswordCard extends StatelessWidget {
             const SizedBox(height: 18),
             CustomButton(
               buttonText: 'Back to log in',
-              onPressed: () {
-                if (Navigator.canPop(context)) {
-                  Navigator.pop(context);
-                } else {
-                  Navigator.pushReplacementNamed(context, '/LogIn');
-                }
-              },
+              onPressed: () => context.go('/login'),
             ),
             const SizedBox(height: 12),
             CustomButton(
               buttonText: 'Create account',
               buttonColor: AuthPalette.secondaryButtonBase,
-              onPressed: () {
-                Navigator.pushReplacementNamed(context, '/Register');
-              },
+              onPressed: () => context.go('/register'),
             ),
           ],
         ),

@@ -1,7 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:notif/commons/components/primitives.dart';
 import 'package:notif/commons/dither_overlay.dart';
-import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/data.dart';
@@ -20,9 +24,7 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       _refreshDashboard();
     });
   }
@@ -44,18 +46,14 @@ class _HomePageState extends State<HomePage> {
   Future<void> _handleAddLink() async {
     final linkService = context.read<LinkService>();
     await linkService.ensureStrategyChoicesLoaded();
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     final draft = await showDialog<_LinkDraft>(
       context: context,
       builder: (_) =>
           _LinkEditorDialog(strategyChoices: linkService.strategyChoices),
     );
-    if (draft == null) {
-      return;
-    }
+    if (draft == null) return;
 
     final success = await linkService.createLink(
       name: draft.name,
@@ -63,9 +61,7 @@ class _HomePageState extends State<HomePage> {
       strategyClass: draft.strategyClass,
       selectorsText: draft.selectorsText,
     );
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     _showMessage(success ? 'Link added to the registry.' : linkService.error);
   }
@@ -73,9 +69,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _handleEditLink(Link link) async {
     final linkService = context.read<LinkService>();
     await linkService.ensureStrategyChoicesLoaded();
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     final draft = await showDialog<_LinkDraft>(
       context: context,
@@ -91,9 +85,7 @@ class _HomePageState extends State<HomePage> {
         title: 'Edit link',
       ),
     );
-    if (draft == null) {
-      return;
-    }
+    if (draft == null) return;
 
     final success = await linkService.updateLink(
       link: link,
@@ -102,15 +94,16 @@ class _HomePageState extends State<HomePage> {
       strategyClass: draft.strategyClass,
       selectorsText: draft.selectorsText,
     );
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     _showMessage(success ? 'Link updated.' : linkService.error);
   }
 
   Future<void> _handleDeleteLink(Link link) async {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
     final linkService = context.read<LinkService>();
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -123,29 +116,24 @@ class _HomePageState extends State<HomePage> {
             onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Cancel'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: FeedbackColors.error,
-              foregroundColor: Colors.white,
-              shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.zero,
-              ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: tokens.bg1,
+              backgroundColor: NotifFeedback.error,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              textStyle: text$.eyebrow,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
+            child: const Text('DELETE'),
           ),
         ],
       ),
     );
 
-    if (confirmed != true) {
-      return;
-    }
+    if (confirmed != true) return;
 
     final success = await linkService.deleteLink(link);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     _showMessage(success ? 'Link removed.' : linkService.error);
   }
@@ -157,9 +145,7 @@ class _HomePageState extends State<HomePage> {
     if (message != null) {
       await notificationService.fetchNotifications();
     }
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     _showMessage(message ?? linkService.error);
   }
 
@@ -170,9 +156,7 @@ class _HomePageState extends State<HomePage> {
     if (message != null) {
       await notificationService.fetchNotifications();
     }
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     _showMessage(message ?? linkService.error);
   }
 
@@ -183,13 +167,9 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
-    if (await launchUrl(uri)) {
-      return;
-    }
+    if (await launchUrl(uri)) return;
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
     _showMessage('Could not open $url');
   }
 
@@ -198,9 +178,7 @@ class _HomePageState extends State<HomePage> {
     if (notification.isUnread) {
       await notificationService.markRead(notification.id);
     }
-    if (!mounted || notification.itemUrl.isEmpty) {
-      return;
-    }
+    if (!mounted || notification.itemUrl.isEmpty) return;
     await _openExternalUrl(notification.itemUrl);
   }
 
@@ -212,94 +190,103 @@ class _HomePageState extends State<HomePage> {
   void _showNotificationsSheet() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: NotifDesignTokens.structRaised,
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(4)),
-      ),
-      builder: (context) {
+      builder: (sheetContext) {
+        final tokens = NotifTokens.of(sheetContext);
+        final text$ = NotifTextTheme.of(sheetContext);
+
         return FractionallySizedBox(
           heightFactor: 0.88,
           child: SafeArea(
-            child: Consumer<NotificationService>(
-              builder: (context, notificationService, _) {
-                return Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        NotifDesignTokens.spaceLg,
-                        NotifDesignTokens.spaceLg,
-                        NotifDesignTokens.spaceLg,
-                        NotifDesignTokens.spaceBase,
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Notifications', style: _labelStyle),
-                                SizedBox(height: NotifDesignTokens.spaceXs),
-                                Text('Full feed', style: _sheetTitleStyle),
-                              ],
-                            ),
-                          ),
-                          if (notificationService.unreadCount > 0)
-                            TextButton(
-                              onPressed: notificationService.markingAllRead
-                                  ? null
-                                  : () => notificationService.markAllRead(),
-                              child: Text(
-                                notificationService.markingAllRead
-                                    ? 'Working...'
-                                    : 'Mark all read',
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const Divider(height: 1),
-                    Expanded(
-                      child: notificationService.notifications.isEmpty
-                          ? const Center(
-                              child: _EmptyState(
-                                icon: Icons.notifications_off_outlined,
-                                title: 'No notifications yet',
-                                message:
-                                    'Scrapes that find new updates will show up here.',
-                              ),
-                            )
-                          : ListView.separated(
-                              padding: const EdgeInsets.all(
-                                NotifDesignTokens.spaceLg,
-                              ),
-                              itemCount:
-                                  notificationService.notifications.length,
-                              separatorBuilder: (_, _) => const SizedBox(
-                                height: NotifDesignTokens.spaceSm,
-                              ),
-                              itemBuilder: (context, index) {
-                                final item =
-                                    notificationService.notifications[index];
-                                return _NotificationCard(
-                                  notification: item,
-                                  compact: false,
-                                  isBusy: notificationService.isMarkingRead(
-                                    item.id,
+            top: false,
+            child: Container(
+              decoration: BoxDecoration(
+                color: tokens.bg1,
+                border: Border(top: BorderSide(color: tokens.ruleStrong)),
+              ),
+              child: Consumer<NotificationService>(
+                builder: (context, notificationService, _) {
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 22, 24, 16),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Eyebrow(
+                                    'Notifications',
+                                    tone: EyebrowTone.accent,
                                   ),
-                                  onTap: () => _handleNotificationTap(item),
-                                  onMarkRead: item.isUnread
-                                      ? () => notificationService.markRead(
-                                          item.id,
-                                        )
-                                      : null,
-                                );
-                              },
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Full feed',
+                                    style: text$.title.copyWith(
+                                      color: tokens.ink,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                    ),
-                  ],
-                );
-              },
+                            if (notificationService.unreadCount > 0)
+                              NotifButton(
+                                label: notificationService.markingAllRead
+                                    ? 'Working'
+                                    : 'Mark all read',
+                                variant: NotifButtonVariant.ghost,
+                                size: NotifButtonSize.sm,
+                                onPressed: notificationService.markingAllRead
+                                    ? null
+                                    : () => notificationService.markAllRead(),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Rule(strength: RuleStrength.faint),
+                      Expanded(
+                        child: notificationService.notifications.isEmpty
+                            ? const Center(
+                                child: _EmptyState(
+                                  icon: Icons.notifications_off_outlined,
+                                  title: 'No notifications yet',
+                                  message:
+                                      'Scrapes that find new updates will show up here.',
+                                ),
+                              )
+                            : ListView.separated(
+                                padding: const EdgeInsets.all(24),
+                                itemCount:
+                                    notificationService.notifications.length,
+                                separatorBuilder: (_, _) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final item =
+                                      notificationService.notifications[index];
+                                  return _NotificationCard(
+                                    notification: item,
+                                    compact: false,
+                                    isBusy: notificationService.isMarkingRead(
+                                      item.id,
+                                    ),
+                                    onTap: () => _handleNotificationTap(item),
+                                    onMarkRead: item.isUnread
+                                        ? () => notificationService.markRead(
+                                            item.id,
+                                          )
+                                        : null,
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
         );
@@ -308,9 +295,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _showMessage(String? message) {
-    if (!mounted || message == null || message.trim().isEmpty) {
-      return;
-    }
+    if (!mounted || message == null || message.trim().isEmpty) return;
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
@@ -319,6 +304,8 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
     final appSettings = context.watch<AppSettingsController?>();
     final userData = context.watch<UserDataService>().userData;
     final linkService = context.watch<LinkService>();
@@ -329,82 +316,76 @@ class _HomePageState extends State<HomePage> {
         .toList(growable: false);
 
     return Scaffold(
-      backgroundColor: NotifDesignTokens.structBg,
+      backgroundColor: tokens.bg0,
       appBar: AppBar(
-        backgroundColor: NotifDesignTokens.structSurface,
-        foregroundColor: NotifDesignTokens.structText,
+        backgroundColor: tokens.bg0,
+        foregroundColor: tokens.ink,
         elevation: 0,
         scrolledUnderElevation: 0,
-        titleSpacing: NotifDesignTokens.spaceLg,
-        title: const Text('Home', style: _headlineStyle),
+        titleSpacing: 0,
         leading: IconButton(
           tooltip: 'Log out',
-          icon: const Icon(Icons.logout_sharp),
+          icon: Icon(Icons.logout_sharp, color: tokens.inkDim),
           onPressed: _logout,
+        ),
+        title: Row(
+          children: [
+            Text(
+              'Notif',
+              style: text$.heading.copyWith(
+                color: tokens.ink,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('/ desk', style: text$.micro.copyWith(color: tokens.inkMute)),
+          ],
         ),
         actions: [
           Stack(
             children: [
               IconButton(
                 tooltip: 'Notifications',
-                icon: const Icon(Icons.notifications_sharp),
+                icon: Icon(Icons.notifications_sharp, color: tokens.inkDim),
                 onPressed: _showNotificationsSheet,
               ),
               if (notificationService.unreadCount > 0)
                 Positioned(
                   right: 8,
                   top: 8,
-                  child: Container(
-                    constraints: const BoxConstraints(minWidth: 18),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 5,
-                      vertical: 2,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: FeedbackColors.error,
-                      borderRadius: BorderRadius.all(Radius.circular(999)),
-                    ),
-                    child: Text(
-                      '${notificationService.unreadCount}',
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  child: _Badge(value: '${notificationService.unreadCount}'),
                 ),
             ],
           ),
           IconButton(
             tooltip: 'About',
-            icon: const Icon(Icons.info_outline_sharp),
+            icon: Icon(Icons.info_outline_sharp, color: tokens.inkDim),
             onPressed: () => context.push('/about'),
           ),
           IconButton(
             tooltip: 'Settings',
-            icon: const Icon(Icons.settings_sharp),
+            icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
             onPressed: () => context.push('/settings'),
           ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: NotifDesignTokens.structBorder),
+          child: Container(height: 1, color: tokens.rule),
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: linkService.creating ? null : _handleAddLink,
-        backgroundColor: NotifDesignTokens.accentPrimary,
-        foregroundColor: NotifDesignTokens.accentOnAccent,
+        backgroundColor: tokens.btnBg,
+        foregroundColor: tokens.btnInk,
+        elevation: 0,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         child: linkService.creating
-            ? const SizedBox(
+            ? SizedBox(
                 width: 20,
                 height: 20,
                 child: CircularProgressIndicator(
-                  strokeWidth: 2.2,
-                  color: NotifDesignTokens.accentOnAccent,
+                  strokeWidth: 2,
+                  color: tokens.btnInk,
                 ),
               )
             : const Icon(Icons.add_sharp),
@@ -414,7 +395,8 @@ class _HomePageState extends State<HomePage> {
           if (appSettings?.designDitheringEnabled ?? true)
             const DitherOverlay(),
           RefreshIndicator(
-            color: NotifDesignTokens.accentPrimary,
+            color: tokens.accent,
+            backgroundColor: tokens.bg2,
             onRefresh: _refreshDashboard,
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -424,12 +406,7 @@ class _HomePageState extends State<HomePage> {
                   physics: const AlwaysScrollableScrollPhysics(
                     parent: ClampingScrollPhysics(),
                   ),
-                  padding: const EdgeInsets.fromLTRB(
-                    NotifDesignTokens.spaceLg,
-                    NotifDesignTokens.spaceLg,
-                    NotifDesignTokens.spaceLg,
-                    96,
-                  ),
+                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 96),
                   children: [
                     _HeroPanel(
                       userData: userData,
@@ -443,14 +420,14 @@ class _HomePageState extends State<HomePage> {
                           : _handleScrapeAll,
                     ),
                     if (linkService.error != null) ...[
-                      const SizedBox(height: NotifDesignTokens.spaceLg),
+                      const SizedBox(height: 18),
                       _ErrorBanner(message: linkService.error!),
                     ],
                     if (notificationService.error != null) ...[
-                      const SizedBox(height: NotifDesignTokens.spaceLg),
+                      const SizedBox(height: 18),
                       _ErrorBanner(message: notificationService.error!),
                     ],
-                    const SizedBox(height: NotifDesignTokens.spaceLg),
+                    const SizedBox(height: 24),
                     if (isWide)
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -459,7 +436,7 @@ class _HomePageState extends State<HomePage> {
                             flex: 7,
                             child: _buildLinksPanel(linkService),
                           ),
-                          const SizedBox(width: NotifDesignTokens.spaceLg),
+                          const SizedBox(width: 24),
                           Expanded(
                             flex: 5,
                             child: _buildNotificationsPanel(
@@ -471,12 +448,14 @@ class _HomePageState extends State<HomePage> {
                       )
                     else ...[
                       _buildLinksPanel(linkService),
-                      const SizedBox(height: NotifDesignTokens.spaceLg),
+                      const SizedBox(height: 24),
                       _buildNotificationsPanel(
                         notificationService,
                         unreadNotifications,
                       ),
                     ],
+                    const SizedBox(height: 24),
+                    _HomeFooter(userData: userData),
                   ],
                 );
               },
@@ -489,22 +468,30 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildLinksPanel(LinkService linkService) {
     return _DashboardPanel(
+      index: 1,
       label: 'Registry',
       title: 'Monitored links',
-      badge: '${linkService.links.length}',
+      meta: '${linkService.links.length} total',
       loading: linkService.loading,
-      action: TextButton.icon(
+      action: NotifButton(
+        label: 'Refresh',
+        icon: Icons.sync_sharp,
+        variant: NotifButtonVariant.link,
+        size: NotifButtonSize.sm,
         onPressed: linkService.loading ? null : _refreshDashboard,
-        icon: const Icon(Icons.sync_sharp, size: 16),
-        label: const Text('Refresh'),
       ),
       child: linkService.loading && linkService.links.isEmpty
           ? const _LoadingState(message: 'Loading links...')
           : linkService.links.isEmpty
-          ? const _EmptyState(
+          ? _EmptyState(
               icon: Icons.link_off_sharp,
               title: 'No links in the registry',
               message: 'Add a monitored page to start scraping for updates.',
+              action: NotifButton(
+                label: 'Add link',
+                icon: Icons.add_sharp,
+                onPressed: linkService.creating ? null : _handleAddLink,
+              ),
             )
           : Column(
               children: [
@@ -520,7 +507,7 @@ class _HomePageState extends State<HomePage> {
                     onOpen: () => _openExternalUrl(link.url),
                   ),
                   if (link != linkService.links.last)
-                    const SizedBox(height: NotifDesignTokens.spaceSm),
+                    const SizedBox(height: 12),
                 ],
               ],
             ),
@@ -532,27 +519,29 @@ class _HomePageState extends State<HomePage> {
     List<NotificationItem> unreadNotifications,
   ) {
     return _DashboardPanel(
-      label: 'Signal Feed',
+      index: 2,
+      label: 'Signal feed',
       title: 'Unread notifications',
-      badge: '${notificationService.unreadCount}',
+      meta: '${notificationService.unreadCount} unread',
       loading: notificationService.loading,
-      action: Row(
-        mainAxisSize: MainAxisSize.min,
+      action: Wrap(
+        spacing: 10,
+        runSpacing: 8,
         children: [
           if (notificationService.unreadCount > 0)
-            TextButton(
+            NotifButton(
+              label: notificationService.markingAllRead ? 'Working' : 'Read all',
+              variant: NotifButtonVariant.link,
+              size: NotifButtonSize.sm,
               onPressed: notificationService.markingAllRead
                   ? null
                   : () => notificationService.markAllRead(),
-              child: Text(
-                notificationService.markingAllRead
-                    ? 'Working...'
-                    : 'Mark all read',
-              ),
             ),
-          TextButton(
+          NotifButton(
+            label: 'Open feed',
+            variant: NotifButtonVariant.link,
+            size: NotifButtonSize.sm,
             onPressed: _showNotificationsSheet,
-            child: const Text('Open feed'),
           ),
         ],
       ),
@@ -577,7 +566,7 @@ class _HomePageState extends State<HomePage> {
                     onMarkRead: () => notificationService.markRead(item.id),
                   ),
                   if (item != unreadNotifications.last)
-                    const SizedBox(height: NotifDesignTokens.spaceSm),
+                    const SizedBox(height: 12),
                 ],
               ],
             ),
@@ -606,6 +595,8 @@ class _HeroPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
     final name = userData?.name.trim();
     final username = userData?.username.trim();
     final identity = name != null && name.isNotEmpty
@@ -614,62 +605,77 @@ class _HeroPanel extends StatelessWidget {
         ? username
         : 'operator';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: NotifDesignTokens.structSurface,
-        border: Border.all(color: NotifDesignTokens.structBorder),
-      ),
-      padding: const EdgeInsets.all(NotifDesignTokens.spaceLg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Monitoring Desk', style: _labelStyle),
-          const SizedBox(height: NotifDesignTokens.spaceSm),
-          const Text('Quiet control of a noisy feed.', style: _displayStyle),
-          const SizedBox(height: NotifDesignTokens.spaceBase),
-          Text(
-            'Signed in as $identity. Keep the registry deliberate, run scrapes when you need fresh signals, and let the feed stay readable.',
-            style: _bodyStyle.copyWith(color: NotifDesignTokens.structText2),
-          ),
-          const SizedBox(height: NotifDesignTokens.spaceLg),
-          Wrap(
-            spacing: NotifDesignTokens.spaceSm,
-            runSpacing: NotifDesignTokens.spaceSm,
+    return NotifCard(
+      cornerMarks: true,
+      padding: const EdgeInsets.all(24),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 760;
+          final copy = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _MetricPlate(label: 'Links', value: '$linkCount'),
-              _MetricPlate(label: 'Unread', value: '$unreadCount'),
-              _MetricPlate(label: 'Backend', value: backendLabel),
-            ],
-          ),
-          const SizedBox(height: NotifDesignTokens.spaceLg),
-          Wrap(
-            spacing: NotifDesignTokens.spaceSm,
-            runSpacing: NotifDesignTokens.spaceSm,
-            children: [
-              FilledButton.icon(
-                style: NotifDesignTokens.framedButtonStyle(isPrimary: true),
-                onPressed: onScrapeAll,
-                icon: scrapeInProgress
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: NotifDesignTokens.accentOnAccent,
-                        ),
-                      )
-                    : const Icon(Icons.radar_sharp, size: 16),
-                label: Text(scrapeInProgress ? 'SCRAPING' : 'SCRAPE ALL'),
+              const Eyebrow('Monitoring desk', tone: EyebrowTone.accent),
+              const SizedBox(height: 10),
+              Text(
+                'Quiet control of a noisy feed.',
+                style: text$.display.copyWith(
+                  color: tokens.ink,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
-              OutlinedButton.icon(
-                style: NotifDesignTokens.framedButtonStyle(isPrimary: false),
-                onPressed: onAddLink,
-                icon: const Icon(Icons.add_sharp, size: 16),
-                label: const Text('ADD LINK'),
+              const SizedBox(height: 14),
+              Text(
+                'Signed in as $identity. Keep the registry deliberate, run scrapes when you need fresh signals, and let the feed stay readable.',
+                style: text$.bodyLong.copyWith(color: tokens.inkDim),
+              ),
+              const SizedBox(height: 22),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _MetricPlate(label: 'Links', value: '$linkCount'),
+                  _MetricPlate(label: 'Unread', value: '$unreadCount'),
+                  _MetricPlate(label: 'Backend', value: backendLabel),
+                ],
+              ),
+              const SizedBox(height: 22),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  NotifButton(
+                    label: scrapeInProgress ? 'Scraping' : 'Scrape all',
+                    icon: Icons.radar_sharp,
+                    onPressed: onScrapeAll,
+                  ),
+                  NotifButton(
+                    label: 'Add link',
+                    icon: Icons.add_sharp,
+                    variant: NotifButtonVariant.ghost,
+                    onPressed: onAddLink,
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
+          );
+
+          if (!isWide) return copy;
+
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(flex: 5, child: copy),
+              const SizedBox(width: 28),
+              Expanded(
+                flex: 2,
+                child: Opacity(
+                  opacity: 0.82,
+                  child: _SignalOrb(size: math.min(220, constraints.maxWidth / 4)),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -677,93 +683,75 @@ class _HeroPanel extends StatelessWidget {
 
 class _DashboardPanel extends StatelessWidget {
   const _DashboardPanel({
+    required this.index,
     required this.label,
     required this.title,
     required this.child,
-    this.badge,
+    this.meta,
     this.action,
     this.loading = false,
   });
 
+  final int index;
   final String label;
   final String title;
-  final String? badge;
+  final String? meta;
   final Widget child;
   final Widget? action;
   final bool loading;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: NotifDesignTokens.structSurface,
-        border: Border.all(color: NotifDesignTokens.structBorder),
-      ),
-      child: Column(
-        children: [
-          if (loading)
-            const LinearProgressIndicator(
-              minHeight: 1,
-              backgroundColor: NotifDesignTokens.structDivider,
-              color: NotifDesignTokens.accentPrimary,
-            ),
-          Padding(
-            padding: const EdgeInsets.all(NotifDesignTokens.spaceBase),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        IndexRule(index: index, title: label, meta: meta),
+        NotifCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (loading)
+                LinearProgressIndicator(
+                  minHeight: 1,
+                  backgroundColor: tokens.rule,
+                  color: tokens.accent,
+                ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(label, style: _labelStyle),
-                          const SizedBox(height: NotifDesignTokens.spaceXs),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(title, style: _panelTitleStyle),
-                              ),
-                              if (badge != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: NotifDesignTokens.spaceSm,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: NotifDesignTokens.accentDim,
-                                    border: Border.all(
-                                      color: NotifDesignTokens.accentMuted,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    badge!,
-                                    style: _monoStyle.copyWith(
-                                      color: NotifDesignTokens.accentText,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                ),
-                            ],
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: text$.title.copyWith(
+                              color: tokens.ink,
+                              fontStyle: FontStyle.italic,
+                            ),
                           ),
+                        ),
+                        if (action != null) ...[
+                          const SizedBox(width: 12),
+                          action!,
                         ],
-                      ),
+                      ],
                     ),
-                    if (action != null) ...[
-                      const SizedBox(width: NotifDesignTokens.spaceSm),
-                      action!,
-                    ],
+                    const SizedBox(height: 18),
+                    child,
                   ],
                 ),
-                const SizedBox(height: NotifDesignTokens.spaceBase),
-                child,
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -791,14 +779,12 @@ class _LinkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
     final busy = isScraping || isSaving || isDeleting;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: NotifDesignTokens.structRaised,
-        border: Border.all(color: NotifDesignTokens.structBorder),
-      ),
-      padding: const EdgeInsets.all(NotifDesignTokens.spaceBase),
+    return NotifCard(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -809,56 +795,51 @@ class _LinkCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(link.name, style: _itemTitleStyle),
-                    const SizedBox(height: NotifDesignTokens.spaceXs),
-                    Text(
+                    Text(link.name, style: text$.heading.copyWith(color: tokens.ink)),
+                    const SizedBox(height: 6),
+                    SelectableText(
                       link.url,
-                      style: _monoStyle.copyWith(
-                        color: NotifDesignTokens.structText3,
-                        fontSize: 12,
-                      ),
+                      style: text$.code.copyWith(color: tokens.inkMute),
                     ),
-                    const SizedBox(height: NotifDesignTokens.spaceSm),
+                    const SizedBox(height: 10),
                     Wrap(
-                      spacing: NotifDesignTokens.spaceSm,
-                      runSpacing: NotifDesignTokens.spaceSm,
+                      spacing: 6,
+                      runSpacing: 6,
                       children: [
-                        _TagChip(label: link.strategyLabel),
-                        _TagChip(
-                          label: link.lastScraped == null
+                        Tag(link.strategyLabel),
+                        Tag(
+                          link.lastScraped == null
                               ? 'Never scraped'
                               : 'Last scrape ${_formatTimeAgo(link.lastScraped!)}',
+                          tone: TagTone.muted,
                         ),
                       ],
                     ),
                     if (link.selectors.isNotEmpty) ...[
-                      const SizedBox(height: NotifDesignTokens.spaceSm),
+                      const SizedBox(height: 10),
                       Text(
                         'Selectors: ${link.selectors.join(', ')}',
-                        style: _bodyStyle.copyWith(
-                          color: NotifDesignTokens.structText2,
-                          fontSize: 13,
-                        ),
+                        style: text$.body.copyWith(color: tokens.inkDim),
                       ),
                     ],
                   ],
                 ),
               ),
               if (busy)
-                const SizedBox(
+                SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: NotifDesignTokens.accentPrimary,
+                    color: tokens.accent,
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: NotifDesignTokens.spaceBase),
+          const SizedBox(height: 14),
           Wrap(
-            spacing: NotifDesignTokens.spaceSm,
-            runSpacing: NotifDesignTokens.spaceSm,
+            spacing: 10,
+            runSpacing: 10,
             children: [
               _CardActionButton(
                 icon: Icons.radar_sharp,
@@ -906,74 +887,70 @@ class _NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return NotifCard(
+      padding: EdgeInsets.zero,
       onTap: isBusy ? null : onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: NotifDesignTokens.structRaised,
-          border: Border.all(
-            color: notification.isUnread
-                ? NotifDesignTokens.accentMuted
-                : NotifDesignTokens.structBorder,
-          ),
-        ),
-        padding: const EdgeInsets.all(NotifDesignTokens.spaceBase),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 10,
-              height: 10,
-              margin: const EdgeInsets.only(top: 5),
-              decoration: BoxDecoration(
-                color: notification.isUnread
-                    ? NotifDesignTokens.accentPrimary
-                    : NotifDesignTokens.structText3,
-                shape: BoxShape.circle,
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: StatusDot(
+                state: notification.isUnread
+                    ? StatusDotState.live
+                    : StatusDotState.idle,
               ),
             ),
-            const SizedBox(width: NotifDesignTokens.spaceBase),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(notification.title, style: _itemTitleStyle),
+                  Text(
+                    notification.title,
+                    style: text$.heading.copyWith(color: tokens.ink),
+                  ),
                   if (notification.description.isNotEmpty) ...[
-                    const SizedBox(height: NotifDesignTokens.spaceXs),
+                    const SizedBox(height: 6),
                     Text(
                       notification.description,
                       maxLines: compact ? 2 : 4,
                       overflow: TextOverflow.ellipsis,
-                      style: _bodyStyle.copyWith(
-                        color: NotifDesignTokens.structText2,
-                      ),
+                      style: text$.body.copyWith(color: tokens.inkDim),
                     ),
                   ],
-                  const SizedBox(height: NotifDesignTokens.spaceSm),
+                  const SizedBox(height: 8),
                   Text(
                     _formatTimestamp(notification.createdAt),
-                    style: _monoStyle.copyWith(
-                      color: NotifDesignTokens.structText3,
-                      fontSize: 11,
-                    ),
+                    style: text$.micro.copyWith(color: tokens.inkMute),
                   ),
                 ],
               ),
             ),
             if (isBusy)
-              const Padding(
-                padding: EdgeInsets.only(left: NotifDesignTokens.spaceSm),
+              Padding(
+                padding: const EdgeInsets.only(left: 10),
                 child: SizedBox(
                   width: 18,
                   height: 18,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: NotifDesignTokens.accentPrimary,
+                    color: tokens.accent,
                   ),
                 ),
               )
             else if (onMarkRead != null)
-              TextButton(onPressed: onMarkRead, child: const Text('Read')),
+              NotifButton(
+                label: 'Read',
+                variant: NotifButtonVariant.link,
+                size: NotifButtonSize.sm,
+                onPressed: onMarkRead,
+              ),
           ],
         ),
       ),
@@ -989,47 +966,23 @@ class _MetricPlate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
     return Container(
-      constraints: const BoxConstraints(minWidth: 110),
-      padding: const EdgeInsets.all(NotifDesignTokens.spaceBase),
+      constraints: const BoxConstraints(minWidth: 112),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: NotifDesignTokens.structRaised,
-        border: Border.all(color: NotifDesignTokens.structBorder),
+        color: tokens.bg1,
+        border: Border.all(color: tokens.rule),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: _labelStyle),
-          const SizedBox(height: NotifDesignTokens.spaceXs),
-          Text(value, style: _metricStyle),
+          Eyebrow(label, size: EyebrowSize.micro),
+          const SizedBox(height: 6),
+          Text(value, style: text$.heading.copyWith(color: tokens.ink)),
         ],
-      ),
-    );
-  }
-}
-
-class _TagChip extends StatelessWidget {
-  const _TagChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: NotifDesignTokens.spaceSm,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: NotifDesignTokens.structSurface,
-        border: Border.all(color: NotifDesignTokens.structBorder),
-      ),
-      child: Text(
-        label,
-        style: _monoStyle.copyWith(
-          color: NotifDesignTokens.structText2,
-          fontSize: 11,
-        ),
       ),
     );
   }
@@ -1050,37 +1003,41 @@ class _CardActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = destructive
-        ? FeedbackColors.error
-        : NotifDesignTokens.accentText;
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final foreground = destructive ? NotifFeedback.error : tokens.ink;
+    final border = destructive
+        ? NotifFeedback.error.withValues(alpha: onPressed == null ? 0.26 : 0.55)
+        : tokens.ruleStrong;
 
-    return OutlinedButton.icon(
-      style: NotifDesignTokens.framedButtonStyle(isPrimary: false).copyWith(
-        foregroundColor: WidgetStatePropertyAll(foreground),
-        side: WidgetStateProperty.resolveWith((states) {
-          if (destructive) {
-            return BorderSide(
-              color: states.contains(WidgetState.hovered)
-                  ? FeedbackColors.error
-                  : FeedbackColors.error.withValues(alpha: 0.45),
-            );
-          }
-          if (states.contains(WidgetState.focused)) {
-            return const BorderSide(
-              color: NotifDesignTokens.accentDim,
-              width: NotifDesignTokens.borderFocusWidth,
-            );
-          }
-          if (states.contains(WidgetState.hovered) ||
-              states.contains(WidgetState.pressed)) {
-            return const BorderSide(color: NotifDesignTokens.accentMuted);
-          }
-          return const BorderSide(color: NotifDesignTokens.structBorder);
-        }),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        splashColor: foreground.withValues(alpha: 0.08),
+        highlightColor: foreground.withValues(alpha: 0.04),
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: BoxDecoration(
+            border: Border.all(color: border),
+            color: onPressed == null
+                ? tokens.rule.withValues(alpha: 0.12)
+                : Colors.transparent,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 15, color: foreground),
+              const SizedBox(width: 6),
+              Text(
+                label.toUpperCase(),
+                style: text$.micro.copyWith(color: foreground),
+              ),
+            ],
+          ),
+        ),
       ),
-      onPressed: onPressed,
-      icon: Icon(icon, size: 15),
-      label: Text(label.toUpperCase()),
     );
   }
 }
@@ -1092,23 +1049,23 @@ class _LoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: NotifDesignTokens.spaceXl),
+      padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
         children: [
-          const SizedBox(
+          SizedBox(
             width: 24,
             height: 24,
             child: CircularProgressIndicator(
-              strokeWidth: 2.4,
-              color: NotifDesignTokens.accentPrimary,
+              strokeWidth: 2,
+              color: tokens.accent,
             ),
           ),
-          const SizedBox(height: NotifDesignTokens.spaceBase),
-          Text(
-            message,
-            style: _bodyStyle.copyWith(color: NotifDesignTokens.structText2),
-          ),
+          const SizedBox(height: 16),
+          Text(message, style: text$.body.copyWith(color: tokens.inkDim)),
         ],
       ),
     );
@@ -1120,31 +1077,47 @@ class _EmptyState extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.message,
+    this.action,
   });
 
   final IconData icon;
   final String title;
   final String message;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: NotifDesignTokens.spaceXl),
+      padding: const EdgeInsets.symmetric(vertical: 28),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 28, color: NotifDesignTokens.structText3),
-          const SizedBox(height: NotifDesignTokens.spaceBase),
-          Text(title, style: _panelTitleStyle),
-          const SizedBox(height: NotifDesignTokens.spaceSm),
+          Icon(icon, size: 28, color: tokens.inkMute),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: text$.title.copyWith(
+              color: tokens.ink,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+          const SizedBox(height: 10),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 420),
             child: Text(
               message,
               textAlign: TextAlign.center,
-              style: _bodyStyle.copyWith(color: NotifDesignTokens.structText2),
+              style: text$.body.copyWith(color: tokens.inkDim),
             ),
           ),
+          if (action != null) ...[
+            const SizedBox(height: 18),
+            action!,
+          ],
         ],
       ),
     );
@@ -1158,11 +1131,14 @@ class _ErrorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
     return Container(
-      padding: const EdgeInsets.all(NotifDesignTokens.spaceBase),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: FeedbackColors.error.withValues(alpha: 0.12),
-        border: Border.all(color: FeedbackColors.error.withValues(alpha: 0.4)),
+        color: NotifFeedback.error.withValues(alpha: 0.10),
+        border: Border.all(color: NotifFeedback.error.withValues(alpha: 0.45)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1171,20 +1147,170 @@ class _ErrorBanner extends StatelessWidget {
             padding: EdgeInsets.only(top: 2),
             child: Icon(
               Icons.error_outline_sharp,
-              color: FeedbackColors.error,
+              color: NotifFeedback.error,
               size: 18,
             ),
           ),
-          const SizedBox(width: NotifDesignTokens.spaceSm),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               message,
-              style: _bodyStyle.copyWith(color: FeedbackColors.error),
+              style: text$.body.copyWith(
+                color: tokens.brightness == Brightness.dark
+                    ? NotifFeedback.error
+                    : tokens.ink,
+              ),
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _HomeFooter extends StatelessWidget {
+  const _HomeFooter({required this.userData});
+
+  final UserData? userData;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final isNarrow = MediaQuery.sizeOf(context).width < 720;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: tokens.rule)),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Wrap(
+              spacing: 18,
+              runSpacing: 6,
+              children: [
+                Text(
+                  (userData == null
+                          ? 'profile loading'
+                          : '@${userData!.username}')
+                      .toUpperCase(),
+                  style: text$.eyebrow.copyWith(color: tokens.inkDim),
+                ),
+                if (!isNarrow)
+                  Text(
+                    'sources active'.toUpperCase(),
+                    style: text$.eyebrow.copyWith(color: tokens.inkMute),
+                  ),
+              ],
+            ),
+          ),
+          StatusDot(
+            state: userData == null
+                ? StatusDotState.idle
+                : StatusDotState.synced,
+            label: userData == null ? 'loading' : 'authenticated',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Badge extends StatelessWidget {
+  const _Badge({required this.value});
+
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: tokens.accent,
+        border: Border.all(color: tokens.bg0),
+      ),
+      child: Text(
+        value,
+        textAlign: TextAlign.center,
+        style: text$.micro.copyWith(color: tokens.bg0),
+      ),
+    );
+  }
+}
+
+class _SignalOrb extends StatelessWidget {
+  const _SignalOrb({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    return SizedBox.square(
+      dimension: size,
+      child: CustomPaint(
+        painter: _SignalOrbPainter(
+          ink: tokens.ink,
+          accent: tokens.accent,
+        ),
+      ),
+    );
+  }
+}
+
+class _SignalOrbPainter extends CustomPainter {
+  const _SignalOrbPainter({
+    required this.ink,
+    required this.accent,
+  });
+
+  final Color ink;
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const step = 4.0;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radiusLimit = size.width / 2;
+    final inkPaint = Paint();
+    final accentPaint = Paint();
+
+    for (double y = 0; y < size.height; y += step) {
+      for (double x = 0; x < size.width; x += step) {
+        final dx = (x - center.dx) / radiusLimit;
+        final dy = (y - center.dy) / radiusLimit;
+        final distance = math.sqrt(dx * dx + dy * dy);
+        final density = math.max(0, 1 - distance);
+        final noise = _noise(x, y);
+        if (noise >= density) continue;
+
+        final point = Offset(x, y);
+        final pointRadius = 0.8 + _noise(x + 1, y + 1) * 1.2;
+        final isAccent = density > 0.62 && _noise(x + 13, y + 7) > 0.82;
+        final color = (isAccent ? accent : ink).withValues(
+          alpha: isAccent ? 0.74 : 0.84,
+        );
+        final paint = isAccent ? accentPaint : inkPaint;
+        paint.color = color;
+        canvas.drawCircle(point, pointRadius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SignalOrbPainter oldDelegate) {
+    return oldDelegate.ink != ink || oldDelegate.accent != accent;
+  }
+
+  double _noise(double x, double y) {
+    final s = math.sin(x * 12.9898 + y * 78.233 + 215.37) * 43758.5453;
+    return s - s.floorToDouble();
   }
 }
 
@@ -1256,6 +1382,7 @@ class _LinkEditorDialogState extends State<_LinkEditorDialog> {
                 TextFormField(
                   controller: _nameController,
                   decoration: _dialogInputDecoration(
+                    context: context,
                     label: 'Name',
                     hint: 'Threadmarks, release feed, changelog...',
                   ),
@@ -1263,10 +1390,11 @@ class _LinkEditorDialogState extends State<_LinkEditorDialog> {
                       ? 'Give the link a name.'
                       : null,
                 ),
-                const SizedBox(height: NotifDesignTokens.spaceBase),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _urlController,
                   decoration: _dialogInputDecoration(
+                    context: context,
                     label: 'URL',
                     hint: 'https://example.com/feed',
                   ),
@@ -1282,10 +1410,13 @@ class _LinkEditorDialogState extends State<_LinkEditorDialog> {
                     return null;
                   },
                 ),
-                const SizedBox(height: NotifDesignTokens.spaceBase),
+                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedStrategy,
-                  decoration: _dialogInputDecoration(label: 'Strategy'),
+                  decoration: _dialogInputDecoration(
+                    context: context,
+                    label: 'Strategy',
+                  ),
                   items: _availableStrategies
                       .map(
                         (choice) => DropdownMenuItem<String>(
@@ -1295,9 +1426,7 @@ class _LinkEditorDialogState extends State<_LinkEditorDialog> {
                       )
                       .toList(growable: false),
                   onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
+                    if (value == null) return;
                     setState(() {
                       _selectedStrategy = value;
                       if (_selectedStrategy != generalSelectorStrategy &&
@@ -1307,20 +1436,15 @@ class _LinkEditorDialogState extends State<_LinkEditorDialog> {
                     });
                   },
                 ),
-                const SizedBox(height: NotifDesignTokens.spaceSm),
-                Text(
-                  _strategyDescription(_selectedStrategy),
-                  style: _bodyStyle.copyWith(
-                    color: NotifDesignTokens.structText3,
-                    fontSize: 13,
-                  ),
-                ),
+                const SizedBox(height: 8),
+                _StrategyDescription(strategyClass: _selectedStrategy),
                 if (_selectedStrategy == generalSelectorStrategy) ...[
-                  const SizedBox(height: NotifDesignTokens.spaceBase),
+                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _selectorsController,
                     maxLines: 4,
                     decoration: _dialogInputDecoration(
+                      context: context,
                       label: 'CSS selectors',
                       hint: 'body\narticle.post-card',
                     ),
@@ -1345,16 +1469,9 @@ class _LinkEditorDialogState extends State<_LinkEditorDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.zero,
-            ),
-          ),
+        TextButton(
           onPressed: () {
-            if (!(_formKey.currentState?.validate() ?? false)) {
-              return;
-            }
+            if (!(_formKey.currentState?.validate() ?? false)) return;
 
             Navigator.of(context).pop(
               _LinkDraft(
@@ -1368,6 +1485,23 @@ class _LinkEditorDialogState extends State<_LinkEditorDialog> {
           child: Text(widget.submitLabel),
         ),
       ],
+    );
+  }
+}
+
+class _StrategyDescription extends StatelessWidget {
+  const _StrategyDescription({required this.strategyClass});
+
+  final String strategyClass;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Text(
+      _strategyDescription(strategyClass),
+      style: text$.body.copyWith(color: tokens.inkMute),
     );
   }
 }
@@ -1386,32 +1520,36 @@ class _LinkDraft {
   final String selectorsText;
 }
 
-InputDecoration _dialogInputDecoration({required String label, String? hint}) {
+InputDecoration _dialogInputDecoration({
+  required BuildContext context,
+  required String label,
+  String? hint,
+}) {
+  final tokens = NotifTokens.of(context);
+  final text$ = NotifTextTheme.of(context);
+
   return InputDecoration(
     labelText: label,
     hintText: hint,
-    labelStyle: const TextStyle(color: NotifDesignTokens.structText2),
-    hintStyle: const TextStyle(color: NotifDesignTokens.structText3),
+    labelStyle: text$.body.copyWith(color: tokens.inkDim),
+    hintStyle: text$.body.copyWith(color: tokens.inkMute),
     filled: true,
-    fillColor: NotifDesignTokens.structSurface,
-    enabledBorder: const OutlineInputBorder(
+    fillColor: tokens.bg1,
+    enabledBorder: OutlineInputBorder(
       borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: NotifDesignTokens.structBorder),
+      borderSide: BorderSide(color: tokens.rule),
     ),
-    focusedBorder: const OutlineInputBorder(
+    focusedBorder: OutlineInputBorder(
       borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(
-        color: NotifDesignTokens.accentDim,
-        width: NotifDesignTokens.borderFocusWidth,
-      ),
+      borderSide: BorderSide(color: tokens.accent, width: 2),
     ),
     errorBorder: const OutlineInputBorder(
       borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: FeedbackColors.error),
+      borderSide: BorderSide(color: NotifFeedback.error),
     ),
     focusedErrorBorder: const OutlineInputBorder(
       borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: FeedbackColors.error, width: 2),
+      borderSide: BorderSide(color: NotifFeedback.error, width: 2),
     ),
   );
 }
@@ -1444,18 +1582,10 @@ String _strategyDescription(String strategyClass) {
 
 String _formatTimeAgo(DateTime dateTime) {
   final diff = DateTime.now().difference(dateTime);
-  if (diff.inMinutes < 1) {
-    return 'just now';
-  }
-  if (diff.inMinutes < 60) {
-    return '${diff.inMinutes}m ago';
-  }
-  if (diff.inHours < 24) {
-    return '${diff.inHours}h ago';
-  }
-  if (diff.inDays < 7) {
-    return '${diff.inDays}d ago';
-  }
+  if (diff.inMinutes < 1) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
   return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
 }
 
@@ -1465,63 +1595,3 @@ String _formatTimestamp(DateTime dateTime) {
   return '${dateTime.day}/${dateTime.month}/${dateTime.year} '
       '$twoDigitHour:$twoDigitMinute';
 }
-
-const TextStyle _headlineStyle = TextStyle(
-  fontFamily: NotifDesignTokens.displayFont,
-  color: NotifDesignTokens.structText,
-  fontSize: 28,
-);
-
-const TextStyle _displayStyle = TextStyle(
-  fontFamily: NotifDesignTokens.displayFont,
-  color: NotifDesignTokens.structText,
-  fontSize: 38,
-  height: 1.02,
-);
-
-const TextStyle _sheetTitleStyle = TextStyle(
-  fontFamily: NotifDesignTokens.displayFont,
-  color: NotifDesignTokens.structText,
-  fontSize: 22,
-);
-
-const TextStyle _panelTitleStyle = TextStyle(
-  fontFamily: NotifDesignTokens.displayFont,
-  color: NotifDesignTokens.structText,
-  fontSize: 24,
-);
-
-const TextStyle _itemTitleStyle = TextStyle(
-  fontFamily: NotifDesignTokens.bodyFont,
-  color: NotifDesignTokens.structText,
-  fontSize: 16,
-  fontWeight: FontWeight.w600,
-);
-
-const TextStyle _metricStyle = TextStyle(
-  fontFamily: NotifDesignTokens.displayFont,
-  color: NotifDesignTokens.structText,
-  fontSize: 28,
-);
-
-const TextStyle _bodyStyle = TextStyle(
-  fontFamily: NotifDesignTokens.bodyFont,
-  color: NotifDesignTokens.structText,
-  fontSize: 14,
-  height: 1.45,
-);
-
-const TextStyle _labelStyle = TextStyle(
-  fontFamily: NotifDesignTokens.bodyFont,
-  color: NotifDesignTokens.structText3,
-  fontSize: 11,
-  fontWeight: FontWeight.w600,
-  letterSpacing: 1.2,
-);
-
-const TextStyle _monoStyle = TextStyle(
-  fontFamily: NotifDesignTokens.monoFont,
-  color: NotifDesignTokens.structText,
-  fontSize: 12,
-  height: 1.3,
-);
