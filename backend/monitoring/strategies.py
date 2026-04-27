@@ -15,6 +15,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any, NewType
 from urllib.parse import urlsplit, urlunsplit
 
+import feedparser
 import requests
 from bs4 import BeautifulSoup
 from bs4.element import AttributeValueList, ResultSet, Tag
@@ -736,3 +737,95 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			session.close()
 
 		return fav_response
+
+
+# ── RSS / Atom Feed Strategy ──────────────────────────────────────────────
+
+
+@register
+class FeedStrategy(BaseStrategy):
+	"""
+	Parse RSS and Atom feeds using feedparser.
+
+	Works with:
+	- Substack (e.g. https://example.substack.com/feed)
+	- XenForo forums (e.g. https://forum.example.com/index.rss)
+	- Any standard RSS 2.0 or Atom feed
+
+	Config data (all optional):
+	- No config required — just the feed URL.
+
+	Comparison state:
+	- ``last_entry_id``: the ``id`` (or ``link`` fallback) of the most recently seen entry. On the next scrape, all entries up to (and including) this one are skipped.
+	"""
+
+	def can_scrape_url(self, url: URL) -> bool:
+		"""Permissive: any URL could be a feed. The user decides."""
+		return True
+
+	def scrape(
+		self,
+		url: URL,
+		config_data: dict[str, Any],
+		comparison_data: dict[str, str],
+		*args, **kwargs,
+	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+		try:
+			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response.raise_for_status()
+		except requests.RequestException as exc:
+			return Err(f"Feed fetch failed: {exc}"), None
+
+		feed = feedparser.parse(response.content)
+
+		if feed.bozo and not feed.entries:
+			bozo_msg = str(feed.bozo_exception) if feed.bozo_exception else "unknown parse error"
+			logger.warning("FeedStrategy: bozo error for %s: %s", url, bozo_msg)
+			return Err(f"Feed parse error: {bozo_msg}"), None
+
+		entries = feed.entries
+		if not entries:
+			return Ok([]), None
+
+		last_entry_id: str | None = comparison_data.get("last_entry_id")
+
+		updates: NotifData = []
+		new_last_entry_id: str | None = None
+
+		for entry in entries:
+			entry_id = self._entry_id(entry)
+
+			# Stop once we hit the last known entry
+			if last_entry_id is not None and entry_id == last_entry_id:
+				break
+
+			title = entry.get("title", "Untitled")
+			description = entry.get("description") or entry.get("summary") or ""
+			link = URL(entry.get("link", url))
+
+			updates.append((title, description, link))
+
+			# Track the first (newest) entry id for the comparison state
+			if new_last_entry_id is None:
+				new_last_entry_id = entry_id
+
+		comparison_update: ComparisonStateUpdate = None
+		if new_last_entry_id is not None:
+			comparison_update = {"last_entry_id": new_last_entry_id}
+
+		return Ok(updates), comparison_update
+
+	@staticmethod
+	def _entry_id(entry: dict[str, Any]) -> str:
+		"""Return a stable identifier for a feed entry.
+
+		Prefers the ``id`` field; falls back to ``link``. If neither is
+		present, hashes the title so we always return *something*.
+		"""
+		eid = entry.get("id")
+		if eid:
+			return str(eid)
+		link = entry.get("link")
+		if link:
+			return str(link)
+		return str(hash(entry.get("title", "")))
