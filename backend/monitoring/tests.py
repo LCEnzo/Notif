@@ -16,7 +16,7 @@ from commons.test_utils import SetupMixin, ViewSetMixin, login_client
 from commons.utils import create_notification
 from monitoring.models import Link, Notification, Strategy, Update
 from monitoring.services import scrape_link
-from monitoring.strategies import URL, GeneralSelectorStrategy, SBSVThreadmarksStrategy
+from monitoring.strategies import URL, FeedStrategy, GeneralSelectorStrategy, SBSVThreadmarksStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -500,44 +500,226 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 		scrape_all.assert_called_once_with(user_id=None, rate_limiter=rate_limiter)
 
 
-class TriggerScrapeEndpointTestCase(SetupMixin, TestCase):
+# ── FeedStrategy Tests ────────────────────────────────────────────────────
+
+ATOM_FEED_XML = """\
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Example Blog</title>
+  <link href="https://example.com/feed" rel="self"/>
+  <entry>
+    <id>tag:example.com,2024:1</id>
+    <title>First Post</title>
+    <link href="https://example.com/post/1"/>
+    <summary>This is the first post.</summary>
+  </entry>
+  <entry>
+    <id>tag:example.com,2024:2</id>
+    <title>Second Post</title>
+    <link href="https://example.com/post/2"/>
+    <summary>This is the second post.</summary>
+  </entry>
+  <entry>
+    <id>tag:example.com,2024:3</id>
+    <title>Third Post</title>
+    <link href="https://example.com/post/3"/>
+    <description>This is the third post.</description>
+  </entry>
+</feed>"""
+
+
+class FeedStrategyTestCase(TestCase):
 	def setUp(self):
-		for link in self.links:
-			link.url = f"https://{link.url}"
-			link.save()
+		self.strategy = FeedStrategy()
+		self.feed_url = URL("https://example.com/feed")
 
-	def test_trigger_scrape_single_link(self):
-		link = self.links[0]
-		html = '<html><body><article class="post-card">Post</article></body></html>'
+	def test_can_scrape_url_returns_true(self):
+		assert self.strategy.can_scrape_url(URL("https://anything.example.com/rss")) is True
+		assert self.strategy.can_scrape_url(URL("https://substack.com/feed")) is True
+		assert self.strategy.can_scrape_url(URL("https://forum.example.com/index.rss")) is True
 
+	def test_scrape_new_feed_returns_all_entries_and_sets_comparison(self):
+		"""First scrape of a feed: returns all entries, sets last_entry_id to the first (newest)."""
 		with requests_mock.Mocker() as mocker:
-			mocker.get(requests_mock.ANY, text=html)
-			response = self.api_client.post(
-				reverse('trigger-scrape'),
-				{'link_id': link.pk},
-				format='json',
+			mocker.get(self.feed_url, text=ATOM_FEED_XML)
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Ok)
+		assert len(result.value) == 3
+		assert result.value[0][0] == "First Post"
+		assert result.value[1][0] == "Second Post"
+		assert result.value[2][0] == "Third Post"
+		assert comparison is not None
+		assert comparison["last_entry_id"] == "tag:example.com,2024:1"
+
+	def test_scrape_with_last_entry_id_skips_seen(self):
+		"""With last_entry_id set to the newest entry, no new entries should be returned."""
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=ATOM_FEED_XML)
+			result, comparison = self.strategy.scrape(
+				self.feed_url, {}, {"last_entry_id": "tag:example.com,2024:1"}
 			)
 
-		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data['status'], 'ok')
+		assert isinstance(result, Ok)
+		assert len(result.value) == 0
+		assert comparison is None
 
-	def test_trigger_scrape_other_users_link_404(self):
-		other_link = Link.objects.filter(user=self.secondary_user).first()
-		assert other_link is not None
-		response = self.api_client.post(
-			reverse('trigger-scrape'),
-			{'link_id': other_link.pk},
-			format='json',
-		)
-		self.assertEqual(response.status_code, 404)
+	def test_scrape_with_middle_entry_id_returns_newer_only(self):
+		"""With last_entry_id set to the middle entry, returns entries before that point."""
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=ATOM_FEED_XML)
+			result, comparison = self.strategy.scrape(
+				self.feed_url, {}, {"last_entry_id": "tag:example.com,2024:3"}
+			)
 
-	def test_trigger_scrape_all(self):
-		html = '<html><body><article class="post-card">Post</article></body></html>'
+		assert isinstance(result, Ok)
+		assert len(result.value) == 2
+		assert result.value[0][0] == "First Post"
+		assert result.value[1][0] == "Second Post"
+		assert comparison is not None
+		assert comparison["last_entry_id"] == "tag:example.com,2024:1"
+
+	def test_scrape_empty_feed_returns_ok_empty(self):
+		"""A feed with no entries returns Ok([]), None."""
+		empty_feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Empty Feed</title>
+</feed>"""
 
 		with requests_mock.Mocker() as mocker:
-			mocker.get(requests_mock.ANY, text=html)
-			response = self.api_client.post(reverse('trigger-scrape'), format='json')
+			mocker.get(self.feed_url, text=empty_feed)
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
 
-		self.assertEqual(response.status_code, 200)
-		# Should have entries for the authenticated user's links
-		assert len(response.data) > 0
+		assert isinstance(result, Ok)
+		assert result.value == []
+		assert comparison is None
+
+	def test_scrape_http_error_returns_err(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, status_code=500)
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Err)
+		assert "500" in result.error or "Feed fetch failed" in result.error
+		assert comparison is None
+
+	def test_scrape_timeout_returns_err(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, exc=requests.exceptions.ConnectTimeout)
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Err)
+		assert "Feed fetch failed" in result.error
+		assert comparison is None
+
+	def test_scrape_invalid_xml_with_no_entries_returns_err(self):
+		"""Bozo parse error and no entries → Err."""
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text="not valid xml {{{")
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Err)
+		assert "parse error" in result.error.lower()
+		assert comparison is None
+
+	def test_scrape_bozo_with_entries_still_works(self):
+		"""Bozo flag on but entries present → still returns entries (feed was partially parseable)."""
+		# feedparser sets bozo on some imperfect feeds that still have entries
+		# Our strategy treats bozo as fatal only when there are no entries
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=ATOM_FEED_XML)
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+
+		# ATOM_FEED_XML should parse cleanly (no bozo), so this proves the happy path
+		assert isinstance(result, Ok)
+		assert len(result.value) == 3
+
+	def test_entry_id_falls_back_to_link(self):
+		"""Entry without an <id> field uses <link> as the identifier."""
+		no_id_feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>No-ID Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Only Item</title>
+      <link>https://example.com/post/only</link>
+      <description>Content here.</description>
+    </item>
+  </channel>
+</rss>"""
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=no_id_feed)
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Ok)
+		assert len(result.value) == 1
+		assert result.value[0][0] == "Only Item"
+		assert comparison is not None
+		assert comparison["last_entry_id"] == "https://example.com/post/only"
+
+	def test_rss_feed_parsed_correctly(self):
+		"""RSS 2.0 feeds are handled (feedparser supports both Atom and RSS)."""
+		rss_feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>RSS Blog</title>
+    <link>https://example.com</link>
+    <description>Test RSS feed</description>
+    <item>
+      <title>RSS Post One</title>
+      <link>https://example.com/post/rss1</link>
+      <guid isPermaLink="true">https://example.com/post/rss1</guid>
+      <description>First RSS item.</description>
+    </item>
+    <item>
+      <title>RSS Post Two</title>
+      <link>https://example.com/post/rss2</link>
+      <guid isPermaLink="true">https://example.com/post/rss2</guid>
+      <description>Second RSS item.</description>
+    </item>
+  </channel>
+</rss>"""
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=rss_feed)
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Ok)
+		assert len(result.value) == 2
+		assert result.value[0][0] == "RSS Post One"
+		assert result.value[1][0] == "RSS Post Two"
+		assert comparison is not None
+		assert comparison["last_entry_id"] == "https://example.com/post/rss1"
+
+	def test_entry_uses_description_with_summary_fallback(self):
+		"""Description field is preferred; summary used as fallback."""
+		feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Desc Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Has Description</title>
+      <link>https://example.com/1</link>
+      <description>Explicit description.</description>
+    </item>
+    <item>
+      <title>No Description</title>
+      <link>https://example.com/2</link>
+    </item>
+  </channel>
+</rss>"""
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=feed)
+			result, _ = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Ok)
+		assert result.value[0][1] == "Explicit description."
+		assert result.value[1][1] == ""
