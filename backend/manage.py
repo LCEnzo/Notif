@@ -4,36 +4,25 @@ import os
 import sys
 
 
-def _load_local_env() -> None:
-	try:
-		from dotenv import load_dotenv
-	except ImportError:
-		return
-
-	load_dotenv()
-
-
 def main():
-	"""Run administrative tasks."""
-	_load_local_env()
+    """Run administrative tasks."""
+    # Load typed config early — needed before Django settings import
+    from notif.config import settings
 
-	if len(sys.argv) == 2 and sys.argv[1] == 'runserver':
-		backend_port = os.getenv('BACKEND_PORT')
-		if backend_port:
-			runserver_host = os.getenv('RUNSERVER_HOST', '127.0.0.1')
-			sys.argv.append(f'{runserver_host}:{backend_port}')
+    if len(sys.argv) == 2 and sys.argv[1] == 'runserver' and settings.BACKEND_PORT:
+        sys.argv.append(f'{settings.RUNSERVER_HOST}:{settings.BACKEND_PORT}')
 
-	os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'notif.settings')
-	try:
-		from django.core.management import execute_from_command_line
-	except ImportError as exc:
-		raise ImportError(
-			"Couldn't import Django. Are you sure it's installed and "
-			"available on your PYTHONPATH environment variable? Did you "
-			"forget to activate a virtual environment?"
-		) from exc
-	execute_from_command_line(sys.argv)
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'notif.settings')
+    try:
+        from django.core.management import execute_from_command_line
+    except ImportError as exc:
+        raise ImportError(
+            "Couldn't import Django. Are you sure it's installed and "
+            "available on your PYTHONPATH environment variable? Did you "
+            "forget to activate a virtual environment?"
+        ) from exc
+    execute_from_command_line(sys.argv)
 
 
 if __name__ == '__main__':
-	main()
+    main()

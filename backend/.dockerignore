@@ -6,6 +6,7 @@
 
 # Python environments and caches
 .venv/
+.venv-linux/
 venv/
 .pytest_cache/
 .mypy_cache/
@@ -16,7 +17,6 @@ __pycache__/
 
 # Local state
 .env
-.env.example
 *.sqlite3
 debug.log
 
