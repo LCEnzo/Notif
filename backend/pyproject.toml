@@ -21,6 +21,7 @@ dev = [
 	"django-stubs[compatible-mypy]>=6.0,<6.1",
 	"djangorestframework-stubs[compatible-mypy]>=3.16.8,<3.17",
 	"faker>=40.13,<41.0",
+	"hypothesis>=6.152,<7.0",
 	"ipython>=9.2,<10.0",
 	"mypy>=1.11,<2.0",
 	"pytest>=9.0.3,<10.0",
@@ -103,3 +104,9 @@ django_settings_module = "notif.settings"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "notif.settings"
 pythonpath = ["."]
+markers = [
+    "slow: marks tests that use real downloaded fixtures (deselect with -m 'not slow')",
+    "feed: marks tests specific to FeedStrategy",
+    "e2e: end-to-end tests using real downloaded feeds — most directly test parsing correctness",
+    "property: Hypothesis property-based tests that verify invariants across generated inputs",
+]

@@ -1,14 +1,19 @@
 import logging
 import os
+import xml.sax.saxutils
 from pprint import pprint  # noqa: F401
 from unittest.mock import patch
 
+import pytest
 import requests
 import requests_mock
 from django.core.management import call_command
 from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
+from hypothesis import given, settings
+from hypothesis import strategies as st
+from hypothesis.extra.django import TestCase as HypothesisTestCase
 from rest_framework.test import APIClient
 
 from commons import Err, Ok
@@ -172,7 +177,7 @@ class TestSelectorStrat(TestCase):
 			notif_data, new_data = strat(URL(url), config_data, old_data)
 
 		logger.debug(
-			"selector strat on kemono: \t" +
+			"selector strat on kemono: \\t" +
 			f"{notif_data = } \n--------------------------\n" +
 			f"{new_data = }\n--------------------------\n"
 		)
@@ -187,6 +192,8 @@ class SBSVThreadmarksStrategyTestCase(TestCase):
 		self.url = URL('http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1')
 		self.strategy = SBSVThreadmarksStrategy()
 
+	@pytest.mark.slow
+	@pytest.mark.e2e
 	def test_scrape(self):
 		file_path = f'{os.path.dirname(__file__)}/tests/skkitterdoc-threadmarks.html'
 		with open(file_path) as html_file, requests_mock.Mocker() as mocker:
@@ -723,3 +730,169 @@ class FeedStrategyTestCase(TestCase):
 		assert isinstance(result, Ok)
 		assert result.value[0][1] == "Explicit description."
 		assert result.value[1][1] == ""
+
+
+# ── Real Feed Fixture Tests ——————————————————————————————————————————————
+# These use downloaded feed XML files (see tests/downloadTestFeeds.py).
+# Marked `slow` — skip with: pytest -m "not slow"
+
+
+REAL_FEEDS = {
+	"citriniresearch": "citriniresearch.xml",
+	"semianalysis": "semianalysis.xml",
+	"astralcodexten": "astralcodexten.xml",
+	"sufficientvelocity": "sufficientvelocity.xml",
+	"stratechery": "stratechery.xml",
+}
+
+
+class FeedStrategyRealFeedTestCase(TestCase):
+	"""Tests FeedStrategy against real downloaded feed files."""
+
+	def setUp(self):
+		self.strategy = FeedStrategy()
+
+	def _load_feed(self, filename: str) -> str:
+		file_path = f"{os.path.dirname(__file__)}/tests/{filename}"
+		with open(file_path) as f:
+			return f.read()
+
+	@pytest.mark.slow
+	@pytest.mark.feed
+	@pytest.mark.e2e
+	def test_all_real_feeds_parse_successfully(self):
+		"""Every real feed file returns Ok with at least 1 entry."""
+		for name, filename in REAL_FEEDS.items():
+			with self.subTest(feed=name):
+				xml = self._load_feed(filename)
+				url = URL(f"https://{name}.example.com/feed")
+
+				with requests_mock.Mocker() as mocker:
+					mocker.get(url, text=xml)
+					result, comparison = self.strategy.scrape(url, {}, {})
+
+				assert isinstance(result, Ok), f"{name} returned Err: {result if hasattr(result, 'value') else result}"
+				assert len(result.value) > 0, f"{name} returned 0 entries"
+				# Each entry must have title, description, url
+				for entry in result.value:
+					assert len(entry) == 3
+					assert entry[0], f"{name} entry has empty title"
+					assert entry[2], f"{name} entry has empty url"
+
+	@pytest.mark.slow
+	@pytest.mark.feed
+	@pytest.mark.e2e
+	def test_real_feed_incremental_scraping(self):
+		"""Incremental scraping works with a real feed: second scrape returns nothing new."""
+		xml = self._load_feed("citriniresearch.xml")
+		url = URL("https://example.com/feed")
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, text=xml)
+
+			# First scrape — returns all entries
+			result1, comparison1 = self.strategy.scrape(url, {}, {})
+			assert isinstance(result1, Ok)
+			assert len(result1.value) > 0
+			assert comparison1 is not None
+			assert "last_entry_id" in comparison1
+
+			# Second scrape with comparison data — returns nothing
+			result2, comparison2 = self.strategy.scrape(url, {}, comparison1)
+			assert isinstance(result2, Ok)
+			assert len(result2.value) == 0
+			assert comparison2 is None
+
+	@pytest.mark.slow
+	@pytest.mark.feed
+	@pytest.mark.e2e
+	def test_sufficientvelocity_rss_specifics(self):
+		"""SV's RSS uses <guid> entries and cross-links — FeedStrategy handles them."""
+		xml = self._load_feed("sufficientvelocity.xml")
+		url = URL("https://forums.sufficientvelocity.com/forums/-/index.rss")
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, text=xml)
+			result, comparison = self.strategy.scrape(url, {}, {})
+
+		assert isinstance(result, Ok)
+		# SV should have many items
+		assert len(result.value) >= 20, f"Expected >=20, got {len(result.value)}"
+		assert comparison is not None
+
+# ── Property-Based Tests ————————————————————————————————————————————————
+# These use Hypothesis to verify invariants across generated RSS feeds.
+
+NL = "\n"  # noqa: F811
+
+@st.composite
+def _rss_item(draw):
+    """Generate a single RSS <item> with optional guid and description."""
+    escape = xml.sax.saxutils.escape
+    title = escape(draw(st.text(min_size=1, max_size=60)))
+    link = escape(draw(st.text(min_size=3, max_size=100)))
+    has_guid = draw(st.booleans())
+    guid = escape(draw(st.text(min_size=1, max_size=60))) if has_guid else None
+    has_desc = draw(st.booleans())
+    desc = escape(draw(st.text(min_size=1, max_size=150))) if has_desc else None
+
+    parts = [f"<title>{title}</title>", f"<link>{link}</link>"]
+    if guid is not None:
+        parts.append(f'<guid isPermaLink="false">{guid}</guid>')
+    if desc is not None:
+        parts.append(f"<description>{desc}</description>")
+
+    NL = "\n"
+    return "    <item>" + NL + "      " + NL.join(parts) + NL + "    </item>"
+
+
+@st.composite
+def _rss_feed_xml(draw, min_items=1, max_items=20):
+    """Generate a valid RSS 2.0 feed with randomized items."""
+    n = draw(st.integers(min_value=min_items, max_value=max_items))
+    items = draw(st.lists(_rss_item(), min_size=n, max_size=n))
+
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Hypothesis Test Feed</title>
+    <link>https://example.com</link>
+    <description>Auto-generated for property testing</description>
+{NL.join(items)}
+  </channel>
+</rss>"""
+
+
+class FeedStrategyDedupPropertyTestCase(HypothesisTestCase):
+    """Property-based tests for FeedStrategy dedup invariant."""
+
+    def setUp(self):
+        self.strategy = FeedStrategy()
+
+    @pytest.mark.property
+    @given(feed_xml=_rss_feed_xml())
+    @settings(max_examples=200)
+    def test_dedup_is_idempotent(self, feed_xml):
+        """Second scrape with first scrape's comparison data returns zero new entries."""
+        url = URL("https://example.com/feed")
+
+        with requests_mock.Mocker() as mocker:
+            mocker.get(url, text=feed_xml)
+
+            # First scrape
+            result1, comparison1 = self.strategy.scrape(url, {}, {})
+            assert isinstance(result1, Ok), f"First scrape failed: {result1}"
+            assert len(result1.value) > 0, (
+                f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
+            )
+
+            # Second scrape with comparison data from first
+            result2, comparison2 = self.strategy.scrape(url, {}, comparison1)
+            assert isinstance(result2, Ok), f"Second scrape failed: {result2}"
+            assert len(result2.value) == 0, (
+                f"Dedup invariant violated: second scrape returned "
+                f"{len(result2.value)} entries. comparison1: {comparison1}"
+            )
+            assert comparison2 is None, (
+                f"Expected None comparison on dedup hit, got: {comparison2}"
+            )
