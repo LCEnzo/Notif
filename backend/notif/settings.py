@@ -11,12 +11,9 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
 from datetime import timedelta
-from os import getenv
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
+from notif.config import settings
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -26,25 +23,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = getenv("DJANGO_SECRET_KEY")
+SECRET_KEY = settings.DJANGO_SECRET_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = getenv("DEBUG", "True") == "True"
-DEV_BOOTSTRAP_LOGIN_ENABLED = getenv(
-	"DEV_BOOTSTRAP_LOGIN_ENABLED",
-	"True" if DEBUG else "False",
-) == "True"
-DEV_BOOTSTRAP_USERNAME = getenv("DEV_BOOTSTRAP_USERNAME", "LCEnzo")
-DEV_BOOTSTRAP_PASSWORD = getenv("DEV_BOOTSTRAP_PASSWORD", "1ukacolic")
-DEV_BOOTSTRAP_EMAIL = getenv(
-	"DEV_BOOTSTRAP_EMAIL",
-	"lcenzo@notif.local",
-)
-DEV_BOOTSTRAP_NAME = getenv("DEV_BOOTSTRAP_NAME", DEV_BOOTSTRAP_USERNAME)
+DEBUG = settings.DEBUG
+DEV_BOOTSTRAP_LOGIN_ENABLED = settings.DEV_BOOTSTRAP_LOGIN_ENABLED
+DEV_BOOTSTRAP_USERNAME = settings.DEV_BOOTSTRAP_USERNAME
+DEV_BOOTSTRAP_PASSWORD = settings.DEV_BOOTSTRAP_PASSWORD
+DEV_BOOTSTRAP_EMAIL = settings.DEV_BOOTSTRAP_EMAIL
+DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 
 ALLOWED_HOSTS = [
 	host.strip()
-	for host in getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",")
+	for host in settings.ALLOWED_HOSTS.split(",")
 	if host.strip()
 ]  # type: ignore
 CORS_ALLOW_ALL_ORIGINS = True
@@ -105,7 +96,7 @@ WSGI_APPLICATION = 'notif.wsgi.application'
 DATABASES = {
 	"default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": getenv("SQLITE_PATH", "db.sqlite3"),
+        "NAME": settings.SQLITE_PATH,
     }
 	# 'default': {
 	# 	'ENGINE': 'django.db.backends.postgresql',
