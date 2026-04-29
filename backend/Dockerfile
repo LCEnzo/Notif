@@ -18,7 +18,8 @@ RUN uv sync --frozen --no-dev
 
 COPY . .
 
-RUN useradd --create-home appuser \
+RUN mkdir -p /app/data \
+    && useradd --create-home appuser \
     && chown -R appuser:appuser /app
 
 ENV PATH="/app/.venv/bin:${PATH}"

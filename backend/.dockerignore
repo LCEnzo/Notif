@@ -17,7 +17,6 @@ __pycache__/
 
 # Local state
 .env
-.env.example
 *.sqlite3
 debug.log
 
