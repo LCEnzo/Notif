@@ -6,6 +6,7 @@
 
 # Python environments and caches
 .venv/
+.venv-linux/
 venv/
 .pytest_cache/
 .mypy_cache/
