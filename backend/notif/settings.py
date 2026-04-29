@@ -68,6 +68,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
 	'django.middleware.security.SecurityMiddleware',
+	'notif.middleware.DevLatencyMiddleware',
 	'django.contrib.sessions.middleware.SessionMiddleware',
 	"corsheaders.middleware.CorsMiddleware",
 	"django.middleware.common.CommonMiddleware",
