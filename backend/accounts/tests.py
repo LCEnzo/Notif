@@ -67,7 +67,8 @@ class UserViewSetTestCase(ViewSetMixin):
 		disposable_client = login_client(
 			APIClient(), create_fields["username"], create_fields["password"]
 		)
-		pk = User.objects.order_by("-pk").first().pk
+		disposable_user = User.objects.get(username=create_fields["username"])
+		pk = disposable_user.pk
 		url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: pk})
 		response = disposable_client.delete(url)
 		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)

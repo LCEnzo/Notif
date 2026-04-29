@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     DEV_API_LATENCY_JITTER_MS: int = 0
 
     @model_validator(mode="after")
-    def _resolve_conditional_defaults(self) -> "Settings":  # noqa: UP037  # self-referential, must be quoted
+    def _resolve_conditional_defaults(self) -> Settings:
         """Defaults that depend on other fields.
 
         * DEV_BOOTSTRAP_LOGIN_ENABLED defaults to ``DEBUG`` when not set.

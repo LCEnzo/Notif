@@ -87,15 +87,20 @@ venv = ".venv"
 reportMissingImports = true
 reportMissingTypeStubs = true
 
-pythonVersion = "3.13"
 pythonPlatform = "Linux"
 
 [tool.mypy]
-plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main", "pydantic.mypy"]
 exclude = ["migrations", "\\.venv", "venv"]
-python_version = "3.13"
 check_untyped_defs = true
 warn_unused_configs = true
+warn_redundant_casts = true
+no_implicit_reexport = true
+
+[tool.pydantic-mypy]
+init_typed = true
+init_forbid_extra = true
+warn_required_dynamic_aliases = true
 
 [tool.django-stubs]
 django_settings_module = "notif.settings"
