@@ -5,9 +5,15 @@ Replaces scattered ``os.getenv()`` calls with a single validated config object.
 """
 
 from enum import StrEnum
+from pathlib import Path
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve .env relative to the backend package directory so lookups
+# work regardless of the working directory (IDE runners, manage.py
+# from repo root, Docker containers, etc.).
+_ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 
 
 class Environment(StrEnum):
@@ -17,7 +23,9 @@ class Environment(StrEnum):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=str(_ENV_FILE), env_file_encoding="utf-8"
+    )
 
     # ── environment ────────────────────────────────────────
     NOTIF_ENV: Environment = Environment.LOCAL
@@ -44,7 +52,7 @@ class Settings(BaseSettings):
     DEV_API_LATENCY_JITTER_MS: int = 0
 
     @model_validator(mode="after")
-    def _resolve_conditional_defaults(self) -> Settings:
+    def _resolve_conditional_defaults(self) -> "Settings":  # noqa: UP037  # self-referential, must be quoted
         """Defaults that depend on other fields.
 
         * DEV_BOOTSTRAP_LOGIN_ENABLED defaults to ``DEBUG`` when not set.
