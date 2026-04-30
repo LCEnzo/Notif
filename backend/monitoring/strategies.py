@@ -5,16 +5,18 @@
 # 1. Add batch fetch to Strat classes. By default call _scrape for every URL.
 # Implement via requests session, to reduce network load, and request spam.
 
+import hashlib
 import json
 import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, NewType
 from urllib.parse import urlsplit, urlunsplit
 
+import feedparser
 import requests
 from bs4 import BeautifulSoup
 from bs4.element import AttributeValueList, ResultSet, Tag
@@ -736,3 +738,178 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			session.close()
 
 		return fav_response
+
+@register
+class FeedStrategy(BaseStrategy):
+	"""
+	Parse RSS and Atom feeds using feedparser.
+
+	Works with:
+	- Substack (e.g. https://example.substack.com/feed)
+	- XenForo forums (e.g. https://forum.example.com/index.rss)
+	- Any standard RSS 2.0 or Atom feed
+
+	Config data (all optional):
+	- No config required — just the feed URL.
+
+	Comparison state:
+	- ``last_entry_id``: the best newest-entry marker available for backwards compatibility.
+	- ``seen_entry_hashes``: a bounded list of recently seen entry identifier hashes for compact dedupe.
+	"""
+
+	ENTRY_ID_HASH_BYTES = 16
+	MAX_SEEN_ENTRY_HASHES = 1000
+
+	def can_scrape_url(self, url: URL) -> bool:
+		"""No URL-shape prefilter; validity is determined by fetching and parsing."""
+		return True
+
+	def scrape(
+		self,
+		url: URL,
+		config_data: dict[str, Any],
+		comparison_data: dict[str, Any],
+		*args, **kwargs,
+	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+		try:
+			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response.raise_for_status()
+		except requests.RequestException as exc:
+			return Err(f"Feed fetch failed: {exc}"), None
+
+		feed = feedparser.parse(response.content)
+
+		if feed.bozo and not feed.entries:
+			bozo_msg = str(feed.bozo_exception) if feed.bozo_exception else "unknown parse error"
+			logger.warning("FeedStrategy: bozo error for %s: %s", url, bozo_msg)
+			return Err(f"Feed parse error: {bozo_msg}"), None
+
+		entries = self._sorted_entries(feed.entries)
+		if not entries:
+			return Ok([]), None
+
+		last_entry_id: str | None = comparison_data.get("last_entry_id")
+		seen_entry_hashes = self._seen_entry_hashes(comparison_data)
+		seen_entry_hash_set = set(seen_entry_hashes)
+
+		updates: NotifData = []
+		current_entry_hashes: list[str] = []
+		new_last_entry_id: str | None = None
+
+		for entry in entries:
+			entry_id = self._entry_id(entry)
+			entry_hash = self._entry_id_hash(entry_id)
+			current_entry_hashes.append(entry_hash)
+			if new_last_entry_id is None:
+				new_last_entry_id = entry_id
+
+			if seen_entry_hash_set and entry_hash in seen_entry_hash_set:
+				continue
+
+			# Backwards compatibility for comparison state written before
+			# seen_entry_hashes existed. We skip the marker, but keep scanning
+			# because feed order is not guaranteed.
+			if not seen_entry_hash_set and last_entry_id is not None and entry_id == last_entry_id:
+				continue
+
+			title = entry.get("title", "Untitled")
+			description = entry.get("description") or entry.get("summary") or ""
+			link = URL(entry.get("link", url))
+
+			updates.append((title, description, link))
+
+		new_seen_entry_hashes = self._merge_seen_entry_hashes(current_entry_hashes, seen_entry_hashes)
+
+		comparison_update: ComparisonStateUpdate = None
+		if updates and new_last_entry_id is not None:
+			comparison_update = {
+				"last_entry_id": new_last_entry_id,
+				"seen_entry_hashes": new_seen_entry_hashes,
+			}
+
+		return Ok(updates), comparison_update
+
+	@classmethod
+	def _merge_seen_entry_hashes(cls, current_entry_hashes: list[str], previous_entry_hashes: list[str]) -> list[str]:
+		merged_entry_hashes: list[str] = []
+		merged_entry_hash_set: set[str] = set()
+
+		for entry_hash in [*current_entry_hashes, *previous_entry_hashes]:
+			if entry_hash in merged_entry_hash_set:
+				continue
+			merged_entry_hashes.append(entry_hash)
+			merged_entry_hash_set.add(entry_hash)
+
+			if len(merged_entry_hashes) >= cls.MAX_SEEN_ENTRY_HASHES:
+				break
+
+		return merged_entry_hashes
+
+	@classmethod
+	def _seen_entry_hashes(cls, comparison_data: dict[str, Any]) -> list[str]:
+		value = comparison_data.get("seen_entry_hashes")
+		if isinstance(value, list):
+			entry_hashes = [str(entry_hash) for entry_hash in value if entry_hash]
+			if entry_hashes:
+				return entry_hashes
+
+		legacy_entry_ids = comparison_data.get("seen_entry_ids")
+		if not isinstance(legacy_entry_ids, list):
+			return []
+		return [cls._entry_id_hash(str(entry_id)) for entry_id in legacy_entry_ids if entry_id]
+
+	@classmethod
+	def _entry_id_hash(cls, entry_id: str) -> str:
+		return hashlib.blake2s(entry_id.encode("utf-8"), digest_size=cls.ENTRY_ID_HASH_BYTES).hexdigest()
+
+	@staticmethod
+	def _sorted_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+		indexed_entries = list(enumerate(entries))
+		if not any(FeedStrategy._entry_timestamp(entry) is not None for _, entry in indexed_entries):
+			return entries
+
+		return [
+			entry
+			for _, entry in sorted(
+				indexed_entries,
+				key=lambda indexed_entry: FeedStrategy._entry_sort_key(indexed_entry[0], indexed_entry[1]),
+			)
+		]
+
+	@staticmethod
+	def _entry_sort_key(index: int, entry: dict[str, Any]) -> tuple[int, float, int]:
+		timestamp = FeedStrategy._entry_timestamp(entry)
+		if timestamp is None:
+			return (1, 0, index)
+		return (0, -timestamp, index)
+
+	@staticmethod
+	def _entry_timestamp(entry: dict[str, Any]) -> float | None:
+		for key in ("published_parsed", "updated_parsed", "created_parsed"):
+			parsed = entry.get(key)
+			if parsed is None:
+				continue
+
+			try:
+				year, month, day, hour, minute, second = parsed[:6]
+				return datetime(year, month, day, hour, minute, second, tzinfo=UTC).timestamp()
+			except (TypeError, ValueError):
+				continue
+
+		return None
+
+	@staticmethod
+	def _entry_id(entry: dict[str, Any]) -> str:
+		"""Return a stable identifier for a feed entry.
+
+		Prefers the ``id`` field; falls back to ``link``. If neither is
+		present, hashes the title so we always return *something*.
+		"""
+		eid = entry.get("id")
+		if eid:
+			return str(eid)
+		link = entry.get("link")
+		if link:
+			return str(link)
+		title = str(entry.get("title", ""))
+		return f"sha256:{hashlib.sha256(title.encode('utf-8')).hexdigest()}"

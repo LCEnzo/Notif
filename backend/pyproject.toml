@@ -7,6 +7,7 @@ requires-python = ">=3.14,<3.15"
 dependencies = [
 	"beautifulsoup4>=4.13,<5.0",
 	"django>=6.0,<6.1",
+	"feedparser>=6.0,<7.0",
 	"django-cors-headers>=4.9,<5.0",
 	"djangorestframework>=3.17,<3.18",
 	"djangorestframework-simplejwt>=5.5,<5.6",
@@ -21,6 +22,7 @@ dev = [
 	"django-stubs[compatible-mypy]>=6.0,<6.1",
 	"djangorestframework-stubs[compatible-mypy]>=3.16.8,<3.17",
 	"faker>=40.13,<41.0",
+	"hypothesis>=6.152,<7.0",
 	"ipython>=9.2,<10.0",
 	"mypy>=1.11,<2.0",
 	"pytest>=9.0.3,<10.0",
@@ -92,6 +94,7 @@ pythonPlatform = "Linux"
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main", "pydantic.mypy"]
 exclude = ["migrations", "\\.venv", "venv"]
+mypy_path = "stubs"
 check_untyped_defs = true
 warn_unused_configs = true
 warn_redundant_casts = true
@@ -108,3 +111,10 @@ django_settings_module = "notif.settings"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "notif.settings"
 pythonpath = ["."]
+python_files = ["tests.py", "test_*.py", "*_test.py"]
+markers = [
+    "slow: marks tests that use real downloaded fixtures (deselect with -m 'not slow')",
+    "feed: marks tests specific to FeedStrategy",
+    "e2e: end-to-end tests using real downloaded feeds — most directly test parsing correctness",
+    "property: Hypothesis property-based tests that verify invariants across generated inputs",
+]
