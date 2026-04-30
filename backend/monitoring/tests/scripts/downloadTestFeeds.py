@@ -14,4 +14,3 @@ for name, url in feeds.items():
     with open(f"{name}.xml", "xb") as f:
         f.write(response.content)
     print(f"{name}.xml — {len(response.content)} bytes, {response.status_code}")
-

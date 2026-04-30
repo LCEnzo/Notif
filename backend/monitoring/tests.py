@@ -850,7 +850,7 @@ class FeedStrategyTestCase(TestCase):
 
 
 # ── Real Feed Fixture Tests ——————————————————————————————————————————————
-# These use downloaded feed XML files (see tests/downloadTestFeeds.py).
+# These use downloaded feed XML files (see tests/scripts/downloadTestFeeds.py).
 # Marked `slow` — skip with: pytest -m "not slow"
 
 
