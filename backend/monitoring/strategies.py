@@ -5,13 +5,14 @@
 # 1. Add batch fetch to Strat classes. By default call _scrape for every URL.
 # Implement via requests session, to reduce network load, and request spam.
 
+import hashlib
 import json
 import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, NewType
 from urllib.parse import urlsplit, urlunsplit
 
@@ -756,8 +757,11 @@ class FeedStrategy(BaseStrategy):
 	- No config required — just the feed URL.
 
 	Comparison state:
-	- ``last_entry_id``: the ``id`` (or ``link`` fallback) of the most recently seen entry. On the next scrape, all entries up to (and including) this one are skipped.
+	- ``last_entry_id``: the best newest-entry marker available for backwards compatibility.
+	- ``seen_entry_ids``: a bounded list of recently seen entry identifiers, used for order-independent dedupe.
 	"""
+
+	MAX_SEEN_ENTRY_IDS = 1000
 
 	def can_scrape_url(self, url: URL) -> bool:
 		"""Permissive: any URL could be a feed. The user decides."""
@@ -767,7 +771,7 @@ class FeedStrategy(BaseStrategy):
 		self,
 		url: URL,
 		config_data: dict[str, Any],
-		comparison_data: dict[str, str],
+		comparison_data: dict[str, Any],
 		*args, **kwargs,
 	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
 		try:
@@ -783,21 +787,29 @@ class FeedStrategy(BaseStrategy):
 			logger.warning("FeedStrategy: bozo error for %s: %s", url, bozo_msg)
 			return Err(f"Feed parse error: {bozo_msg}"), None
 
-		entries = feed.entries
+		entries = self._sorted_entries(feed.entries)
 		if not entries:
 			return Ok([]), None
 
 		last_entry_id: str | None = comparison_data.get("last_entry_id")
+		seen_entry_ids = self._seen_entry_ids(comparison_data.get("seen_entry_ids"))
+		seen_entry_id_set = set(seen_entry_ids)
 
 		updates: NotifData = []
-		new_last_entry_id: str | None = None
+		current_entry_ids: list[str] = []
 
 		for entry in entries:
 			entry_id = self._entry_id(entry)
+			current_entry_ids.append(entry_id)
 
-			# Stop once we hit the last known entry
-			if last_entry_id is not None and entry_id == last_entry_id:
-				break
+			if seen_entry_id_set and entry_id in seen_entry_id_set:
+				continue
+
+			# Backwards compatibility for comparison state written before
+			# seen_entry_ids existed. We skip the marker, but keep scanning
+			# because feed order is not guaranteed.
+			if not seen_entry_id_set and last_entry_id is not None and entry_id == last_entry_id:
+				continue
 
 			title = entry.get("title", "Untitled")
 			description = entry.get("description") or entry.get("summary") or ""
@@ -805,15 +817,74 @@ class FeedStrategy(BaseStrategy):
 
 			updates.append((title, description, link))
 
-			# Track the first (newest) entry id for the comparison state
-			if new_last_entry_id is None:
-				new_last_entry_id = entry_id
+		new_seen_entry_ids = self._merge_seen_entry_ids(current_entry_ids, seen_entry_ids)
+		new_last_entry_id = current_entry_ids[0] if current_entry_ids else None
 
 		comparison_update: ComparisonStateUpdate = None
-		if new_last_entry_id is not None:
-			comparison_update = {"last_entry_id": new_last_entry_id}
+		if updates and new_last_entry_id is not None:
+			comparison_update = {
+				"last_entry_id": new_last_entry_id,
+				"seen_entry_ids": new_seen_entry_ids,
+			}
 
 		return Ok(updates), comparison_update
+
+	@classmethod
+	def _merge_seen_entry_ids(cls, current_entry_ids: list[str], previous_entry_ids: list[str]) -> list[str]:
+		merged_entry_ids: list[str] = []
+		merged_entry_id_set: set[str] = set()
+
+		for entry_id in [*current_entry_ids, *previous_entry_ids]:
+			if entry_id in merged_entry_id_set:
+				continue
+			merged_entry_ids.append(entry_id)
+			merged_entry_id_set.add(entry_id)
+
+			if len(merged_entry_ids) >= cls.MAX_SEEN_ENTRY_IDS:
+				break
+
+		return merged_entry_ids
+
+	@staticmethod
+	def _seen_entry_ids(value: Any) -> list[str]:
+		if not isinstance(value, list):
+			return []
+		return [str(entry_id) for entry_id in value if entry_id]
+
+	@staticmethod
+	def _sorted_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+		indexed_entries = list(enumerate(entries))
+		if not any(FeedStrategy._entry_timestamp(entry) is not None for _, entry in indexed_entries):
+			return entries
+
+		return [
+			entry
+			for _, entry in sorted(
+				indexed_entries,
+				key=lambda indexed_entry: FeedStrategy._entry_sort_key(indexed_entry[0], indexed_entry[1]),
+			)
+		]
+
+	@staticmethod
+	def _entry_sort_key(index: int, entry: dict[str, Any]) -> tuple[int, float, int]:
+		timestamp = FeedStrategy._entry_timestamp(entry)
+		if timestamp is None:
+			return (1, 0, index)
+		return (0, -timestamp, index)
+
+	@staticmethod
+	def _entry_timestamp(entry: dict[str, Any]) -> float | None:
+		for key in ("published_parsed", "updated_parsed", "created_parsed"):
+			parsed = entry.get(key)
+			if parsed is None:
+				continue
+
+			try:
+				return datetime(*parsed[:6], tzinfo=UTC).timestamp()
+			except (TypeError, ValueError):
+				continue
+
+		return None
 
 	@staticmethod
 	def _entry_id(entry: dict[str, Any]) -> str:
@@ -828,4 +899,5 @@ class FeedStrategy(BaseStrategy):
 		link = entry.get("link")
 		if link:
 			return str(link)
-		return str(hash(entry.get("title", "")))
+		title = str(entry.get("title", ""))
+		return f"sha256:{hashlib.sha256(title.encode('utf-8')).hexdigest()}"

@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import os
 import xml.sax.saxutils
@@ -559,12 +560,21 @@ class FeedStrategyTestCase(TestCase):
 		assert comparison is not None
 		assert comparison["last_entry_id"] == "tag:example.com,2024:1"
 
-	def test_scrape_with_last_entry_id_skips_seen(self):
-		"""With last_entry_id set to the newest entry, no new entries should be returned."""
+	def test_scrape_with_seen_entry_ids_skips_seen(self):
+		"""With seen_entry_ids set, no previously seen entries should be returned."""
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=ATOM_FEED_XML)
 			result, comparison = self.strategy.scrape(
-				self.feed_url, {}, {"last_entry_id": "tag:example.com,2024:1"}
+				self.feed_url,
+				{},
+				{
+					"last_entry_id": "tag:example.com,2024:1",
+					"seen_entry_ids": [
+						"tag:example.com,2024:1",
+						"tag:example.com,2024:2",
+						"tag:example.com,2024:3",
+					],
+				},
 			)
 
 		assert isinstance(result, Ok)
@@ -668,6 +678,113 @@ class FeedStrategyTestCase(TestCase):
 		assert comparison is not None
 		assert comparison["last_entry_id"] == "https://example.com/post/only"
 
+	def test_entry_id_falls_back_to_stable_title_hash(self):
+		entry_id = self.strategy._entry_id({"title": "Only title"})
+
+		expected_digest = hashlib.sha256(b"Only title").hexdigest()
+		assert entry_id == f"sha256:{expected_digest}"
+
+	def test_scrape_detects_oldest_first_appended_entries(self):
+		initial_feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Append Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Old Post</title>
+      <link>https://example.com/post/old</link>
+      <description>Already seen.</description>
+    </item>
+    <item>
+      <title>Middle Post</title>
+      <link>https://example.com/post/middle</link>
+      <description>Already seen.</description>
+    </item>
+  </channel>
+</rss>"""
+		appended_feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Append Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Old Post</title>
+      <link>https://example.com/post/old</link>
+      <description>Already seen.</description>
+    </item>
+    <item>
+      <title>Middle Post</title>
+      <link>https://example.com/post/middle</link>
+      <description>Already seen.</description>
+    </item>
+    <item>
+      <title>New Post</title>
+      <link>https://example.com/post/new</link>
+      <description>Appended later.</description>
+    </item>
+  </channel>
+</rss>"""
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=initial_feed)
+			result1, comparison1 = self.strategy.scrape(self.feed_url, {}, {})
+			mocker.get(self.feed_url, text=appended_feed)
+			result2, comparison2 = self.strategy.scrape(self.feed_url, {}, comparison1)
+
+		assert isinstance(result1, Ok)
+		assert comparison1 is not None
+		assert comparison1["seen_entry_ids"] == [
+			"https://example.com/post/old",
+			"https://example.com/post/middle",
+		]
+
+		assert isinstance(result2, Ok)
+		assert result2.value == [("New Post", "Appended later.", URL("https://example.com/post/new"))]
+		assert comparison2 is not None
+		assert comparison2["seen_entry_ids"] == [
+			"https://example.com/post/old",
+			"https://example.com/post/middle",
+			"https://example.com/post/new",
+		]
+
+	def test_scrape_migrates_legacy_last_entry_id_without_order_assumption(self):
+		feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Legacy Append Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Old Post</title>
+      <link>https://example.com/post/old</link>
+      <description>Already seen.</description>
+    </item>
+    <item>
+      <title>New Post</title>
+      <link>https://example.com/post/new</link>
+      <description>Appended later.</description>
+    </item>
+  </channel>
+</rss>"""
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=feed)
+			result, comparison = self.strategy.scrape(
+				self.feed_url,
+				{},
+				{"last_entry_id": "https://example.com/post/old"},
+			)
+
+		assert isinstance(result, Ok)
+		assert result.value == [("New Post", "Appended later.", URL("https://example.com/post/new"))]
+		assert comparison is not None
+		assert comparison["seen_entry_ids"] == [
+			"https://example.com/post/old",
+			"https://example.com/post/new",
+		]
+
 	def test_rss_feed_parsed_correctly(self):
 		"""RSS 2.0 feeds are handled (feedparser supports both Atom and RSS)."""
 		rss_feed = """\
@@ -754,7 +871,7 @@ class FeedStrategyRealFeedTestCase(TestCase):
 
 	def _load_feed(self, filename: str) -> str:
 		file_path = f"{os.path.dirname(__file__)}/tests/{filename}"
-		with open(file_path) as f:
+		with open(file_path, encoding="utf-8") as f:
 			return f.read()
 
 	@pytest.mark.slow
@@ -823,7 +940,7 @@ class FeedStrategyRealFeedTestCase(TestCase):
 # ── Property-Based Tests ————————————————————————————————————————————————
 # These use Hypothesis to verify invariants across generated RSS feeds.
 
-NL = "\n"  # noqa: F811
+NL = "\n"
 
 @st.composite
 def _rss_item(draw):
@@ -842,8 +959,8 @@ def _rss_item(draw):
     if desc is not None:
         parts.append(f"<description>{desc}</description>")
 
-    NL = "\n"
-    return "    <item>" + NL + "      " + NL.join(parts) + NL + "    </item>"
+    nl = "\n"
+    return "    <item>" + nl + "      " + nl.join(parts) + nl + "    </item>"
 
 
 @st.composite
