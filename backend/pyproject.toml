@@ -110,6 +110,7 @@ django_settings_module = "notif.settings"
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "notif.settings"
 pythonpath = ["."]
+python_files = ["tests.py", "test_*.py", "*_test.py"]
 markers = [
     "slow: marks tests that use real downloaded fixtures (deselect with -m 'not slow')",
     "feed: marks tests specific to FeedStrategy",
