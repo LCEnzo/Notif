@@ -5,7 +5,7 @@ This backend now uses `uv` and the `pyproject.toml` in this directory as the sou
 ### Local setup
 
 ```bash
-uv sync --python 3.13
+uv sync --python 3.14
 cp .env.example .env
 uv run python manage.py migrate
 uv run python manage.py runserver
