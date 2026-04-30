@@ -687,15 +687,26 @@ class FeedStrategyTestCase(TestCase):
 
 	def test_scrape_bozo_with_entries_still_works(self):
 		"""Bozo flag on but entries present → still returns entries (feed was partially parseable)."""
-		# feedparser sets bozo on some imperfect feeds that still have entries
-		# Our strategy treats bozo as fatal only when there are no entries
+		# Missing closing </channel> — feedparser sets bozo but still finds items
+		half_broken_feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Broken Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Still Here</title>
+      <link>https://example.com/post/1</link>
+      <description>Found it.</description>
+    </item>
+"""
 		with requests_mock.Mocker() as mocker:
-			mocker.get(self.feed_url, text=ATOM_FEED_XML)
+			mocker.get(self.feed_url, text=half_broken_feed)
 			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
 
-		# ATOM_FEED_XML should parse cleanly (no bozo), so this proves the happy path
 		assert isinstance(result, Ok)
-		assert len(result.value) == 3
+		assert len(result.value) == 1
+		assert result.value[0][0] == "Still Here"
 
 	def test_entry_id_falls_back_to_link(self):
 		"""Entry without an <id> field uses <link> as the identifier."""
@@ -983,7 +994,7 @@ class FeedStrategyRealFeedTestCase(TestCase):
 		assert comparison is not None
 
 # ── Property-Based Tests ————————————————————————————————————————————————
-# These use Hypothesis to verify invariants across generated RSS feeds.
+# These use Hypothesis to verify invariants across generated RSS and Atom feeds.
 
 NL = "\n"
 
@@ -1025,6 +1036,44 @@ def _rss_feed_xml(draw, min_items=1, max_items=20):
 </rss>"""
 
 
+@st.composite
+def _atom_entry(draw):
+    """Generate a single Atom <entry> with optional summary."""
+    escape = xml.sax.saxutils.escape
+    eid = escape(draw(st.text(min_size=1, max_size=60)))
+    title = escape(draw(st.text(min_size=1, max_size=60)))
+    # quoteattr wraps in quotes and escapes " and ' — escape() alone doesn't
+    # handle attribute-value quoting, which can produce invalid XML.
+    link = xml.sax.saxutils.quoteattr(draw(st.text(min_size=3, max_size=100)))
+    has_summary = draw(st.booleans())
+    summary = escape(draw(st.text(min_size=1, max_size=150))) if has_summary else None
+
+    parts = [
+        f"<id>tag:example.com,2024:{eid}</id>",
+        f"<title>{title}</title>",
+        f"<link href={link}/>",
+    ]
+    if summary is not None:
+        parts.append(f"<summary>{summary}</summary>")
+
+    nl = "\n"
+    return "  <entry>" + nl + "    " + nl.join(parts) + nl + "  </entry>"
+
+
+@st.composite
+def _atom_feed_xml(draw, min_items=1, max_items=20):
+    """Generate a valid Atom 1.0 feed with randomized entries."""
+    n = draw(st.integers(min_value=min_items, max_value=max_items))
+    entries = draw(st.lists(_atom_entry(), min_size=n, max_size=n))
+
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Hypothesis Atom Feed</title>
+  <link href="https://example.com/feed" rel="self"/>
+{NL.join(entries)}
+</feed>"""
+
+
 class FeedStrategyDedupPropertyTestCase(HypothesisTestCase):
     """Property-based tests for FeedStrategy dedup invariant."""
 
@@ -1032,7 +1081,7 @@ class FeedStrategyDedupPropertyTestCase(HypothesisTestCase):
         self.strategy = FeedStrategy()
 
     @pytest.mark.property
-    @given(feed_xml=_rss_feed_xml())
+    @given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
     @settings(max_examples=200)
     def test_dedup_is_idempotent(self, feed_xml):
         """Second scrape with first scrape's comparison data returns zero new entries."""
