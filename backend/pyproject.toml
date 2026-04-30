@@ -94,6 +94,7 @@ pythonPlatform = "Linux"
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main", "pydantic.mypy"]
 exclude = ["migrations", "\\.venv", "venv"]
+mypy_path = "stubs"
 check_untyped_defs = true
 warn_unused_configs = true
 warn_redundant_casts = true

@@ -775,11 +775,11 @@ class FeedStrategyTestCase(TestCase):
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=initial_feed)
 			result1, comparison1 = self.strategy.scrape(self.feed_url, {}, {})
+			assert comparison1 is not None
 			mocker.get(self.feed_url, text=appended_feed)
 			result2, comparison2 = self.strategy.scrape(self.feed_url, {}, comparison1)
 
 		assert isinstance(result1, Ok)
-		assert comparison1 is not None
 		assert comparison1["seen_entry_hashes"] == self._entry_hashes(
 			"https://example.com/post/old",
 			"https://example.com/post/middle",
@@ -1047,6 +1047,7 @@ class FeedStrategyDedupPropertyTestCase(HypothesisTestCase):
             assert len(result1.value) > 0, (
                 f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
             )
+            assert comparison1 is not None
 
             # Second scrape with comparison data from first
             result2, comparison2 = self.strategy.scrape(url, {}, comparison1)

@@ -891,7 +891,8 @@ class FeedStrategy(BaseStrategy):
 				continue
 
 			try:
-				return datetime(*parsed[:6], tzinfo=UTC).timestamp()
+				year, month, day, hour, minute, second = parsed[:6]
+				return datetime(year, month, day, hour, minute, second, tzinfo=UTC).timestamp()
 			except (TypeError, ValueError):
 				continue
 
