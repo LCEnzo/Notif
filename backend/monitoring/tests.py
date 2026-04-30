@@ -541,6 +541,9 @@ class FeedStrategyTestCase(TestCase):
 		self.strategy = FeedStrategy()
 		self.feed_url = URL("https://example.com/feed")
 
+	def _entry_hashes(self, *entry_ids: str) -> list[str]:
+		return [self.strategy._entry_id_hash(entry_id) for entry_id in entry_ids]
+
 	def test_can_scrape_url_returns_true(self):
 		assert self.strategy.can_scrape_url(URL("https://anything.example.com/rss")) is True
 		assert self.strategy.can_scrape_url(URL("https://substack.com/feed")) is True
@@ -559,9 +562,15 @@ class FeedStrategyTestCase(TestCase):
 		assert result.value[2][0] == "Third Post"
 		assert comparison is not None
 		assert comparison["last_entry_id"] == "tag:example.com,2024:1"
+		assert comparison["seen_entry_hashes"] == self._entry_hashes(
+			"tag:example.com,2024:1",
+			"tag:example.com,2024:2",
+			"tag:example.com,2024:3",
+		)
+		assert "seen_entry_ids" not in comparison
 
 	def test_scrape_with_seen_entry_ids_skips_seen(self):
-		"""With seen_entry_ids set, no previously seen entries should be returned."""
+		"""Legacy raw seen_entry_ids state still suppresses previously seen entries."""
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=ATOM_FEED_XML)
 			result, comparison = self.strategy.scrape(
@@ -580,6 +589,42 @@ class FeedStrategyTestCase(TestCase):
 		assert isinstance(result, Ok)
 		assert len(result.value) == 0
 		assert comparison is None
+
+	def test_scrape_with_seen_entry_hashes_skips_seen(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=ATOM_FEED_XML)
+			result, comparison = self.strategy.scrape(
+				self.feed_url,
+				{},
+				{
+					"last_entry_id": "tag:example.com,2024:1",
+					"seen_entry_hashes": self._entry_hashes(
+						"tag:example.com,2024:1",
+						"tag:example.com,2024:2",
+						"tag:example.com,2024:3",
+					),
+				},
+			)
+
+		assert isinstance(result, Ok)
+		assert result.value == []
+		assert comparison is None
+
+	def test_seen_entry_hashes_migrate_legacy_raw_ids(self):
+		assert self.strategy._seen_entry_hashes(
+			{"seen_entry_ids": ["https://example.com/post/1"]}
+		) == self._entry_hashes("https://example.com/post/1")
+
+	def test_seen_entry_hashes_are_bounded(self):
+		original_limit = FeedStrategy.MAX_SEEN_ENTRY_HASHES
+		try:
+			FeedStrategy.MAX_SEEN_ENTRY_HASHES = 3
+			assert FeedStrategy._merge_seen_entry_hashes(
+				["current-1", "current-2", "current-3", "current-4"],
+				["previous-1"],
+			) == ["current-1", "current-2", "current-3"]
+		finally:
+			FeedStrategy.MAX_SEEN_ENTRY_HASHES = original_limit
 
 	def test_scrape_with_middle_entry_id_returns_newer_only(self):
 		"""With last_entry_id set to the middle entry, returns entries before that point."""
@@ -735,19 +780,19 @@ class FeedStrategyTestCase(TestCase):
 
 		assert isinstance(result1, Ok)
 		assert comparison1 is not None
-		assert comparison1["seen_entry_ids"] == [
+		assert comparison1["seen_entry_hashes"] == self._entry_hashes(
 			"https://example.com/post/old",
 			"https://example.com/post/middle",
-		]
+		)
 
 		assert isinstance(result2, Ok)
 		assert result2.value == [("New Post", "Appended later.", URL("https://example.com/post/new"))]
 		assert comparison2 is not None
-		assert comparison2["seen_entry_ids"] == [
+		assert comparison2["seen_entry_hashes"] == self._entry_hashes(
 			"https://example.com/post/old",
 			"https://example.com/post/middle",
 			"https://example.com/post/new",
-		]
+		)
 
 	def test_scrape_migrates_legacy_last_entry_id_without_order_assumption(self):
 		feed = """\
@@ -780,10 +825,10 @@ class FeedStrategyTestCase(TestCase):
 		assert isinstance(result, Ok)
 		assert result.value == [("New Post", "Appended later.", URL("https://example.com/post/new"))]
 		assert comparison is not None
-		assert comparison["seen_entry_ids"] == [
+		assert comparison["seen_entry_hashes"] == self._entry_hashes(
 			"https://example.com/post/old",
 			"https://example.com/post/new",
-		]
+		)
 
 	def test_rss_feed_parsed_correctly(self):
 		"""RSS 2.0 feeds are handled (feedparser supports both Atom and RSS)."""

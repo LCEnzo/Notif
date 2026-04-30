@@ -739,10 +739,6 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 		return fav_response
 
-
-# ── RSS / Atom Feed Strategy ──────────────────────────────────────────────
-
-
 @register
 class FeedStrategy(BaseStrategy):
 	"""
@@ -758,13 +754,14 @@ class FeedStrategy(BaseStrategy):
 
 	Comparison state:
 	- ``last_entry_id``: the best newest-entry marker available for backwards compatibility.
-	- ``seen_entry_ids``: a bounded list of recently seen entry identifiers, used for order-independent dedupe.
+	- ``seen_entry_hashes``: a bounded list of recently seen entry identifier hashes for compact dedupe.
 	"""
 
-	MAX_SEEN_ENTRY_IDS = 1000
+	ENTRY_ID_HASH_BYTES = 16
+	MAX_SEEN_ENTRY_HASHES = 1000
 
 	def can_scrape_url(self, url: URL) -> bool:
-		"""Permissive: any URL could be a feed. The user decides."""
+		"""No URL-shape prefilter; validity is determined by fetching and parsing."""
 		return True
 
 	def scrape(
@@ -792,23 +789,27 @@ class FeedStrategy(BaseStrategy):
 			return Ok([]), None
 
 		last_entry_id: str | None = comparison_data.get("last_entry_id")
-		seen_entry_ids = self._seen_entry_ids(comparison_data.get("seen_entry_ids"))
-		seen_entry_id_set = set(seen_entry_ids)
+		seen_entry_hashes = self._seen_entry_hashes(comparison_data)
+		seen_entry_hash_set = set(seen_entry_hashes)
 
 		updates: NotifData = []
-		current_entry_ids: list[str] = []
+		current_entry_hashes: list[str] = []
+		new_last_entry_id: str | None = None
 
 		for entry in entries:
 			entry_id = self._entry_id(entry)
-			current_entry_ids.append(entry_id)
+			entry_hash = self._entry_id_hash(entry_id)
+			current_entry_hashes.append(entry_hash)
+			if new_last_entry_id is None:
+				new_last_entry_id = entry_id
 
-			if seen_entry_id_set and entry_id in seen_entry_id_set:
+			if seen_entry_hash_set and entry_hash in seen_entry_hash_set:
 				continue
 
 			# Backwards compatibility for comparison state written before
-			# seen_entry_ids existed. We skip the marker, but keep scanning
+			# seen_entry_hashes existed. We skip the marker, but keep scanning
 			# because feed order is not guaranteed.
-			if not seen_entry_id_set and last_entry_id is not None and entry_id == last_entry_id:
+			if not seen_entry_hash_set and last_entry_id is not None and entry_id == last_entry_id:
 				continue
 
 			title = entry.get("title", "Untitled")
@@ -817,39 +818,49 @@ class FeedStrategy(BaseStrategy):
 
 			updates.append((title, description, link))
 
-		new_seen_entry_ids = self._merge_seen_entry_ids(current_entry_ids, seen_entry_ids)
-		new_last_entry_id = current_entry_ids[0] if current_entry_ids else None
+		new_seen_entry_hashes = self._merge_seen_entry_hashes(current_entry_hashes, seen_entry_hashes)
 
 		comparison_update: ComparisonStateUpdate = None
 		if updates and new_last_entry_id is not None:
 			comparison_update = {
 				"last_entry_id": new_last_entry_id,
-				"seen_entry_ids": new_seen_entry_ids,
+				"seen_entry_hashes": new_seen_entry_hashes,
 			}
 
 		return Ok(updates), comparison_update
 
 	@classmethod
-	def _merge_seen_entry_ids(cls, current_entry_ids: list[str], previous_entry_ids: list[str]) -> list[str]:
-		merged_entry_ids: list[str] = []
-		merged_entry_id_set: set[str] = set()
+	def _merge_seen_entry_hashes(cls, current_entry_hashes: list[str], previous_entry_hashes: list[str]) -> list[str]:
+		merged_entry_hashes: list[str] = []
+		merged_entry_hash_set: set[str] = set()
 
-		for entry_id in [*current_entry_ids, *previous_entry_ids]:
-			if entry_id in merged_entry_id_set:
+		for entry_hash in [*current_entry_hashes, *previous_entry_hashes]:
+			if entry_hash in merged_entry_hash_set:
 				continue
-			merged_entry_ids.append(entry_id)
-			merged_entry_id_set.add(entry_id)
+			merged_entry_hashes.append(entry_hash)
+			merged_entry_hash_set.add(entry_hash)
 
-			if len(merged_entry_ids) >= cls.MAX_SEEN_ENTRY_IDS:
+			if len(merged_entry_hashes) >= cls.MAX_SEEN_ENTRY_HASHES:
 				break
 
-		return merged_entry_ids
+		return merged_entry_hashes
 
-	@staticmethod
-	def _seen_entry_ids(value: Any) -> list[str]:
-		if not isinstance(value, list):
+	@classmethod
+	def _seen_entry_hashes(cls, comparison_data: dict[str, Any]) -> list[str]:
+		value = comparison_data.get("seen_entry_hashes")
+		if isinstance(value, list):
+			entry_hashes = [str(entry_hash) for entry_hash in value if entry_hash]
+			if entry_hashes:
+				return entry_hashes
+
+		legacy_entry_ids = comparison_data.get("seen_entry_ids")
+		if not isinstance(legacy_entry_ids, list):
 			return []
-		return [str(entry_id) for entry_id in value if entry_id]
+		return [cls._entry_id_hash(str(entry_id)) for entry_id in legacy_entry_ids if entry_id]
+
+	@classmethod
+	def _entry_id_hash(cls, entry_id: str) -> str:
+		return hashlib.blake2s(entry_id.encode("utf-8"), digest_size=cls.ENTRY_ID_HASH_BYTES).hexdigest()
 
 	@staticmethod
 	def _sorted_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
