@@ -25,8 +25,10 @@ class AppSettingsController extends ChangeNotifier {
   BackendUrlMode _backendUrlMode = BackendUrlMode.builtin;
   String _customBackendUrl = '';
 
+  late final Future<void> initialized;
+
   AppSettingsController() {
-    _load();
+    initialized = _load();
   }
 
   bool get designDitheringEnabled => _designDitheringEnabled;

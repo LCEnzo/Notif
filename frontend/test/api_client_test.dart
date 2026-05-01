@@ -9,6 +9,12 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  Future<AppSettingsController> createLoadedSettings() async {
+    final settings = AppSettingsController();
+    await settings.initialized;
+    return settings;
+  }
+
   group('resolveUrls', () {
     test('null settings returns builtin base URL only', () {
       final urls = resolveUrls('/auth/login', null);
@@ -18,9 +24,7 @@ void main() {
     });
 
     test('builtin mode returns builtin base URL only', () async {
-      final settings = AppSettingsController();
-      // default mode is builtin
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       final urls = resolveUrls('/ping', settings);
 
@@ -29,8 +33,7 @@ void main() {
     });
 
     test('customWithFallback returns custom first, then builtin', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
       await settings.setBackendUrlMode(BackendUrlMode.customWithFallback);
       await settings.setCustomBackendUrl('https://example.com/api/v1');
 
@@ -42,8 +45,7 @@ void main() {
     });
 
     test('customOnly returns custom base URL only', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);
       await settings.setCustomBackendUrl('https://prod.example.com/api');
 
@@ -55,8 +57,7 @@ void main() {
 
     test('customWithFallback with empty custom falls back to builtin',
         () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
       await settings.setBackendUrlMode(BackendUrlMode.customWithFallback);
       // customBackendUrl is empty by default
 
@@ -67,8 +68,7 @@ void main() {
     });
 
     test('customOnly with empty custom returns empty list', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);
       // customBackendUrl is empty by default
 
@@ -78,8 +78,7 @@ void main() {
     });
 
     test('custom base URL is trimmed', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);
       await settings.setCustomBackendUrl('  https://trim.example.com/api  ');
 
@@ -102,8 +101,7 @@ void main() {
         'customBackendUrl': 'https://cached.example.com/v2',
       });
 
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       final urls = resolveUrls('/data', settings);
 

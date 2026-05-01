@@ -7,31 +7,33 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  Future<AppSettingsController> createLoadedSettings() async {
+    final settings = AppSettingsController();
+    await settings.initialized;
+    return settings;
+  }
+
   group('AppSettingsController defaults', () {
     test('default authCardStyle is framed', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       expect(settings.authCardStyle, AuthCardStyle.framed);
     });
 
     test('default backendUrlMode is builtin', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       expect(settings.backendUrlMode, BackendUrlMode.builtin);
     });
 
     test('default customBackendUrl is empty', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       expect(settings.customBackendUrl, isEmpty);
     });
 
     test('default dithering is enabled', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       expect(settings.designDitheringEnabled, isTrue);
     });
@@ -39,8 +41,7 @@ void main() {
 
   group('AppSettingsController mutations', () {
     test('setAuthCardStyle updates and persists', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       await settings.setAuthCardStyle(AuthCardStyle.glass);
 
@@ -52,20 +53,17 @@ void main() {
     });
 
     test('setBackendUrlMode ignores no-op change', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);
       expect(settings.backendUrlMode, BackendUrlMode.customOnly);
 
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);
-      // Still customOnly — no reset
       expect(settings.backendUrlMode, BackendUrlMode.customOnly);
     });
 
     test('setCustomBackendUrl trims input', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       await settings.setCustomBackendUrl('  https://api.example.com  ');
 
@@ -73,8 +71,7 @@ void main() {
     });
 
     test('setCustomBackendUrl skips redundant writes', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       await settings.setCustomBackendUrl('https://api.example.com');
       final prefs = await SharedPreferences.getInstance();
@@ -93,8 +90,7 @@ void main() {
         'designDitheringEnabled': false,
       });
 
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       expect(settings.backendUrlMode, BackendUrlMode.customOnly);
       expect(settings.customBackendUrl, 'https://cached.example.com/v2');
@@ -103,8 +99,7 @@ void main() {
     });
 
     test('notifies listeners on settings change', () async {
-      final settings = AppSettingsController();
-      await Future<void>.delayed(Duration.zero);
+      final settings = await createLoadedSettings();
 
       var notified = false;
       settings.addListener(() {
