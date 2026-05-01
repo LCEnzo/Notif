@@ -113,7 +113,14 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         const SizedBox(height: 32),
 
-                        const IndexRule(index: 3, title: 'Texture'),
+                        const IndexRule(index: 3, title: 'Home density'),
+                        _HomeDensityPicker(
+                          selected: settings.homeDensity,
+                          onChanged: settings.setHomeDensity,
+                        ),
+                        const SizedBox(height: 32),
+
+                        const IndexRule(index: 4, title: 'Texture'),
                         _LabeledSwitch(
                           title: 'Dithering overlay',
                           description:
@@ -123,7 +130,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         const SizedBox(height: 32),
 
-                        const IndexRule(index: 4, title: 'Network'),
+                        const IndexRule(index: 5, title: 'Network'),
                         Text(
                           'Backend URL',
                           style: text$.heading.copyWith(color: tokens.ink),
@@ -541,6 +548,115 @@ class _RadioDot extends StatelessWidget {
               ),
             )
           : null,
+    );
+  }
+}
+
+class _HomeDensityPicker extends StatelessWidget {
+  const _HomeDensityPicker({
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final HomeDensity selected;
+  final ValueChanged<HomeDensity> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _HomeDensityTile(
+          density: HomeDensity.comfortable,
+          selected: selected == HomeDensity.comfortable,
+          title: 'Comfortable',
+          description:
+              'Readable desktop default. Larger rows, bigger actions, fewer ant-sized labels.',
+          onTap: () => onChanged(HomeDensity.comfortable),
+        ),
+        _HomeDensityTile(
+          density: HomeDensity.compact,
+          selected: selected == HomeDensity.compact,
+          title: 'Compact',
+          description:
+              'Default. Console structure with readable rows and visible actions.',
+          onTap: () => onChanged(HomeDensity.compact),
+        ),
+        _HomeDensityTile(
+          density: HomeDensity.dense,
+          selected: selected == HomeDensity.dense,
+          title: 'Dense',
+          description:
+              'Tighter than default for scan-heavy sessions and smaller windows.',
+          onTap: () => onChanged(HomeDensity.dense),
+        ),
+      ],
+    );
+  }
+}
+
+class _HomeDensityTile extends StatelessWidget {
+  const _HomeDensityTile({
+    required this.density,
+    required this.selected,
+    required this.title,
+    required this.description,
+    required this.onTap,
+  });
+
+  final HomeDensity density;
+  final bool selected;
+  final String title;
+  final String description;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: tokens.rule)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _RadioDot(selected: selected),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: text$.heading.copyWith(color: tokens.ink),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          density.name.toUpperCase(),
+                          style: text$.micro.copyWith(color: tokens.inkMute),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      description,
+                      style: text$.body.copyWith(color: tokens.inkDim),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

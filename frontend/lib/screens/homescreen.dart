@@ -43,101 +43,6 @@ class _HomePageState extends State<HomePage> {
     await Future.wait(futures);
   }
 
-  Future<void> _handleAddLink() async {
-    final linkService = context.read<LinkService>();
-    await linkService.ensureStrategyChoicesLoaded();
-    if (!mounted) return;
-
-    final draft = await showDialog<_LinkDraft>(
-      context: context,
-      builder: (_) =>
-          _LinkEditorDialog(strategyChoices: linkService.strategyChoices),
-    );
-    if (draft == null) return;
-
-    final success = await linkService.createLink(
-      name: draft.name,
-      url: draft.url,
-      strategyClass: draft.strategyClass,
-      selectorsText: draft.selectorsText,
-    );
-    if (!mounted) return;
-
-    _showMessage(success ? 'Link added to the registry.' : linkService.error);
-  }
-
-  Future<void> _handleEditLink(Link link) async {
-    final linkService = context.read<LinkService>();
-    await linkService.ensureStrategyChoicesLoaded();
-    if (!mounted) return;
-
-    final draft = await showDialog<_LinkDraft>(
-      context: context,
-      builder: (_) => _LinkEditorDialog(
-        strategyChoices: linkService.strategyChoices,
-        initialValue: _LinkDraft(
-          name: link.name,
-          url: link.url,
-          strategyClass: link.strategyClass,
-          selectorsText: link.selectors.join('\n'),
-        ),
-        submitLabel: 'Save',
-        title: 'Edit link',
-      ),
-    );
-    if (draft == null) return;
-
-    final success = await linkService.updateLink(
-      link: link,
-      name: draft.name,
-      url: draft.url,
-      strategyClass: draft.strategyClass,
-      selectorsText: draft.selectorsText,
-    );
-    if (!mounted) return;
-
-    _showMessage(success ? 'Link updated.' : linkService.error);
-  }
-
-  Future<void> _handleDeleteLink(Link link) async {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-    final linkService = context.read<LinkService>();
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete link'),
-        content: Text(
-          'Remove "${link.name}" from the registry? This only deletes the link entry.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: tokens.bg1,
-              backgroundColor: NotifFeedback.error,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-              textStyle: text$.eyebrow,
-            ),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('DELETE'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    final success = await linkService.deleteLink(link);
-    if (!mounted) return;
-
-    _showMessage(success ? 'Link removed.' : linkService.error);
-  }
-
   Future<void> _handleScrapeAll() async {
     final linkService = context.read<LinkService>();
     final notificationService = context.read<NotificationService>();
@@ -187,113 +92,6 @@ class _HomePageState extends State<HomePage> {
     context.go('/login');
   }
 
-  void _showNotificationsSheet() {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        final tokens = NotifTokens.of(sheetContext);
-        final text$ = NotifTextTheme.of(sheetContext);
-
-        return FractionallySizedBox(
-          heightFactor: 0.88,
-          child: SafeArea(
-            top: false,
-            child: Container(
-              decoration: BoxDecoration(
-                color: tokens.bg1,
-                border: Border(top: BorderSide(color: tokens.ruleStrong)),
-              ),
-              child: Consumer<NotificationService>(
-                builder: (context, notificationService, _) {
-                  return Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 22, 24, 16),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Eyebrow(
-                                    'Notifications',
-                                    tone: EyebrowTone.accent,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Full feed',
-                                    style: text$.title.copyWith(
-                                      color: tokens.ink,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (notificationService.unreadCount > 0)
-                              NotifButton(
-                                label: notificationService.markingAllRead
-                                    ? 'Working'
-                                    : 'Mark all read',
-                                variant: NotifButtonVariant.ghost,
-                                size: NotifButtonSize.sm,
-                                onPressed: notificationService.markingAllRead
-                                    ? null
-                                    : () => notificationService.markAllRead(),
-                              ),
-                          ],
-                        ),
-                      ),
-                      Rule(strength: RuleStrength.faint),
-                      Expanded(
-                        child: notificationService.notifications.isEmpty
-                            ? const Center(
-                                child: _EmptyState(
-                                  icon: Icons.notifications_off_outlined,
-                                  title: 'No notifications yet',
-                                  message:
-                                      'Scrapes that find new updates will show up here.',
-                                ),
-                              )
-                            : ListView.separated(
-                                padding: const EdgeInsets.all(24),
-                                itemCount:
-                                    notificationService.notifications.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 10),
-                                itemBuilder: (context, index) {
-                                  final item =
-                                      notificationService.notifications[index];
-                                  return _NotificationCard(
-                                    notification: item,
-                                    compact: false,
-                                    isBusy: notificationService.isMarkingRead(
-                                      item.id,
-                                    ),
-                                    onTap: () => _handleNotificationTap(item),
-                                    onMarkRead: item.isUnread
-                                        ? () => notificationService.markRead(
-                                            item.id,
-                                          )
-                                        : null,
-                                  );
-                                },
-                              ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   void _showMessage(String? message) {
     if (!mounted || message == null || message.trim().isEmpty) return;
 
@@ -305,453 +103,1930 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
     final appSettings = context.watch<AppSettingsController?>();
     final userData = context.watch<UserDataService>().userData;
     final linkService = context.watch<LinkService>();
     final notificationService = context.watch<NotificationService>();
-    final unreadNotifications = notificationService.notifications
-        .where((item) => item.isUnread)
-        .take(6)
-        .toList(growable: false);
 
     return Scaffold(
       backgroundColor: tokens.bg0,
-      appBar: AppBar(
-        backgroundColor: tokens.bg0,
-        foregroundColor: tokens.ink,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        titleSpacing: 0,
-        leading: IconButton(
-          tooltip: 'Log out',
-          icon: Icon(Icons.logout_sharp, color: tokens.inkDim),
-          onPressed: _logout,
-        ),
-        title: Row(
-          children: [
-            Text(
-              'Notif',
-              style: text$.heading.copyWith(
-                color: tokens.ink,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text('/ desk', style: text$.micro.copyWith(color: tokens.inkMute)),
-          ],
-        ),
-        actions: [
-          Stack(
-            children: [
-              IconButton(
-                tooltip: 'Notifications',
-                icon: Icon(Icons.notifications_sharp, color: tokens.inkDim),
-                onPressed: _showNotificationsSheet,
-              ),
-              if (notificationService.unreadCount > 0)
-                Positioned(
-                  right: 8,
-                  top: 8,
-                  child: _Badge(value: '${notificationService.unreadCount}'),
-                ),
-            ],
-          ),
-          IconButton(
-            tooltip: 'About',
-            icon: Icon(Icons.info_outline_sharp, color: tokens.inkDim),
-            onPressed: () => context.push('/about'),
-          ),
-          IconButton(
-            tooltip: 'Settings',
-            icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: tokens.rule),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: linkService.creating ? null : _handleAddLink,
-        backgroundColor: tokens.btnBg,
-        foregroundColor: tokens.btnInk,
-        elevation: 0,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        child: linkService.creating
-            ? SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: tokens.btnInk,
-                ),
-              )
-            : const Icon(Icons.add_sharp),
-      ),
       body: Stack(
         children: [
           if (appSettings?.designDitheringEnabled ?? true)
             const DitherOverlay(),
-          RefreshIndicator(
-            color: tokens.accent,
-            backgroundColor: tokens.bg2,
-            onRefresh: _refreshDashboard,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 980;
+          SafeArea(
+            child: _HomeConsole(
+              appSettings: appSettings,
+              userData: userData,
+              linkService: linkService,
+              notificationService: notificationService,
+              onRefresh: _refreshDashboard,
+              onScrapeAll: linkService.scrapingAll ? null : _handleScrapeAll,
+              onScrapeLink: _handleScrapeLink,
+              onNotificationTap: _handleNotificationTap,
+              onMarkAllRead: notificationService.unreadCount == 0 ||
+                      notificationService.markingAllRead
+                  ? null
+                  : notificationService.markAllRead,
+              onSources: () => context.go('/sources'),
+              onSettings: () => context.push('/settings'),
+              onAbout: () => context.push('/about'),
+              onLogout: _logout,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
-                return ListView(
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: ClampingScrollPhysics(),
-                  ),
-                  padding: const EdgeInsets.fromLTRB(24, 28, 24, 96),
-                  children: [
-                    _HeroPanel(
-                      userData: userData,
-                      linkCount: linkService.links.length,
-                      unreadCount: notificationService.unreadCount,
-                      backendLabel: _backendModeLabel(appSettings),
-                      scrapeInProgress: linkService.scrapingAll,
-                      onAddLink: linkService.creating ? null : _handleAddLink,
-                      onScrapeAll: linkService.scrapingAll
-                          ? null
-                          : _handleScrapeAll,
+class SourcesPage extends StatefulWidget {
+  const SourcesPage({super.key});
+
+  @override
+  State<SourcesPage> createState() => _SourcesPageState();
+}
+
+class _SourcesPageState extends State<SourcesPage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<LinkService>().fetchLinks();
+    });
+  }
+
+  Future<void> _handleAddLink() async {
+    final linkService = context.read<LinkService>();
+    await linkService.ensureStrategyChoicesLoaded();
+    if (!mounted) return;
+
+    final draft = await showDialog<_LinkDraft>(
+      context: context,
+      builder: (_) =>
+          _LinkEditorDialog(strategyChoices: linkService.strategyChoices),
+    );
+    if (draft == null) return;
+
+    final success = await linkService.createLink(
+      name: draft.name,
+      url: draft.url,
+      strategyClass: draft.strategyClass,
+      selectorsText: draft.selectorsText,
+    );
+    if (!mounted) return;
+
+    _showMessage(success ? 'Source added.' : linkService.error);
+  }
+
+  Future<void> _handleEditLink(Link link) async {
+    final linkService = context.read<LinkService>();
+    await linkService.ensureStrategyChoicesLoaded();
+    if (!mounted) return;
+
+    final draft = await showDialog<_LinkDraft>(
+      context: context,
+      builder: (_) => _LinkEditorDialog(
+        strategyChoices: linkService.strategyChoices,
+        initialValue: _LinkDraft(
+          name: link.name,
+          url: link.url,
+          strategyClass: link.strategyClass,
+          selectorsText: link.selectors.join('\n'),
+        ),
+        submitLabel: 'Save',
+        title: 'Edit source',
+      ),
+    );
+    if (draft == null) return;
+
+    final success = await linkService.updateLink(
+      link: link,
+      name: draft.name,
+      url: draft.url,
+      strategyClass: draft.strategyClass,
+      selectorsText: draft.selectorsText,
+    );
+    if (!mounted) return;
+
+    _showMessage(success ? 'Source updated.' : linkService.error);
+  }
+
+  Future<void> _handleDeleteLink(Link link) async {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final linkService = context.read<LinkService>();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete source'),
+        content: Text('Remove "${link.name}" from the registry?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: tokens.bg1,
+              backgroundColor: NotifFeedback.error,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              textStyle: text$.eyebrow,
+            ),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final success = await linkService.deleteLink(link);
+    if (!mounted) return;
+
+    _showMessage(success ? 'Source removed.' : linkService.error);
+  }
+
+  Future<void> _handleScrapeLink(Link link) async {
+    final linkService = context.read<LinkService>();
+    final notificationService = context.read<NotificationService>();
+    final message = await linkService.triggerScrape(linkId: link.id);
+    if (message != null) {
+      await notificationService.fetchNotifications();
+    }
+    if (!mounted) return;
+    _showMessage(message ?? linkService.error);
+  }
+
+  Future<void> _openExternalUrl(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      _showMessage('That URL could not be opened.');
+      return;
+    }
+
+    if (await launchUrl(uri)) return;
+
+    if (!mounted) return;
+    _showMessage('Could not open $url');
+  }
+
+  void _showMessage(String? message) {
+    if (!mounted || message == null || message.trim().isEmpty) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message.trim())));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final appSettings = context.watch<AppSettingsController?>();
+    final linkService = context.watch<LinkService>();
+    final density = appSettings?.homeDensity ?? HomeDensity.compact;
+    final metrics = _HomeConsoleMetrics.forDensity(density);
+
+    return Scaffold(
+      backgroundColor: tokens.bg0,
+      body: Stack(
+        children: [
+          if (appSettings?.designDitheringEnabled ?? true)
+            const DitherOverlay(),
+          SafeArea(
+            child: Column(
+              children: [
+                _ConsoleTopBar(
+                  density: density,
+                  metrics: metrics,
+                  userData: context.watch<UserDataService>().userData,
+                  unreadCount: context.watch<NotificationService>().unreadCount,
+                  sourceCount: linkService.links.length,
+                  backendLabel: _backendModeLabel(appSettings),
+                  syncLabel: _lastScrapeLabel(linkService.links),
+                  scrapeBusy: linkService.scrapingAll,
+                  onScrape: linkService.scrapingAll
+                      ? null
+                      : () async {
+                          final message = await linkService.triggerScrape();
+                          if (message != null && mounted) {
+                            await context
+                                .read<NotificationService>()
+                                .fetchNotifications();
+                          }
+                          if (!mounted) return;
+                          _showMessage(message ?? linkService.error);
+                        },
+                  onSources: null,
+                  onSettings: () => context.push('/settings'),
+                  onAbout: () => context.push('/about'),
+                  onDensityChanged: appSettings?.setHomeDensity,
+                  onLogout: () {
+                    context.read<AuthService>().logout();
+                    context.go('/login');
+                  },
+                  activeSection: 'sources',
+                ),
+                Expanded(
+                  child: RefreshIndicator(
+                    color: tokens.accent,
+                    backgroundColor: tokens.bg2,
+                    onRefresh: linkService.fetchLinks,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: ClampingScrollPhysics(),
+                      ),
+                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Eyebrow(
+                                    'Registry',
+                                    tone: EyebrowTone.accent,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Sources are managed here, not in the feed.',
+                                    style: text$.title.copyWith(
+                                      color: tokens.ink,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            NotifButton(
+                              label: 'Add source',
+                              icon: Icons.add_sharp,
+                              onPressed: linkService.creating
+                                  ? null
+                                  : _handleAddLink,
+                            ),
+                          ],
+                        ),
+                        if (linkService.error != null) ...[
+                          const SizedBox(height: 18),
+                          _ErrorBanner(message: linkService.error!),
+                        ],
+                        const SizedBox(height: 24),
+                        if (linkService.loading && linkService.links.isEmpty)
+                          const _LoadingState(message: 'Loading sources...')
+                        else if (linkService.links.isEmpty)
+                          _EmptyState(
+                            icon: Icons.link_off_sharp,
+                            title: 'No sources yet',
+                            message:
+                                'Add a monitored page to start collecting updates.',
+                            action: NotifButton(
+                              label: 'Add source',
+                              icon: Icons.add_sharp,
+                              onPressed: linkService.creating
+                                  ? null
+                                  : _handleAddLink,
+                            ),
+                          )
+                        else
+                          for (final link in linkService.links) ...[
+                            _LinkCard(
+                              link: link,
+                              isScraping: linkService.isScrapingLink(link.id),
+                              isSaving: linkService.isUpdatingLink(link.id),
+                              isDeleting: linkService.isDeletingLink(link.id),
+                              onScrape: () => _handleScrapeLink(link),
+                              onEdit: () => _handleEditLink(link),
+                              onDelete: () => _handleDeleteLink(link),
+                              onOpen: () => _openExternalUrl(link.url),
+                            ),
+                            if (link != linkService.links.last)
+                              const SizedBox(height: 12),
+                          ],
+                      ],
                     ),
-                    if (linkService.error != null) ...[
-                      const SizedBox(height: 18),
-                      _ErrorBanner(message: linkService.error!),
-                    ],
-                    if (notificationService.error != null) ...[
-                      const SizedBox(height: 18),
-                      _ErrorBanner(message: notificationService.error!),
-                    ],
-                    const SizedBox(height: 24),
-                    if (isWide)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 7,
-                            child: _buildLinksPanel(linkService),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeConsole extends StatelessWidget {
+  const _HomeConsole({
+    required this.appSettings,
+    required this.userData,
+    required this.linkService,
+    required this.notificationService,
+    required this.onRefresh,
+    required this.onScrapeAll,
+    required this.onScrapeLink,
+    required this.onNotificationTap,
+    required this.onMarkAllRead,
+    required this.onSources,
+    required this.onSettings,
+    required this.onAbout,
+    required this.onLogout,
+  });
+
+  final AppSettingsController? appSettings;
+  final UserData? userData;
+  final LinkService linkService;
+  final NotificationService notificationService;
+  final Future<void> Function() onRefresh;
+  final VoidCallback? onScrapeAll;
+  final Future<void> Function(Link link) onScrapeLink;
+  final Future<void> Function(NotificationItem notification) onNotificationTap;
+  final VoidCallback? onMarkAllRead;
+  final VoidCallback onSources;
+  final VoidCallback onSettings;
+  final VoidCallback onAbout;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 900;
+        final density = appSettings?.homeDensity ?? HomeDensity.compact;
+        final metrics = _HomeConsoleMetrics.forDensity(
+          isDesktop ? density : HomeDensity.dense,
+        );
+
+        return Column(
+          children: [
+            _ConsoleTopBar(
+              density: density,
+              metrics: metrics,
+              userData: userData,
+              unreadCount: notificationService.unreadCount,
+              sourceCount: linkService.links.length,
+              backendLabel: _backendModeLabel(appSettings),
+              syncLabel: _lastScrapeLabel(linkService.links),
+              scrapeBusy: linkService.scrapingAll,
+              onScrape: onScrapeAll,
+              onSources: onSources,
+              onSettings: onSettings,
+              onAbout: onAbout,
+              onLogout: onLogout,
+              onDensityChanged: appSettings?.setHomeDensity,
+              activeSection: 'home',
+            ),
+            if (linkService.error != null || notificationService.error != null)
+              _ConsoleErrorStrip(
+                linkError: linkService.error,
+                notificationError: notificationService.error,
+              ),
+            Expanded(
+              child: isDesktop
+                  ? Row(
+                      children: [
+                        SizedBox(
+                          width: metrics.railWidth,
+                          child: _ConsoleSourceRail(
+                            metrics: metrics,
+                            links: linkService.links,
+                            loading: linkService.loading,
+                            onSources: onSources,
+                            onScrapeLink: onScrapeLink,
+                            isScrapingLink: linkService.isScrapingLink,
                           ),
-                          const SizedBox(width: 24),
+                        ),
+                        VerticalDivider(
+                          width: 1,
+                          thickness: 1,
+                          color: tokens.rule,
+                        ),
+                        Expanded(
+                          child: _UpdateConsole(
+                            metrics: metrics,
+                            notifications: notificationService.notifications,
+                            loading: notificationService.loading,
+                            unreadCount: notificationService.unreadCount,
+                            markingAllRead: notificationService.markingAllRead,
+                            isMarkingRead: notificationService.isMarkingRead,
+                            onRefresh: onRefresh,
+                            onNotificationTap: onNotificationTap,
+                            onMarkAllRead: onMarkAllRead,
+                            onSources: onSources,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      children: [
+                        _MobileSourceSummary(
+                          metrics: metrics,
+                          links: linkService.links,
+                          loading: linkService.loading,
+                          onSources: onSources,
+                        ),
+                        Expanded(
+                          child: _UpdateConsole(
+                            metrics: metrics,
+                            notifications: notificationService.notifications,
+                            loading: notificationService.loading,
+                            unreadCount: notificationService.unreadCount,
+                            markingAllRead:
+                                notificationService.markingAllRead,
+                            isMarkingRead: notificationService.isMarkingRead,
+                            onRefresh: onRefresh,
+                            onNotificationTap: onNotificationTap,
+                            onMarkAllRead: onMarkAllRead,
+                            onSources: onSources,
+                            mobileTui: true,
+                          ),
+                        ),
+                        _MobileCommandLine(
+                          metrics: metrics,
+                          count: notificationService.notifications.length,
+                          onScrape: onScrapeAll,
+                          onSources: onSources,
+                          onSettings: onSettings,
+                        ),
+                      ],
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ConsoleTopBar extends StatelessWidget {
+  const _ConsoleTopBar({
+    required this.density,
+    required this.metrics,
+    required this.userData,
+    required this.unreadCount,
+    required this.sourceCount,
+    required this.backendLabel,
+    required this.syncLabel,
+    required this.scrapeBusy,
+    required this.onScrape,
+    required this.onSources,
+    required this.onSettings,
+    required this.onAbout,
+    required this.onLogout,
+    required this.onDensityChanged,
+    required this.activeSection,
+  });
+
+  final HomeDensity density;
+  final _HomeConsoleMetrics metrics;
+  final UserData? userData;
+  final int unreadCount;
+  final int sourceCount;
+  final String backendLabel;
+  final String syncLabel;
+  final bool scrapeBusy;
+  final VoidCallback? onScrape;
+  final VoidCallback? onSources;
+  final VoidCallback onSettings;
+  final VoidCallback onAbout;
+  final VoidCallback onLogout;
+  final ValueChanged<HomeDensity>? onDensityChanged;
+  final String activeSection;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final compact = MediaQuery.sizeOf(context).width < 1120;
+    final username = userData?.username.trim();
+    final identity = username == null || username.isEmpty ? 'operator' : username;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: tokens.bg1.withValues(alpha: 0.94),
+        border: Border(bottom: BorderSide(color: tokens.rule)),
+      ),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 10 : 18,
+        vertical: compact ? 7 : metrics.topBarVPad,
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Notif',
+            style: text$.heading.copyWith(
+              color: tokens.ink,
+              fontStyle: FontStyle.italic,
+              fontSize: compact ? null : metrics.brandSize,
+            ),
+          ),
+          if (!compact) ...[
+            const SizedBox(width: 10),
+            Text(
+              '~/notif/$activeSection',
+              style: text$.micro.copyWith(
+                color: tokens.inkMute,
+                letterSpacing: 0,
+                fontSize: metrics.microSize,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '@$identity',
+              style: text$.micro.copyWith(
+                color: tokens.inkDim,
+                fontSize: metrics.microSize,
+              ),
+            ),
+          ],
+          const Spacer(),
+          if (!compact) ...[
+            _MiniStat(
+              metrics: metrics,
+              label: 'UNREAD',
+              value: '$unreadCount',
+              accent: true,
+            ),
+            _MiniStat(metrics: metrics, label: 'SRC', value: '$sourceCount'),
+            _MiniStat(metrics: metrics, label: 'SYNC', value: syncLabel),
+            _MiniStat(metrics: metrics, label: 'API', value: backendLabel),
+          ] else ...[
+            _MiniStat(
+              metrics: metrics,
+              label: 'U',
+              value: '$unreadCount',
+              accent: true,
+            ),
+            _MiniStat(metrics: metrics, label: 'S', value: '$sourceCount'),
+          ],
+          const SizedBox(width: 8),
+          if (!compact)
+            _DensitySegment(
+              selected: density,
+              onChanged: onDensityChanged,
+              metrics: metrics,
+            ),
+          _TopBarAction(
+            metrics: metrics,
+            label: scrapeBusy ? 'scraping' : 'scrape',
+            onPressed: onScrape,
+            accent: true,
+          ),
+          if (!compact) ...[
+            _TopBarAction(
+              metrics: metrics,
+              label: 'sources',
+              onPressed: onSources,
+              selected: activeSection == 'sources',
+            ),
+            _TopBarAction(
+              metrics: metrics,
+              label: 'settings',
+              onPressed: onSettings,
+            ),
+            _TopBarAction(metrics: metrics, label: 'about', onPressed: onAbout),
+            _TopBarAction(
+              metrics: metrics,
+              label: 'logout',
+              onPressed: onLogout,
+            ),
+          ] else
+            PopupMenuButton<String>(
+              tooltip: 'Navigation',
+              color: tokens.bg1,
+              icon: Icon(Icons.more_horiz_sharp, color: tokens.inkDim),
+              onSelected: (value) {
+                switch (value) {
+                  case 'sources':
+                    onSources?.call();
+                    break;
+                  case 'settings':
+                    onSettings();
+                    break;
+                  case 'about':
+                    onAbout();
+                    break;
+                  case 'logout':
+                    onLogout();
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'sources', child: Text('Sources')),
+                const PopupMenuItem(value: 'settings', child: Text('Settings')),
+                const PopupMenuItem(value: 'about', child: Text('About')),
+                const PopupMenuItem(value: 'logout', child: Text('Logout')),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeConsoleMetrics {
+  const _HomeConsoleMetrics({
+    required this.railWidth,
+    required this.brandSize,
+    required this.bodySize,
+    required this.microSize,
+    required this.actionFontSize,
+    required this.topBarVPad,
+    required this.actionHPad,
+    required this.actionVPad,
+    required this.railRowVPad,
+    required this.updateRowVPad,
+    required this.headerHeight,
+  });
+
+  final double railWidth;
+  final double brandSize;
+  final double bodySize;
+  final double microSize;
+  final double actionFontSize;
+  final double topBarVPad;
+  final double actionHPad;
+  final double actionVPad;
+  final double railRowVPad;
+  final double updateRowVPad;
+  final double headerHeight;
+
+  static _HomeConsoleMetrics forDensity(HomeDensity density) {
+    switch (density) {
+      case HomeDensity.comfortable:
+        return const _HomeConsoleMetrics(
+          railWidth: 336,
+          brandSize: 31,
+          bodySize: 20,
+          microSize: 15,
+          actionFontSize: 14,
+          topBarVPad: 14,
+          actionHPad: 15,
+          actionVPad: 9,
+          railRowVPad: 14,
+          updateRowVPad: 14,
+          headerHeight: 52,
+        );
+      case HomeDensity.compact:
+        return const _HomeConsoleMetrics(
+          railWidth: 252,
+          brandSize: 24,
+          bodySize: 16,
+          microSize: 13,
+          actionFontSize: 12,
+          topBarVPad: 9,
+          actionHPad: 10,
+          actionVPad: 6,
+          railRowVPad: 7,
+          updateRowVPad: 7,
+          headerHeight: 37,
+        );
+      case HomeDensity.dense:
+        return const _HomeConsoleMetrics(
+          railWidth: 224,
+          brandSize: 21,
+          bodySize: 14.5,
+          microSize: 11.5,
+          actionFontSize: 10.5,
+          topBarVPad: 7,
+          actionHPad: 8,
+          actionVPad: 4,
+          railRowVPad: 5,
+          updateRowVPad: 5,
+          headerHeight: 32,
+        );
+    }
+  }
+}
+
+class _MiniStat extends StatelessWidget {
+  const _MiniStat({
+    required this.metrics,
+    required this.label,
+    required this.value,
+    this.accent = false,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final String label;
+  final String value;
+  final bool accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      child: RichText(
+        text: TextSpan(
+          style: text$.micro.copyWith(
+            color: tokens.inkMute,
+            fontSize: metrics.microSize,
+          ),
+          children: [
+            TextSpan(text: '$label '),
+            TextSpan(
+              text: value,
+              style: TextStyle(
+                color: accent ? tokens.accent : tokens.ink,
+                fontSize: metrics.microSize + 0.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TopBarAction extends StatelessWidget {
+  const _TopBarAction({
+    required this.metrics,
+    required this.label,
+    this.onPressed,
+    this.accent = false,
+    this.selected = false,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final String label;
+  final VoidCallback? onPressed;
+  final bool accent;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final foreground = accent ? tokens.btnInk : tokens.ink;
+    final background = accent
+        ? tokens.btnBg
+        : selected
+        ? tokens.bg2
+        : tokens.bg1;
+    final border = accent || selected ? tokens.ruleStrong : tokens.rule;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 7),
+      child: InkWell(
+        onTap: onPressed,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: metrics.actionHPad,
+            vertical: metrics.actionVPad,
+          ),
+          decoration: BoxDecoration(
+            color: onPressed == null
+                ? tokens.rule.withValues(alpha: 0.16)
+                : background,
+            border: Border.all(color: border),
+          ),
+          child: Text(
+            label.toUpperCase(),
+            style: text$.eyebrow.copyWith(
+              color: onPressed == null ? tokens.inkMute : foreground,
+              letterSpacing: 0,
+              fontSize: metrics.actionFontSize,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DensitySegment extends StatelessWidget {
+  const _DensitySegment({
+    required this.selected,
+    required this.onChanged,
+    required this.metrics,
+  });
+
+  final HomeDensity selected;
+  final ValueChanged<HomeDensity>? onChanged;
+  final _HomeConsoleMetrics metrics;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Container(
+      margin: const EdgeInsets.only(right: 4),
+      decoration: BoxDecoration(
+        color: tokens.bg0.withValues(alpha: 0.35),
+        border: Border.all(color: tokens.rule),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final density in HomeDensity.values)
+            InkWell(
+              onTap: onChanged == null ? null : () => onChanged!(density),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: metrics.actionHPad - 1,
+                  vertical: metrics.actionVPad,
+                ),
+                decoration: BoxDecoration(
+                  color: density == selected ? tokens.accent : Colors.transparent,
+                  border: Border(
+                    left: density == HomeDensity.comfortable
+                        ? BorderSide.none
+                        : BorderSide(color: tokens.rule),
+                  ),
+                ),
+                child: Text(
+                  switch (density) {
+                    HomeDensity.comfortable => 'COMF',
+                    HomeDensity.compact => 'COMP',
+                    HomeDensity.dense => 'DENSE',
+                  },
+                  style: text$.micro.copyWith(
+                    color: density == selected ? tokens.bg0 : tokens.inkDim,
+                    fontSize: metrics.microSize,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConsoleSourceRail extends StatelessWidget {
+  const _ConsoleSourceRail({
+    required this.metrics,
+    required this.links,
+    required this.loading,
+    required this.onSources,
+    required this.onScrapeLink,
+    required this.isScrapingLink,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final List<Link> links;
+  final bool loading;
+  final VoidCallback onSources;
+  final Future<void> Function(Link link) onScrapeLink;
+  final bool Function(int id) isScrapingLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Container(
+      color: tokens.bg1.withValues(alpha: 0.82),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: onSources,
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: metrics.actionVPad + 2,
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'registry - ${links.length}',
+                      style: text$.micro.copyWith(
+                        color: tokens.inkMute,
+                        fontSize: metrics.microSize,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: metrics.actionHPad,
+                      vertical: metrics.actionVPad,
+                    ),
+                    decoration: BoxDecoration(
+                      color: tokens.btnBg,
+                      border: Border.all(color: tokens.ruleStrong),
+                    ),
+                    child: Text(
+                      '+ MANAGE',
+                      style: text$.micro.copyWith(
+                        color: tokens.btnInk,
+                        fontSize: metrics.microSize,
+                        letterSpacing: 0,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Divider(height: 1, color: tokens.rule),
+          Expanded(
+            child: loading && links.isEmpty
+                ? const _LoadingState(message: 'Loading sources...')
+                : ListView.builder(
+                    padding: EdgeInsets.zero,
+                    itemCount: links.isEmpty ? 1 : links.length,
+                    itemBuilder: (context, index) {
+                      if (links.isEmpty) {
+                        return Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(
+                            'No sources. Open registry to add one.',
+                            style: text$.body.copyWith(
+                              color: tokens.inkDim,
+                              fontSize: metrics.bodySize,
+                            ),
+                          ),
+                        );
+                      }
+
+                      final link = links[index];
+                      final busy = isScrapingLink(link.id);
+
+                      return _SourceRailRow(
+                        metrics: metrics,
+                        link: link,
+                        busy: busy,
+                        onTap: onSources,
+                        onScrape: busy ? null : () => onScrapeLink(link),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SourceRailRow extends StatelessWidget {
+  const _SourceRailRow({
+    required this.metrics,
+    required this.link,
+    required this.busy,
+    required this.onTap,
+    required this.onScrape,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final Link link;
+  final bool busy;
+  final VoidCallback onTap;
+  final VoidCallback? onScrape;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: metrics.railRowVPad,
+        ),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: tokens.rule)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: StatusDot(
+                state: link.lastScraped == null
+                    ? StatusDotState.idle
+                    : StatusDotState.synced,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    link.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text$.body.copyWith(
+                      color: tokens.ink,
+                      fontSize: metrics.bodySize,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${link.strategyLabel} - ${_formatTimeAgo(link.lastScraped)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text$.micro.copyWith(
+                      color: tokens.inkMute,
+                      letterSpacing: 0,
+                      fontSize: metrics.microSize,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: onScrape,
+              child: busy
+                  ? SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: tokens.accent,
+                      ),
+                    )
+                    : Icon(
+                        Icons.radar_sharp,
+                        size: metrics.bodySize + 2,
+                        color: tokens.inkMute,
+                      ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MobileSourceSummary extends StatelessWidget {
+  const _MobileSourceSummary({
+    required this.metrics,
+    required this.links,
+    required this.loading,
+    required this.onSources,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final List<Link> links;
+  final bool loading;
+  final VoidCallback onSources;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final visibleLinks = links.take(4).toList(growable: false);
+
+    return InkWell(
+      onTap: onSources,
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: tokens.bg1.withValues(alpha: 0.72),
+          border: Border(bottom: BorderSide(color: tokens.rule)),
+        ),
+        padding: const EdgeInsets.fromLTRB(10, 6, 10, 7),
+        child: loading && links.isEmpty
+            ? Text(
+                'loading sources...',
+                style: text$.micro.copyWith(
+                  color: tokens.inkMute,
+                  fontSize: metrics.microSize,
+                ),
+              )
+            : Column(
+                children: [
+                  for (final link in visibleLinks)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1),
+                      child: Row(
+                        children: [
+                          StatusDot(
+                            state: link.lastScraped == null
+                                ? StatusDotState.idle
+                                : StatusDotState.synced,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            link.strategyLabel.toLowerCase(),
+                            style: text$.micro.copyWith(
+                              color: tokens.accent,
+                              fontSize: metrics.microSize,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
                           Expanded(
-                            flex: 5,
-                            child: _buildNotificationsPanel(
-                              notificationService,
-                              unreadNotifications,
+                            child: Text(
+                              link.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text$.micro.copyWith(
+                                color: tokens.inkDim,
+                                letterSpacing: 0,
+                                fontSize: metrics.microSize,
+                              ),
                             ),
                           ),
                         ],
-                      )
-                    else ...[
-                      _buildLinksPanel(linkService),
-                      const SizedBox(height: 24),
-                      _buildNotificationsPanel(
-                        notificationService,
-                        unreadNotifications,
+                      ),
+                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          links.length > visibleLinks.length
+                              ? '+ ${links.length - visibleLinks.length} more sources'
+                              : '${links.length} sources',
+                          style: text$.micro.copyWith(
+                            color: tokens.inkMute,
+                            fontSize: metrics.microSize,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        ':sources',
+                        style: text$.micro.copyWith(
+                          color: tokens.accent,
+                          fontSize: metrics.microSize,
+                        ),
                       ),
                     ],
-                    const SizedBox(height: 24),
-                    _HomeFooter(userData: userData),
-                  ],
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _UpdateConsole extends StatelessWidget {
+  const _UpdateConsole({
+    required this.metrics,
+    required this.notifications,
+    required this.loading,
+    required this.unreadCount,
+    required this.markingAllRead,
+    required this.isMarkingRead,
+    required this.onRefresh,
+    required this.onNotificationTap,
+    required this.onMarkAllRead,
+    required this.onSources,
+    this.mobileTui = false,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final List<NotificationItem> notifications;
+  final bool loading;
+  final int unreadCount;
+  final bool markingAllRead;
+  final bool Function(int id) isMarkingRead;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(NotificationItem notification) onNotificationTap;
+  final VoidCallback? onMarkAllRead;
+  final VoidCallback onSources;
+  final bool mobileTui;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final items = notifications;
+
+    return RefreshIndicator(
+      color: tokens.accent,
+      backgroundColor: tokens.bg2,
+      onRefresh: onRefresh,
+      child: CustomScrollView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: ClampingScrollPhysics(),
+        ),
+        slivers: [
+          if (!mobileTui)
+            SliverToBoxAdapter(
+              child: _ConsoleMasthead(
+                metrics: metrics,
+                unreadCount: unreadCount,
+                totalCount: items.length,
+                onScrape: onRefresh,
+                onSources: onSources,
+              ),
+            ),
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _ConsoleHeaderDelegate(
+              metrics: metrics,
+              mobileTui: mobileTui,
+              unreadCount: unreadCount,
+              markingAllRead: markingAllRead,
+              onMarkAllRead: onMarkAllRead,
+            ),
+          ),
+          if (loading && items.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: _LoadingState(message: 'Loading updates...'),
+            )
+          else if (items.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: _EmptyState(
+                  icon: Icons.mark_email_read_outlined,
+                  title: 'No updates yet',
+                  message:
+                      'Scrape your sources or add a new one to start filling the feed.',
+                  action: NotifButton(
+                    label: 'Manage sources',
+                    icon: Icons.add_link_sharp,
+                    onPressed: onSources,
+                  ),
+                ),
+              ),
+            )
+          else
+            SliverList.builder(
+              itemCount: items.length + 1,
+              itemBuilder: (context, index) {
+                if (index == items.length) {
+                  return Container(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: mobileTui ? 10 : 14,
+                      vertical: mobileTui ? 6 : metrics.updateRowVPad,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: tokens.rule)),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          'EOF - ${items.length} entries',
+                          style: text$.micro.copyWith(
+                            color: tokens.inkMute,
+                            fontSize: metrics.microSize,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (!mobileTui)
+                          Text(
+                            'pull to refresh - enter opens browser',
+                            style: text$.micro.copyWith(
+                              color: tokens.inkMute,
+                              fontSize: metrics.microSize,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }
+
+                final item = items[index];
+                return _ConsoleNotificationRow(
+                  notification: item,
+                  metrics: metrics,
+                  index: index,
+                  mobileTui: mobileTui,
+                  busy: isMarkingRead(item.id),
+                  onTap: () => onNotificationTap(item),
                 );
               },
             ),
-          ),
         ],
       ),
-    );
-  }
-
-  Widget _buildLinksPanel(LinkService linkService) {
-    return _DashboardPanel(
-      index: 1,
-      label: 'Registry',
-      title: 'Monitored links',
-      meta: '${linkService.links.length} total',
-      loading: linkService.loading,
-      action: NotifButton(
-        label: 'Refresh',
-        icon: Icons.sync_sharp,
-        variant: NotifButtonVariant.link,
-        size: NotifButtonSize.sm,
-        onPressed: linkService.loading ? null : _refreshDashboard,
-      ),
-      child: linkService.loading && linkService.links.isEmpty
-          ? const _LoadingState(message: 'Loading links...')
-          : linkService.links.isEmpty
-          ? _EmptyState(
-              icon: Icons.link_off_sharp,
-              title: 'No links in the registry',
-              message: 'Add a monitored page to start scraping for updates.',
-              action: NotifButton(
-                label: 'Add link',
-                icon: Icons.add_sharp,
-                onPressed: linkService.creating ? null : _handleAddLink,
-              ),
-            )
-          : Column(
-              children: [
-                for (final link in linkService.links) ...[
-                  _LinkCard(
-                    link: link,
-                    isScraping: linkService.isScrapingLink(link.id),
-                    isSaving: linkService.isUpdatingLink(link.id),
-                    isDeleting: linkService.isDeletingLink(link.id),
-                    onScrape: () => _handleScrapeLink(link),
-                    onEdit: () => _handleEditLink(link),
-                    onDelete: () => _handleDeleteLink(link),
-                    onOpen: () => _openExternalUrl(link.url),
-                  ),
-                  if (link != linkService.links.last)
-                    const SizedBox(height: 12),
-                ],
-              ],
-            ),
-    );
-  }
-
-  Widget _buildNotificationsPanel(
-    NotificationService notificationService,
-    List<NotificationItem> unreadNotifications,
-  ) {
-    return _DashboardPanel(
-      index: 2,
-      label: 'Signal feed',
-      title: 'Unread notifications',
-      meta: '${notificationService.unreadCount} unread',
-      loading: notificationService.loading,
-      action: Wrap(
-        spacing: 10,
-        runSpacing: 8,
-        children: [
-          if (notificationService.unreadCount > 0)
-            NotifButton(
-              label: notificationService.markingAllRead ? 'Working' : 'Read all',
-              variant: NotifButtonVariant.link,
-              size: NotifButtonSize.sm,
-              onPressed: notificationService.markingAllRead
-                  ? null
-                  : () => notificationService.markAllRead(),
-            ),
-          NotifButton(
-            label: 'Open feed',
-            variant: NotifButtonVariant.link,
-            size: NotifButtonSize.sm,
-            onPressed: _showNotificationsSheet,
-          ),
-        ],
-      ),
-      child:
-          notificationService.loading &&
-              notificationService.notifications.isEmpty
-          ? const _LoadingState(message: 'Loading notifications...')
-          : unreadNotifications.isEmpty
-          ? const _EmptyState(
-              icon: Icons.mark_email_read_outlined,
-              title: 'Inbox clear',
-              message:
-                  'Unread notifications will appear here after new updates are found.',
-            )
-          : Column(
-              children: [
-                for (final item in unreadNotifications) ...[
-                  _NotificationCard(
-                    notification: item,
-                    isBusy: notificationService.isMarkingRead(item.id),
-                    onTap: () => _handleNotificationTap(item),
-                    onMarkRead: () => notificationService.markRead(item.id),
-                  ),
-                  if (item != unreadNotifications.last)
-                    const SizedBox(height: 12),
-                ],
-              ],
-            ),
     );
   }
 }
 
-class _HeroPanel extends StatelessWidget {
-  const _HeroPanel({
-    required this.userData,
-    required this.linkCount,
+class _ConsoleMasthead extends StatelessWidget {
+  const _ConsoleMasthead({
+    required this.metrics,
     required this.unreadCount,
-    required this.backendLabel,
-    required this.scrapeInProgress,
-    required this.onAddLink,
-    required this.onScrapeAll,
+    required this.totalCount,
+    required this.onScrape,
+    required this.onSources,
   });
 
-  final UserData? userData;
-  final int linkCount;
+  final _HomeConsoleMetrics metrics;
   final int unreadCount;
-  final String backendLabel;
-  final bool scrapeInProgress;
-  final VoidCallback? onAddLink;
-  final VoidCallback? onScrapeAll;
+  final int totalCount;
+  final Future<void> Function() onScrape;
+  final VoidCallback onSources;
 
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
-    final name = userData?.name.trim();
-    final username = userData?.username.trim();
-    final identity = name != null && name.isNotEmpty
-        ? name
-        : username != null && username.isNotEmpty
-        ? username
-        : 'operator';
 
-    return NotifCard(
-      cornerMarks: true,
-      padding: const EdgeInsets.all(24),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 760;
-          final copy = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Eyebrow('Monitoring desk', tone: EyebrowTone.accent),
-              const SizedBox(height: 10),
-              Text(
-                'Quiet control of a noisy feed.',
-                style: text$.display.copyWith(
-                  color: tokens.ink,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                'Signed in as $identity. Keep the registry deliberate, run scrapes when you need fresh signals, and let the feed stay readable.',
-                style: text$.bodyLong.copyWith(color: tokens.inkDim),
-              ),
-              const SizedBox(height: 22),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        metrics.actionHPad + 8,
+        metrics.updateRowVPad + 6,
+        metrics.actionHPad + 8,
+        metrics.updateRowVPad + 4,
+      ),
+      child: NotifCard(
+        cornerMarks: true,
+        padding: EdgeInsets.all(metrics.actionHPad + 8),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 5,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _MetricPlate(label: 'Links', value: '$linkCount'),
-                  _MetricPlate(label: 'Unread', value: '$unreadCount'),
-                  _MetricPlate(label: 'Backend', value: backendLabel),
+                  const Eyebrow('Updates console', tone: EyebrowTone.accent),
+                  const SizedBox(height: 10),
+                  Text(
+                    unreadCount == 0
+                        ? 'Nothing urgent. Keep the feed quiet.'
+                        : '$unreadCount unread signals need review.',
+                    style: text$.title.copyWith(
+                      color: tokens.ink,
+                      fontStyle: FontStyle.italic,
+                      fontSize: metrics.bodySize * 1.8,
+                      height: 1.05,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '$totalCount total entries in the local console. Sources live in their own registry; this page is for reading and clearing updates.',
+                    style: text$.bodyLong.copyWith(
+                      color: tokens.inkDim,
+                      fontSize: metrics.bodySize,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      NotifButton(
+                        label: 'Refresh feed',
+                        icon: Icons.sync_sharp,
+                        onPressed: onScrape,
+                      ),
+                      NotifButton(
+                        label: 'Manage sources',
+                        icon: Icons.add_link_sharp,
+                        variant: NotifButtonVariant.ghost,
+                        onPressed: onSources,
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              const SizedBox(height: 22),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  NotifButton(
-                    label: scrapeInProgress ? 'Scraping' : 'Scrape all',
-                    icon: Icons.radar_sharp,
-                    onPressed: onScrapeAll,
-                  ),
-                  NotifButton(
-                    label: 'Add link',
-                    icon: Icons.add_sharp,
-                    variant: NotifButtonVariant.ghost,
-                    onPressed: onAddLink,
-                  ),
-                ],
-              ),
-            ],
-          );
-
-          if (!isWide) return copy;
-
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(flex: 5, child: copy),
-              const SizedBox(width: 28),
-              Expanded(
-                flex: 2,
+            ),
+            const SizedBox(width: 22),
+            Expanded(
+              flex: 2,
+              child: Align(
+                alignment: Alignment.centerRight,
                 child: Opacity(
-                  opacity: 0.82,
-                  child: _SignalOrb(size: math.min(220, constraints.maxWidth / 4)),
+                  opacity: 0.88,
+                  child: _SignalOrb(
+                    size: math.min(260, metrics.railWidth * 0.76),
+                  ),
                 ),
               ),
-            ],
-          );
-        },
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _DashboardPanel extends StatelessWidget {
-  const _DashboardPanel({
-    required this.index,
-    required this.label,
-    required this.title,
-    required this.child,
-    this.meta,
-    this.action,
-    this.loading = false,
+class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
+  const _ConsoleHeaderDelegate({
+    required this.metrics,
+    required this.mobileTui,
+    required this.unreadCount,
+    required this.markingAllRead,
+    required this.onMarkAllRead,
   });
 
+  final _HomeConsoleMetrics metrics;
+  final bool mobileTui;
+  final int unreadCount;
+  final bool markingAllRead;
+  final VoidCallback? onMarkAllRead;
+
+  @override
+  double get minExtent => mobileTui ? 25 : metrics.headerHeight;
+
+  @override
+  double get maxExtent => minExtent;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Container(
+      color: tokens.bg0.withValues(alpha: 0.97),
+      padding: EdgeInsets.symmetric(
+        horizontal: mobileTui ? 10 : 14,
+        vertical: mobileTui ? 4 : metrics.actionVPad,
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: mobileTui ? 60 : 82,
+            child: Text(
+              't',
+              style: text$.micro.copyWith(
+                color: tokens.inkMute,
+                fontSize: metrics.microSize,
+              ),
+            ),
+          ),
+          if (!mobileTui)
+            SizedBox(
+              width: 168,
+              child: Text(
+                'source',
+                style: text$.micro.copyWith(
+                  color: tokens.inkMute,
+                  fontSize: metrics.microSize,
+                ),
+              ),
+            ),
+          Expanded(
+            child: Text(
+              mobileTui ? 'signal - source' : 'signal',
+              style: text$.micro.copyWith(
+                color: tokens.inkMute,
+                fontSize: metrics.microSize,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: onMarkAllRead,
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: metrics.actionHPad,
+                vertical: metrics.actionVPad,
+              ),
+              decoration: BoxDecoration(
+                color: unreadCount > 0
+                    ? tokens.bg1
+                    : tokens.rule.withValues(alpha: 0.12),
+                border: Border.all(
+                  color: unreadCount > 0 ? tokens.ruleStrong : tokens.rule,
+                ),
+              ),
+              child: Text(
+                markingAllRead
+                    ? 'WORKING'
+                    : unreadCount > 0
+                    ? 'READ ALL'
+                    : 'CLEAR',
+                textAlign: TextAlign.right,
+                style: text$.micro.copyWith(
+                  color: unreadCount > 0 ? tokens.accent : tokens.inkMute,
+                  fontSize: metrics.microSize,
+                  letterSpacing: 0,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _ConsoleHeaderDelegate oldDelegate) {
+    return mobileTui != oldDelegate.mobileTui ||
+        metrics != oldDelegate.metrics ||
+        unreadCount != oldDelegate.unreadCount ||
+        markingAllRead != oldDelegate.markingAllRead ||
+        onMarkAllRead != oldDelegate.onMarkAllRead;
+  }
+}
+
+class _ConsoleNotificationRow extends StatelessWidget {
+  const _ConsoleNotificationRow({
+    required this.notification,
+    required this.metrics,
+    required this.index,
+    required this.mobileTui,
+    required this.busy,
+    required this.onTap,
+  });
+
+  final NotificationItem notification;
+  final _HomeConsoleMetrics metrics;
   final int index;
-  final String label;
-  final String title;
-  final String? meta;
-  final Widget child;
-  final Widget? action;
-  final bool loading;
+  final bool mobileTui;
+  final bool busy;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
+    final source = _notificationSource(notification);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        IndexRule(index: index, title: label, meta: meta),
-        NotifCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (loading)
-                LinearProgressIndicator(
-                  minHeight: 1,
-                  backgroundColor: tokens.rule,
-                  color: tokens.accent,
-                ),
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+    return InkWell(
+      onTap: busy ? null : onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: index.isOdd ? tokens.bg1.withValues(alpha: 0.42) : null,
+          border: Border(bottom: BorderSide(color: tokens.rule)),
+        ),
+        padding: EdgeInsets.symmetric(
+          horizontal: mobileTui ? 10 : 14,
+          vertical: mobileTui ? 4 : metrics.updateRowVPad,
+        ),
+        child: mobileTui
+            ? Row(
+                children: [
+                  _ReadPip(unread: notification.isUnread),
+                  const SizedBox(width: 7),
+                  SizedBox(
+                    width: 46,
+                    child: Text(
+                      _formatTimeAgo(notification.createdAt),
+                      style: text$.micro.copyWith(
+                        color: tokens.inkMute,
+                        letterSpacing: 0,
+                        fontSize: metrics.microSize,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Row(
                       children: [
+                        Text(
+                          _shortSource(source),
+                          style: text$.micro.copyWith(
+                            color: tokens.accent,
+                            letterSpacing: 0,
+                            fontSize: metrics.microSize,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            title,
-                            style: text$.title.copyWith(
+                            notification.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text$.body.copyWith(
                               color: tokens.ink,
-                              fontStyle: FontStyle.italic,
+                              fontSize: metrics.bodySize,
                             ),
                           ),
                         ),
-                        if (action != null) ...[
-                          const SizedBox(width: 12),
-                          action!,
+                      ],
+                    ),
+                  ),
+                  if (busy)
+                    SizedBox(
+                      width: 13,
+                      height: 13,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: tokens.accent,
+                      ),
+                    )
+                  else
+                    Icon(Icons.north_east_sharp, size: 12, color: tokens.inkMute),
+                ],
+              )
+            : Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _ReadPip(unread: notification.isUnread),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 64,
+                    child: Text(
+                      _formatTimeAgo(notification.createdAt),
+                      style: text$.micro.copyWith(
+                        color: tokens.inkMute,
+                        letterSpacing: 0,
+                        fontSize: metrics.microSize,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 168,
+                    child: Text(
+                      _shortSource(source),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text$.micro.copyWith(
+                        color: tokens.accent,
+                        letterSpacing: 0,
+                        fontSize: metrics.microSize,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Flexible(
+                          flex: 3,
+                          child: Text(
+                            notification.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text$.body.copyWith(
+                              color: tokens.ink,
+                              fontSize: metrics.bodySize,
+                            ),
+                          ),
+                        ),
+                        if (notification.description.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            flex: 4,
+                            child: Text(
+                              '- ${notification.description}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text$.micro.copyWith(
+                                color: tokens.inkMute,
+                                letterSpacing: 0,
+                                fontSize: metrics.microSize,
+                              ),
+                            ),
+                          ),
                         ],
                       ],
                     ),
-                    const SizedBox(height: 18),
-                    child,
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 102,
+                    child: busy
+                        ? Align(
+                            alignment: Alignment.centerRight,
+                            child: SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: tokens.accent,
+                              ),
+                            ),
+                          )
+                        : Align(
+                            alignment: Alignment.centerRight,
+                            child: Container(
+                              padding: EdgeInsets.symmetric(
+                                horizontal: metrics.actionHPad,
+                                vertical: metrics.actionVPad,
+                              ),
+                              decoration: BoxDecoration(
+                                color: notification.isUnread
+                                    ? tokens.bg1
+                                    : Colors.transparent,
+                                border: Border.all(
+                                  color: notification.isUnread
+                                      ? tokens.ruleStrong
+                                      : tokens.rule,
+                                ),
+                              ),
+                              child: Text(
+                                notification.isUnread ? 'READ' : 'OPEN',
+                                textAlign: TextAlign.right,
+                                style: text$.micro.copyWith(
+                                  color: notification.isUnread
+                                      ? tokens.accent
+                                      : tokens.inkDim,
+                                  letterSpacing: 0,
+                                  fontSize: metrics.microSize,
+                                ),
+                              ),
+                            ),
+                          ),
+                  ),
+                ],
               ),
-            ],
+      ),
+    );
+  }
+}
+
+class _ReadPip extends StatelessWidget {
+  const _ReadPip({required this.unread});
+
+  final bool unread;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+
+    return Container(
+      width: 8,
+      height: 8,
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: unread ? tokens.accent : Colors.transparent,
+        border: unread ? null : Border.all(color: tokens.ruleStrong),
+      ),
+    );
+  }
+}
+
+class _SignalOrb extends StatelessWidget {
+  const _SignalOrb({required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    return SizedBox.square(
+      dimension: size,
+      child: CustomPaint(
+        painter: _SignalOrbPainter(
+          ink: tokens.ink,
+          accent: tokens.accent,
+        ),
+      ),
+    );
+  }
+}
+
+class _SignalOrbPainter extends CustomPainter {
+  const _SignalOrbPainter({
+    required this.ink,
+    required this.accent,
+  });
+
+  final Color ink;
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const step = 4.0;
+    final center = Offset(size.width / 2, size.height / 2);
+    final radiusLimit = size.width / 2;
+    final inkPaint = Paint();
+    final accentPaint = Paint();
+
+    for (double y = 0; y < size.height; y += step) {
+      for (double x = 0; x < size.width; x += step) {
+        final dx = (x - center.dx) / radiusLimit;
+        final dy = (y - center.dy) / radiusLimit;
+        final distance = math.sqrt(dx * dx + dy * dy);
+        final density = math.max(0, 1 - distance);
+        final noise = _noise(x, y);
+        if (noise >= density) continue;
+
+        final point = Offset(x, y);
+        final pointRadius = 0.8 + _noise(x + 1, y + 1) * 1.2;
+        final isAccent = density > 0.62 && _noise(x + 13, y + 7) > 0.82;
+        final color = (isAccent ? accent : ink).withValues(
+          alpha: isAccent ? 0.74 : 0.84,
+        );
+        final paint = isAccent ? accentPaint : inkPaint;
+        paint.color = color;
+        canvas.drawCircle(point, pointRadius, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SignalOrbPainter oldDelegate) {
+    return oldDelegate.ink != ink || oldDelegate.accent != accent;
+  }
+
+  double _noise(double x, double y) {
+    final s = math.sin(x * 12.9898 + y * 78.233 + 215.37) * 43758.5453;
+    return s - s.floorToDouble();
+  }
+}
+
+class _MobileCommandLine extends StatelessWidget {
+  const _MobileCommandLine({
+    required this.metrics,
+    required this.count,
+    required this.onScrape,
+    required this.onSources,
+    required this.onSettings,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final int count;
+  final VoidCallback? onScrape;
+  final VoidCallback onSources;
+  final VoidCallback onSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: tokens.bg1,
+        border: Border(top: BorderSide(color: tokens.rule)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      child: Row(
+        children: [
+          Text(
+            ':',
+            style: text$.micro.copyWith(
+              color: tokens.accent,
+              fontSize: metrics.microSize,
+            ),
+          ),
+          const SizedBox(width: 8),
+          _CommandTap(metrics: metrics, label: 'scrape', onTap: onScrape),
+          _CommandTap(metrics: metrics, label: 'sources', onTap: onSources),
+          _CommandTap(metrics: metrics, label: 'settings', onTap: onSettings),
+          const Spacer(),
+          Text(
+            '$count',
+            style: text$.micro.copyWith(
+              color: tokens.inkMute,
+              fontSize: metrics.microSize,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CommandTap extends StatelessWidget {
+  const _CommandTap({
+    required this.metrics,
+    required this.label,
+    required this.onTap,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        child: Text(
+          label,
+          style: text$.micro.copyWith(
+            color: onTap == null ? tokens.inkMute : tokens.inkDim,
+            letterSpacing: 0,
+            fontSize: metrics.microSize,
           ),
         ),
-      ],
+      ),
+    );
+  }
+}
+
+class _ConsoleErrorStrip extends StatelessWidget {
+  const _ConsoleErrorStrip({
+    required this.linkError,
+    required this.notificationError,
+  });
+
+  final String? linkError;
+  final String? notificationError;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final errors = [
+      if (linkError != null) 'sources: $linkError',
+      if (notificationError != null) 'updates: $notificationError',
+    ];
+
+    return Container(
+      width: double.infinity,
+      color: NotifFeedback.error.withValues(alpha: 0.12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+      child: Text(
+        errors.join(' | '),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: text$.micro.copyWith(color: NotifFeedback.error),
+      ),
     );
   }
 }
@@ -864,124 +2139,6 @@ class _LinkCard extends StatelessWidget {
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NotificationCard extends StatelessWidget {
-  const _NotificationCard({
-    required this.notification,
-    required this.onTap,
-    this.onMarkRead,
-    this.isBusy = false,
-    this.compact = true,
-  });
-
-  final NotificationItem notification;
-  final VoidCallback onTap;
-  final VoidCallback? onMarkRead;
-  final bool isBusy;
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-
-    return NotifCard(
-      padding: EdgeInsets.zero,
-      onTap: isBusy ? null : onTap,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 5),
-              child: StatusDot(
-                state: notification.isUnread
-                    ? StatusDotState.live
-                    : StatusDotState.idle,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    notification.title,
-                    style: text$.heading.copyWith(color: tokens.ink),
-                  ),
-                  if (notification.description.isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      notification.description,
-                      maxLines: compact ? 2 : 4,
-                      overflow: TextOverflow.ellipsis,
-                      style: text$.body.copyWith(color: tokens.inkDim),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Text(
-                    _formatTimestamp(notification.createdAt),
-                    style: text$.micro.copyWith(color: tokens.inkMute),
-                  ),
-                ],
-              ),
-            ),
-            if (isBusy)
-              Padding(
-                padding: const EdgeInsets.only(left: 10),
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: tokens.accent,
-                  ),
-                ),
-              )
-            else if (onMarkRead != null)
-              NotifButton(
-                label: 'Read',
-                variant: NotifButtonVariant.link,
-                size: NotifButtonSize.sm,
-                onPressed: onMarkRead,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MetricPlate extends StatelessWidget {
-  const _MetricPlate({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-
-    return Container(
-      constraints: const BoxConstraints(minWidth: 112),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: tokens.bg1,
-        border: Border.all(color: tokens.rule),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Eyebrow(label, size: EyebrowSize.micro),
-          const SizedBox(height: 6),
-          Text(value, style: text$.heading.copyWith(color: tokens.ink)),
         ],
       ),
     );
@@ -1165,152 +2322,6 @@ class _ErrorBanner extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-class _HomeFooter extends StatelessWidget {
-  const _HomeFooter({required this.userData});
-
-  final UserData? userData;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-    final isNarrow = MediaQuery.sizeOf(context).width < 720;
-
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: tokens.rule)),
-      ),
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Wrap(
-              spacing: 18,
-              runSpacing: 6,
-              children: [
-                Text(
-                  (userData == null
-                          ? 'profile loading'
-                          : '@${userData!.username}')
-                      .toUpperCase(),
-                  style: text$.eyebrow.copyWith(color: tokens.inkDim),
-                ),
-                if (!isNarrow)
-                  Text(
-                    'sources active'.toUpperCase(),
-                    style: text$.eyebrow.copyWith(color: tokens.inkMute),
-                  ),
-              ],
-            ),
-          ),
-          StatusDot(
-            state: userData == null
-                ? StatusDotState.idle
-                : StatusDotState.synced,
-            label: userData == null ? 'loading' : 'authenticated',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  const _Badge({required this.value});
-
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-
-    return Container(
-      constraints: const BoxConstraints(minWidth: 18),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-      decoration: BoxDecoration(
-        color: tokens.accent,
-        border: Border.all(color: tokens.bg0),
-      ),
-      child: Text(
-        value,
-        textAlign: TextAlign.center,
-        style: text$.micro.copyWith(color: tokens.bg0),
-      ),
-    );
-  }
-}
-
-class _SignalOrb extends StatelessWidget {
-  const _SignalOrb({required this.size});
-
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    return SizedBox.square(
-      dimension: size,
-      child: CustomPaint(
-        painter: _SignalOrbPainter(
-          ink: tokens.ink,
-          accent: tokens.accent,
-        ),
-      ),
-    );
-  }
-}
-
-class _SignalOrbPainter extends CustomPainter {
-  const _SignalOrbPainter({
-    required this.ink,
-    required this.accent,
-  });
-
-  final Color ink;
-  final Color accent;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const step = 4.0;
-    final center = Offset(size.width / 2, size.height / 2);
-    final radiusLimit = size.width / 2;
-    final inkPaint = Paint();
-    final accentPaint = Paint();
-
-    for (double y = 0; y < size.height; y += step) {
-      for (double x = 0; x < size.width; x += step) {
-        final dx = (x - center.dx) / radiusLimit;
-        final dy = (y - center.dy) / radiusLimit;
-        final distance = math.sqrt(dx * dx + dy * dy);
-        final density = math.max(0, 1 - distance);
-        final noise = _noise(x, y);
-        if (noise >= density) continue;
-
-        final point = Offset(x, y);
-        final pointRadius = 0.8 + _noise(x + 1, y + 1) * 1.2;
-        final isAccent = density > 0.62 && _noise(x + 13, y + 7) > 0.82;
-        final color = (isAccent ? accent : ink).withValues(
-          alpha: isAccent ? 0.74 : 0.84,
-        );
-        final paint = isAccent ? accentPaint : inkPaint;
-        paint.color = color;
-        canvas.drawCircle(point, pointRadius, paint);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _SignalOrbPainter oldDelegate) {
-    return oldDelegate.ink != ink || oldDelegate.accent != accent;
-  }
-
-  double _noise(double x, double y) {
-    final s = math.sin(x * 12.9898 + y * 78.233 + 215.37) * 43758.5453;
-    return s - s.floorToDouble();
   }
 }
 
@@ -1580,18 +2591,50 @@ String _strategyDescription(String strategyClass) {
   }
 }
 
-String _formatTimeAgo(DateTime dateTime) {
+String _lastScrapeLabel(List<Link> links) {
+  final scraped = links
+      .map((link) => link.lastScraped)
+      .whereType<DateTime>()
+      .toList(growable: false);
+  if (scraped.isEmpty) return 'never';
+  scraped.sort((a, b) => b.compareTo(a));
+  return _formatTimeAgo(scraped.first).replaceAll(' ago', '');
+}
+
+String _notificationSource(NotificationItem notification) {
+  final uri = Uri.tryParse(notification.itemUrl);
+  final host = uri?.host;
+  if (host != null && host.isNotEmpty) {
+    return host.startsWith('www.') ? host.substring(4) : host;
+  }
+
+  final title = notification.title.trim();
+  final separator = title.indexOf(':');
+  if (separator > 0 && separator < 32) {
+    return title.substring(0, separator);
+  }
+  return 'update';
+}
+
+String _shortSource(String source) {
+  final normalized = source.toLowerCase();
+  if (normalized.contains('spacebattles')) return 'sb';
+  if (normalized.contains('sufficientvelocity')) return 'sv';
+  if (normalized.contains('questionablequesting')) return 'qq';
+  if (normalized.contains('daringfireball')) return 'df';
+  if (normalized.contains('ycombinator')) return 'hn';
+  if (normalized.contains('github')) return 'gh';
+  if (normalized.contains('kemono')) return 'kemono';
+  if (normalized.contains('.')) return normalized.split('.').first;
+  return normalized.length <= 12 ? normalized : normalized.substring(0, 12);
+}
+
+String _formatTimeAgo(DateTime? dateTime) {
+  if (dateTime == null) return 'never';
   final diff = DateTime.now().difference(dateTime);
   if (diff.inMinutes < 1) return 'just now';
   if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
   if (diff.inHours < 24) return '${diff.inHours}h ago';
   if (diff.inDays < 7) return '${diff.inDays}d ago';
   return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-}
-
-String _formatTimestamp(DateTime dateTime) {
-  final twoDigitMinute = dateTime.minute.toString().padLeft(2, '0');
-  final twoDigitHour = dateTime.hour.toString().padLeft(2, '0');
-  return '${dateTime.day}/${dateTime.month}/${dateTime.year} '
-      '$twoDigitHour:$twoDigitMinute';
 }

@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 enum AuthCardStyle { glass, framed }
 
+enum HomeDensity { comfortable, compact, dense }
+
 enum BackendUrlMode {
   /// Use only the built-in compile-time URL.
   builtin,
@@ -37,6 +39,7 @@ class AppSettingsController extends ChangeNotifier {
   static const String _customBackendUrlKey = 'customBackendUrl';
   static const String _colorwayKey = 'colorway';
   static const String _fontSetKey = 'fontSet';
+  static const String _homeDensityKey = 'homeDensity';
 
   bool _designDitheringEnabled = true;
   AuthCardStyle _authCardStyle = AuthCardStyle.framed;
@@ -44,6 +47,7 @@ class AppSettingsController extends ChangeNotifier {
   String _customBackendUrl = '';
   NotifColorway _colorway = NotifColorway.dusk1;
   NotifFontSet _fontSet = NotifFontSet.current;
+  HomeDensity _homeDensity = HomeDensity.compact;
 
   /// Surface the most recent persistence failure so UI can show a banner.
   /// Cleared to `null` on the next successful operation.
@@ -64,6 +68,7 @@ class AppSettingsController extends ChangeNotifier {
   String get customBackendUrl => _customBackendUrl;
   NotifColorway get colorway => _colorway;
   NotifFontSet get fontSet => _fontSet;
+  HomeDensity get homeDensity => _homeDensity;
 
   Future<void> _load() async {
     try {
@@ -90,6 +95,11 @@ class AppSettingsController extends ChangeNotifier {
         NotifFontSet.values,
         NotifFontSet.current,
       );
+      final homeDensity = _parseEnum(
+        prefs.getString(_homeDensityKey),
+        HomeDensity.values,
+        HomeDensity.compact,
+      );
       final customBackendUrl = prefs.getString(_customBackendUrlKey) ?? '';
 
       _designDitheringEnabled = designDitheringEnabled;
@@ -97,6 +107,7 @@ class AppSettingsController extends ChangeNotifier {
       _backendUrlMode = backendUrlMode;
       _colorway = colorway;
       _fontSet = fontSet;
+      _homeDensity = homeDensity;
       _customBackendUrl = customBackendUrl;
       _persistenceError = null;
     } catch (e, st) {
@@ -192,6 +203,16 @@ class AppSettingsController extends ChangeNotifier {
     await _write(
       'setFontSet',
       (prefs) => prefs.setString(_fontSetKey, set.name),
+    );
+  }
+
+  Future<void> setHomeDensity(HomeDensity density) async {
+    if (_homeDensity == density) return;
+    _homeDensity = density;
+    notifyListeners();
+    await _write(
+      'setHomeDensity',
+      (prefs) => prefs.setString(_homeDensityKey, density.name),
     );
   }
 
