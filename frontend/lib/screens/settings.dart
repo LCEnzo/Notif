@@ -71,7 +71,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                        Text('Preferences', style: _displayStyle),
+                        const Text('Preferences', style: _displayStyle),
                         const SizedBox(height: NotifDesignTokens.spaceBase),
                         Text(
                           'Settings holds design-system toggles that are safe to experiment with outside auth. Auth card swapping remains in the debug tuner on login and register.',

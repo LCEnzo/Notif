@@ -144,28 +144,28 @@ class _AppState extends State<App> {
             fontSize: 14,
           ),
         ),
-        dialogTheme: DialogThemeData(
+        dialogTheme: const DialogThemeData(
           backgroundColor: NotifDesignTokens.structRaised,
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          titleTextStyle: const TextStyle(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          titleTextStyle: TextStyle(
             fontFamily: NotifDesignTokens.displayFont,
             color: NotifDesignTokens.structText,
             fontSize: 24,
           ),
-          contentTextStyle: const TextStyle(
+          contentTextStyle: TextStyle(
             fontFamily: NotifDesignTokens.bodyFont,
             color: NotifDesignTokens.structText2,
             fontSize: 14,
             height: 1.4,
           ),
         ),
-        snackBarTheme: SnackBarThemeData(
+        snackBarTheme: const SnackBarThemeData(
           backgroundColor: NotifDesignTokens.structRaised,
-          contentTextStyle: const TextStyle(
+          contentTextStyle: TextStyle(
             fontFamily: NotifDesignTokens.bodyFont,
             color: NotifDesignTokens.structText,
           ),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           behavior: SnackBarBehavior.floating,
           actionTextColor: NotifDesignTokens.accentText,
         ),

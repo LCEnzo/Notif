@@ -281,10 +281,10 @@ class CustomButton extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: radius,
           boxShadow: [
-            BoxShadow(
+            const BoxShadow(
               color: AuthPalette.buttonShadow,
               blurRadius: 16,
-              offset: const Offset(0, 10),
+              offset: Offset(0, 10),
             ),
           ],
         ),

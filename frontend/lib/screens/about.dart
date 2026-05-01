@@ -55,7 +55,7 @@ class _AboutPageState extends State<AboutPage> {
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleSpacing: NotifDesignTokens.spaceLg,
-        title: Text('About', style: _headlineStyle),
+        title: const Text('About', style: _headlineStyle),
         actions: [
           IconButton(
             tooltip: 'Settings',
@@ -165,7 +165,7 @@ class _AboutPageState extends State<AboutPage> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
+                                    const Text(
                                       'Printed systems, not dashboards.',
                                       style: _titleStyle,
                                     ),
@@ -181,7 +181,7 @@ class _AboutPageState extends State<AboutPage> {
                                     const SizedBox(
                                       height: NotifDesignTokens.spaceMd,
                                     ),
-                                    Text(
+                                    const Text(
                                       'Pseudo-URI Sample',
                                       style: _labelStyle,
                                     ),
@@ -288,9 +288,9 @@ class _AboutPageState extends State<AboutPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.max,
       children: [
-        Text('SHOWCASE / NON-AUTH PILOT', style: _labelStyle),
+        const Text('SHOWCASE / NON-AUTH PILOT', style: _labelStyle),
         const SizedBox(height: NotifDesignTokens.spaceSm),
-        Text('About Notif', style: _displayStyle),
+        const Text('About Notif', style: _displayStyle),
         const SizedBox(height: NotifDesignTokens.spaceBase),
         Text(
           'Notif aggregates updates from pages, feeds, and accounts you care about, and notifies you when something changes. Notif is a personal project I made for my own needs, and to expand my skills and experience. As such, it\'s provided as is. '
