@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Stratechery by Ben Thompson</title>
+	<atom:link href="https://stratechery.com/feed/" rel="self" type="application/rss+xml" />
+	<link>https://stratechery.com</link>
+	<description>On the business, strategy, and impact of technology.</description>
+	<lastBuildDate>Wed, 29 Apr 2026 09:41:44 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+
+
+<image>
+	<url>https://i0.wp.com/stratechery.com/wp-content/uploads/2018/03/cropped-android-chrome-512x512-1.png?fit=32%2C32&#038;ssl=1</url>
+	<title>Stratechery by Ben Thompson</title>
+	<link>https://stratechery.com</link>
+	<width>32</width>
+	<height>32</height>
+</image>
+<site xmlns="com-wordpress:feed-additions:1">188043415</site>	<item>
+		<title>Intel Earnings, Intel&#8217;s Differentiation?, Whither Terafab</title>
+		<link>https://stratechery.com/2026/intel-earnings-intels-differentiation-whither-terafab/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Wed, 29 Apr 2026 10:00:00 +0000</pubDate>
+				<category><![CDATA[Daily Update]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18898</guid>
+
+					<description><![CDATA[Intel's earnings were very impressive, but the chief driver was a structural shift in demand for CPUs for AI. Plus, what is going on with Terafab?]]></description>
+										<content:encoded><![CDATA[<p>Intel's earnings were very impressive, but the chief driver was a structural shift in demand for CPUs for AI. Plus, what is going on with Terafab?</p>]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18898</post-id>	</item>
+		<item>
+		<title>An Interview with OpenAI CEO Sam Altman and AWS CEO Matt Garman About Bedrock Managed Agents</title>
+		<link>https://stratechery.com/2026/an-interview-with-openai-ceo-sam-altman-and-aws-ceo-matt-garman-about-bedrock-managed-agents/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Tue, 28 Apr 2026 17:00:00 +0000</pubDate>
+				<category><![CDATA[Daily Update]]></category>
+		<category><![CDATA[Interviews]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18891</guid>
+
+					<description><![CDATA[An interview with OpenAI CEO Sam Altman and AWS CEO Matt Garman about their new partnership, plus my thoughts on OpenAI and Microsoft's new deal.]]></description>
+										<content:encoded><![CDATA[<div class="wp-block-group has-border-color is-nowrap is-layout-flex wp-container-core-group-is-layout-77c2d4bd wp-block-group-is-layout-flex" style="border-color:#DDDDDD;border-w]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18891</post-id>	</item>
+		<item>
+		<title>AI Hardware, Meta Display, Redefining VR and AR</title>
+		<link>https://stratechery.com/2026/ai-hardware-meta-display-redefining-vr-and-ar/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Mon, 27 Apr 2026 10:00:00 +0000</pubDate>
+				<category><![CDATA[Daily Update]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18880</guid>
+
+					<description><![CDATA[I finally tried the Meta Ray-Ban Display, and it completely changed how I think about AR and VR.]]></description>
+										<content:encoded><![CDATA[<p>I finally tried the Meta Ray-Ban Display, and it completely changed how I think about AR and VR.</p>]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18880</post-id>	</item>
+		<item>
+		<title>2026.17: He Came, He Saw, He Cooked</title>
+		<link>https://stratechery.com/2026/he-came-he-saw-he-cooked/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Fri, 24 Apr 2026 17:00:00 +0000</pubDate>
+				<category><![CDATA[This Week in Stratechery]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18860</guid>
+
+					<description><![CDATA[The best Stratechery content from the week of April 27, 2026, including the end of the Tim Cook era, Cursor and SpaceX, and the various fronts of Cold War 2.0.]]></description>
+										<content:encoded><![CDATA[<figure class="wp-block-image size-large"><img data-recalc-dims="1" fetchpriority="high" decoding="async" width="1700" height="1197" src="https://i0.wp.com/stratechery.com/wp-cont]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18860</post-id>	</item>
+		<item>
+		<title>An Interview with Google Cloud CEO Thomas Kurian About the Agentic Moment</title>
+		<link>https://stratechery.com/2026/an-interview-with-google-cloud-ceo-thomas-kurian-about-the-agentic-moment/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Thu, 23 Apr 2026 10:00:00 +0000</pubDate>
+				<category><![CDATA[Daily Update]]></category>
+		<category><![CDATA[Interviews]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18854</guid>
+
+					<description><![CDATA[An interview with Google Cloud CEO Thomas Kurian about Google's cloud priorities, enterprise agent platform, and Google’s integration advantage.]]></description>
+										<content:encoded><![CDATA[<div class="wp-block-group has-border-color is-nowrap is-layout-flex wp-container-core-group-is-layout-77c2d4bd wp-block-group-is-layout-flex" style="border-color:#DDDDDD;border-w]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18854</post-id>	</item>
+		<item>
+		<title>John Ternus and Apple&#8217;s Hardware-Defined Future, SpaceXAI and Cursor</title>
+		<link>https://stratechery.com/2026/john-ternus-and-apples-hardware-defined-future-spacexai-and-cursor/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Wed, 22 Apr 2026 10:00:00 +0000</pubDate>
+				<category><![CDATA[Daily Update]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18847</guid>
+
+					<description><![CDATA[The elevation of John Ternus suggests that Apple's future is about hardware differentiation; then, the SpaceX-Cursor deal makes a lot of sense.]]></description>
+										<content:encoded><![CDATA[<p>The elevation of John Ternus suggests that Apple's future is about hardware differentiation; then, the SpaceX-Cursor deal makes a lot of sense.</p>]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18847</post-id>	</item>
+		<item>
+		<title>Tim Cook&#8217;s Impeccable Timing</title>
+		<link>https://stratechery.com/2026/tim-cooks-impeccable-timing/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Tue, 21 Apr 2026 10:00:00 +0000</pubDate>
+				<category><![CDATA[Articles]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18834</guid>
+
+					<description><![CDATA[Tim Cook had an extraordinary run — and impeccable timing, both in terms of when he became CEO, and when he is stepping down.]]></description>
+										<content:encoded><![CDATA[<div class="wp-block-passport-restricted-content">
+
+
+<div class="wp-block-passport-logged-out-view">
+<div class="wp-block-group wp-block-passport-podcast-player-logged-out-view ha]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18834</post-id>	</item>
+		<item>
+		<title>TSMC Earnings, New N3 Fabs, The Nvidia Ramp</title>
+		<link>https://stratechery.com/2026/tsmc-earnings-new-n3-fabs-the-nvidia-ramp/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Mon, 20 Apr 2026 10:00:00 +0000</pubDate>
+				<category><![CDATA[Daily Update]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18826</guid>
+
+					<description><![CDATA[TSMC's earnings suggest that the company's leadership is not truly bought into the AI growth story.]]></description>
+										<content:encoded><![CDATA[<p>TSMC's earnings suggest that the company's leadership is not truly bought into the AI growth story.</p>]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18826</post-id>	</item>
+		<item>
+		<title>2026.16: Servers, Satellites, and Stars</title>
+		<link>https://stratechery.com/2026/servers-satellites-and-stars/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Fri, 17 Apr 2026 17:00:00 +0000</pubDate>
+				<category><![CDATA[This Week in Stratechery]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18807</guid>
+
+					<description><![CDATA[The best Stratechery content from the week of April 13, 2026, including the cost of AI, what Amazon is doing with Globalstar, and Nico Rosberg on racing and investing.]]></description>
+										<content:encoded><![CDATA[<figure class="wp-block-image size-full"><img data-recalc-dims="1" loading="lazy" decoding="async" width="1600" height="900" src="https://i0.wp.com/stratechery.com/wp-content/uplo]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18807</post-id>	</item>
+		<item>
+		<title>An Interview with F1 Driver and Venture Capitalist Nico Rosberg About the Drive to Win</title>
+		<link>https://stratechery.com/2026/an-interview-with-f1-driver-and-venture-capitalist-nico-rosberg-about-the-drive-to-win/</link>
+
+		<dc:creator><![CDATA[Ben Thompson]]></dc:creator>
+		<pubDate>Thu, 16 Apr 2026 10:00:00 +0000</pubDate>
+				<category><![CDATA[Daily Update]]></category>
+		<category><![CDATA[Interviews]]></category>
+		<guid isPermaLink="false">https://stratechery.com/?p=18799</guid>
+
+					<description><![CDATA[An interview with former F1 driver and current venture capitalist Nico Rosberg about finding the mental edge and maximizing opportunities.]]></description>
+										<content:encoded><![CDATA[<div class="wp-block-group has-border-color is-nowrap is-layout-flex wp-container-core-group-is-layout-77c2d4bd wp-block-group-is-layout-flex" style="border-color:#DDDDDD;border-w]]></content:encoded>
+
+
+
+		<post-id xmlns="com-wordpress:feed-additions:1">18799</post-id>	</item>
+	</channel>
+</rss>

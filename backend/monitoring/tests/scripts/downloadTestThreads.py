@@ -10,4 +10,3 @@ response = requests.get(threadmarks_url)
 with open("skkitterdoc-threadmarks.html", 'xb') as f:
 	f.write(response.content)
 
-

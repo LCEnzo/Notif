@@ -51,9 +51,28 @@ class UserViewSetTestCase(ViewSetMixin):
 		self._test_update_object()
 
 	def test_delete_user(self):
-		# Users can only delete themselves (IsRequestingThemselves permission),
-		# so this deletes self.obj (regular_user). Side effect is accepted here.
-		self._test_delete_object()
+		# Users can only delete themselves (IsRequestingThemselves permission).
+		# Cannot use _test_delete_object(create_fields=...) because its DELETE
+		# uses self.api_client (regular_user), and the permission requires the
+		# delete to come from the user being deleted.
+		create_fields = {
+			"username": "disposable_delete_me",
+			"email": "del@example.com",
+			"name": "Delete Me",
+			"password": "disposable123!",
+		}
+		create_resp = self.api_client.post(reverse(self.list_view_name), create_fields)
+		self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
+
+		disposable_client = login_client(
+			APIClient(), create_fields["username"], create_fields["password"]
+		)
+		disposable_user = User.objects.get(username=create_fields["username"])
+		pk = disposable_user.pk
+		url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: pk})
+		response = disposable_client.delete(url)
+		self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+		self.assertFalse(User.objects.filter(pk=pk).exists())
 
 	def test_regular_user_permissions(self):
 		fields = {
