@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from accounts.models import User
-from commons.permissions import IsOwnerOrAdmin
+from commons.permissions import IsOwnerOrAdmin, OwnerOrAdminQuerysetMixin
 from commons.result import Err, Ok
 from monitoring.models import Link, Notification, Strategy
 from monitoring.serializers import LinkSerializer, NotificationSerializer, StrategySerializer
@@ -19,42 +19,25 @@ from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
 
 
-class LinkViewSet(ModelViewSet):
+class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
 	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = LinkSerializer
 
 	def get_queryset(self) -> QuerySet[Link]:
-		queryset = Link.objects.all()
-		user = self.request.user
-
-		if not isinstance(user, User):
-			return queryset.none()
-
-		user_is_admin = bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False))
-		if user_is_admin:
-			return queryset
-
-		return queryset.filter(user=user)
+		return self._scoped_queryset(Link.objects.all())
 
 
-class StrategyViewSet(ModelViewSet):
+class StrategyViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
 	permission_classes = [IsAuthenticated]
 	serializer_class = StrategySerializer
 
 	def get_queryset(self) -> QuerySet[Strategy]:
-		queryset = Strategy.objects.all()
-		user = self.request.user
-
-		if not isinstance(user, User):
-			return queryset.none()
-
-		user_is_admin = bool(getattr(user, 'is_staff', False) or getattr(user, 'is_superuser', False))
-		if user_is_admin:
-			return queryset
-
-		return queryset.filter(
-			Q(link_set__user=user) | Q(link_set__isnull=True)
-		).distinct()
+		return self._scoped_queryset(
+			Strategy.objects.all(),
+			user_filter=lambda qs, u: qs.filter(
+				Q(link_set__user=u) | Q(link_set__isnull=True)
+			).distinct(),
+		)
 
 
 class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):

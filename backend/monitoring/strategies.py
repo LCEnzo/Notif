@@ -1,8 +1,8 @@
-# This file contains scraping strategies/callables
-# This whole file is TODO
-
-# TODO:
-# 1. Add batch fetch to Strat classes. By default call _scrape for every URL.
+# Scraping strategies for Notif — pluggable callables that extract updates from
+# monitored web pages. Each strategy is registered via the @register decorator
+# and surfaced through the STRATEGY_CHOICES dict.
+#
+# TODO: Add batch fetch to Strat classes. By default call _scrape for every URL.
 # Implement via requests session, to reduce network load, and request spam.
 
 import hashlib

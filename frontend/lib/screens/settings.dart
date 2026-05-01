@@ -155,11 +155,11 @@ class _SettingsPageState extends State<SettingsPage> {
                             onChanged: settings.setCustomBackendUrl,
                           ),
                         ],
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
             ],
           ),
         );

@@ -57,9 +57,10 @@ class AppSettingsController extends ChangeNotifier {
   bool _loaded = false;
   bool get loaded => _loaded;
 
+  late final Future<void> initialized;
+
   AppSettingsController() {
-    // ignore: discarded_futures — fire-and-forget initial load.
-    _load();
+    initialized = _load();
   }
 
   bool get designDitheringEnabled => _designDitheringEnabled;
