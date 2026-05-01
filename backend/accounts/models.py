@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, cast
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
 from django.contrib.auth.validators import UnicodeUsernameValidator
@@ -12,9 +12,9 @@ class UserManager(BaseUserManager):
 			raise ValueError("Email is required")
 		email = self.normalize_email(email)
 		user = self.model(email=email, username=username, **extra_fields)
-		user.set_password(password) # type: ignore
+		cast(AbstractBaseUser, user).set_password(password)
 		user.save(using=self._db)
-		return user # type: ignore
+		return cast(User, user)
 
 	def create_superuser(self, email: str, username: str, password: str, **extra_fields) -> User:
 		extra_fields["is_staff"] = True
