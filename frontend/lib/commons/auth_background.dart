@@ -255,47 +255,21 @@ class _AuthBackdropPalette {
   });
 
   factory _AuthBackdropPalette.fromTokens(NotifTokens tokens) {
-    final bloomCore = Color.lerp(tokens.halo1, tokens.accent, 0.12)!;
-    final bloomMid = Color.lerp(tokens.halo2, tokens.halo1, 0.08)!;
-    final bloomEdge = Color.lerp(tokens.halo3, tokens.bg1, 0.12)!;
-    final grainFrom = Color.lerp(tokens.bg0, tokens.halo3, 0.18)!;
-    final grainTo = Color.lerp(tokens.halo1, tokens.accent, 0.42)!;
-    final halftoneTop = Color.lerp(tokens.bg0, tokens.halftone, 0.55)!;
+    final colors = tokens.authBackdrop;
 
     return _AuthBackdropPalette(
-      baseGradientColors: [
-        tokens.bg0,
-        tokens.bg0,
-        tokens.bg0,
-        tokens.bg0,
-        tokens.bg0,
-      ],
+      baseGradientColors: colors.baseGradientColors,
       baseGradientStops: const [0.0, 0.3, 0.58, 0.82, 1.0],
-      bloomColors: [
-        bloomCore.withValues(alpha: 0.96),
-        bloomMid.withValues(alpha: 0.84),
-        bloomEdge.withValues(alpha: 0.48),
-        tokens.bg1.withValues(alpha: 0.12),
-        Colors.transparent,
-      ],
-      bloomStops: const [0.0, 0.28, 0.55, 0.8, 1.0],
-      transitionColors: [
-        Colors.transparent,
-        tokens.halo3.withValues(alpha: 0.12),
-        tokens.bg1.withValues(alpha: 0.54),
-        tokens.bg0,
-      ],
-      transitionStops: const [0.30, 0.58, 0.84, 1.0],
-      floorFadeColors: [
-        Colors.transparent,
-        tokens.bg0.withValues(alpha: 0.66),
-        tokens.bg0,
-      ],
+      bloomColors: colors.bloomColors,
+      bloomStops: const [0.0, 0.24, 0.52, 1.0],
+      transitionColors: colors.transitionColors,
+      transitionStops: const [0.22, 0.56, 0.82, 1.0],
+      floorFadeColors: colors.floorFadeColors,
       floorFadeStops: const [0.72, 0.9, 1.0],
-      grainFrom: grainFrom,
-      grainTo: grainTo,
-      halftoneTop: halftoneTop,
-      halftoneBottom: tokens.halftone,
+      grainFrom: colors.grainFrom,
+      grainTo: colors.grainTo,
+      halftoneTop: colors.halftoneTop,
+      halftoneBottom: colors.halftoneBottom,
     );
   }
 }
@@ -334,8 +308,8 @@ class PageBackground extends StatelessWidget {
         shape: _BackgroundShape.rect,
       ),
       _CircularGradientOp(
-        centerYFactor: 0.0,
-        diameterFactor: 1.12,
+        centerYFactor: -0.05,
+        diameterFactor: 0.82,
         colors: palette.bloomColors,
         stops: palette.bloomStops,
       ),
@@ -403,6 +377,9 @@ class _PosterTextureLayer extends StatelessWidget {
     return FutureBuilder<ui.FragmentProgram>(
       future: _programFuture,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const SizedBox.expand();
+        }
         final program = snapshot.data;
         if (program == null) {
           return const SizedBox.expand();

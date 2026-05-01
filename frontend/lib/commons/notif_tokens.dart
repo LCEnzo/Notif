@@ -74,6 +74,65 @@ class NotifFeedback {
   static const Color warning = Color(0xFFB09040);
 }
 
+@immutable
+class AuthBackdropColors {
+  const AuthBackdropColors({
+    required this.baseGradientColors,
+    required this.bloomColors,
+    required this.transitionColors,
+    required this.floorFadeColors,
+    required this.grainFrom,
+    required this.grainTo,
+    required this.halftoneTop,
+    required this.halftoneBottom,
+  });
+
+  final List<Color> baseGradientColors;
+  final List<Color> bloomColors;
+  final List<Color> transitionColors;
+  final List<Color> floorFadeColors;
+  final Color grainFrom;
+  final Color grainTo;
+  final Color halftoneTop;
+  final Color halftoneBottom;
+
+  AuthBackdropColors lerp(AuthBackdropColors other, double t) {
+    return AuthBackdropColors(
+      baseGradientColors: _lerpColorList(
+        baseGradientColors,
+        other.baseGradientColors,
+        t,
+      ),
+      bloomColors: _lerpColorList(bloomColors, other.bloomColors, t),
+      transitionColors: _lerpColorList(
+        transitionColors,
+        other.transitionColors,
+        t,
+      ),
+      floorFadeColors: _lerpColorList(
+        floorFadeColors,
+        other.floorFadeColors,
+        t,
+      ),
+      grainFrom: Color.lerp(grainFrom, other.grainFrom, t)!,
+      grainTo: Color.lerp(grainTo, other.grainTo, t)!,
+      halftoneTop: Color.lerp(halftoneTop, other.halftoneTop, t)!,
+      halftoneBottom: Color.lerp(halftoneBottom, other.halftoneBottom, t)!,
+    );
+  }
+
+  static List<Color> _lerpColorList(
+    List<Color> a,
+    List<Color> b,
+    double t,
+  ) {
+    assert(a.length == b.length, 'Auth backdrop color lists must align.');
+    return [
+      for (var i = 0; i < a.length; i++) Color.lerp(a[i], b[i], t)!,
+    ];
+  }
+}
+
 /// Full token set per colorway. Consumed through [NotifTokens] on the Theme
 /// extension. Every field is required — no missing tokens, no fallbacks —
 /// because the spec (§3) treats a gap as a colorway bug.
@@ -103,6 +162,7 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
     required this.halftone,
     required this.halftoneBlend,
     required this.grainOpacity,
+    required this.authBackdrop,
   });
 
   final NotifColorway colorway;
@@ -142,6 +202,7 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
   final Color halftone;
   final BlendMode halftoneBlend;
   final double grainOpacity;
+  final AuthBackdropColors authBackdrop;
 
   Brightness get brightness => colorway.brightness;
 
@@ -183,6 +244,7 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
     Color? halftone,
     BlendMode? halftoneBlend,
     double? grainOpacity,
+    AuthBackdropColors? authBackdrop,
   }) {
     return NotifTokens(
       colorway: colorway ?? this.colorway,
@@ -208,6 +270,7 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
       halftone: halftone ?? this.halftone,
       halftoneBlend: halftoneBlend ?? this.halftoneBlend,
       grainOpacity: grainOpacity ?? this.grainOpacity,
+      authBackdrop: authBackdrop ?? this.authBackdrop,
     );
   }
 
@@ -243,6 +306,7 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
         halftone: Color.lerp(halftone, other.halftone, t)!,
         halftoneBlend: t < 0.5 ? halftoneBlend : other.halftoneBlend,
         grainOpacity: grainOpacity + (other.grainOpacity - grainOpacity) * t,
+        authBackdrop: authBackdrop.lerp(other.authBackdrop, t),
       );
     }
     return t < 0.5 ? this : other;
@@ -307,6 +371,36 @@ class _NotifColorwayRegistry {
       halftone: Color(0xFF000000),
       halftoneBlend: BlendMode.multiply,
       grainOpacity: 0.24,
+      authBackdrop: AuthBackdropColors(
+        baseGradientColors: [
+          Color(0xFF7716A4),
+          Color(0xFF5D148F),
+          Color(0xFF33104F),
+          Color(0xFF0B0716),
+          Color(0xFF000000),
+        ],
+        bloomColors: [
+          Color(0xFFFC2FA7),
+          Color(0xEEFA42B2),
+          Color(0xA0CC33DE),
+          Color(0x003E0D63),
+        ],
+        transitionColors: [
+          Color(0x00FFFFFF),
+          Color(0x44320D57),
+          Color(0xAA09040F),
+          Color(0xFF010103),
+        ],
+        floorFadeColors: [
+          Color(0x00000000),
+          Color(0xA6000000),
+          Color(0xFF000000),
+        ],
+        grainFrom: Color(0xFF16040B),
+        grainTo: Color(0xFF9A41DB),
+        halftoneTop: Color(0xFF0A0219),
+        halftoneBottom: Color(0xFF0A0219),
+      ),
     );
   }
 
@@ -335,6 +429,36 @@ class _NotifColorwayRegistry {
       halftone: Color(0xFF000000),
       halftoneBlend: BlendMode.multiply,
       grainOpacity: 0.28,
+      authBackdrop: AuthBackdropColors(
+        baseGradientColors: [
+          Color(0xFF8C1771),
+          Color(0xFF4C1D95),
+          Color(0xFF2D1244),
+          Color(0xFF14061F),
+          Color(0xFF000000),
+        ],
+        bloomColors: [
+          Color(0xFFFF2BB3),
+          Color(0xEEF560C9),
+          Color(0xA0B820CC),
+          Color(0x004C1D95),
+        ],
+        transitionColors: [
+          Color(0x00FFFFFF),
+          Color(0x444C1D95),
+          Color(0xAA16071F),
+          Color(0xFF050108),
+        ],
+        floorFadeColors: [
+          Color(0x00000000),
+          Color(0xA6050108),
+          Color(0xFF050108),
+        ],
+        grainFrom: Color(0xFF160828),
+        grainTo: Color(0xFFFF64C8),
+        halftoneTop: Color(0xFF040107),
+        halftoneBottom: Color(0xFF040107),
+      ),
     );
   }
 
@@ -363,6 +487,36 @@ class _NotifColorwayRegistry {
       halftone: Color(0xFF000000),
       halftoneBlend: BlendMode.multiply,
       grainOpacity: 0.30,
+      authBackdrop: AuthBackdropColors(
+        baseGradientColors: [
+          Color(0xFF0E5A7A),
+          Color(0xFF164E63),
+          Color(0xFF0F2438),
+          Color(0xFF030A12),
+          Color(0xFF000000),
+        ],
+        bloomColors: [
+          Color(0xFF22D3EE),
+          Color(0xEE67E8F9),
+          Color(0xA00891B2),
+          Color(0x00164E63),
+        ],
+        transitionColors: [
+          Color(0x00FFFFFF),
+          Color(0x44164E63),
+          Color(0xAA030A12),
+          Color(0xFF000305),
+        ],
+        floorFadeColors: [
+          Color(0x00000000),
+          Color(0xA6000305),
+          Color(0xFF000305),
+        ],
+        grainFrom: Color(0xFF061621),
+        grainTo: Color(0xFF7DCB99),
+        halftoneTop: Color(0xFF010408),
+        halftoneBottom: Color(0xFF010408),
+      ),
     );
   }
 
@@ -391,6 +545,36 @@ class _NotifColorwayRegistry {
       halftone: Color(0xFF1A1C14),
       halftoneBlend: BlendMode.multiply,
       grainOpacity: 0.22,
+      authBackdrop: AuthBackdropColors(
+        baseGradientColors: [
+          Color(0xFFA8B070),
+          Color(0xFFC9CC8D),
+          Color(0xFFD2CAA6),
+          Color(0xFFDED7B8),
+          Color(0xFFE8E2C8),
+        ],
+        bloomColors: [
+          Color(0xFFE8E2A8),
+          Color(0xEEA8B070),
+          Color(0xA08A9560),
+          Color(0x00C9CC8D),
+        ],
+        transitionColors: [
+          Color(0x00FFFFFF),
+          Color(0x55C9CC8D),
+          Color(0xAAD2CAA6),
+          Color(0xFFE8E2C8),
+        ],
+        floorFadeColors: [
+          Color(0x00E8E2C8),
+          Color(0xA6D2CAA6),
+          Color(0xFFE8E2C8),
+        ],
+        grainFrom: Color(0xFFE2DEBD),
+        grainTo: Color(0xFF8A7C49),
+        halftoneTop: Color(0xFF777565),
+        halftoneBottom: Color(0xFF1A1C14),
+      ),
     );
   }
 
@@ -419,6 +603,36 @@ class _NotifColorwayRegistry {
       halftone: Color(0xFF071624),
       halftoneBlend: BlendMode.multiply,
       grainOpacity: 0.20,
+      authBackdrop: AuthBackdropColors(
+        baseGradientColors: [
+          Color(0xFF0E5A7A),
+          Color(0xFF0891B2),
+          Color(0xFFC2D5DF),
+          Color(0xFFD5E3EA),
+          Color(0xFFE4EEF2),
+        ],
+        bloomColors: [
+          Color(0xFF67E8F9),
+          Color(0xEE0891B2),
+          Color(0xA00E5A7A),
+          Color(0x00164E63),
+        ],
+        transitionColors: [
+          Color(0x00FFFFFF),
+          Color(0x55164E63),
+          Color(0xAAC2D5DF),
+          Color(0xFFE4EEF2),
+        ],
+        floorFadeColors: [
+          Color(0x00E4EEF2),
+          Color(0xA6C2D5DF),
+          Color(0xFFE4EEF2),
+        ],
+        grainFrom: Color(0xFFBFD1D8),
+        grainTo: Color(0xFF49786B),
+        halftoneTop: Color(0xFF6A7781),
+        halftoneBottom: Color(0xFF071624),
+      ),
     );
   }
 }
