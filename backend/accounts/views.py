@@ -1,4 +1,3 @@
-
 from django.conf import settings
 from rest_framework import status
 from rest_framework.decorators import action
@@ -29,11 +28,8 @@ class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 			return
 
 		username = attrs.get(self.username_field)
-		password = attrs.get('password')
-		if (
-			username != settings.DEV_BOOTSTRAP_USERNAME or
-			password != settings.DEV_BOOTSTRAP_PASSWORD
-		):
+		password = attrs.get("password")
+		if username != settings.DEV_BOOTSTRAP_USERNAME or password != settings.DEV_BOOTSTRAP_PASSWORD:
 			return
 
 		existing_user = User._base_manager.filter(username=username).first()
@@ -41,7 +37,7 @@ class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 			if existing_user.date_deleted is not None or not existing_user.is_active:
 				existing_user.date_deleted = None
 				existing_user.is_active = True
-				existing_user.save(update_fields=['date_deleted', 'is_active', 'date_modified'])
+				existing_user.save(update_fields=["date_deleted", "is_active", "date_modified"])
 			return
 
 		User.objects.create_user(
@@ -62,7 +58,7 @@ class UserViewSet(ModelViewSet):
 
 	def get_serializer_class(self) -> type[BaseSerializer]:
 		requester_pk = self.request.user.pk if not self.request.user.is_anonymous else None
-		wanted_pk = self.kwargs.get('pk', None)
+		wanted_pk = self.kwargs.get("pk", None)
 
 		match (self.request.method, requester_pk):
 			case ("POST" | "PUT" | "PATCH", _):
@@ -82,11 +78,8 @@ class UserViewSet(ModelViewSet):
 
 		return super().get_permissions()
 
-	@action(detail=False, methods=['get', 'post'], permission_classes=[IsAuthenticated])
+	@action(detail=False, methods=["get", "post"], permission_classes=[IsAuthenticated])
 	def get_my_info(self, request: Request) -> Response:
 		user = request.user
 		assert isinstance(user, User)
-		return Response(
-			status=status.HTTP_200_OK,
-			data=UserFullReadSerializer(user).data
-		)
+		return Response(status=status.HTTP_200_OK, data=UserFullReadSerializer(user).data)

@@ -50,6 +50,4 @@ class Command(BaseCommand):
 						err_count += 1
 						self.stderr.write(f"  Link {link_id}: error — {msg}")
 
-			self.stdout.write(
-				f"Done. {ok_count} succeeded, {err_count} failed, {total_updates} total new update(s)."
-			)
+			self.stdout.write(f"Done. {ok_count} succeeded, {err_count} failed, {total_updates} total new update(s).")

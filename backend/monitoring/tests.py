@@ -130,7 +130,7 @@ class TestSelectorStratErr(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(requests_mock.ANY, exc=requests.exceptions.ReadTimeout)
-			result, new_data = strat.scrape(url, {}, {'last_alert': ''})
+			result, new_data = strat.scrape(url, {}, {"last_alert": ""})
 
 		assert isinstance(result, Err)
 		assert "Request failed" in result.error
@@ -139,8 +139,10 @@ class TestSelectorStratErr(TestCase):
 class RateLimiterTestCase(TestCase):
 	def test_same_domain_waits(self):
 		from monitoring.rate_limiter import DomainRateLimiter
+
 		limiter = DomainRateLimiter(delay=0.15)
 		import time
+
 		start = time.monotonic()
 		limiter.wait_for_domain("https://example.com/a")
 		limiter.wait_for_domain("https://example.com/b")
@@ -149,8 +151,10 @@ class RateLimiterTestCase(TestCase):
 
 	def test_different_domains_no_wait(self):
 		from monitoring.rate_limiter import DomainRateLimiter
+
 		limiter = DomainRateLimiter(delay=0.5)
 		import time
+
 		start = time.monotonic()
 		limiter.wait_for_domain("https://example.com/a")
 		limiter.wait_for_domain("https://other.com/b")
@@ -163,7 +167,7 @@ class TestSelectorStrat(TestCase):
 		strat = GeneralSelectorStrategy()
 
 		url = "https://kemono.party/patreon/user/50187986"
-		config_data = { "selectors": ["article.post-card"] }
+		config_data = {"selectors": ["article.post-card"]}
 		old_data: dict[str, list[int]] = {}
 		html_content = """
 		<html>
@@ -178,9 +182,9 @@ class TestSelectorStrat(TestCase):
 			notif_data, new_data = strat(URL(url), config_data, old_data)
 
 		logger.debug(
-			"selector strat on kemono: \\t" +
-			f"{notif_data = } \n--------------------------\n" +
-			f"{new_data = }\n--------------------------\n"
+			"selector strat on kemono: \\t"
+			+ f"{notif_data = } \n--------------------------\n"
+			+ f"{new_data = }\n--------------------------\n"
 		)
 
 		assert isinstance(notif_data, Ok)
@@ -190,33 +194,35 @@ class TestSelectorStrat(TestCase):
 
 class SBSVThreadmarksStrategyTestCase(TestCase):
 	def setUp(self):
-		self.url = URL('http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1')
+		self.url = URL(
+			"http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1"
+		)
 		self.strategy = SBSVThreadmarksStrategy()
 
 	@pytest.mark.slow
 	@pytest.mark.e2e
 	def test_scrape(self):
-		file_path = f'{os.path.dirname(__file__)}/tests/skkitterdoc-threadmarks.html'
+		file_path = f"{os.path.dirname(__file__)}/tests/skkitterdoc-threadmarks.html"
 		with open(file_path) as html_file, requests_mock.Mocker() as mocker:
 			html_content = html_file.read()
 			mocker.get(self.url, text=html_content)
 
-			updates, new_data = self.strategy.scrape(self.url, {}, {'last_alert': '2023-06-08T15:30:00+0000'})
+			updates, new_data = self.strategy.scrape(self.url, {}, {"last_alert": "2023-06-08T15:30:00+0000"})
 
 			assert new_data is not None
-			assert ('last_alert' in new_data)
+			assert "last_alert" in new_data
 			assert isinstance(updates, Ok)
 			assert len(updates.value) >= 2
 
 
 class LinkViewSetTestCase(ViewSetMixin):
 	def setUp(
-			self,
-			list_view_name: str = "links-list",
-			detail_view_name: str = "links-detail",
-			model: type[Model] = Link,
-			obj: Model | None = None,
-		) -> None:
+		self,
+		list_view_name: str = "links-list",
+		detail_view_name: str = "links-detail",
+		model: type[Model] = Link,
+		obj: Model | None = None,
+	) -> None:
 		super().setUp(
 			list_view_name=list_view_name,
 			detail_view_name=detail_view_name,
@@ -236,14 +242,14 @@ class LinkViewSetTestCase(ViewSetMixin):
 			"name": "Skitterdoc on Spacebattles",
 			"url": "http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1",
 			"user": f"{self.regular_user.pk}",
-			"strategy": self.strat.pk
+			"strategy": self.strat.pk,
 		}
 		resp = self._test_create_object(fields=fields)  # noqa: F841
 		# print(f"{resp = }")
 		# print(f"{resp.content!r}")
 
 	def test_get_strat_choices(self):
-		response = self.api_client.get(reverse('get-strat-choices'))
+		response = self.api_client.get(reverse("get-strat-choices"))
 
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(isinstance(response.data, list))
@@ -253,28 +259,30 @@ class LinkViewSetTestCase(ViewSetMixin):
 		self._test_update_object()
 
 	def test_delete_link(self):
-		self._test_delete_object(create_fields={
-			"name": "Disposable link",
-			"url": "https://example.com/disposable",
-			"user": f"{self.regular_user.pk}",
-			"strategy": self.strat.pk,
-		})
+		self._test_delete_object(
+			create_fields={
+				"name": "Disposable link",
+				"url": "https://example.com/disposable",
+				"user": f"{self.regular_user.pk}",
+				"strategy": self.strat.pk,
+			}
+		)
 
 	def test_regular_link_permissions(self):
 		fields = {
 			"name": "Skitterdoc on Spacebattles",
 			"url": "http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1",
 			"user": f"{self.regular_user.pk}",
-			"strategy": self.strat.pk
+			"strategy": self.strat.pk,
 		}
 		update_fields = {"name": "Maria"}
-		permissions = {'list': True, 'retrieve': True, 'create': True, 'update': True, 'delete': True}
+		permissions = {"list": True, "retrieve": True, "create": True, "update": True, "delete": True}
 		self._test_permissions(
 			user=self.regular_user,
 			obj_pk=self.links[0].pk,
 			fields=fields,
 			update_fields=update_fields,
-			permissions=permissions
+			permissions=permissions,
 		)
 
 	def test_other_user_link_permissions(self):
@@ -282,16 +290,16 @@ class LinkViewSetTestCase(ViewSetMixin):
 			"name": "Skitterdoc on Spacebattles",
 			"url": "http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1",
 			"user": f"{self.regular_user.pk}",
-			"strategy": self.strat.pk
+			"strategy": self.strat.pk,
 		}
 		update_fields = {"name": "Maria"}
-		permissions = {'list': True, 'retrieve': False, 'create': True, 'update': False, 'delete': False}
+		permissions = {"list": True, "retrieve": False, "create": True, "update": False, "delete": False}
 		_ = self._test_permissions(
 			user=self.secondary_user,
 			obj_pk=self.links[0].pk,
 			fields=fields,
 			update_fields=update_fields,
-			permissions=permissions
+			permissions=permissions,
 		)
 
 
@@ -302,10 +310,10 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 			data={"selectors": ["body"]},
 		)
 
-		response = self.api_client.get(reverse('strategies-list'))
+		response = self.api_client.get(reverse("strategies-list"))
 
 		self.assertEqual(response.status_code, 200)
-		ids = [item['id'] for item in response.data]
+		ids = [item["id"] for item in response.data]
 		self.assertIn(orphan.pk, ids)
 
 	def test_list_excludes_other_users_non_orphaned_strategies(self):
@@ -320,10 +328,10 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 			strategy=other_only_strategy,
 		)
 
-		response = self.api_client.get(reverse('strategies-list'))
+		response = self.api_client.get(reverse("strategies-list"))
 
 		self.assertEqual(response.status_code, 200)
-		ids = [item['id'] for item in response.data]
+		ids = [item["id"] for item in response.data]
 		self.assertNotIn(other_only_strategy.pk, ids)
 
 	def test_delete_orphaned_strategy(self):
@@ -332,9 +340,7 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 			data={"selectors": ["body"]},
 		)
 
-		response = self.api_client.delete(
-			reverse('strategies-detail', kwargs={'pk': orphan.pk})
-		)
+		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": orphan.pk}))
 
 		self.assertEqual(response.status_code, 204)
 		self.assertFalse(Strategy.objects.filter(pk=orphan.pk).exists())
@@ -362,31 +368,31 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 		)
 
 	def test_list_returns_only_own_notifications(self):
-		response = self.api_client.get(reverse('notifications-list'))
+		response = self.api_client.get(reverse("notifications-list"))
 		self.assertEqual(response.status_code, 200)
-		ids = [n['id'] for n in response.data]
+		ids = [n["id"] for n in response.data]
 		self.assertIn(self.notification.pk, ids)
 		self.assertNotIn(self.other_notification.pk, ids)
 
 	def test_filter_by_status(self):
-		response = self.api_client.get(reverse('notifications-list'), {'status': 'unread'})
+		response = self.api_client.get(reverse("notifications-list"), {"status": "unread"})
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(len(response.data), 1)
 
 		# Mark it read, then filter again
 		self.api_client.patch(
-			reverse('notifications-detail', kwargs={'pk': self.notification.pk}),
-			{'status': 'read'},
-			format='json',
+			reverse("notifications-detail", kwargs={"pk": self.notification.pk}),
+			{"status": "read"},
+			format="json",
 		)
-		response = self.api_client.get(reverse('notifications-list'), {'status': 'unread'})
+		response = self.api_client.get(reverse("notifications-list"), {"status": "unread"})
 		self.assertEqual(len(response.data), 0)
 
 	def test_patch_mark_as_read_sets_read_at(self):
 		response = self.api_client.patch(
-			reverse('notifications-detail', kwargs={'pk': self.notification.pk}),
-			{'status': 'read'},
-			format='json',
+			reverse("notifications-detail", kwargs={"pk": self.notification.pk}),
+			{"status": "read"},
+			format="json",
 		)
 		self.assertEqual(response.status_code, 200)
 		self.notification.refresh_from_db()
@@ -395,9 +401,7 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 
 	def test_other_user_cannot_access(self):
 		other_client = login_client(APIClient(), self.secondary_user.get_username())
-		response = other_client.get(
-			reverse('notifications-detail', kwargs={'pk': self.notification.pk})
-		)
+		response = other_client.get(reverse("notifications-detail", kwargs={"pk": self.notification.pk}))
 		self.assertEqual(response.status_code, 404)
 
 	def test_mark_all_read(self):
@@ -408,9 +412,9 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 			item_url="https://example.com/2",
 		)
 
-		response = self.api_client.post(reverse('notifications-mark-all-read'))
+		response = self.api_client.post(reverse("notifications-mark-all-read"))
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(response.data['marked_read'], 2)
+		self.assertEqual(response.data["marked_read"], 2)
 
 		unread_count = Notification.objects.filter(
 			update__link__user=self.regular_user, status=Notification.Status.UNREAD
@@ -476,7 +480,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 
 	def test_scrape_link_updates_comparison_info(self):
 		link = self.links[0]
-		assert link.comparison_info == ''
+		assert link.comparison_info == ""
 
 		html = '<html><body><article class="post-card">Post</article></body></html>'
 		with requests_mock.Mocker() as mocker:
@@ -484,7 +488,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 			scrape_link(link)
 
 		link.refresh_from_db()
-		assert link.comparison_info != ''
+		assert link.comparison_info != ""
 
 	def test_management_command_runs(self):
 		link = self.links[0]
@@ -493,7 +497,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 		with requests_mock.Mocker() as mocker:
 			mocker.get(requests_mock.ANY, text=html)
 			# Should not raise
-			call_command('scrape', '--link', str(link.pk), '--delay', '0')
+			call_command("scrape", "--link", str(link.pk), "--delay", "0")
 
 	def test_management_command_bulk_passes_custom_delay(self):
 		rate_limiter = object()
@@ -502,7 +506,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 			patch("monitoring.management.commands.scrape.DomainRateLimiter", return_value=rate_limiter) as limiter_cls,
 			patch("monitoring.management.commands.scrape.scrape_all_links", return_value={}) as scrape_all,
 		):
-			call_command('scrape', '--delay', '5')
+			call_command("scrape", "--delay", "5")
 
 		limiter_cls.assert_called_once_with(delay=5.0)
 		scrape_all.assert_called_once_with(user_id=None, rate_limiter=rate_limiter)
@@ -630,9 +634,7 @@ class FeedStrategyTestCase(TestCase):
 		"""With last_entry_id set to the middle entry, returns entries before that point."""
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=ATOM_FEED_XML)
-			result, comparison = self.strategy.scrape(
-				self.feed_url, {}, {"last_entry_id": "tag:example.com,2024:3"}
-			)
+			result, comparison = self.strategy.scrape(self.feed_url, {}, {"last_entry_id": "tag:example.com,2024:3"})
 
 		assert isinstance(result, Ok)
 		assert len(result.value) == 2
@@ -993,39 +995,41 @@ class FeedStrategyRealFeedTestCase(TestCase):
 		assert len(result.value) >= 20, f"Expected >=20, got {len(result.value)}"
 		assert comparison is not None
 
+
 # ── Property-Based Tests ————————————————————————————————————————————————
 # These use Hypothesis to verify invariants across generated RSS and Atom feeds.
 
 NL = "\n"
 
+
 @st.composite
 def _rss_item(draw):
-    """Generate a single RSS <item> with optional guid and description."""
-    escape = xml.sax.saxutils.escape
-    title = escape(draw(st.text(min_size=1, max_size=60)))
-    link = escape(draw(st.text(min_size=3, max_size=100)))
-    has_guid = draw(st.booleans())
-    guid = escape(draw(st.text(min_size=1, max_size=60))) if has_guid else None
-    has_desc = draw(st.booleans())
-    desc = escape(draw(st.text(min_size=1, max_size=150))) if has_desc else None
+	"""Generate a single RSS <item> with optional guid and description."""
+	escape = xml.sax.saxutils.escape
+	title = escape(draw(st.text(min_size=1, max_size=60)))
+	link = escape(draw(st.text(min_size=3, max_size=100)))
+	has_guid = draw(st.booleans())
+	guid = escape(draw(st.text(min_size=1, max_size=60))) if has_guid else None
+	has_desc = draw(st.booleans())
+	desc = escape(draw(st.text(min_size=1, max_size=150))) if has_desc else None
 
-    parts = [f"<title>{title}</title>", f"<link>{link}</link>"]
-    if guid is not None:
-        parts.append(f'<guid isPermaLink="false">{guid}</guid>')
-    if desc is not None:
-        parts.append(f"<description>{desc}</description>")
+	parts = [f"<title>{title}</title>", f"<link>{link}</link>"]
+	if guid is not None:
+		parts.append(f'<guid isPermaLink="false">{guid}</guid>')
+	if desc is not None:
+		parts.append(f"<description>{desc}</description>")
 
-    nl = "\n"
-    return "    <item>" + nl + "      " + nl.join(parts) + nl + "    </item>"
+	nl = "\n"
+	return "    <item>" + nl + "      " + nl.join(parts) + nl + "    </item>"
 
 
 @st.composite
 def _rss_feed_xml(draw, min_items=1, max_items=20):
-    """Generate a valid RSS 2.0 feed with randomized items."""
-    n = draw(st.integers(min_value=min_items, max_value=max_items))
-    items = draw(st.lists(_rss_item(), min_size=n, max_size=n))
+	"""Generate a valid RSS 2.0 feed with randomized items."""
+	n = draw(st.integers(min_value=min_items, max_value=max_items))
+	items = draw(st.lists(_rss_item(), min_size=n, max_size=n))
 
-    return f"""<?xml version="1.0" encoding="utf-8"?>
+	return f"""<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0">
   <channel>
     <title>Hypothesis Test Feed</title>
@@ -1038,35 +1042,35 @@ def _rss_feed_xml(draw, min_items=1, max_items=20):
 
 @st.composite
 def _atom_entry(draw):
-    """Generate a single Atom <entry> with optional summary."""
-    escape = xml.sax.saxutils.escape
-    eid = escape(draw(st.text(min_size=1, max_size=60)))
-    title = escape(draw(st.text(min_size=1, max_size=60)))
-    # quoteattr wraps in quotes and escapes " and ' — escape() alone doesn't
-    # handle attribute-value quoting, which can produce invalid XML.
-    link = xml.sax.saxutils.quoteattr(draw(st.text(min_size=3, max_size=100)))
-    has_summary = draw(st.booleans())
-    summary = escape(draw(st.text(min_size=1, max_size=150))) if has_summary else None
+	"""Generate a single Atom <entry> with optional summary."""
+	escape = xml.sax.saxutils.escape
+	eid = escape(draw(st.text(min_size=1, max_size=60)))
+	title = escape(draw(st.text(min_size=1, max_size=60)))
+	# quoteattr wraps in quotes and escapes " and ' — escape() alone doesn't
+	# handle attribute-value quoting, which can produce invalid XML.
+	link = xml.sax.saxutils.quoteattr(draw(st.text(min_size=3, max_size=100)))
+	has_summary = draw(st.booleans())
+	summary = escape(draw(st.text(min_size=1, max_size=150))) if has_summary else None
 
-    parts = [
-        f"<id>tag:example.com,2024:{eid}</id>",
-        f"<title>{title}</title>",
-        f"<link href={link}/>",
-    ]
-    if summary is not None:
-        parts.append(f"<summary>{summary}</summary>")
+	parts = [
+		f"<id>tag:example.com,2024:{eid}</id>",
+		f"<title>{title}</title>",
+		f"<link href={link}/>",
+	]
+	if summary is not None:
+		parts.append(f"<summary>{summary}</summary>")
 
-    nl = "\n"
-    return "  <entry>" + nl + "    " + nl.join(parts) + nl + "  </entry>"
+	nl = "\n"
+	return "  <entry>" + nl + "    " + nl.join(parts) + nl + "  </entry>"
 
 
 @st.composite
 def _atom_feed_xml(draw, min_items=1, max_items=20):
-    """Generate a valid Atom 1.0 feed with randomized entries."""
-    n = draw(st.integers(min_value=min_items, max_value=max_items))
-    entries = draw(st.lists(_atom_entry(), min_size=n, max_size=n))
+	"""Generate a valid Atom 1.0 feed with randomized entries."""
+	n = draw(st.integers(min_value=min_items, max_value=max_items))
+	entries = draw(st.lists(_atom_entry(), min_size=n, max_size=n))
 
-    return f"""<?xml version="1.0" encoding="utf-8"?>
+	return f"""<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Hypothesis Atom Feed</title>
   <link href="https://example.com/feed" rel="self"/>
@@ -1075,36 +1079,32 @@ def _atom_feed_xml(draw, min_items=1, max_items=20):
 
 
 class FeedStrategyDedupPropertyTestCase(HypothesisTestCase):
-    """Property-based tests for FeedStrategy dedup invariant."""
+	"""Property-based tests for FeedStrategy dedup invariant."""
 
-    def setUp(self):
-        self.strategy = FeedStrategy()
+	def setUp(self):
+		self.strategy = FeedStrategy()
 
-    @pytest.mark.property
-    @given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
-    @settings(max_examples=200)
-    def test_dedup_is_idempotent(self, feed_xml):
-        """Second scrape with first scrape's comparison data returns zero new entries."""
-        url = URL("https://example.com/feed")
+	@pytest.mark.property
+	@given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
+	@settings(max_examples=200)
+	def test_dedup_is_idempotent(self, feed_xml):
+		"""Second scrape with first scrape's comparison data returns zero new entries."""
+		url = URL("https://example.com/feed")
 
-        with requests_mock.Mocker() as mocker:
-            mocker.get(url, text=feed_xml)
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, text=feed_xml)
 
-            # First scrape
-            result1, comparison1 = self.strategy.scrape(url, {}, {})
-            assert isinstance(result1, Ok), f"First scrape failed: {result1}"
-            assert len(result1.value) > 0, (
-                f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
-            )
-            assert comparison1 is not None
+			# First scrape
+			result1, comparison1 = self.strategy.scrape(url, {}, {})
+			assert isinstance(result1, Ok), f"First scrape failed: {result1}"
+			assert len(result1.value) > 0, f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
+			assert comparison1 is not None
 
-            # Second scrape with comparison data from first
-            result2, comparison2 = self.strategy.scrape(url, {}, comparison1)
-            assert isinstance(result2, Ok), f"Second scrape failed: {result2}"
-            assert len(result2.value) == 0, (
-                f"Dedup invariant violated: second scrape returned "
-                f"{len(result2.value)} entries. comparison1: {comparison1}"
-            )
-            assert comparison2 is None, (
-                f"Expected None comparison on dedup hit, got: {comparison2}"
-            )
+			# Second scrape with comparison data from first
+			result2, comparison2 = self.strategy.scrape(url, {}, comparison1)
+			assert isinstance(result2, Ok), f"Second scrape failed: {result2}"
+			assert len(result2.value) == 0, (
+				f"Dedup invariant violated: second scrape returned "
+				f"{len(result2.value)} entries. comparison1: {comparison1}"
+			)
+			assert comparison2 is None, f"Expected None comparison on dedup hit, got: {comparison2}"

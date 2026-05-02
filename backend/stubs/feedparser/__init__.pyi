@@ -5,5 +5,4 @@ class FeedParserDict(dict[str, Any]):
 	bozo: bool
 	bozo_exception: BaseException | None
 
-
 def parse(data: bytes | str) -> FeedParserDict: ...
