@@ -6,9 +6,10 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 
 from accounts.models import User
 from accounts.serializers import (
@@ -17,6 +18,10 @@ from accounts.serializers import (
 	UserMinimalReadSerializer,
 )
 from commons.permissions import IsRequestingThemselves, ReadOnly
+
+# Imported here rather than django.conf.settings so TESTING (a module-level
+# variable, not a Django setting) is directly accessible.
+from notif.settings import TESTING
 
 
 class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -54,11 +59,45 @@ class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class DevBootstrapTokenObtainPairView(TokenObtainPairView):
 	serializer_class = DevBootstrapTokenObtainPairSerializer
+	throttle_scope = 'login'
+
+	def get_throttles(self):
+		throttles = [UserRateThrottle()]
+		if not TESTING:
+			throttles.append(ScopedRateThrottle())
+		return throttles
+
+
+class ThrottledTokenRefreshView(TokenRefreshView):
+	throttle_scope = 'token_refresh'
+
+	def get_throttles(self):
+		throttles = [UserRateThrottle()]
+		if not TESTING:
+			throttles.append(ScopedRateThrottle())
+		return throttles
+
+
+class ThrottledTokenVerifyView(TokenVerifyView):
+	throttle_scope = 'token_verify'
+
+	def get_throttles(self):
+		throttles = [UserRateThrottle()]
+		if not TESTING:
+			throttles.append(ScopedRateThrottle())
+		return throttles
 
 
 class UserViewSet(ModelViewSet):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
+
+	def get_throttles(self):
+		"""Apply stricter 'register' throttle on account creation."""
+		throttles = super().get_throttles()
+		if self.action == 'create' and not TESTING:
+			throttles.append(ScopedRateThrottle())
+		return throttles
 
 	def get_serializer_class(self) -> type[BaseSerializer]:
 		requester_pk = self.request.user.pk if not self.request.user.is_anonymous else None
