@@ -15,9 +15,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
+from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.views import (  # type: ignore
-    TokenRefreshView,
-    TokenVerifyView,
+	TokenRefreshView,
+	TokenVerifyView,
 )
 
 from accounts.views import DevBootstrapTokenObtainPairView
@@ -30,4 +32,8 @@ urlpatterns = [
 	path('api/v1/token/', DevBootstrapTokenObtainPairView.as_view(), name='token_obtain_pair'), # type: ignore
 	path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # type: ignore
 	path('api/v1/token/verify/', TokenVerifyView.as_view(), name='token_verify'), # type: ignore
+	# OpenAPI schema & docs (public — no auth so agents can discover the API)
+	path('api/v1/schema/', SpectacularAPIView.as_view(permission_classes=[AllowAny]), name='schema'),  # type: ignore[arg-type]
+	path('api/v1/docs/', SpectacularSwaggerView.as_view(permission_classes=[AllowAny], url_name='schema'), name='swagger-ui'),  # type: ignore[arg-type]
+	path('api/v1/redoc/', SpectacularRedocView.as_view(permission_classes=[AllowAny], url_name='schema'), name='redoc'),  # type: ignore[arg-type]
 ]

@@ -170,6 +170,18 @@ REST_FRAMEWORK = {
 	'DEFAULT_AUTHENTICATION_CLASSES': [
 		'rest_framework_simplejwt.authentication.JWTAuthentication',
 	],
+	'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+	'TITLE': 'Notif API',
+	'DESCRIPTION': (
+		'Personal update monitoring and notification service.\n\n'
+		'Monitors URLs for changes via pluggable scraping strategies '
+		'(RSS/Atom feeds, CSS selectors, forum threadmarks, and more).'
+	),
+	'VERSION': '1.0.0',
+	'SERVE_INCLUDE_SCHEMA': False,
 }
 
 LOGGING = {
