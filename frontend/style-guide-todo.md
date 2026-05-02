@@ -383,10 +383,12 @@ picks one in Settings; the app rebuilds the theme on change.
 The experiment defines an 8-role scale (`display`, `title`, `heading`,
 `eyebrow`, `body`, `bodyLong`, `micro`, `code`). The current app uses a
 narrower 6-role scale (`display`, `headline`, `title`, `body`, `label`,
-`caption`, plus `mono`). The Experiment and Hybrid sets use the 8-role scale;
-the Current set preserves the existing 6-role scale exactly.
+`caption`, plus `mono`). The Experiment and Hybrid sets use the 8 role names,
+but their `body` roles intentionally differ: Experiment uses Inter Tight as
+the utility/body face, while Hybrid keeps body copy on Suisse Mono. The Current
+set preserves the existing 6-role scale exactly.
 
-### 6.1 Role scale — 8-role (Experiment + Hybrid sets)
+### 6.1 Role scale — 8-role sets
 
 | Role       | Size  | Line ht | Tracking  | Case      | Role family  |
 | ---------- | ----- | ------- | --------- | --------- | ------------ |
@@ -394,7 +396,8 @@ the Current set preserves the existing 6-role scale exactly.
 | title      | 40    | 1.02    | −0.015em  | mixed     | serif        |
 | heading    | 22    | 1.15    | −0.01em   | mixed     | serif        |
 | eyebrow    | 11    | 1.0     | +0.20em   | UPPER     | mono         |
-| body       | 13    | 1.5     | 0         | mixed     | mono         |
+| body (Experiment) | 14 | 22/14 | 0         | mixed     | sans         |
+| body (Hybrid) | 13 | 20/13 | 0         | mixed     | mono         |
 | bodyLong   | 15    | 1.55    | 0         | mixed     | serifLong    |
 | micro      | 10.5  | 1.3     | +0.12em   | UPPER     | mono         |
 | code       | 12    | 1.5     | 0         | mixed     | mono         |
@@ -418,13 +421,14 @@ shared file.
 
 ### 6.3 Font sets
 
-| Role            | Current set       | Experiment set   | Hybrid set (exp roles, current fonts) |
-| --------------- | ----------------- | ---------------- | -------------------------------------- |
-| *all serif*     | Instrument Serif  | Instrument Serif | Instrument Serif                       |
-| *serif (long)*  | —                 | Newsreader       | Instrument Serif (italic)              |
-| *body / mono*   | Skyling           | JetBrains Mono   | Suisse Mono                            |
-| *utility sans*  | Zalando Sans      | Inter Tight      | Skyling                                |
-| *mono (code)*   | Suisse Mono       | JetBrains Mono   | Suisse Mono                            |
+| Role / family bucket | Current set | Experiment set | Hybrid set |
+| -------------------- | ----------- | -------------- | ---------- |
+| Display/title/heading serif | Instrument Serif | Instrument Serif | Instrument Serif |
+| Long body serif | — | Newsreader | Instrument Serif italic |
+| Body | Skyling | Inter Tight | Suisse Mono |
+| Eyebrow/micro | Skyling label fallback | JetBrains Mono | Suisse Mono |
+| Code/mono | Suisse Mono | JetBrains Mono | Suisse Mono |
+| Utility sans | Zalando Sans | Inter Tight | Skyling |
 
 Notes:
 
@@ -433,8 +437,8 @@ Notes:
   `micro` distinctions — code that tries to use those roles under the Current
   set falls back to `label` (for `eyebrow`/`micro`) or `body` (for `bodyLong`).
 - **Experiment set** uses the 8-role scale with Instrument Serif, Newsreader
-  (body-length serif for digests and long-form reads), JetBrains Mono (body
-  + micro + code), Inter Tight (utility sans, unused by default).
+  (body-length serif for digests and long-form reads), Inter Tight for normal
+  body copy, and JetBrains Mono for eyebrow, micro, and code.
 - **Hybrid set** uses the 8-role scale but keeps the current paid-license
   fonts: Instrument Serif stays, Suisse Mono covers all mono roles, Skyling
   is the utility sans. `bodyLong` resolves to **Instrument Serif italic** —
@@ -1006,28 +1010,35 @@ Replace with catalog primitives:
 
 ## 12. Auth reconciliation
 
-The user decision: auth buttons and accent hues follow the active colorway,
-but the auth gradient, panel fill, and texture pipeline stay fixed. The
-signature backdrop is not applied to auth.
+Current decision: auth keeps its existing poster/backdrop pipeline, but the
+palette feeding that pipeline is colorway-aware. The signature backdrop is
+still not applied to auth; auth remains its own visual environment. What
+changes with the active colorway is the `authBackdrop` color bundle on
+`NotifTokens`, plus the framed auth controls that already consume normal
+`btn*`, `accent`, and `rule*` tokens.
 
-Changes to `AuthPalette`:
+This means auth is neither fixed nor fully identical to the app interior:
 
-| Token in `AuthPalette`                      | Behavior                         |
-| ------------------------------------------- | -------------------------------- |
-| `panel`, `panelBorder`, `panelShadow`       | Fixed (current values)           |
-| `baseGradientColors`, `baseGradientStops`   | Fixed                            |
-| `bloomColors`, `bloomStops`                 | Fixed                            |
-| `transitionColors`, `floorFadeColors`       | Fixed                            |
-| `grainFrom`, `grainTo`                      | Fixed                            |
-| `panelAlpha`, `glassBlurSigma`, etc.        | Fixed                            |
-| `primaryButtonBase`                         | Derive: `colorway.btnBg`         |
-| `secondaryButtonBase`                       | Derive: `colorway.btnBg` shaded  |
-| `buttonBorder`                              | Derive: `colorway.ruleStrong`    |
-| `fabGlass`, `fabShadow`                     | Fixed                            |
+- **Fixed pipeline:** page geometry, bloom positions, floor fade shape,
+  halftone/grain drawing code, glass/framed card structure, blur amounts,
+  alpha values, and debug texture controls.
+- **Colorway-aware palette:** `baseGradientColors`, `bloomColors`,
+  `transitionColors`, `floorFadeColors`, `grainFrom`, `grainTo`,
+  `halftoneTop`, and `halftoneBottom`, all supplied by
+  `NotifTokens.authBackdrop`.
+- **Normal app tokens:** framed auth panel/button/input styling reads
+  `bg*`, `ink*`, `accent`, `btn*`, and `rule*` through the active
+  `NotifTokens`.
+- **Legacy fixed bits:** glass-mode panel values that intentionally preserve
+  the pre-system auth look can stay in `AuthPalette` until glass mode is
+  retired or folded into tokens.
 
-Rationale: the gradient and bloom *are* the auth identity — they represent
-"pre-brand, pre-login, environment." Button tint is the place the user's
-chosen colorway peeks through, foreshadowing the interior.
+Rationale: auth should feel like the same product under each chosen colorway
+without becoming the interior shell. The stable part is the poster-like
+environment and texture behavior; the variable part is the colorway-specific
+atmosphere and controls. This keeps Dusk, Midnight, Sage, and Daybreak from
+sharing a misleading purple-only login world while avoiding a full duplicate
+of the non-auth signature backdrop.
 
 ---
 
@@ -1150,8 +1161,9 @@ Each step ships on its own. Don't batch.
    `pubspec.yaml`. Build Experiment and Hybrid `TextTheme` factories.
 8. **Font-set picker in Settings.** Radio: Current / Experiment / Hybrid.
    Theme rebuilds on change.
-9. **AuthPalette reconciliation.** Button + bloom-adjacent values derive
-   from active colorway per §12. Everything else stays fixed.
+9. **Auth backdrop reconciliation.** Keep the auth poster/backdrop pipeline,
+   but feed it from `NotifTokens.authBackdrop` per §12. Controls continue to
+   derive from normal colorway tokens.
 10. **Debug tuner additions.** Texture-intensity slider, per-layer toggles,
     signature-backdrop on/off (§10.1).
 11. **Component primitives (batch A: static).** `Eyebrow`, `Rule`,
