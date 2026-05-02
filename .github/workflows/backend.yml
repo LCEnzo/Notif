@@ -36,8 +36,14 @@ jobs:
         with:
           python-version: '3.14'
 
+      - name: Verify lockfile
+        run: uv lock --check
+
       - name: Install dependencies
         run: uv sync --frozen
+
+      - name: Format (ruff)
+        run: uv run ruff format --check .
 
       - name: Lint (ruff)
         run: uv run ruff check .
@@ -46,7 +52,13 @@ jobs:
         run: uv run mypy .
 
       - name: Type check (pyright)
-        run: uvx pyright .
+        run: uv run pyright .
+
+      - name: Django system check
+        run: uv run python manage.py check
+
+      - name: Missing migrations
+        run: uv run python manage.py makemigrations --check --dry-run
 
       - name: Test (pytest)
         run: uv run pytest -v
