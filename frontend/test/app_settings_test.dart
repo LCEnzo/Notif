@@ -1,7 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 void main() {
   setUp(() {
@@ -131,18 +133,85 @@ void main() {
     });
   });
 
-  test('load falls back to defaults when stored prefs are malformed', () async {
+  test(
+    'load preserves readable prefs when one stored key has wrong type',
+    () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        'designDitheringEnabled': 'broken',
+        'backendUrlMode': BackendUrlMode.customOnly.name,
+        'customBackendUrl': 'https://cached.example.com/v2',
+        'colorway': NotifColorway.sage.name,
+        'fontSet': NotifFontSet.hybrid.name,
+        'homeDensity': HomeDensity.dense.name,
+      });
+
+      final settings = await createLoadedSettings();
+
+      expect(settings.loaded, isTrue);
+      expect(settings.designDitheringEnabled, isTrue);
+      expect(settings.backendUrlMode, BackendUrlMode.customOnly);
+      expect(settings.customBackendUrl, 'https://cached.example.com/v2');
+      expect(settings.colorway, NotifColorway.sage);
+      expect(settings.fontSet, NotifFontSet.hybrid);
+      expect(settings.homeDensity, HomeDensity.dense);
+      expect(settings.persistenceError, isNotNull);
+      expect(settings.persistenceError!.operation, 'load');
+    },
+  );
+
+  test('unknown enum strings fall back only for that enum', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
-      'designDitheringEnabled': 'broken',
-      'colorway': NotifColorway.sage.name,
+      'designDitheringEnabled': false,
+      'colorway': 'bogus',
+      'fontSet': NotifFontSet.hybrid.name,
     });
 
     final settings = await createLoadedSettings();
 
-    expect(settings.loaded, isTrue);
-    expect(settings.designDitheringEnabled, isTrue);
+    expect(settings.designDitheringEnabled, isFalse);
     expect(settings.colorway, NotifColorway.dusk1);
-    expect(settings.persistenceError, isNotNull);
-    expect(settings.persistenceError!.operation, 'load');
+    expect(settings.fontSet, NotifFontSet.hybrid);
+    expect(settings.persistenceError, isNull);
   });
+
+  test(
+    'write failure keeps session value and reports persistence error',
+    () async {
+      final settings = await createLoadedSettings();
+      final store = _ControllablePreferencesStore(failWrites: true);
+      SharedPreferencesStorePlatform.instance = store;
+
+      var notifications = 0;
+      settings.addListener(() {
+        notifications += 1;
+      });
+
+      await settings.setColorway(NotifColorway.sage);
+
+      expect(settings.colorway, NotifColorway.sage);
+      expect(settings.persistenceError, isNotNull);
+      expect(settings.persistenceError!.operation, 'setColorway');
+      expect(notifications, 2);
+
+      store.failWrites = false;
+
+      await settings.setFontSet(NotifFontSet.hybrid);
+
+      expect(settings.fontSet, NotifFontSet.hybrid);
+      expect(settings.persistenceError, isNull);
+      expect(notifications, 4);
+    },
+  );
+}
+
+class _ControllablePreferencesStore extends InMemorySharedPreferencesStore {
+  _ControllablePreferencesStore({required this.failWrites}) : super.empty();
+
+  bool failWrites;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    if (failWrites) return Future<bool>.value(false);
+    return super.setValue(valueType, key, value);
+  }
 }

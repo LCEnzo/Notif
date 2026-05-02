@@ -72,36 +72,56 @@ class AppSettingsController extends ChangeNotifier {
   HomeDensity get homeDensity => _homeDensity;
 
   Future<void> _load() async {
+    Object? loadError;
+    StackTrace? loadStackTrace;
+
+    T? readPref<T>(
+      SharedPreferences prefs,
+      String key,
+      T? Function(String key) reader,
+    ) {
+      try {
+        return reader(key);
+      } catch (e, st) {
+        loadError ??= StateError('Could not read "$key": $e');
+        loadStackTrace ??= st;
+        if (kDebugMode) debugPrint('AppSettings._load failed for $key: $e');
+        return null;
+      }
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      final designDitheringEnabled = prefs.getBool(_ditheringKey) ?? true;
+      final designDitheringEnabled =
+          readPref<bool>(prefs, _ditheringKey, prefs.getBool) ?? true;
       final authCardStyle = _parseEnum(
-        prefs.getString(_authCardStyleKey),
+        readPref<String>(prefs, _authCardStyleKey, prefs.getString),
         AuthCardStyle.values,
         AuthCardStyle.framed,
       );
       final backendUrlMode = _parseEnum(
-        prefs.getString(_backendUrlModeKey),
+        readPref<String>(prefs, _backendUrlModeKey, prefs.getString),
         BackendUrlMode.values,
         BackendUrlMode.builtin,
       );
       final colorway = _parseEnum(
-        prefs.getString(_colorwayKey),
+        readPref<String>(prefs, _colorwayKey, prefs.getString),
         NotifColorway.values,
         NotifColorway.dusk1,
       );
       final fontSet = _parseEnum(
-        prefs.getString(_fontSetKey),
+        readPref<String>(prefs, _fontSetKey, prefs.getString),
         NotifFontSet.values,
         NotifFontSet.current,
       );
       final homeDensity = _parseEnum(
-        prefs.getString(_homeDensityKey),
+        readPref<String>(prefs, _homeDensityKey, prefs.getString),
         HomeDensity.values,
         HomeDensity.compact,
       );
-      final customBackendUrl = prefs.getString(_customBackendUrlKey) ?? '';
+      final customBackendUrl =
+          readPref<String>(prefs, _customBackendUrlKey, prefs.getString) ?? '';
 
       _designDitheringEnabled = designDitheringEnabled;
       _authCardStyle = authCardStyle;
@@ -110,11 +130,19 @@ class AppSettingsController extends ChangeNotifier {
       _fontSet = fontSet;
       _homeDensity = homeDensity;
       _customBackendUrl = customBackendUrl;
-      _persistenceError = null;
     } catch (e, st) {
-      _persistenceError = AppSettingsPersistenceException('load', e, st);
+      loadError ??= e;
+      loadStackTrace ??= st;
       if (kDebugMode) debugPrint('AppSettings._load failed: $e');
     } finally {
+      final error = loadError;
+      _persistenceError = error == null
+          ? null
+          : AppSettingsPersistenceException(
+              'load',
+              error,
+              loadStackTrace ?? StackTrace.current,
+            );
       _loaded = true;
       notifyListeners();
     }

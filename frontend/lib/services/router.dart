@@ -17,7 +17,7 @@ GoRouter createRouter(AuthService authService) {
           state.matchedLocation == '/login' ||
           state.matchedLocation == '/register' ||
           state.matchedLocation == '/forgot-password';
-      final isPublicRoute = state.matchedLocation.startsWith('/about');
+      final isPublicRoute = state.matchedLocation == '/about';
 
       if (!loggedIn && !isAuthRoute && !isPublicRoute) return '/login';
       if (loggedIn && isAuthRoute) return '/home';
@@ -34,7 +34,10 @@ GoRouter createRouter(AuthService authService) {
         builder: (context, state) => const ForgotPasswordPage(),
       ),
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
-      GoRoute(path: '/sources', builder: (context, state) => const SourcesPage()),
+      GoRoute(
+        path: '/sources',
+        builder: (context, state) => const SourcesPage(),
+      ),
       GoRoute(path: '/about', builder: (context, state) => const AboutPage()),
       GoRoute(
         path: '/settings',

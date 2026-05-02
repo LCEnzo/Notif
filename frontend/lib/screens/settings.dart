@@ -15,18 +15,21 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _backendUrlController;
+  late final AppSettingsController _settings;
+  late String _backendUrlSyncedValue;
 
   @override
   void initState() {
     super.initState();
-    final settings = context.read<AppSettingsController>();
-    _backendUrlController = TextEditingController(
-      text: settings.customBackendUrl,
-    );
+    _settings = context.read<AppSettingsController>();
+    _backendUrlSyncedValue = _settings.customBackendUrl;
+    _backendUrlController = TextEditingController(text: _backendUrlSyncedValue);
+    _settings.addListener(_handleSettingsChanged);
   }
 
   @override
   void dispose() {
+    _settings.removeListener(_handleSettingsChanged);
     _backendUrlController.dispose();
     super.dispose();
   }
@@ -155,15 +158,33 @@ class _SettingsPageState extends State<SettingsPage> {
                             onChanged: settings.setCustomBackendUrl,
                           ),
                         ],
-                        ],
-                      ),
+                      ],
                     ),
                   ),
                 ),
+              ),
             ],
           ),
         );
       },
+    );
+  }
+
+  void _handleSettingsChanged() {
+    _syncBackendUrlController(_settings);
+  }
+
+  void _syncBackendUrlController(AppSettingsController settings) {
+    final settingsValue = settings.customBackendUrl;
+    if (settingsValue == _backendUrlSyncedValue) return;
+
+    final hasLocalEdit = _backendUrlController.text != _backendUrlSyncedValue;
+    _backendUrlSyncedValue = settingsValue;
+    if (hasLocalEdit) return;
+
+    _backendUrlController.value = TextEditingValue(
+      text: settingsValue,
+      selection: TextSelection.collapsed(offset: settingsValue.length),
     );
   }
 }
@@ -553,10 +574,7 @@ class _RadioDot extends StatelessWidget {
 }
 
 class _HomeDensityPicker extends StatelessWidget {
-  const _HomeDensityPicker({
-    required this.selected,
-    required this.onChanged,
-  });
+  const _HomeDensityPicker({required this.selected, required this.onChanged});
 
   final HomeDensity selected;
   final ValueChanged<HomeDensity> onChanged;

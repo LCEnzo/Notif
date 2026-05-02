@@ -162,9 +162,7 @@ class AuthPanel extends StatelessWidget {
           ? text$.body.copyWith(color: tokens.ink)
           : const TextStyle(color: Colors.white),
       child: IconTheme.merge(
-        data: IconThemeData(
-          color: isFramed ? tokens.inkDim : Colors.white70,
-        ),
+        data: IconThemeData(color: isFramed ? tokens.inkDim : Colors.white70),
         child: child,
       ),
     );
@@ -267,7 +265,6 @@ Future<void> showAuthFailureDialog(
   final text$ =
       Theme.of(context).extension<NotifTextTheme>() ??
       NotifTextTheme.forSet(NotifFontSet.current);
-  final messenger = ScaffoldMessenger.of(context);
 
   ButtonStyle actionStyle({
     required Color foreground,
@@ -338,6 +335,8 @@ Future<void> showAuthFailureDialog(
                           await Clipboard.setData(
                             ClipboardData(text: '$title\n$message'),
                           );
+                          if (!dialogContext.mounted) return;
+                          final messenger = ScaffoldMessenger.of(dialogContext);
                           messenger
                             ..clearSnackBars()
                             ..showSnackBar(
