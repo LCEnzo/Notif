@@ -1,0 +1,27 @@
+# ── Dev overrides ─────────────────────────────────────────────────
+# Auto-merged with compose.yaml when both exist. Run with:
+#   docker compose up -d          (merges both files automatically)
+#   docker compose -f compose.yaml up -d   (production only, no override)
+#
+# What this adds over production:
+#   - Binds your local code so edits are reflected instantly
+#   - Runs runserver instead of gunicorn (hot reload)
+#   - Enables DEBUG mode
+#   - Skips collectstatic (you're serving from source)
+
+services:
+  backend:
+    command:
+      - python
+      - manage.py
+      - runserver
+      - "0.0.0.0:8000"
+    environment:
+      - DEBUG=true
+      - NOTIF_ENV=local
+      - SKIP_COLLECTSTATIC=1
+    volumes:
+      - ./backend:/app          # live code mount
+      - backend_data:/app/data
+    ports:
+      - "8000:8000"
