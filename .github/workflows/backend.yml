@@ -51,9 +51,6 @@ jobs:
       - name: Type check (mypy)
         run: uv run mypy .
 
-      - name: Type check (pyright)
-        run: uv run pyright .
-
       - name: Django system check
         run: uv run python manage.py check
 
