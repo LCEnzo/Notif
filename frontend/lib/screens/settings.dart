@@ -80,7 +80,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Eyebrow('Preferences', tone: EyebrowTone.accent),
+                        const Eyebrow('Preferences', tone: EyebrowTone.accent),
                         const SizedBox(height: 8),
                         Text(
                           'Look and feel.',
@@ -850,7 +850,7 @@ class _PersistenceBanner extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Eyebrow('Persistence error', tone: EyebrowTone.accent),
+          const Eyebrow('Persistence error', tone: EyebrowTone.accent),
           const SizedBox(height: 4),
           Text(
             'Changes are active this session but could not be saved.',

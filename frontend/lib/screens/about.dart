@@ -255,7 +255,7 @@ class _Hero extends StatelessWidget {
     final introTop = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Eyebrow('Showcase · non-auth pilot', tone: EyebrowTone.accent),
+        const Eyebrow('Showcase · non-auth pilot', tone: EyebrowTone.accent),
         const SizedBox(height: 12),
         Text('About Notif', style: text$.display.copyWith(color: tokens.ink)),
         const SizedBox(height: 16),
@@ -292,7 +292,7 @@ class _Hero extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Eyebrow('Current build'),
+          const Eyebrow('Current build'),
           const SizedBox(height: 8),
           Text(
             'Prototype status',
@@ -645,7 +645,7 @@ class _TypefaceCard extends StatelessWidget {
             style: text$.bodyLong.copyWith(color: tokens.inkDim),
           ),
           const SizedBox(height: 20),
-          Eyebrow('Pseudo-URI sample'),
+          const Eyebrow('Pseudo-URI sample'),
           const SizedBox(height: 6),
           Text(
             'notif://about/showcase/non-auth',
@@ -938,7 +938,7 @@ class _ErrorSlab extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Eyebrow('Error', tone: EyebrowTone.accent),
+              const Eyebrow('Error', tone: EyebrowTone.accent),
               const SizedBox(height: 8),
               Text(
                 'Could not load build info.',

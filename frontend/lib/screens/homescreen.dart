@@ -287,133 +287,131 @@ class _SourcesPageState extends State<SourcesPage> {
     final text$ = NotifTextTheme.of(context);
     final appSettings = context.watch<AppSettingsController?>();
     final linkService = context.watch<LinkService>();
-    final density = appSettings?.homeDensity ?? HomeDensity.compact;
-    final metrics = _HomeConsoleMetrics.forDensity(density);
 
     return Scaffold(
       backgroundColor: tokens.bg0,
+      appBar: AppBar(
+        backgroundColor: tokens.bg1,
+        foregroundColor: tokens.ink,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        titleSpacing: 0,
+        leading: IconButton(
+          tooltip: 'Home',
+          onPressed: () => context.go('/home'),
+          icon: Icon(Icons.arrow_back_sharp, color: tokens.inkDim),
+        ),
+        title: Row(
+          children: [
+            Text(
+              'Notif',
+              style: text$.heading.copyWith(
+                color: tokens.ink,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text('/ sources', style: text$.micro.copyWith(color: tokens.inkMute)),
+          ],
+        ),
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: () => context.push('/settings'),
+            icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
+          ),
+          IconButton(
+            tooltip: 'About',
+            onPressed: () => context.push('/about'),
+            icon: Icon(Icons.info_outline, color: tokens.inkDim),
+          ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: tokens.rule),
+        ),
+      ),
       body: Stack(
         children: [
           if (appSettings?.designDitheringEnabled ?? true)
             const DitherOverlay(),
           SafeArea(
-            child: Column(
-              children: [
-                _ConsoleTopBar(
-                  density: density,
-                  metrics: metrics,
-                  userData: context.watch<UserDataService>().userData,
-                  unreadCount: context.watch<NotificationService>().unreadCount,
-                  sourceCount: linkService.links.length,
-                  backendLabel: _backendModeLabel(appSettings),
-                  syncLabel: _lastScrapeLabel(linkService.links),
-                  scrapeBusy: linkService.scrapingAll,
-                  onScrape: linkService.scrapingAll
-                      ? null
-                      : () async {
-                          final message = await linkService.triggerScrape();
-                          if (message != null && mounted) {
-                            await context
-                                .read<NotificationService>()
-                                .fetchNotifications();
-                          }
-                          if (!mounted) return;
-                          _showMessage(message ?? linkService.error);
-                        },
-                  onSources: null,
-                  onSettings: () => context.push('/settings'),
-                  onAbout: () => context.push('/about'),
-                  onDensityChanged: appSettings?.setHomeDensity,
-                  onLogout: () {
-                    context.read<AuthService>().logout();
-                    context.go('/login');
-                  },
-                  activeSection: 'sources',
+            child: RefreshIndicator(
+              color: tokens.accent,
+              backgroundColor: tokens.bg2,
+              onRefresh: linkService.fetchLinks,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(
+                  parent: ClampingScrollPhysics(),
                 ),
-                Expanded(
-                  child: RefreshIndicator(
-                    color: tokens.accent,
-                    backgroundColor: tokens.bg2,
-                    onRefresh: linkService.fetchLinks,
-                    child: ListView(
-                      physics: const AlwaysScrollableScrollPhysics(
-                        parent: ClampingScrollPhysics(),
-                      ),
-                      padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
-                      children: [
-                        Row(
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Eyebrow(
-                                    'Registry',
-                                    tone: EyebrowTone.accent,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Sources are managed here, not in the feed.',
-                                    style: text$.title.copyWith(
-                                      color: tokens.ink,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            const Eyebrow(
+                              'Registry',
+                              tone: EyebrowTone.accent,
                             ),
-                            const SizedBox(width: 16),
-                            NotifButton(
-                              label: 'Add source',
-                              icon: Icons.add_sharp,
-                              onPressed: linkService.creating
-                                  ? null
-                                  : _handleAddLink,
+                            const SizedBox(height: 8),
+                            Text(
+                              'Sources are managed here, not in the feed.',
+                              style: text$.title.copyWith(
+                                color: tokens.ink,
+                                fontStyle: FontStyle.italic,
+                              ),
                             ),
                           ],
                         ),
-                        if (linkService.error != null) ...[
-                          const SizedBox(height: 18),
-                          _ErrorBanner(message: linkService.error!),
-                        ],
-                        const SizedBox(height: 24),
-                        if (linkService.loading && linkService.links.isEmpty)
-                          const _LoadingState(message: 'Loading sources...')
-                        else if (linkService.links.isEmpty)
-                          _EmptyState(
-                            icon: Icons.link_off_sharp,
-                            title: 'No sources yet',
-                            message:
-                                'Add a monitored page to start collecting updates.',
-                            action: NotifButton(
-                              label: 'Add source',
-                              icon: Icons.add_sharp,
-                              onPressed: linkService.creating
-                                  ? null
-                                  : _handleAddLink,
-                            ),
-                          )
-                        else
-                          for (final link in linkService.links) ...[
-                            _LinkCard(
-                              link: link,
-                              isScraping: linkService.isScrapingLink(link.id),
-                              isSaving: linkService.isUpdatingLink(link.id),
-                              isDeleting: linkService.isDeletingLink(link.id),
-                              onScrape: () => _handleScrapeLink(link),
-                              onEdit: () => _handleEditLink(link),
-                              onDelete: () => _handleDeleteLink(link),
-                              onOpen: () => _openExternalUrl(link.url),
-                            ),
-                            if (link != linkService.links.last)
-                              const SizedBox(height: 12),
-                          ],
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 16),
+                      NotifButton(
+                        label: 'Add source',
+                        icon: Icons.add_sharp,
+                        onPressed: linkService.creating ? null : _handleAddLink,
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  if (linkService.error != null) ...[
+                    const SizedBox(height: 18),
+                    _ErrorBanner(message: linkService.error!),
+                  ],
+                  const SizedBox(height: 24),
+                  if (linkService.loading && linkService.links.isEmpty)
+                    const _LoadingState(message: 'Loading sources...')
+                  else if (linkService.links.isEmpty)
+                    _EmptyState(
+                      icon: Icons.link_off_sharp,
+                      title: 'No sources yet',
+                      message:
+                          'Add a monitored page to start collecting updates.',
+                      action: NotifButton(
+                        label: 'Add source',
+                        icon: Icons.add_sharp,
+                        onPressed: linkService.creating ? null : _handleAddLink,
+                      ),
+                    )
+                  else
+                    for (final link in linkService.links) ...[
+                      _LinkCard(
+                        link: link,
+                        isScraping: linkService.isScrapingLink(link.id),
+                        isSaving: linkService.isUpdatingLink(link.id),
+                        isDeleting: linkService.isDeletingLink(link.id),
+                        onScrape: () => _handleScrapeLink(link),
+                        onEdit: () => _handleEditLink(link),
+                        onDelete: () => _handleDeleteLink(link),
+                        onOpen: () => _openExternalUrl(link.url),
+                      ),
+                      if (link != linkService.links.last)
+                        const SizedBox(height: 12),
+                    ],
+                ],
+              ),
             ),
           ),
         ],
@@ -477,6 +475,7 @@ class _HomeConsole extends StatelessWidget {
               syncLabel: _lastScrapeLabel(linkService.links),
               scrapeBusy: linkService.scrapingAll,
               onScrape: onScrapeAll,
+              onHome: null,
               onSources: onSources,
               onSettings: onSettings,
               onAbout: onAbout,
@@ -577,6 +576,7 @@ class _ConsoleTopBar extends StatelessWidget {
     required this.syncLabel,
     required this.scrapeBusy,
     required this.onScrape,
+    required this.onHome,
     required this.onSources,
     required this.onSettings,
     required this.onAbout,
@@ -594,6 +594,7 @@ class _ConsoleTopBar extends StatelessWidget {
   final String syncLabel;
   final bool scrapeBusy;
   final VoidCallback? onScrape;
+  final VoidCallback? onHome;
   final VoidCallback? onSources;
   final VoidCallback onSettings;
   final VoidCallback onAbout;
@@ -608,6 +609,8 @@ class _ConsoleTopBar extends StatelessWidget {
     final compact = MediaQuery.sizeOf(context).width < 1120;
     final username = userData?.username.trim();
     final identity = username == null || username.isEmpty ? 'operator' : username;
+    final selectedHome = activeSection == 'home';
+    final selectedSources = activeSection == 'sources';
 
     return Container(
       decoration: BoxDecoration(
@@ -618,116 +621,150 @@ class _ConsoleTopBar extends StatelessWidget {
         horizontal: compact ? 10 : 18,
         vertical: compact ? 7 : metrics.topBarVPad,
       ),
-      child: Row(
-        children: [
-          Text(
-            'Notif',
-            style: text$.heading.copyWith(
-              color: tokens.ink,
-              fontStyle: FontStyle.italic,
-              fontSize: compact ? null : metrics.brandSize,
-            ),
-          ),
-          if (!compact) ...[
-            const SizedBox(width: 10),
-            Text(
-              '~/notif/$activeSection',
-              style: text$.micro.copyWith(
-                color: tokens.inkMute,
-                letterSpacing: 0,
-                fontSize: metrics.microSize,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '@$identity',
-              style: text$.micro.copyWith(
-                color: tokens.inkDim,
-                fontSize: metrics.microSize,
-              ),
-            ),
-          ],
-          const Spacer(),
-          if (!compact) ...[
-            _MiniStat(
-              metrics: metrics,
-              label: 'UNREAD',
-              value: '$unreadCount',
-              accent: true,
-            ),
-            _MiniStat(metrics: metrics, label: 'SRC', value: '$sourceCount'),
-            _MiniStat(metrics: metrics, label: 'SYNC', value: syncLabel),
-            _MiniStat(metrics: metrics, label: 'API', value: backendLabel),
-          ] else ...[
-            _MiniStat(
-              metrics: metrics,
-              label: 'U',
-              value: '$unreadCount',
-              accent: true,
-            ),
-            _MiniStat(metrics: metrics, label: 'S', value: '$sourceCount'),
-          ],
-          const SizedBox(width: 8),
-          if (!compact)
-            _DensitySegment(
-              selected: density,
-              onChanged: onDensityChanged,
-              metrics: metrics,
-            ),
-          _TopBarAction(
-            metrics: metrics,
-            label: scrapeBusy ? 'scraping' : 'scrape',
-            onPressed: onScrape,
-            accent: true,
-          ),
-          if (!compact) ...[
-            _TopBarAction(
-              metrics: metrics,
-              label: 'sources',
-              onPressed: onSources,
-              selected: activeSection == 'sources',
-            ),
-            _TopBarAction(
-              metrics: metrics,
-              label: 'settings',
-              onPressed: onSettings,
-            ),
-            _TopBarAction(metrics: metrics, label: 'about', onPressed: onAbout),
-            _TopBarAction(
-              metrics: metrics,
-              label: 'logout',
-              onPressed: onLogout,
-            ),
-          ] else
-            PopupMenuButton<String>(
-              tooltip: 'Navigation',
-              color: tokens.bg1,
-              icon: Icon(Icons.more_horiz_sharp, color: tokens.inkDim),
-              onSelected: (value) {
-                switch (value) {
-                  case 'sources':
-                    onSources?.call();
-                    break;
-                  case 'settings':
-                    onSettings();
-                    break;
-                  case 'about':
-                    onAbout();
-                    break;
-                  case 'logout':
-                    onLogout();
-                    break;
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(value: 'sources', child: Text('Sources')),
-                const PopupMenuItem(value: 'settings', child: Text('Settings')),
-                const PopupMenuItem(value: 'about', child: Text('About')),
-                const PopupMenuItem(value: 'logout', child: Text('Logout')),
+      child: compact
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'Notif',
+                      style: text$.heading.copyWith(
+                        color: tokens.ink,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                    const Spacer(),
+                    _MiniStat(
+                      metrics: metrics,
+                      label: 'U',
+                      value: '$unreadCount',
+                      accent: true,
+                    ),
+                    _MiniStat(metrics: metrics, label: 'S', value: '$sourceCount'),
+                    const SizedBox(width: 6),
+                    _TopBarAction(
+                      metrics: metrics,
+                      label: scrapeBusy ? 'scraping' : 'scrape',
+                      onPressed: onScrape,
+                      accent: true,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 7),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _TopBarIconAction(
+                      metrics: metrics,
+                      icon: Icons.home_outlined,
+                      tooltip: 'Home',
+                      onPressed: onHome,
+                      selected: selectedHome,
+                    ),
+                    _TopBarIconAction(
+                      metrics: metrics,
+                      icon: Icons.link_outlined,
+                      tooltip: 'Sources',
+                      onPressed: onSources,
+                      selected: selectedSources,
+                    ),
+                    _TopBarIconAction(
+                      metrics: metrics,
+                      icon: Icons.settings_outlined,
+                      tooltip: 'Settings',
+                      onPressed: onSettings,
+                    ),
+                    _TopBarIconAction(
+                      metrics: metrics,
+                      icon: Icons.info_outline,
+                      tooltip: 'About',
+                      onPressed: onAbout,
+                    ),
+                    _TopBarIconAction(
+                      metrics: metrics,
+                      icon: Icons.logout_outlined,
+                      tooltip: 'Logout',
+                      onPressed: onLogout,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Text(
+                  'Notif',
+                  style: text$.heading.copyWith(
+                    color: tokens.ink,
+                    fontStyle: FontStyle.italic,
+                    fontSize: metrics.brandSize,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '~/notif/$activeSection',
+                  style: text$.micro.copyWith(
+                    color: tokens.inkMute,
+                    letterSpacing: 0,
+                    fontSize: metrics.microSize,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '@$identity',
+                  style: text$.micro.copyWith(
+                    color: tokens.inkDim,
+                    fontSize: metrics.microSize,
+                  ),
+                ),
+                const Spacer(),
+                _MiniStat(
+                  metrics: metrics,
+                  label: 'UNREAD',
+                  value: '$unreadCount',
+                  accent: true,
+                ),
+                _MiniStat(metrics: metrics, label: 'SRC', value: '$sourceCount'),
+                _MiniStat(metrics: metrics, label: 'SYNC', value: syncLabel),
+                _MiniStat(metrics: metrics, label: 'API', value: backendLabel),
+                const SizedBox(width: 8),
+                _DensitySegment(
+                  selected: density,
+                  onChanged: onDensityChanged,
+                  metrics: metrics,
+                ),
+                _TopBarAction(
+                  metrics: metrics,
+                  label: scrapeBusy ? 'scraping' : 'scrape',
+                  onPressed: onScrape,
+                  accent: true,
+                ),
+                _TopBarAction(
+                  metrics: metrics,
+                  label: 'home',
+                  onPressed: onHome,
+                  selected: selectedHome,
+                ),
+                _TopBarAction(
+                  metrics: metrics,
+                  label: 'sources',
+                  onPressed: onSources,
+                  selected: selectedSources,
+                ),
+                _TopBarAction(
+                  metrics: metrics,
+                  label: 'settings',
+                  onPressed: onSettings,
+                ),
+                _TopBarAction(metrics: metrics, label: 'about', onPressed: onAbout),
+                _TopBarAction(
+                  metrics: metrics,
+                  label: 'logout',
+                  onPressed: onLogout,
+                ),
               ],
             ),
-        ],
-      ),
     );
   }
 }
@@ -897,6 +934,55 @@ class _TopBarAction extends StatelessWidget {
               color: onPressed == null ? tokens.inkMute : foreground,
               letterSpacing: 0,
               fontSize: metrics.actionFontSize,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TopBarIconAction extends StatelessWidget {
+  const _TopBarIconAction({
+    required this.metrics,
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+    this.selected = false,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final background = selected ? tokens.bg2 : tokens.bg1;
+    final border = selected ? tokens.ruleStrong : tokens.rule;
+    final foreground = onPressed == null ? tokens.inkMute : tokens.ink;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 7),
+      child: Tooltip(
+        message: tooltip,
+        child: InkWell(
+          onTap: onPressed,
+          child: Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: onPressed == null
+                  ? tokens.rule.withValues(alpha: 0.16)
+                  : background,
+              border: Border.all(color: border),
+            ),
+            child: Icon(
+              icon,
+              size: metrics.actionFontSize + 6,
+              color: foreground,
             ),
           ),
         ),
@@ -2010,7 +2096,6 @@ class _ConsoleErrorStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
     final errors = [
       if (linkError != null) 'sources: $linkError',

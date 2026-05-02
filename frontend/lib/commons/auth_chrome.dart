@@ -11,6 +11,15 @@ import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:provider/provider.dart';
 
+class AuthPanelWidth {
+  const AuthPanelWidth._();
+
+  static const double glass = 330;
+  static const double loginFramed = 380;
+  static const double registerFramed = 414;
+  static const double recoveryFramed = 380;
+}
+
 class AuthScaffold extends StatefulWidget {
   final Widget child;
 

@@ -29,7 +29,11 @@ class _ForgotPasswordCard extends StatelessWidget {
     final text$ = NotifTextTheme.of(context);
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 420),
+      constraints: BoxConstraints(
+        maxWidth: isFramed
+            ? AuthPanelWidth.recoveryFramed
+            : AuthPanelWidth.glass,
+      ),
       child: AuthPanel(
         child: Column(
           mainAxisSize: MainAxisSize.min,

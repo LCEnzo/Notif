@@ -240,7 +240,7 @@ NotifTextTheme _buildCurrent() {
   final heading = _serif(family: serif, size: 22, lineHeight: 28);
 
   // Current set's `label` (12sp, +1.2 tracking, w500). Maps to eyebrow/micro.
-  final label = TextStyle(
+  const label = TextStyle(
     fontFamily: sans,
     fontSize: 12,
     height: 16 / 12,
@@ -248,7 +248,7 @@ NotifTextTheme _buildCurrent() {
     letterSpacing: 1.2,
   );
 
-  final body = TextStyle(
+  const body = TextStyle(
     fontFamily: sans,
     fontSize: 15,
     height: 22 / 15,
@@ -259,7 +259,7 @@ NotifTextTheme _buildCurrent() {
   // §6.3 explicitly allows this, and §6.4 forbids faking it with italic.
   final bodyLong = body;
 
-  final code = TextStyle(
+  const code = TextStyle(
     fontFamily: mono,
     fontSize: 14,
     height: 20 / 14,

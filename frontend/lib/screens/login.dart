@@ -53,7 +53,11 @@ class _FormContentState extends State<_FormContent> {
         AuthCardStyle.framed;
 
     return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: isFramed ? 420 : 330),
+      constraints: BoxConstraints(
+        maxWidth: isFramed
+            ? AuthPanelWidth.loginFramed
+            : AuthPanelWidth.glass,
+      ),
       child: AuthPanel(
         child: AutofillGroup(
           child: Form(
