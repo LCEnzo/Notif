@@ -9,6 +9,7 @@ class DomainRateLimiter:
 	Per-domain rate limiter. Ensures at least `delay` seconds between
 	requests to the same domain. Resets each run (no persistence).
 	"""
+
 	def __init__(self, delay: float = DEFAULT_DOMAIN_DELAY):
 		self._delay = delay
 		self._last_request: dict[str, float] = {}

@@ -47,14 +47,14 @@ class User(AbstractBaseUser, PermissionsMixin):
 	groups = models.ManyToManyField(
 		Group,
 		blank=True,
-		related_name='users',
-		related_query_name='users',
+		related_name="users",
+		related_query_name="users",
 	)  # type: ignore[assignment]
 	user_permissions = models.ManyToManyField(
 		Permission,
 		blank=True,
-		related_name='users',
-		related_query_name='users',
+		related_name="users",
+		related_query_name="users",
 	)  # type: ignore[assignment]
 
 	# Bookkeeping
@@ -72,31 +72,30 @@ class User(AbstractBaseUser, PermissionsMixin):
 		"active",
 		default=True,
 		help_text=(
-			"Designates whether this user should be treated as active. "
-			"Unselect this instead of deleting accounts."
+			"Designates whether this user should be treated as active. Unselect this instead of deleting accounts."
 		),
 	)
 
 	objects = UserManager()
 
-	USERNAME_FIELD = 'username'
-	EMAIL_FIELD = 'email'
+	USERNAME_FIELD = "username"
+	EMAIL_FIELD = "email"
 	REQUIRED_FIELDS = [EMAIL_FIELD]
 
 	# Soft delete by default
 	def delete(
-			self,
-			using: Any | None = None,
-			keep_parents: bool = False,
-		) -> tuple[int, dict[str, int]]:
+		self,
+		using: Any | None = None,
+		keep_parents: bool = False,
+	) -> tuple[int, dict[str, int]]:
 		self.date_deleted = timezone.now()
 		self.is_active = False
-		self.save(using=using, update_fields=['date_deleted', 'is_active', 'date_modified'])
+		self.save(using=using, update_fields=["date_deleted", "is_active", "date_modified"])
 		return (1, {self._meta.label: 1})
 
 	def actually_delete(
-			self,
-			using: Any | None = None,
-			keep_parents: bool = False,
-		) -> tuple[int, dict[str, int]]:
+		self,
+		using: Any | None = None,
+		keep_parents: bool = False,
+	) -> tuple[int, dict[str, int]]:
 		return super().delete(using=using, keep_parents=keep_parents)

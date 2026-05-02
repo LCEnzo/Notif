@@ -39,6 +39,7 @@ type ScrapeResult = Result[NotifData, str]
 # Used for choices for the Strategy model
 STRATEGY_CHOICES = {}
 
+
 def register(cls: type):
 	STRATEGY_CHOICES[cls.__name__] = cls
 	return cls  # return the class so that it's still defined
@@ -64,8 +65,9 @@ def _fetch_url_content(url: URL) -> str | None:
 
 	return None
 
+
 def _get_content_with_css_selector(html_content: str, css_selector: str) -> ResultSet[Tag]:
-	soup = BeautifulSoup(html_content, 'html.parser')
+	soup = BeautifulSoup(html_content, "html.parser")
 	elements = soup.select(css_selector)
 	return elements
 
@@ -80,8 +82,9 @@ class BaseStrategy(ABC):
 		pass
 
 	@abstractmethod
-	def scrape(self, url: URL, config_data: dict, comparison_data: dict,
-				*args, **kwargs) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	def scrape(
+		self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs
+	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
 		"""
 		This function is the basic functionality. It takes in the URL to be scraped, as well as JSON data/dict.
 		It should return whether there was new stuff found, and if so, what it is.
@@ -93,8 +96,9 @@ class BaseStrategy(ABC):
 		"""
 		pass
 
-	def __call__(self, url: URL, config_data: dict, comparison_data: dict,
-					*args, **kwargs) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	def __call__(
+		self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs
+	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
 		return self.scrape(url, config_data, comparison_data, *args, **kwargs)
 
 
@@ -103,17 +107,15 @@ class GeneralSelectorStrategy(BaseStrategy):
 	"""
 	Uses a CSS selector to check just   some element on a page, instead of the whole thing.
 	"""
+
 	def can_scrape_url(self, url: URL) -> bool:
 		return True
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]],
-				*args, **kwargs) -> tuple[ScrapeResult, ComparisonStateUpdate]:
-		selectors: list[str] = config_data['selectors']
-		old_data: dict[str, list[int]] = {
-			selector:
-				comparison_data.get(str(selector), [])
-			for selector in selectors
-		}
+	def scrape(
+		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]], *args, **kwargs
+	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+		selectors: list[str] = config_data["selectors"]
+		old_data: dict[str, list[int]] = {selector: comparison_data.get(str(selector), []) for selector in selectors}
 		updates: NotifData = []
 		comparison_state_update: dict[str, list[int]] | None = None
 
@@ -122,22 +124,21 @@ class GeneralSelectorStrategy(BaseStrategy):
 			return Err("Empty html_content"), None
 
 		comparison_state_update = {
-			selector:
-				[hash(ret) for ret in _get_content_with_css_selector(html_content, selector)]
+			selector: [hash(ret) for ret in _get_content_with_css_selector(html_content, selector)]
 			for selector in selectors
 		}
 
 		for selector in selectors:
-			tags = comparison_state_update.get(f'{selector}', [])
-			old_tags = old_data.get(f'{selector}', [])
+			tags = comparison_state_update.get(f"{selector}", [])
+			old_tags = old_data.get(f"{selector}", [])
 			update = False
 
 			update = len(tags) != len(old_tags) or tags != old_tags
 
 			if update:
 				split = urlsplit(url)
-				site_name = split.netloc.split('.')[0]
-				updates += [(f'{site_name} update', f'selector: {selector}', url)]
+				site_name = split.netloc.split(".")[0]
+				updates += [(f"{site_name} update", f"selector: {selector}", url)]
 
 		# No need to save new info to the db if the new info is the same as the old info
 		if len(updates) == 0:
@@ -155,30 +156,30 @@ class SThreadmarkInfo:
 
 	def to_json(self) -> str:
 		json_dict = {
-			'title': self.title,
-			'word_count': self.word_count,
-			'pub_date': None if self.pub_date is None else self.pub_date.isoformat(),
-			'link': self.link
+			"title": self.title,
+			"word_count": self.word_count,
+			"pub_date": None if self.pub_date is None else self.pub_date.isoformat(),
+			"link": self.link,
 		}
 		return json.dumps(json_dict)
 
 	@classmethod
 	def from_json(cls, json_str: str) -> SThreadmarkInfo:
 		json_dict = json.loads(json_str)
-		pub_date = None if json_dict['pub_date'] is None else datetime.fromisoformat(json_dict['pub_date'])
+		pub_date = None if json_dict["pub_date"] is None else datetime.fromisoformat(json_dict["pub_date"])
 		return cls(
-			title=json_dict['title'],
-			word_count=json_dict['word_count'],
-			pub_date=pub_date,
-			link=json_dict['link']
+			title=json_dict["title"], word_count=json_dict["word_count"], pub_date=pub_date, link=json_dict["link"]
 		)
 
 	def __str__(self):
-		return f"SThreadmark Information:\n" \
-				f"- Title: {self.title}\n" \
-				f"- Word Count: {self.word_count}\n" \
-				f"- Pub Date: {self.pub_date}\n" \
-				f"- Link: {self.link}"
+		return (
+			f"SThreadmark Information:\n"
+			f"- Title: {self.title}\n"
+			f"- Word Count: {self.word_count}\n"
+			f"- Pub Date: {self.pub_date}\n"
+			f"- Link: {self.link}"
+		)
+
 
 @register
 class SBSVThreadmarksStrategy(BaseStrategy):
@@ -186,21 +187,22 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 	Check SpaceBattles and SufficientVelocity threadmarks.
 	TODO: Specify in configuration which threadmark tabs should be checked.
 	"""
+
 	# format used by strptime strftime
 	# found as a attr on an time element
 	time_format: str = "%Y-%m-%dT%H:%M:%S%z"
 
 	def can_scrape_url(self, url: URL) -> bool:
-		return ('forums.spacebattles.com/threads' in url) or (
-			'forums.sufficientvelocity.com/threads' in url)
+		return ("forums.spacebattles.com/threads" in url) or ("forums.sufficientvelocity.com/threads" in url)
 
-	def scrape(self, url: URL, config_data: dict[str, Any],
-		comparison_data: dict[str, str]) -> tuple[ScrapeResult, ComparisonStateUpdate]:
-		last_alert_str = comparison_data.get('last_alert')
+	def scrape(
+		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str]
+	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+		last_alert_str = comparison_data.get("last_alert")
 
 		last_alert: datetime | None = (
 			datetime.strptime(last_alert_str, self.time_format).astimezone(timezone.get_default_timezone())
-			if last_alert_str is not None and last_alert_str != ''
+			if last_alert_str is not None and last_alert_str != ""
 			else None
 		)
 
@@ -216,24 +218,20 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			(
 				mark.title if mark.title is not None else "Title not found",
 				f"New threadmark with {mark.word_count} words, since {mark.pub_date}",
-				mark.link if mark.link is not None else req_url
+				mark.link if mark.link is not None else req_url,
 			)
 			for mark in marks
-			if mark.pub_date is not None and (
-				last_alert is None
-				or
-				mark.pub_date > last_alert
-			)
+			if mark.pub_date is not None and (last_alert is None or mark.pub_date > last_alert)
 		]
 
-		comparison_state_update: dict[str, str] = {'last_alert': ''}
+		comparison_state_update: dict[str, str] = {"last_alert": ""}
 		if len(marks) > 0:
 			latest_mark = marks.pop()
 			while latest_mark.pub_date is None and len(marks) > 0:
 				latest_mark = marks.pop()
 
 			if latest_mark.pub_date is not None and (last_alert is None or latest_mark.pub_date > last_alert):
-				comparison_state_update['last_alert'] = latest_mark.pub_date.strftime(self.time_format)
+				comparison_state_update["last_alert"] = latest_mark.pub_date.strftime(self.time_format)
 
 		return Ok(updates), comparison_state_update
 
@@ -246,31 +244,31 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		parsed = urlsplit(url)
 
 		# Split the path on 'threadmarks' and take the first part
-		new_path = parsed.path.split('threadmarks')[0]
+		new_path = parsed.path.split("threadmarks")[0]
 		# Ensure that new_path has a '/' between parts
-		if not new_path.endswith('/'):
-			new_path += '/'
-		new_path += 'threadmarks-load-range?threadmark_category_id=1'
+		if not new_path.endswith("/"):
+			new_path += "/"
+		new_path += "threadmarks-load-range?threadmark_category_id=1"
 
-		new_url = urlunsplit((parsed.scheme, parsed.netloc, new_path, '', ''))
+		new_url = urlunsplit((parsed.scheme, parsed.netloc, new_path, "", ""))
 
 		return URL(new_url)
 
 	def _extract_title_and_link(self, mark_tag: Tag, base_url: str) -> tuple[str | None, str | None]:
 		# The title of the threadmark and the href/link are on the same HTML tag
-		title_tag = mark_tag.select_one('a')
+		title_tag = mark_tag.select_one("a")
 		title = link = None
 		if title_tag is not None:
 			title = title_tag.text
-			link = _string_attr_value(title_tag.attrs.get('href'))
+			link = _string_attr_value(title_tag.attrs.get("href"))
 			if link is not None:
 				link = base_url + link
 		return title, link
 
 	def _extract_pub_date(self, mark_tag: Tag) -> datetime | None:
-		pub_date_tag = mark_tag.select_one('time')
+		pub_date_tag = mark_tag.select_one("time")
 		if pub_date_tag is not None:
-			pub_date_str = _string_attr_value(pub_date_tag.attrs.get('datetime'))
+			pub_date_str = _string_attr_value(pub_date_tag.attrs.get("datetime"))
 			if pub_date_str is not None:
 				try:
 					return datetime.strptime(pub_date_str, "%Y-%m-%dT%H:%M:%S%z")
@@ -280,7 +278,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		return None
 
 	def _extract_wordcount(self, mark_tag: Tag) -> str | None:
-		wordcount_tag = mark_tag.select_one('dd')
+		wordcount_tag = mark_tag.select_one("dd")
 		return wordcount_tag.text if wordcount_tag is not None else None
 
 	def _extract_threadmarks(self, response: requests.Response) -> list[SThreadmarkInfo]:
@@ -289,7 +287,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		and returns a list of threadmarks encoded as SThreadmarkInfo.
 		"""
 		marks: list[SThreadmarkInfo] = []
-		mark_tags = _get_content_with_css_selector(response.text, '.structItem--threadmark')
+		mark_tags = _get_content_with_css_selector(response.text, ".structItem--threadmark")
 
 		base_url = response.url
 		parsed_url = urlsplit(base_url)
@@ -303,11 +301,8 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			wordcount = self._extract_wordcount(mark_tag)
 
 			mark_info = SThreadmarkInfo(
-					title=title,
-					word_count=wordcount,
-					pub_date=pub_date,
-					link=URL(link) if link is not None else None
-				)
+				title=title, word_count=wordcount, pub_date=pub_date, link=URL(link) if link is not None else None
+			)
 
 			if mark_info.link is not None:
 				marks.append(mark_info)
@@ -320,6 +315,7 @@ class AlertInfo:
 	"""
 	Mainly exists for QQ alerts, can probably be used for SV and SB.
 	"""
+
 	author_name: str | None = None
 	author_link: str | None = None
 	avatar_image_url: str | None = None
@@ -332,43 +328,46 @@ class AlertInfo:
 
 	def to_json(self) -> str:
 		json_dict = {
-			'author_name': self.author_name,
-			'author_link': self.author_link,
-			'avatar_image_url': self.avatar_image_url,
-			'post_link': self.post_link,
-			'alert_text': self.alert_text,
-			'lengthy_response': self.lengthy_response,
-			'post_date': None if self.post_date is None else self.post_date.isoformat(),
-			'post_time': None if self.post_time is None else self.post_time.strftime('%H:%M:%S')
+			"author_name": self.author_name,
+			"author_link": self.author_link,
+			"avatar_image_url": self.avatar_image_url,
+			"post_link": self.post_link,
+			"alert_text": self.alert_text,
+			"lengthy_response": self.lengthy_response,
+			"post_date": None if self.post_date is None else self.post_date.isoformat(),
+			"post_time": None if self.post_time is None else self.post_time.strftime("%H:%M:%S"),
 		}
 		return json.dumps(json_dict)
 
 	@classmethod
 	def from_json(cls, json_str: str) -> AlertInfo:
 		json_dict = json.loads(json_str)
-		post_date = None if json_dict['post_date'] is None else date.fromisoformat(json_dict['post_date'])
-		post_time = None if json_dict['post_time'] is None else time.fromisoformat(json_dict['post_time'])
+		post_date = None if json_dict["post_date"] is None else date.fromisoformat(json_dict["post_date"])
+		post_time = None if json_dict["post_time"] is None else time.fromisoformat(json_dict["post_time"])
 		return cls(
-			author_name=json_dict['author_name'],
-			author_link=json_dict['author_link'],
-			avatar_image_url=json_dict['avatar_image_url'],
-			post_link=json_dict['post_link'],
-			alert_text=json_dict['alert_text'],
-			lengthy_response=json_dict['lengthy_response'],
+			author_name=json_dict["author_name"],
+			author_link=json_dict["author_link"],
+			avatar_image_url=json_dict["avatar_image_url"],
+			post_link=json_dict["post_link"],
+			alert_text=json_dict["alert_text"],
+			lengthy_response=json_dict["lengthy_response"],
 			post_date=post_date,
-			post_time=post_time
+			post_time=post_time,
 		)
 
 	def __str__(self):
-		return f"Alert Information:\n" \
-			f"- Author Name: {self.author_name}\n" \
-			f"- Author Link: {self.author_link}\n" \
-			f"- Avatar Image URL: {self.avatar_image_url}\n" \
-			f"- Post Link: {self.post_link}\n" \
-			f"- Alert Text: {self.alert_text}\n" \
-			f"- Date: {self.post_date}\n" \
-			f"- Time: {self.post_time}\n" \
+		return (
+			f"Alert Information:\n"
+			f"- Author Name: {self.author_name}\n"
+			f"- Author Link: {self.author_link}\n"
+			f"- Avatar Image URL: {self.avatar_image_url}\n"
+			f"- Post Link: {self.post_link}\n"
+			f"- Alert Text: {self.alert_text}\n"
+			f"- Date: {self.post_date}\n"
+			f"- Time: {self.post_time}\n"
 			f"- Likely chapter: {self.lengthy_response}"
+		)
+
 
 @register
 class QQAlertsStrategy(BaseStrategy):
@@ -378,6 +377,7 @@ class QQAlertsStrategy(BaseStrategy):
 	Config data should include username, password, and optionally
 	whether to include notifications other than likely story updates.
 	"""
+
 	login_url = "https://forum.questionablequesting.com/login/login"
 	alerts_url = "https://forum.questionablequesting.com/account/alerts"
 
@@ -389,22 +389,22 @@ class QQAlertsStrategy(BaseStrategy):
 
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str],
-			*args, **kwargs) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	def scrape(
+		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], *args, **kwargs
+	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
 		if not self.can_scrape_url(url):
 			return Err("Invalid URL"), None
 		updates: list[tuple[str, str, URL]] = []
 
-		username: str = config_data['username']
-		password: str = config_data['password']
+		username: str = config_data["username"]
+		password: str = config_data["password"]
 		# Whether to include all alerts, or only those likely to be a new chapter
-		include_all: bool = bool(config_data['include_all'])
+		include_all: bool = bool(config_data["include_all"])
 
-		last_alert_datetime_str = comparison_data['last_alert']
-		last_alert_datetime = datetime.strptime(
-				last_alert_datetime_str,
-				"%Y-%m-%d %H:%M:%S"
-			).astimezone(timezone.get_default_timezone())
+		last_alert_datetime_str = comparison_data["last_alert"]
+		last_alert_datetime = datetime.strptime(last_alert_datetime_str, "%Y-%m-%d %H:%M:%S").astimezone(
+			timezone.get_default_timezone()
+		)
 
 		try:
 			resp = self._get_alerts_html(username, password)
@@ -419,10 +419,10 @@ class QQAlertsStrategy(BaseStrategy):
 
 				if alert_dt > last_alert_datetime and (include_all or alert.lengthy_response):
 					title = "QQ: " + (
-							f"Likely chapter by {alert.author_name}"
-							if alert.lengthy_response
-							else f"Alert - {alert.author_name}"
-						)
+						f"Likely chapter by {alert.author_name}"
+						if alert.lengthy_response
+						else f"Alert - {alert.author_name}"
+					)
 					description = alert.alert_text if alert.alert_text is not None else "-/-"
 					link = URL(alert.post_link) if alert.post_link is not None else url
 
@@ -442,11 +442,11 @@ class QQAlertsStrategy(BaseStrategy):
 
 	@staticmethod
 	def _extract_alerts(html: str) -> list[AlertInfo]:
-		groups = _get_content_with_css_selector(html, '.alertGroup')
+		groups = _get_content_with_css_selector(html, ".alertGroup")
 
 		alerts = []
 		for group in groups:
-			date_text = group.select('h2.textHeading')[0].text
+			date_text = group.select("h2.textHeading")[0].text
 			date = QQAlertsStrategy._convert_relative_date(date_text)
 
 			alert_list_items = group.select("li.primaryContent")
@@ -461,35 +461,36 @@ class QQAlertsStrategy(BaseStrategy):
 	def _get_alerts_html(username: str, password: str) -> requests.Response:
 		parsed_url = urlsplit(QQAlertsStrategy.alerts_url)
 
-		session_cookie_name = 'xf_session'
+		session_cookie_name = "xf_session"
 		# mce_cookie_name = 'xf_mce_ccv'
 
 		payload = {
-			'login': username,
-			'register': '0',
-			'password': password,
-			'cookie_check': '1',
-			'_xfToken': '',
-			'redirect': '/account/alerts'
+			"login": username,
+			"register": "0",
+			"password": password,
+			"cookie_check": "1",
+			"_xfToken": "",
+			"redirect": "/account/alerts",
 		}
 
 		user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " + (
-				"(KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36 Edg/105.0.1343.42")
+			"(KHTML, like Gecko) Chrome/105.0.0.0 Safari/537.36 Edg/105.0.1343.42"
+		)
 
 		login_headers = {
 			"User-Agent": user_agent,
-			'Referer': QQAlertsStrategy.alerts_url,
-			'Host': parsed_url.netloc,
-			'Origin': f"{parsed_url.scheme}://{parsed_url.netloc}",
+			"Referer": QQAlertsStrategy.alerts_url,
+			"Host": parsed_url.netloc,
+			"Origin": f"{parsed_url.scheme}://{parsed_url.netloc}",
 		}
 
 		with requests.Session() as session:
 			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
 			session_cookie = get_response.cookies.get(session_cookie_name)
-			login_headers['Cookie'] = f"{session_cookie_name}={session_cookie}"
+			login_headers["Cookie"] = f"{session_cookie_name}={session_cookie}"
 
 			# Adds login_headers to session
-			for (header, value) in login_headers.items():
+			for header, value in login_headers.items():
 				session.headers[header] = value
 
 			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
@@ -512,40 +513,40 @@ class QQAlertsStrategy(BaseStrategy):
 		post_time = None
 
 		# Extract author name and link
-		author_tag = notif.find('a', class_='username subject')
+		author_tag = notif.find("a", class_="username subject")
 		if author_tag is not None:
 			author_name = author_tag.text.strip()
-			author_link = f"{url}/{author_tag['href']}" # type: ignore
+			author_link = f"{url}/{author_tag['href']}"  # type: ignore
 
 		# Extract author avatar image URL
-		avatar_img = notif.find('img')
+		avatar_img = notif.find("img")
 		if avatar_img is not None:
-			avatar_image_url = f"{url}/{avatar_img['src']}" # type: ignore
+			avatar_image_url = f"{url}/{avatar_img['src']}"  # type: ignore
 
 		# Extract post link
-		post_link_tag = notif.find('a', class_='PopupItemLink')
+		post_link_tag = notif.find("a", class_="PopupItemLink")
 		if post_link_tag is not None:
-			post_link = f"{url}/{post_link_tag['href']}" # type: ignore
+			post_link = f"{url}/{post_link_tag['href']}"  # type: ignore
 
-		time_tag = notif.find('span', class_='time')
+		time_tag = notif.find("span", class_="time")
 		if time_tag is not None:
-			time_as_list = [int(s) for s in time_tag.text.strip().split(':')]
+			time_as_list = [int(s) for s in time_tag.text.strip().split(":")]
 			# If given hours and minutes, or HH MM ss
 			if len(time_as_list) in [2, 3]:
 				post_time = time(time_as_list[0], time_as_list[1])
 
 		# Extract alert text
 		lengthy_response = False
-		alert_text_div = notif.find('div', class_='alertText')
+		alert_text_div = notif.find("div", class_="alertText")
 		if alert_text_div is not None:
 			alert_text = alert_text_div.text.strip()
-			alert_text = alert_text.replace('\n', ' ')
+			alert_text = alert_text.replace("\n", " ")
 
 			# Remove the time from alert text
 			if time_tag is not None:
-				alert_text = alert_text.replace(time_tag.text.strip(), '')
+				alert_text = alert_text.replace(time_tag.text.strip(), "")
 
-			regex_pattern = r'replied with [0-9]+(\.[0-9]+)?k? words'
+			regex_pattern = r"replied with [0-9]+(\.[0-9]+)?k? words"
 			lengthy_response = bool(re.search(regex_pattern, alert_text))
 
 		# Return the extracted information as an instance of the AlertInfo data class
@@ -556,7 +557,7 @@ class QQAlertsStrategy(BaseStrategy):
 			post_link=post_link,
 			alert_text=alert_text,
 			post_time=post_time,
-			lengthy_response=lengthy_response
+			lengthy_response=lengthy_response,
 		)
 
 	@staticmethod
@@ -574,14 +575,14 @@ class QQAlertsStrategy(BaseStrategy):
 				return today - timedelta(days=1)
 			case "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday":
 				weekday = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(
-						relative_date.title()
-					)
+					relative_date.title()
+				)
 				days_offset = (today.weekday() - weekday) % 7
 				return today - timedelta(days=days_offset)
 			case _ if datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()):
-				return datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()) .date()
+				return datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()).date()
 			case _:
-				return datetime.strptime(relative_date, "%Y-%m-%d").astimezone(timezone.get_default_timezone()) .date()
+				return datetime.strptime(relative_date, "%Y-%m-%d").astimezone(timezone.get_default_timezone()).date()
 
 		# For mypy
 		raise ValueError
@@ -596,30 +597,28 @@ class KemonoCardInfo:
 
 	def to_json(self) -> str:
 		json_dict = {
-			'name': self.name,
-			'date_time': None if self.date_time is None else self.date_time.isoformat(),
-			'service': self.service,
-			'link': self.link
+			"name": self.name,
+			"date_time": None if self.date_time is None else self.date_time.isoformat(),
+			"service": self.service,
+			"link": self.link,
 		}
 		return json.dumps(json_dict)
 
 	@classmethod
 	def from_json(cls, json_str: str) -> KemonoCardInfo:
 		json_dict = json.loads(json_str)
-		date_time = None if json_dict['date_time'] is None else datetime.fromisoformat(json_dict['date_time'])
-		return cls(
-			name=json_dict['name'],
-			date_time=date_time,
-			service=json_dict['service'],
-			link=json_dict['link']
-		)
+		date_time = None if json_dict["date_time"] is None else datetime.fromisoformat(json_dict["date_time"])
+		return cls(name=json_dict["name"], date_time=date_time, service=json_dict["service"], link=json_dict["link"])
 
 	def __str__(self):
-		return f"Kemono Profile Information:\n" \
-			f"- Service: {self.service}\n" \
-			f"- Name: {self.name}\n" \
-			f"- Date and Time: {self.date_time}\n" \
+		return (
+			f"Kemono Profile Information:\n"
+			f"- Service: {self.service}\n"
+			f"- Name: {self.name}\n"
+			f"- Date and Time: {self.date_time}\n"
 			f"- Link: {self.link}"
+		)
+
 
 @register
 class KemonoFavouritesStrategy(BaseStrategy):
@@ -628,8 +627,9 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 	Config data should include username, password.
 	"""
-	login_url = 'https://kemono.party/account/login'
-	fav_url = 'https://kemono.party/favorites'
+
+	login_url = "https://kemono.party/account/login"
+	fav_url = "https://kemono.party/favorites"
 
 	def can_scrape_url(self, url: URL) -> bool:
 		parsed_url = urlsplit(url)
@@ -639,20 +639,20 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str],
-			*args, **kwargs) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	def scrape(
+		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], *args, **kwargs
+	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
 		if not self.can_scrape_url(url):
 			return Err("Invalid URL"), None
 		updates: list[tuple[str, str, URL]] = []
 
-		username: str = config_data['username']
-		password: str = config_data['password']
+		username: str = config_data["username"]
+		password: str = config_data["password"]
 
-		last_update_datetime_str = comparison_data['last_update']
-		last_update_datetime = datetime.strptime(
-				last_update_datetime_str,
-				"%Y-%m-%d %H:%M:%S"
-			).astimezone(timezone.get_default_timezone())
+		last_update_datetime_str = comparison_data["last_update"]
+		last_update_datetime = datetime.strptime(last_update_datetime_str, "%Y-%m-%d %H:%M:%S").astimezone(
+			timezone.get_default_timezone()
+		)
 
 		try:
 			resp = self._get_favourites_html(username, password)
@@ -673,32 +673,31 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		# search alerts for latest update (discarding those with None time)
 		for card in cards:
 			if card.date_time is not None and card.date_time > last_update_datetime:
-				json_dt = json.loads(card.to_json())['date_time']
+				json_dt = json.loads(card.to_json())["date_time"]
 				comparison_state_update = {"last_update": json_dt}
 				break
 
 		return Ok(updates), comparison_state_update
 
 	def _extract_service(self, card_tag: Tag) -> str | None:
-		service = card_tag.select_one('.user-card__service')
+		service = card_tag.select_one(".user-card__service")
 		return service.text.strip() if service is not None else None
 
 	def _extract_name(self, card_tag: Tag) -> str | None:
-		name = card_tag.select_one('.user-card__name')
+		name = card_tag.select_one(".user-card__name")
 		return name.text.strip() if name is not None else None
 
 	def _extract_datetime(self, card_tag: Tag) -> datetime | None:
-		dt = card_tag.select_one('time.timestamp')
+		dt = card_tag.select_one("time.timestamp")
 		if dt is not None:
-			return datetime.strptime(
-					dt.text.strip(),
-					"%Y-%m-%d %H:%M:%S.%f"
-				).astimezone(timezone.get_default_timezone())
+			return datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f").astimezone(
+				timezone.get_default_timezone()
+			)
 		return None
 
 	def _extract_link(self, card_tag: Tag, url: URL) -> URL | None:
-		link = _string_attr_value(card_tag.attrs.get('href'))
-		return URL(url + '/' + link) if link is not None else None
+		link = _string_attr_value(card_tag.attrs.get("href"))
+		return URL(url + "/" + link) if link is not None else None
 
 	def _extract_kemono_profile_cards(self, html: str) -> list[KemonoCardInfo]:
 		card_tags = _get_content_with_css_selector(html, ".user-card")
@@ -712,12 +711,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			dt = self._extract_datetime(card_tag)
 			link = self._extract_link(card_tag, url)
 
-			cards.append(KemonoCardInfo(
-				name=name,
-				date_time=dt,
-				service=service,
-				link=link
-			))
+			cards.append(KemonoCardInfo(name=name, date_time=dt, service=service, link=link))
 
 		return cards
 
@@ -729,7 +723,9 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		}
 
 		with requests.session() as session:
-			login_response = session.post(KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS)
+			login_response = session.post(
+				KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS
+			)
 			assert login_response.status_code == requests.codes.ok
 
 			fav_response = session.get(KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS)
@@ -738,6 +734,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			session.close()
 
 		return fav_response
+
 
 @register
 class FeedStrategy(BaseStrategy):
@@ -769,7 +766,8 @@ class FeedStrategy(BaseStrategy):
 		url: URL,
 		config_data: dict[str, Any],
 		comparison_data: dict[str, Any],
-		*args, **kwargs,
+		*args,
+		**kwargs,
 	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
 		try:
 			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
@@ -893,7 +891,7 @@ class FeedStrategy(BaseStrategy):
 			try:
 				year, month, day, hour, minute, second = parsed[:6]
 				return datetime(year, month, day, hour, minute, second, tzinfo=UTC).timestamp()
-			except (TypeError, ValueError):
+			except TypeError, ValueError:
 				continue
 
 		return None
