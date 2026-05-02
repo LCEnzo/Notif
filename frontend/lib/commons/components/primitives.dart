@@ -28,8 +28,7 @@ class Eyebrow extends StatelessWidget {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
 
-    final base =
-        size == EyebrowSize.regular ? text$.eyebrow : text$.micro;
+    final base = size == EyebrowSize.regular ? text$.eyebrow : text$.micro;
 
     final Color color;
     switch (tone) {
@@ -44,10 +43,7 @@ class Eyebrow extends StatelessWidget {
         break;
     }
 
-    return Text(
-      text.toUpperCase(),
-      style: base.copyWith(color: color),
-    );
+    return Text(text.toUpperCase(), style: base.copyWith(color: color));
   }
 }
 
@@ -66,13 +62,10 @@ class Rule extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
-    final color =
-        strength == RuleStrength.strong ? tokens.ruleStrong : tokens.rule;
-    return Container(
-      margin: margin,
-      height: 1,
-      color: color,
-    );
+    final color = strength == RuleStrength.strong
+        ? tokens.ruleStrong
+        : tokens.rule;
+    return Container(margin: margin, height: 1, color: color);
   }
 }
 
@@ -104,17 +97,20 @@ class IndexRule extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(padded,
-              style: text$.micro.copyWith(color: tokens.inkMute)),
+          Text(padded, style: text$.micro.copyWith(color: tokens.inkMute)),
           const SizedBox(width: 12),
-          Text(title.toUpperCase(),
-              style: text$.eyebrow.copyWith(color: tokens.inkDim)),
+          Text(
+            title.toUpperCase(),
+            style: text$.eyebrow.copyWith(color: tokens.inkDim),
+          ),
           const SizedBox(width: 12),
           Expanded(child: Container(height: 1, color: tokens.rule)),
           if (meta != null) ...[
             const SizedBox(width: 12),
-            Text(meta!.toUpperCase(),
-                style: text$.micro.copyWith(color: tokens.inkMute)),
+            Text(
+              meta!.toUpperCase(),
+              style: text$.micro.copyWith(color: tokens.inkMute),
+            ),
           ],
         ],
       ),
@@ -142,16 +138,12 @@ class CornerMarks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
+    final tokens =
+        Theme.of(context).extension<NotifTokens>() ??
+        NotifTokens.build(NotifColorway.dusk1);
     final c = color ?? tokens.ruleStrong;
 
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        child,
-        ..._ticks(c),
-      ],
-    );
+    return Stack(clipBehavior: Clip.none, children: [child, ..._ticks(c)]);
   }
 
   List<Widget> _ticks(Color c) {
@@ -165,14 +157,26 @@ class CornerMarks extends StatelessWidget {
       Positioned(right: inset, top: inset, child: _VBar(length, c, thickness)),
       // bottom-left
       Positioned(
-          left: inset, bottom: inset, child: _HBar(length, c, thickness)),
+        left: inset,
+        bottom: inset,
+        child: _HBar(length, c, thickness),
+      ),
       Positioned(
-          left: inset, bottom: inset, child: _VBar(length, c, thickness)),
+        left: inset,
+        bottom: inset,
+        child: _VBar(length, c, thickness),
+      ),
       // bottom-right
       Positioned(
-          right: inset, bottom: inset, child: _HBar(length, c, thickness)),
+        right: inset,
+        bottom: inset,
+        child: _HBar(length, c, thickness),
+      ),
       Positioned(
-          right: inset, bottom: inset, child: _VBar(length, c, thickness)),
+        right: inset,
+        bottom: inset,
+        child: _VBar(length, c, thickness),
+      ),
     ];
   }
 }
@@ -184,8 +188,11 @@ class _HBar extends StatelessWidget {
   const _HBar(this.length, this.color, this.thickness);
 
   @override
-  Widget build(BuildContext context) =>
-      SizedBox(width: length, height: thickness, child: ColoredBox(color: color));
+  Widget build(BuildContext context) => SizedBox(
+    width: length,
+    height: thickness,
+    child: ColoredBox(color: color),
+  );
 }
 
 class _VBar extends StatelessWidget {
@@ -195,8 +202,11 @@ class _VBar extends StatelessWidget {
   const _VBar(this.length, this.color, this.thickness);
 
   @override
-  Widget build(BuildContext context) =>
-      SizedBox(width: thickness, height: length, child: ColoredBox(color: color));
+  Widget build(BuildContext context) => SizedBox(
+    width: thickness,
+    height: length,
+    child: ColoredBox(color: color),
+  );
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -226,9 +236,7 @@ class NotifCard extends StatelessWidget {
     final container = Container(
       decoration: BoxDecoration(
         color: tokens.bg2,
-        border: bordered
-            ? Border.all(color: tokens.rule, width: 1)
-            : null,
+        border: bordered ? Border.all(color: tokens.rule, width: 1) : null,
       ),
       padding: padding,
       child: child,
@@ -294,9 +302,7 @@ class NotifButton extends StatelessWidget {
     final text$ = NotifTextTheme.of(context);
     final enabled = onPressed != null;
 
-    final labelStyle = text$.eyebrow.copyWith(
-      letterSpacing: 1.5,
-    );
+    final labelStyle = text$.eyebrow.copyWith(letterSpacing: 1.5);
 
     if (variant == NotifButtonVariant.link) {
       return Material(
@@ -399,9 +405,7 @@ class _FramedButtonState extends State<_FramedButton> {
     }
 
     return MouseRegion(
-      cursor: enabled
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.forbidden,
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.forbidden,
       onEnter: (_) {
         if (enabled) setState(() => _hovered = true);
       },
@@ -643,9 +647,7 @@ class Tag extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        border: Border.all(color: border, width: 1),
-      ),
+      decoration: BoxDecoration(border: Border.all(color: border, width: 1)),
       child: Text(
         label.toUpperCase(),
         style: text$.micro.copyWith(color: text),

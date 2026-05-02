@@ -65,7 +65,7 @@ class _AboutPageState extends State<AboutPage> {
 
     final appSettings = context.watch<AppSettingsController?>();
     final ditheringEnabled = appSettings?.designDitheringEnabled ?? true;
-    final loggedIn = context.watch<AuthService>().jwt != null;
+    final loggedIn = context.watch<AuthService?>()?.jwt != null;
 
     return Scaffold(
       backgroundColor: tokens.bg1,
@@ -276,8 +276,9 @@ class _Hero extends StatelessWidget {
     );
     final intro = Column(
       mainAxisSize: MainAxisSize.max,
-      mainAxisAlignment:
-          isWide ? MainAxisAlignment.spaceBetween : MainAxisAlignment.start,
+      mainAxisAlignment: isWide
+          ? MainAxisAlignment.spaceBetween
+          : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         introTop,
@@ -802,9 +803,7 @@ class _HeroActionGrid extends StatelessWidget {
         variant: NotifButtonVariant.primary,
         expand: true,
       ),
-      const _HeroActionPlaceholder(
-        key: ValueKey('aboutHeroActionPlaceholder'),
-      ),
+      const _HeroActionPlaceholder(key: ValueKey('aboutHeroActionPlaceholder')),
       NotifButton(
         key: const ValueKey('aboutHeroActionDiscord'),
         label: 'Discord',

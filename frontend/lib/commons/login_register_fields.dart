@@ -13,10 +13,20 @@ bool _useFramedAuthMode(BuildContext context) {
       AuthCardStyle.framed;
 }
 
+NotifTokens _authTokens(BuildContext context) {
+  return Theme.of(context).extension<NotifTokens>() ??
+      NotifTokens.build(NotifColorway.dusk1);
+}
+
+NotifTextTheme _authTextTheme(BuildContext context) {
+  return Theme.of(context).extension<NotifTextTheme>() ??
+      NotifTextTheme.forSet(NotifFontSet.current);
+}
+
 TextStyle _buildAuthFieldTextStyle(BuildContext context) {
   if (_useFramedAuthMode(context)) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
+    final tokens = _authTokens(context);
+    final text$ = _authTextTheme(context);
     return text$.body.copyWith(color: tokens.ink);
   }
 
@@ -31,8 +41,8 @@ InputDecoration _buildAuthInputDecoration({
   Widget? suffixIcon,
 }) {
   if (_useFramedAuthMode(context)) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
+    final tokens = _authTokens(context);
+    final text$ = _authTextTheme(context);
 
     return InputDecoration(
       hintText: hintText.isEmpty ? null : hintText,
@@ -41,10 +51,7 @@ InputDecoration _buildAuthInputDecoration({
       suffixIcon: suffixIcon,
       prefixIconColor: tokens.inkDim,
       suffixIconColor: tokens.inkDim,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 12,
-      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       filled: true,
       fillColor: tokens.bg0,
       enabledBorder: OutlineInputBorder(
@@ -117,17 +124,14 @@ class AuthPanelHeader extends StatelessWidget {
           ),
           if (description != null) ...[
             const SizedBox(height: 8),
-            Text(
-              description!,
-              style: const TextStyle(color: Colors.white70),
-            ),
+            Text(description!, style: const TextStyle(color: Colors.white70)),
           ],
         ],
       );
     }
 
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
+    final tokens = _authTokens(context);
+    final text$ = _authTextTheme(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,10 +150,7 @@ class AuthPanelHeader extends StatelessWidget {
         ),
         if (description != null) ...[
           const SizedBox(height: 8),
-          Text(
-            description!,
-            style: text$.body.copyWith(color: tokens.inkDim),
-          ),
+          Text(description!, style: text$.body.copyWith(color: tokens.inkDim)),
         ],
       ],
     );
@@ -184,8 +185,8 @@ class AuthInlineAction extends StatelessWidget {
       );
     }
 
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
+    final tokens = _authTokens(context);
+    final text$ = _authTextTheme(context);
 
     return TextButton(
       onPressed: onPressed,
@@ -215,24 +216,19 @@ class AuthRuleDivider extends StatelessWidget {
           const Expanded(child: Divider(color: Colors.white24)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.white54),
-            ),
+            child: Text(label, style: const TextStyle(color: Colors.white54)),
           ),
           const Expanded(child: Divider(color: Colors.white24)),
         ],
       );
     }
 
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
+    final tokens = _authTokens(context);
+    final text$ = _authTextTheme(context);
 
     return Row(
       children: [
-        Expanded(
-          child: Divider(color: tokens.rule, thickness: 1, height: 1),
-        ),
+        Expanded(child: Divider(color: tokens.rule, thickness: 1, height: 1)),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Text(
@@ -240,9 +236,7 @@ class AuthRuleDivider extends StatelessWidget {
             style: text$.eyebrow.copyWith(color: tokens.inkMute),
           ),
         ),
-        Expanded(
-          child: Divider(color: tokens.rule, thickness: 1, height: 1),
-        ),
+        Expanded(child: Divider(color: tokens.rule, thickness: 1, height: 1)),
       ],
     );
   }
@@ -389,7 +383,7 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
 
 Color _cursorColor(BuildContext context) {
   if (!_useFramedAuthMode(context)) return Colors.white;
-  return NotifTokens.of(context).accent;
+  return _authTokens(context).accent;
 }
 
 class CustomButton extends StatelessWidget {
@@ -412,8 +406,8 @@ class CustomButton extends StatelessWidget {
     final isPrimary = buttonColor == null;
 
     if (isFramed) {
-      final tokens = NotifTokens.of(context);
-      final text$ = NotifTextTheme.of(context);
+      final tokens = _authTokens(context);
+      final text$ = _authTextTheme(context);
       return SizedBox(
         width: double.infinity,
         child: TextButton(
@@ -560,8 +554,6 @@ ButtonStyle _framedAuthButtonStyle({
       }
       return BorderSide(color: tokens.rule, width: 1);
     }),
-    overlayColor: WidgetStatePropertyAll(
-      tokens.accent.withValues(alpha: 0.06),
-    ),
+    overlayColor: WidgetStatePropertyAll(tokens.accent.withValues(alpha: 0.06)),
   );
 }
