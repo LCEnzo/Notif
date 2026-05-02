@@ -38,7 +38,12 @@ ALLOWED_HOSTS = [
 	for host in settings.ALLOWED_HOSTS.split(",")
 	if host.strip()
 ]  # type: ignore
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = settings.DEBUG
+CORS_ALLOWED_ORIGINS = [
+	origin.strip()
+	for origin in settings.CORS_ALLOWED_ORIGINS.split(",")
+	if origin.strip()
+]
 
 
 # Application definition
@@ -196,6 +201,21 @@ if DEBUG:
 		"django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
 		"django.contrib.auth.hashers.ScryptPasswordHasher",
 	]
+
+if not DEBUG:
+	# ── production security hardening ────────────────────────────
+	# Redirect all HTTP to HTTPS. Requires a reverse proxy (nginx/Caddy)
+	# that sets the X-Forwarded-Proto header.
+	SECURE_SSL_REDIRECT = True
+	# Tell Django to trust the X-Forwarded-Proto header from the proxy.
+	SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+	# Tell browsers to only use HTTPS for this domain for 1 year.
+	SECURE_HSTS_SECONDS = 31536000
+	SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+	# Mark session and CSRF cookies as HTTPS-only — browsers won't send
+	# them over plain HTTP.
+	SESSION_COOKIE_SECURE = True
+	CSRF_COOKIE_SECURE = True
 
 
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html

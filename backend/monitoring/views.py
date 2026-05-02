@@ -5,7 +5,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
@@ -103,3 +103,15 @@ def trigger_scrape(request: Request) -> Response:
 @permission_classes([IsAuthenticated])
 def get_strat_choices(request: Request) -> Response:
 	return Response(data=list(STRATEGY_CHOICES))
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def health_check(request: Request) -> Response:
+	"""Health check endpoint — returns 200 if DB is reachable, 503 otherwise."""
+	from django.db import connections
+	try:
+		connections['default'].cursor()
+		return Response({'status': 'ok', 'db': 'ok'})
+	except Exception:
+		return Response({'status': 'error', 'db': 'down'}, status=503)
