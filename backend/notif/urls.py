@@ -13,21 +13,22 @@ Including another URLconf
 	1. Import the include() function: from django.urls import include, path
 	2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework_simplejwt.views import (  # type: ignore
-    TokenRefreshView,
-    TokenVerifyView,
+	TokenRefreshView,
+	TokenVerifyView,
 )
 
 from accounts.views import DevBootstrapTokenObtainPairView
 
 urlpatterns = [
-	path('admin/', admin.site.urls),
-	path('api/v1/accounts/', include('accounts.urls')),
-	path('api/v1/monitoring/', include('monitoring.urls')),
+	path("admin/", admin.site.urls),
+	path("api/v1/accounts/", include("accounts.urls")),
+	path("api/v1/monitoring/", include("monitoring.urls")),
 	# JWT config
-	path('api/v1/token/', DevBootstrapTokenObtainPairView.as_view(), name='token_obtain_pair'), # type: ignore
-	path('api/v1/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'), # type: ignore
-	path('api/v1/token/verify/', TokenVerifyView.as_view(), name='token_verify'), # type: ignore
+	path("api/v1/token/", DevBootstrapTokenObtainPairView.as_view(), name="token_obtain_pair"),  # type: ignore
+	path("api/v1/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),  # type: ignore
+	path("api/v1/token/verify/", TokenVerifyView.as_view(), name="token_verify"),  # type: ignore
 ]

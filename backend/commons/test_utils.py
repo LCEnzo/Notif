@@ -15,9 +15,7 @@ from monitoring.models import Link, Strategy
 
 def login_client(api_client: APIClient, username: str, password: str = password) -> APIClient:
 	login_response = api_client.post(
-		path=reverse("token_obtain_pair"),
-		data={"username": username, "password": password},
-		format="json"
+		path=reverse("token_obtain_pair"), data={"username": username, "password": password}, format="json"
 	)
 	assert login_response.status_code == status.HTTP_200_OK
 
@@ -44,11 +42,11 @@ class SetupMixin:
 
 		cls.regular_user = users[0]
 		# Tests need users to run.
-		assert (cls.regular_user is not None)
+		assert cls.regular_user is not None
 
 		cls.secondary_user = users[1]
-		assert (cls.secondary_user is not None)
-		assert (cls.secondary_user.pk != cls.regular_user.pk)
+		assert cls.secondary_user is not None
+		assert cls.secondary_user.pk != cls.regular_user.pk
 
 		cls.superuser = create_admin()
 
@@ -73,18 +71,19 @@ class ViewSetMixin(SetupMixin, TestCase):
 	To use this mixin, you should define the `list_view_name` and `detail_view_name` variables in your subclass'
 	`setUp()` method. You should also set the `model` variable to be the model class that your tests are operating on.
 	"""
-	lookup_url_kwarg = 'pk'  # The keyword argument used for object lookup in the view
-	list_view_name = 'users-list'  # The name of the list view, to be defined in the subclass
-	detail_view_name = 'users-detail'  # The name of the detail view, to be defined in the subclass
+
+	lookup_url_kwarg = "pk"  # The keyword argument used for object lookup in the view
+	list_view_name = "users-list"  # The name of the list view, to be defined in the subclass
+	detail_view_name = "users-detail"  # The name of the detail view, to be defined in the subclass
 	model: type[Model]  # The model class being tested, to be defined in the subclass
 
 	def setUp(
-			self,
-			list_view_name: str = 'users-list',
-			detail_view_name: str = 'users-detail',
-			model: type[Model] = User,
-			obj: Model | None = None,
-		) -> None:
+		self,
+		list_view_name: str = "users-list",
+		detail_view_name: str = "users-detail",
+		model: type[Model] = User,
+		obj: Model | None = None,
+	) -> None:
 		"""
 		Set up the test case by initializing the model and object under test.
 		Pass `obj` explicitly to avoid depending on queryset ordering.
@@ -122,7 +121,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 
 		return response
 
-	def _test_retrieve_object(self, comparison_field: str = 'name', pk: int | None = None) -> HttpResponse:
+	def _test_retrieve_object(self, comparison_field: str = "name", pk: int | None = None) -> HttpResponse:
 		"""
 		Test that the detail view returns the correct object, using the `comparison_field`.
 		`pk` is the primary key of the object we want to retrieve.
@@ -172,8 +171,9 @@ class ViewSetMixin(SetupMixin, TestCase):
 
 		return response
 
-	def _test_update_object(self, field_to_update: str = 'name', new_field_value: Any = "New Instance",
-							pk: int | None = None) -> HttpResponse:
+	def _test_update_object(
+		self, field_to_update: str = "name", new_field_value: Any = "New Instance", pk: int | None = None
+	) -> HttpResponse:
 		"""
 		Test that objects can be updated via the API.
 		`pk` is the primary key of the object we want to retrieve.
@@ -205,7 +205,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 			url = reverse(self.list_view_name)
 			create_resp = self.api_client.post(url, create_fields)
 			self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
-			pk = self.model_manager.order_by('-pk').first().pk
+			pk = self.model_manager.order_by("-pk").first().pk
 		elif pk is None:
 			assert self.obj is not None
 			pk = self.obj.pk
@@ -218,16 +218,17 @@ class ViewSetMixin(SetupMixin, TestCase):
 
 		return response
 
-	PermissionResponses = namedtuple('PermissionResponses', ['list', 'retrieve', 'create', 'update', 'delete'])
+	PermissionResponses = namedtuple("PermissionResponses", ["list", "retrieve", "create", "update", "delete"])
+
 	def _test_permissions(
-			self,
-			user: User,
-			obj_pk: int,
-			password: str = password,
-			fields: dict[str, Any] | None = None,
-			update_fields: dict[str, Any] | None = None,
-			permissions: dict[str, bool] | None = None
-		) -> PermissionResponses:
+		self,
+		user: User,
+		obj_pk: int,
+		password: str = password,
+		fields: dict[str, Any] | None = None,
+		update_fields: dict[str, Any] | None = None,
+		permissions: dict[str, bool] | None = None,
+	) -> PermissionResponses:
 		"""
 		Test the permissions of the given user.
 
@@ -285,7 +286,7 @@ class ViewSetMixin(SetupMixin, TestCase):
 			update_fields = {"name": "New Instance"}
 
 		if permissions is None:
-			permissions = {'list': True, 'retrieve': True}
+			permissions = {"list": True, "retrieve": True}
 
 		# setup, responses contains the return values
 		client = login_client(APIClient(), user.get_username(), password)
@@ -297,17 +298,17 @@ class ViewSetMixin(SetupMixin, TestCase):
 		response = client.get(url)
 		response_list.append(response)
 
-		list_expected_status = status.HTTP_200_OK if permissions.get('list') else status.HTTP_403_FORBIDDEN
+		list_expected_status = status.HTTP_200_OK if permissions.get("list") else status.HTTP_403_FORBIDDEN
 		self.assertEqual(response.status_code, list_expected_status)
 
 		# get one object
-		url = reverse(self.detail_view_name, kwargs={'pk': obj_pk})
+		url = reverse(self.detail_view_name, kwargs={"pk": obj_pk})
 		response = client.get(url)
 		response_list.append(response)
 
 		retrieve_expected_status: list[int] = (
 			[status.HTTP_200_OK]
-			if permissions.get('retrieve')
+			if permissions.get("retrieve")
 			else [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND]
 		)
 		self.assertIn(response.status_code, retrieve_expected_status)
@@ -318,30 +319,30 @@ class ViewSetMixin(SetupMixin, TestCase):
 		response = client.post(url, data)
 		response_list.append(response)
 
-		create_expected_status = status.HTTP_201_CREATED if permissions.get('create') else status.HTTP_403_FORBIDDEN
+		create_expected_status = status.HTTP_201_CREATED if permissions.get("create") else status.HTTP_403_FORBIDDEN
 		self.assertEqual(response.status_code, create_expected_status)
 
 		# update object
-		url = reverse(self.detail_view_name, kwargs={'pk': obj_pk})
+		url = reverse(self.detail_view_name, kwargs={"pk": obj_pk})
 		data = update_fields
 		response = client.patch(url, data)
 		response_list.append(response)
 
 		update_expected_status: list[int] = (
 			[status.HTTP_200_OK]
-			if permissions.get('update')
+			if permissions.get("update")
 			else [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND]
 		)
 		self.assertIn(response.status_code, update_expected_status)
 
 		# delete object
-		url = reverse(self.detail_view_name, kwargs={'pk': obj_pk})
+		url = reverse(self.detail_view_name, kwargs={"pk": obj_pk})
 		response = client.delete(url)
 		response_list.append(response)
 
 		delete_expected_status: list[int] = (
 			[status.HTTP_204_NO_CONTENT]
-			if permissions.get('delete')
+			if permissions.get("delete")
 			else [status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND]
 		)
 		self.assertIn(response.status_code, delete_expected_status)

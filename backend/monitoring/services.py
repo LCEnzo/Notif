@@ -42,9 +42,7 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 
 			for title, description, item_url in updates:
 				# Deduplicate: skip if identical update exists within last 24h
-				if Update.objects.filter(
-					link=link, title=title, item_url=item_url, created_at__gte=cutoff
-				).exists():
+				if Update.objects.filter(link=link, title=title, item_url=item_url, created_at__gte=cutoff).exists():
 					continue
 
 				update = Update.objects.create(
@@ -74,7 +72,7 @@ def scrape_all_links(
 	Scrape all links (or all links for a specific user).
 	Returns {link_id: result} dict.
 	"""
-	queryset = Link.objects.select_related('strategy')
+	queryset = Link.objects.select_related("strategy")
 	if user_id is not None:
 		queryset = queryset.filter(user_id=user_id)
 

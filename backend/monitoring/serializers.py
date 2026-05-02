@@ -15,33 +15,29 @@ class LinkSerializer(ModelSerializer):
 		model = Link
 
 		fields = [
-			'id',
-			'name',
-			'url',
-			'user',
-			'strategy',
-			'last_scraped',
-			'comparison_info',
+			"id",
+			"name",
+			"url",
+			"user",
+			"strategy",
+			"last_scraped",
+			"comparison_info",
 		]
 
-		read_only_fields = [
-			'id',
-			'comparison_info',
-			'last_scraped'
-		]
+		read_only_fields = ["id", "comparison_info", "last_scraped"]
 
 		extra_kwargs = {
-			'name': {'required': True},
-			'url': {'required': True},
-			'user': {'required': True},
-			'strategy': {'required': True},
+			"name": {"required": True},
+			"url": {"required": True},
+			"user": {"required": True},
+			"strategy": {"required": True},
 		}
 
 
 class UpdateSerializer(ModelSerializer):
 	class Meta:
 		model = Update
-		fields = ['id', 'link', 'title', 'description', 'item_url', 'created_at']
+		fields = ["id", "link", "title", "description", "item_url", "created_at"]
 		read_only_fields = fields
 
 
@@ -50,5 +46,5 @@ class NotificationSerializer(ModelSerializer):
 
 	class Meta:
 		model = Notification
-		fields = ['id', 'update', 'status', 'read_at']
-		read_only_fields = ['id', 'update', 'read_at']
+		fields = ["id", "update", "status", "read_at"]
+		read_only_fields = ["id", "update", "read_at"]

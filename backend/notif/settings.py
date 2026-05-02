@@ -33,61 +33,57 @@ DEV_BOOTSTRAP_PASSWORD = settings.DEV_BOOTSTRAP_PASSWORD
 DEV_BOOTSTRAP_EMAIL = settings.DEV_BOOTSTRAP_EMAIL
 DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 
-ALLOWED_HOSTS = [
-	host.strip()
-	for host in settings.ALLOWED_HOSTS.split(",")
-	if host.strip()
-]  # type: ignore
+ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]  # type: ignore
 CORS_ALLOW_ALL_ORIGINS = True
 
 
 # Application definition
 
 INSTALLED_APPS = [
-	'django.contrib.admin',
-	'django.contrib.auth',
-	'django.contrib.contenttypes',
-	'django.contrib.sessions',
-	'django.contrib.messages',
-	'django.contrib.staticfiles',
-	'corsheaders',
-	'rest_framework',
-	'rest_framework_simplejwt',
-	'accounts',
-	'monitoring',
+	"django.contrib.admin",
+	"django.contrib.auth",
+	"django.contrib.contenttypes",
+	"django.contrib.sessions",
+	"django.contrib.messages",
+	"django.contrib.staticfiles",
+	"corsheaders",
+	"rest_framework",
+	"rest_framework_simplejwt",
+	"accounts",
+	"monitoring",
 ]
 
 MIDDLEWARE = [
-	'django.middleware.security.SecurityMiddleware',
-	'notif.middleware.DevLatencyMiddleware',
-	'django.contrib.sessions.middleware.SessionMiddleware',
+	"django.middleware.security.SecurityMiddleware",
+	"notif.middleware.DevLatencyMiddleware",
+	"django.contrib.sessions.middleware.SessionMiddleware",
 	"corsheaders.middleware.CorsMiddleware",
 	"django.middleware.common.CommonMiddleware",
-	'django.middleware.csrf.CsrfViewMiddleware',
-	'django.contrib.auth.middleware.AuthenticationMiddleware',
-	'django.contrib.messages.middleware.MessageMiddleware',
-	'django.middleware.clickjacking.XFrameOptionsMiddleware',
+	"django.middleware.csrf.CsrfViewMiddleware",
+	"django.contrib.auth.middleware.AuthenticationMiddleware",
+	"django.contrib.messages.middleware.MessageMiddleware",
+	"django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'notif.urls'
+ROOT_URLCONF = "notif.urls"
 
 TEMPLATES = [
 	{
-		'BACKEND': 'django.template.backends.django.DjangoTemplates',
-		'DIRS': [],
-		'APP_DIRS': True,
-		'OPTIONS': {
-			'context_processors': [
-				'django.template.context_processors.debug',
-				'django.template.context_processors.request',
-				'django.contrib.auth.context_processors.auth',
-				'django.contrib.messages.context_processors.messages',
+		"BACKEND": "django.template.backends.django.DjangoTemplates",
+		"DIRS": [],
+		"APP_DIRS": True,
+		"OPTIONS": {
+			"context_processors": [
+				"django.template.context_processors.debug",
+				"django.template.context_processors.request",
+				"django.contrib.auth.context_processors.auth",
+				"django.contrib.messages.context_processors.messages",
 			],
 		},
 	},
 ]
 
-WSGI_APPLICATION = 'notif.wsgi.application'
+WSGI_APPLICATION = "notif.wsgi.application"
 
 
 # Database
@@ -95,9 +91,9 @@ WSGI_APPLICATION = 'notif.wsgi.application'
 
 DATABASES = {
 	"default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": settings.SQLITE_PATH,
-    }
+		"ENGINE": "django.db.backends.sqlite3",
+		"NAME": settings.SQLITE_PATH,
+	}
 	# 'default': {
 	# 	'ENGINE': 'django.db.backends.postgresql',
 	# 	'NAME': 'startdb',
@@ -114,33 +110,33 @@ DATABASES = {
 # Note the custom validator
 AUTH_PASSWORD_VALIDATORS = [
 	{
-		'NAME': 'notif.password_validators.EntropyValidator',
+		"NAME": "notif.password_validators.EntropyValidator",
 	},
 	{
-		'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+		"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
 	},
 	{
-		'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-		'OPTIONS': {
-			'min_length': 8,
-		}
+		"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+		"OPTIONS": {
+			"min_length": 8,
+		},
 	},
 	{
-		'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+		"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
 	},
 	{
-		'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+		"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
 	},
 ]
 
-AUTH_USER_MODEL = 'accounts.User'
+AUTH_USER_MODEL = "accounts.User"
 
 # Internationalization
 # https://docs.djangoproject.com/en/4.0/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -150,36 +146,36 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.0/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = "static/"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # REST Framework stuff
 REST_FRAMEWORK = {
-	'DEFAULT_PERMISSION_CLASSES': [
-		'rest_framework.permissions.IsAuthenticated',
+	"DEFAULT_PERMISSION_CLASSES": [
+		"rest_framework.permissions.IsAuthenticated",
 	],
-	'DEFAULT_AUTHENTICATION_CLASSES': [
-		'rest_framework_simplejwt.authentication.JWTAuthentication',
+	"DEFAULT_AUTHENTICATION_CLASSES": [
+		"rest_framework_simplejwt.authentication.JWTAuthentication",
 	],
 }
 
 LOGGING = {
-	'version': 1,
-	'disable_existing_loggers': False,
-	'handlers': {
-		'file': {
-			'level': 'DEBUG',
-			'class': 'logging.FileHandler',
-			'filename': 'debug.log',
+	"version": 1,
+	"disable_existing_loggers": False,
+	"handlers": {
+		"file": {
+			"level": "DEBUG",
+			"class": "logging.FileHandler",
+			"filename": "debug.log",
 		},
 	},
-	'root': {
-		'handlers': ['file'],
-		'level': 'DEBUG',
+	"root": {
+		"handlers": ["file"],
+		"level": "DEBUG",
 	},
 }
 
@@ -189,7 +185,7 @@ if DEBUG:
 	# https://docs.djangoproject.com/en/4.2/topics/auth/passwords/
 	# This cuts done user creation time from ~270ms to 2.2ms on my laptop, but compromises security.
 	PASSWORD_HASHERS = [
-		'django.contrib.auth.hashers.MD5PasswordHasher',
+		"django.contrib.auth.hashers.MD5PasswordHasher",
 		"django.contrib.auth.hashers.PBKDF2PasswordHasher",
 		"django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
 		"django.contrib.auth.hashers.Argon2PasswordHasher",
@@ -202,14 +198,11 @@ if DEBUG:
 SIMPLE_JWT = {
 	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20 if not DEBUG else 48 * 60),
 	"REFRESH_TOKEN_LIFETIME": timedelta(hours=30 if not DEBUG else 7 * 24),
-
 	"LEEWAY": 0,
-
 	"AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
 	"AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
 	"USER_ID_FIELD": "id",
 	"USER_ID_CLAIM": "user_id",
-
 	"SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
 	"SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
 	"SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
