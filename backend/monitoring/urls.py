@@ -6,6 +6,7 @@ from monitoring.views import (
 	NotificationViewSet,
 	StrategyViewSet,
 	get_strat_choices,
+	health_check,
 	trigger_scrape,
 )
 
@@ -19,4 +20,5 @@ urlpatterns = router.urls
 urlpatterns += [
 	path("strat-choices", get_strat_choices, name="get-strat-choices"),
 	path("trigger-scrape/", trigger_scrape, name="trigger-scrape"),
+	path("health/", health_check, name="health-check"),
 ]

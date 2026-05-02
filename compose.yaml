@@ -1,17 +1,35 @@
+# ── Production compose ────────────────────────────────────────────
+# Run with:  docker compose -f compose.yaml up -d
+# (Without -f, compose.override.yaml is merged — for dev use only.)
+#
+# Scheduled scraping: add to host crontab:
+#   */15 * * * * cd /path/to/notif && docker compose -f compose.yaml run --rm backend python manage.py scrape
+
 services:
   backend:
     build:
       context: ./backend
+    image: notif-backend:latest
+    restart: unless-stopped
     env_file:
       - ./backend/.env
     environment:
-      SQLITE_PATH: /app/data/db.sqlite3
-      BACKEND_PORT: ${BACKEND_PORT:-8000}
-      RUNSERVER_HOST: 0.0.0.0
+      # ── required in production ─────────────────────────────────
+      - DEBUG=false
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:?err: set DJANGO_SECRET_KEY in backend/.env}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-notif.example.com}
+      - NOTIF_ENV=production
+      - SQLITE_PATH=/app/data/db.sqlite3
     ports:
-      - "${BACKEND_PORT:-8000}:${BACKEND_PORT:-8000}"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - backend_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/admin/login/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   backend_data:

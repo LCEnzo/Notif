@@ -1,3 +1,10 @@
+# ── Production Dockerfile ──────────────────────────────────────────
+# For local dev, use compose.override.yaml instead of changing this file.
+#
+# Build:  docker compose -f compose.yaml build
+# Run:    docker compose -f compose.yaml up -d
+# Dev:    docker compose up -d          (auto-merges compose.override.yaml)
+
 FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -7,17 +14,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# ── system deps (lxml needs libxml2/libxslt) ──────────────────────
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libxml2-dev libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# ── uv + deps (layer cached unless pyproject/uv.lock change) ──────
 RUN pip install --no-cache-dir "uv>=0.11,<1.0"
 
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
+# ── app code ──────────────────────────────────────────────────────
 COPY . .
 
+# ── static files (collect during build, served by nginx or whitenoise) ─
+RUN mkdir -p /app/staticfiles \
+    && .venv/bin/python manage.py collectstatic --noinput --clear
+
+# ── volume permissions (directory must exist before chown) ─────────
 RUN mkdir -p /app/data \
     && useradd --create-home appuser \
     && chown -R appuser:appuser /app
@@ -28,5 +43,20 @@ USER appuser
 
 EXPOSE 8000
 
+# ── healthcheck ───────────────────────────────────────────────────
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/admin/login/')" || exit 1
+
 ENTRYPOINT ["./docker-entrypoint.sh"]
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+# ── gunicorn defaults (override via compose command: for dev) ──────
+# Workers: 2-4× CPU cores. For a small VPS with 2 vCPUs, 4 is fine.
+# worker-tmp-dir /dev/shm: prevents heartbeat timeouts on low-memory hosts.
+CMD ["gunicorn", "notif.wsgi:application", \
+     "--bind", "0.0.0.0:8000", \
+     "--workers", "4", \
+     "--worker-tmp-dir", "/dev/shm", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "200"]
