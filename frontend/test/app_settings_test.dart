@@ -177,6 +177,11 @@ void main() {
   test(
     'write failure keeps session value and reports persistence error',
     () async {
+      final originalStore = SharedPreferencesStorePlatform.instance;
+      addTearDown(() {
+        SharedPreferencesStorePlatform.instance = originalStore;
+      });
+
       final settings = await createLoadedSettings();
       final store = _ControllablePreferencesStore(failWrites: true);
       SharedPreferencesStorePlatform.instance = store;
