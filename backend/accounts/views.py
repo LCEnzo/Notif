@@ -18,10 +18,6 @@ from accounts.serializers import (
 )
 from commons.permissions import IsRequestingThemselves, ReadOnly
 
-# Imported here rather than django.conf.settings so TESTING (a module-level
-# variable, not a Django setting) is directly accessible.
-from notif.settings import TESTING
-
 
 class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 	def validate(self, attrs):
@@ -53,35 +49,31 @@ class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 		)
 
 
-class DevBootstrapTokenObtainPairView(TokenObtainPairView):
+class TokenThrottleMixin:
+	"""Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.
+
+	Subclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.
+	"""
+
+	throttle_scope: str
+
+	def get_throttles(self) -> list[BaseThrottle]:
+		if settings.TESTING:
+			return []
+		return [UserRateThrottle(), ScopedRateThrottle()]
+
+
+class DevBootstrapTokenObtainPairView(TokenThrottleMixin, TokenObtainPairView):
 	serializer_class = DevBootstrapTokenObtainPairSerializer
 	throttle_scope = "login"
 
-	def get_throttles(self):
-		throttles: list[BaseThrottle] = [UserRateThrottle()]
-		if not TESTING:
-			throttles.append(ScopedRateThrottle())
-		return throttles
 
-
-class ThrottledTokenRefreshView(TokenRefreshView):
+class ThrottledTokenRefreshView(TokenThrottleMixin, TokenRefreshView):
 	throttle_scope = "token_refresh"
 
-	def get_throttles(self):
-		throttles: list[BaseThrottle] = [UserRateThrottle()]
-		if not TESTING:
-			throttles.append(ScopedRateThrottle())
-		return throttles
 
-
-class ThrottledTokenVerifyView(TokenVerifyView):
+class ThrottledTokenVerifyView(TokenThrottleMixin, TokenVerifyView):
 	throttle_scope = "token_verify"
-
-	def get_throttles(self):
-		throttles: list[BaseThrottle] = [UserRateThrottle()]
-		if not TESTING:
-			throttles.append(ScopedRateThrottle())
-		return throttles
 
 
 class UserViewSet(ModelViewSet):
@@ -91,7 +83,8 @@ class UserViewSet(ModelViewSet):
 	def get_throttles(self):
 		"""Apply stricter 'register' throttle on account creation."""
 		throttles = super().get_throttles()
-		if self.action == "create" and not TESTING:
+		if self.action == "create" and not settings.TESTING:
+			self.throttle_scope = "register"
 			throttles.append(ScopedRateThrottle())
 		return throttles
 
