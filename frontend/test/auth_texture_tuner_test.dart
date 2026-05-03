@@ -127,7 +127,7 @@ void main() {
 
     expect(controller.settings.grainSpacing, 4.2);
 
-    await tester.tap(find.text('Register'));
+    await tester.tap(find.byKey(const Key('loginRegisterButton')));
     await tester.pumpAndSettle();
 
     expect(find.byType(RegisterPage), findsOneWidget);
