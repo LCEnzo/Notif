@@ -1,0 +1,27 @@
+# Caddy reverse proxy for Notif
+# ────────────────────────────────────────────────────────────────
+# Caddy auto-obtains and renews TLS certificates from Let's Encrypt.
+# Configure NOTIF_DOMAIN in the environment, or edit the default below.
+#
+#   Docker: docker compose -f compose.yaml --profile prod up -d
+#   Bare:   cp Caddyfile /etc/caddy/ && systemctl reload caddy
+#
+# Changes take effect after Caddy is reloaded or restarted.
+# ────────────────────────────────────────────────────────────────
+
+{$NOTIF_DOMAIN:notif.example.com} {
+	# Serve static files directly from disk — never touches Python.
+	# Docker default: /app/staticfiles
+	# Bare default:   /opt/notif/backend/staticfiles
+	handle /static/* {
+		root * {$STATIC_ROOT:/opt/notif/backend/staticfiles}
+		file_server
+	}
+
+	# Everything else → gunicorn/Django.
+	# Docker default: backend:8000
+	# Bare override:  BACKEND_UPSTREAM=localhost BACKEND_PORT=8000
+	handle {
+		reverse_proxy {$BACKEND_UPSTREAM:localhost}:{$BACKEND_PORT:8000}
+	}
+}

@@ -5,9 +5,10 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.throttling import BaseThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 
 from accounts.models import User
 from accounts.serializers import (
@@ -48,13 +49,43 @@ class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 		)
 
 
-class DevBootstrapTokenObtainPairView(TokenObtainPairView):
+class TokenThrottleMixin:
+	"""Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.
+
+	Subclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.
+	"""
+
+	throttle_scope: str
+
+	def get_throttles(self) -> list[BaseThrottle]:
+		if settings.TESTING:
+			return []
+		return [UserRateThrottle(), ScopedRateThrottle()]
+
+
+class DevBootstrapTokenObtainPairView(TokenThrottleMixin, TokenObtainPairView):
 	serializer_class = DevBootstrapTokenObtainPairSerializer
+	throttle_scope = "login"
+
+
+class ThrottledTokenRefreshView(TokenThrottleMixin, TokenRefreshView):
+	throttle_scope = "token_refresh"
+
+
+class ThrottledTokenVerifyView(TokenThrottleMixin, TokenVerifyView):
+	throttle_scope = "token_verify"
 
 
 class UserViewSet(ModelViewSet):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
+
+	def get_throttles(self) -> list[BaseThrottle]:
+		"""Apply stricter 'register' throttle on account creation."""
+		if self.action == "create" and not settings.TESTING:
+			self.throttle_scope = "register"
+			return [*super().get_throttles(), ScopedRateThrottle()]
+		return super().get_throttles()
 
 	def get_serializer_class(self) -> type[BaseSerializer]:
 		requester_pk = self.request.user.pk if not self.request.user.is_anonymous else None

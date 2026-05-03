@@ -1,5 +1,5 @@
 # ── Production compose ────────────────────────────────────────────
-# Run with:  docker compose -f compose.yaml up -d
+# Run with:  docker compose -f compose.yaml --profile prod up -d
 # (Without -f, compose.override.yaml is merged — for dev use only.)
 #
 # Scheduled scraping: add to host crontab:
@@ -14,22 +14,45 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      # ── required in production ─────────────────────────────────
+      # Values forced for the production container.
+      # Secrets and domain-specific values stay in backend/.env.
       - DEBUG=false
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:?err: set DJANGO_SECRET_KEY in backend/.env}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-notif.example.com}
       - NOTIF_ENV=production
       - SQLITE_PATH=/app/data/db.sqlite3
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
+    expose:
+      - "8000"
     volumes:
       - backend_data:/app/data
+      - staticfiles:/app/staticfiles
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/admin/login/')"]
+      test: ["CMD", "python", "-c", "import urllib.request; req = urllib.request.Request('http://localhost:8000/api/v1/monitoring/health/', headers={'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(req, timeout=5)"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
 
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    profiles: ["prod"]
+    depends_on:
+      - backend
+    environment:
+      - NOTIF_DOMAIN=${NOTIF_DOMAIN:-notif.example.com}
+      - STATIC_ROOT=/app/staticfiles
+      - BACKEND_UPSTREAM=backend
+      - BACKEND_PORT=8000
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - staticfiles:/app/staticfiles:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
 volumes:
   backend_data:
+  staticfiles:
+  caddy_data:
+  caddy_config:
