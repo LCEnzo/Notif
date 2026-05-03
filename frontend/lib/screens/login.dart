@@ -123,6 +123,7 @@ class _FormContentState extends State<_FormContent> {
         const AuthRuleDivider(),
         const SizedBox(height: 12),
         CustomButton(
+          key: const Key('loginRegisterButton'),
           buttonText: 'Create account',
           buttonColor: AuthPalette.secondaryButtonBase,
           onPressed: () => context.go('/register'),
@@ -180,7 +181,8 @@ class _FormContentState extends State<_FormContent> {
         ],
         const SizedBox(height: 16),
         CustomButton(
-          buttonText: 'Register',
+          key: const Key('loginRegisterButton'),
+          buttonText: 'Create account',
           buttonColor: AuthPalette.secondaryButtonBase,
           onPressed: () => context.go('/register'),
         ),
