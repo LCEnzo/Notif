@@ -76,12 +76,12 @@ docker compose -f compose.yaml build
 # Start backend + Caddy. The prod profile enables Caddy.
 docker compose -f compose.yaml --profile prod up -d
 
-# Check backend locally through the container network healthcheck.
+# Check backend locally through the container healthcheck (liveness).
 docker compose -f compose.yaml ps
 
-# Check public HTTPS through Caddy.
-curl https://notif.yourdomain.com/api/v1/monitoring/health/
-# → {"status":"ok","db":"ok"}
+# Verify the deploy works — /status checks DB + returns version/commit.
+curl https://notif.yourdomain.com/api/v1/monitoring/status/
+# → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
 # Check Caddy got a certificate.
 docker compose -f compose.yaml --profile prod logs caddy | grep -i "certificate"
@@ -252,13 +252,13 @@ systemctl reload caddy
 # Check both services are running
 systemctl status notif caddy
 
-# Health check (local). Header avoids HTTPS redirect from Django.
-curl -H 'X-Forwarded-Proto: https' http://localhost:8000/api/v1/monitoring/health/
-# → {"status":"ok","db":"ok"}
+# Status check (local, through gunicorn). Header avoids HTTPS redirect from Django.
+curl -H 'X-Forwarded-Proto: https' http://localhost:8000/api/v1/monitoring/status/
+# → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
-# Health check (public, through Caddy)
-curl https://notif.yourdomain.com/api/v1/monitoring/health/
-# → {"status":"ok","db":"ok"}
+# Status check (public, through Caddy)
+curl https://notif.yourdomain.com/api/v1/monitoring/status/
+# → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
 # Check Caddy got a certificate
 journalctl -u caddy --no-pager | grep -i "certificate"
@@ -305,8 +305,11 @@ cp /var/lib/notif/db.sqlite3 /var/backups/notif/db-$(date +%Y%m%d-%H%M).sqlite3
 ```bash
 # ── These should all work from any machine ──
 
-# Health
+# Liveness (process alive?)
 curl https://notif.yourdomain.com/api/v1/monitoring/health/
+
+# Status (DB connectivity + version info)
+curl https://notif.yourdomain.com/api/v1/monitoring/status/
 
 # API docs (public)
 open https://notif.yourdomain.com/api/v1/docs/
@@ -362,5 +365,5 @@ In production Compose, only Caddy publishes public ports. In bare-metal mode, gu
 
 | Service | What it monitors | Setup |
 |---------|-----------------|-------|
-| [UptimeRobot](https://uptimerobot.com) | `GET /api/v1/monitoring/health/` every 5 min | 2 min, free tier |
+| [UptimeRobot](https://uptimerobot.com) | `GET /api/v1/monitoring/status/` every 5 min | 2 min, free tier |
 | [Healthchecks.io](https://healthchecks.io) | Cron scrape jobs — alerts if a run is missed | 2 min, free tier |
