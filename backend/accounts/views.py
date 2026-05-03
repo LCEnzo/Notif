@@ -80,13 +80,12 @@ class UserViewSet(ModelViewSet):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
 
-	def get_throttles(self):
+	def get_throttles(self) -> list[BaseThrottle]:
 		"""Apply stricter 'register' throttle on account creation."""
-		throttles = super().get_throttles()
 		if self.action == "create" and not settings.TESTING:
 			self.throttle_scope = "register"
-			throttles.append(ScopedRateThrottle())
-		return throttles
+			return [*super().get_throttles(), ScopedRateThrottle()]
+		return super().get_throttles()
 
 	def get_serializer_class(self) -> type[BaseSerializer]:
 		requester_pk = self.request.user.pk if not self.request.user.is_anonymous else None
