@@ -45,7 +45,6 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_launcher_icons: ^0.14.3
   shared_preferences_platform_interface: ^2.4.2
 
   # The "flutter_lints" package below contains a set of recommended lints to
@@ -55,6 +54,9 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+# Config for the one-off flutter_launcher_icons generator.
+# Keep the package out of dev_dependencies so normal CI/build dependency
+# resolution does not pull the icon generator and its image/archive stack.
 flutter_launcher_icons:
   image_path: assets/notif-ring-1-cyan-dark-1024.png
   android: true
