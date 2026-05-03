@@ -55,7 +55,7 @@ class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 class DevBootstrapTokenObtainPairView(TokenObtainPairView):
 	serializer_class = DevBootstrapTokenObtainPairSerializer
-	throttle_scope = 'login'
+	throttle_scope = "login"
 
 	def get_throttles(self):
 		throttles: list[BaseThrottle] = [UserRateThrottle()]
@@ -65,7 +65,7 @@ class DevBootstrapTokenObtainPairView(TokenObtainPairView):
 
 
 class ThrottledTokenRefreshView(TokenRefreshView):
-	throttle_scope = 'token_refresh'
+	throttle_scope = "token_refresh"
 
 	def get_throttles(self):
 		throttles: list[BaseThrottle] = [UserRateThrottle()]
@@ -75,7 +75,7 @@ class ThrottledTokenRefreshView(TokenRefreshView):
 
 
 class ThrottledTokenVerifyView(TokenVerifyView):
-	throttle_scope = 'token_verify'
+	throttle_scope = "token_verify"
 
 	def get_throttles(self):
 		throttles: list[BaseThrottle] = [UserRateThrottle()]
@@ -91,7 +91,7 @@ class UserViewSet(ModelViewSet):
 	def get_throttles(self):
 		"""Apply stricter 'register' throttle on account creation."""
 		throttles = super().get_throttles()
-		if self.action == 'create' and not TESTING:
+		if self.action == "create" and not TESTING:
 			throttles.append(ScopedRateThrottle())
 		return throttles
 
