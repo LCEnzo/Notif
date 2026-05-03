@@ -35,7 +35,9 @@ class _DitherShaderLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
+    final tokens =
+        Theme.of(context).extension<NotifTokens>() ??
+        NotifTokens.build(NotifColorway.dusk1);
     final palette = ditherOverlayPaletteFor(tokens);
 
     return FutureBuilder<ui.FragmentProgram>(
