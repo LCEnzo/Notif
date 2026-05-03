@@ -20,16 +20,16 @@ Before SSHing into anything:
 
 ## Option A: Docker Compose
 
-Use when you want: CI-identical environments, dev parity via `compose.override.yaml`, or eventual multi-service orchestration.
+Use when you want: CI-identical environments, dev parity via `compose.override.yaml`, Caddy + TLS in Compose, or eventual multi-service orchestration.
 
-### A1. Provision the VPS (~5 min)
+### A1. Provision the VPS
 
 ```bash
 ssh root@<VPS-IP>
 
 # Docker
 curl -fsSL https://get.docker.com | sh
-apt install -y docker-compose-v2 git
+apt update && apt install -y docker-compose-v2 git
 
 # Create deploy user (don't run services as root)
 useradd -m -s /bin/bash deploy
@@ -38,45 +38,56 @@ usermod -aG docker deploy
 su - deploy
 ```
 
-### A2. Clone and configure (~5 min)
+### A2. Clone and configure
 
 ```bash
 git clone https://github.com/LCEnzo/Notif /home/deploy/notif
 cd /home/deploy/notif
 
-# Create production .env from the example
+# Project-level env used by Docker Compose/Caddy interpolation.
+# backend/.env is still used for Django settings and secrets.
+cat > .env << 'ENV'
+NOTIF_DOMAIN=notif.yourdomain.com
+ENV
+
+# Create production Django env from the example.
 cp backend/.env.example backend/.env
 
 # ── REQUIRED: edit backend/.env ──
 # DEBUG=false
 # NOTIF_ENV=production
-# DJANGO_SECRET_KEY=<run: python manage.py regenerate_secret_key>
+# DJANGO_SECRET_KEY=<run after install/build, or paste a generated secret>
 # ALLOWED_HOSTS=notif.yourdomain.com
 # CORS_ALLOWED_ORIGINS=https://notif.yourdomain.com
 # SQLITE_PATH=/app/data/db.sqlite3
+# STATIC_ROOT=staticfiles
 
 vim backend/.env
 ```
 
-### A3. Build and launch (~3 min)
+`DJANGO_SECRET_KEY` belongs in `backend/.env`, not in the project-level `.env`. Compose reads `backend/.env` into the backend container; the project-level `.env` is only for Compose interpolation such as `NOTIF_DOMAIN`.
+
+### A3. Build and launch
 
 ```bash
-# Edit Caddyfile — replace notif.example.com with your domain
-sed -i 's/notif.example.com/notif.yourdomain.com/' Caddyfile
-
-# Build the image
+# Build the image. collectstatic runs during the build with a build-only dummy secret.
 docker compose -f compose.yaml build
 
-# Start everything
-docker compose -f compose.yaml up -d
+# Start backend + Caddy. The prod profile enables Caddy.
+docker compose -f compose.yaml --profile prod up -d
 
-# Check it's alive
-curl http://localhost:8000/api/v1/monitoring/health/
+# Check backend locally through the container network healthcheck.
+docker compose -f compose.yaml ps
+
+# Check public HTTPS through Caddy.
+curl https://notif.yourdomain.com/api/v1/monitoring/health/
 # → {"status":"ok","db":"ok"}
 
-# Check Caddy got a certificate
-docker compose logs caddy | grep "certificate"
+# Check Caddy got a certificate.
+docker compose -f compose.yaml --profile prod logs caddy | grep -i "certificate"
 ```
+
+The backend is not published directly to the host in production Compose. Caddy exposes ports 80/443 and proxies internally to `backend:8000`.
 
 ### A4. Cron for scraping
 
@@ -90,18 +101,19 @@ crontab -e
 
 ```bash
 # View logs
-docker compose -f compose.yaml logs -f backend
+docker compose -f compose.yaml --profile prod logs -f backend caddy
 
 # Restart after config changes
-docker compose -f compose.yaml restart backend
+docker compose -f compose.yaml --profile prod restart backend caddy
 
 # Pull updates
 cd /home/deploy/notif
 git pull
 docker compose -f compose.yaml build
-docker compose -f compose.yaml up -d
+docker compose -f compose.yaml --profile prod up -d
 
 # Backup the database
+mkdir -p backups
 docker compose -f compose.yaml exec backend cp /app/data/db.sqlite3 /app/data/db-$(date +%Y%m%d).sqlite3
 docker compose -f compose.yaml cp backend:/app/data/db-$(date +%Y%m%d).sqlite3 ./backups/
 ```
@@ -110,37 +122,41 @@ docker compose -f compose.yaml cp backend:/app/data/db-$(date +%Y%m%d).sqlite3 .
 
 ## Option B: Bare Metal + systemd
 
-Use when you want: minimal RAM footprint (no Docker daemon), fewer moving parts, native journald logging. Recommended for CX22's 2 GB.
+Use when you want: minimal RAM footprint (no Docker daemon), fewer moving parts, native journald logging. Recommended for CX22's 2 GB if you are comfortable managing Python and systemd directly.
 
-### B1. Provision the VPS (~3 min)
+The project currently requires Python `>=3.14,<3.15`. Ubuntu 22.04/24.04 default apt repositories usually do not provide `python3.14`, so this path installs Python with `uv` instead of apt.
+
+### B1. Provision the VPS
 
 ```bash
 ssh root@<VPS-IP>
 
-# Install runtime deps
-apt update && apt install -y python3.14 python3.14-venv git caddy
+# Runtime deps + Caddy. uv manages Python 3.14.
+apt update && apt install -y curl git caddy
+curl -LsSf https://astral.sh/uv/install.sh | sh
+install -m 755 /root/.local/bin/uv /usr/local/bin/uv
 
 # Create app user (runs the service, can't log in)
-useradd -r -s /bin/false -d /opt/notif notif
+useradd -r -s /usr/sbin/nologin -d /opt/notif notif
 
 # Create source + data directories
 mkdir -p /opt/notif /var/lib/notif /var/backups/notif
 chown -R notif:notif /opt/notif /var/lib/notif /var/backups/notif
 ```
 
-### B2. Clone, venv, install (~3 min)
+### B2. Clone, venv, install
 
 ```bash
 git clone https://github.com/LCEnzo/Notif /opt/notif
+chown -R notif:notif /opt/notif
 cd /opt/notif/backend
 
-# Production venv
-python3.14 -m venv .venv
-.venv/bin/pip install uv
-uv sync --no-dev
+# Production Python + venv from pyproject.toml/uv.lock
+sudo -u notif -H uv python install 3.14
+sudo -u notif -H uv sync --frozen --no-dev --python 3.14
 
 # .env
-cp .env.example .env
+sudo -u notif cp .env.example .env
 # ── REQUIRED: edit .env (use /var/lib/notif for data paths) ──
 # DEBUG=false
 # NOTIF_ENV=production
@@ -148,18 +164,21 @@ cp .env.example .env
 # ALLOWED_HOSTS=notif.yourdomain.com
 # CORS_ALLOWED_ORIGINS=https://notif.yourdomain.com
 # SQLITE_PATH=/var/lib/notif/db.sqlite3
+# STATIC_ROOT=staticfiles
 
 vim .env
+chown notif:notif .env
+chmod 600 .env
 
 # Generate real secret key
-.venv/bin/python manage.py regenerate_secret_key --update-env
+sudo -u notif -H .venv/bin/python manage.py regenerate_secret_key --update-env
 
 # Migrate + collect static
-.venv/bin/python manage.py migrate --noinput
-.venv/bin/python manage.py collectstatic --noinput
+sudo -u notif -H .venv/bin/python manage.py migrate --noinput
+sudo -u notif -H .venv/bin/python manage.py collectstatic --noinput
 ```
 
-### B3. systemd service (~2 min)
+### B3. systemd service
 
 ```bash
 cat > /etc/systemd/system/notif.service << 'UNIT'
@@ -186,7 +205,7 @@ PrivateTmp=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/notif /var/backups/notif
+ReadWritePaths=/opt/notif/backend/staticfiles /var/lib/notif /var/backups/notif
 
 [Install]
 WantedBy=multi-user.target
@@ -196,16 +215,35 @@ systemctl daemon-reload
 systemctl enable --now notif
 ```
 
-### B4. Caddy (~1 min)
+### B4. Caddy
 
 ```bash
-# Edit the Caddyfile — replace notif.example.com with your domain
-sed -i 's/notif.example.com/notif.yourdomain.com/' /opt/notif/Caddyfile
+# Configure Caddy env for this deployment.
+cat > /etc/caddy/notif.env << 'ENV'
+NOTIF_DOMAIN=notif.yourdomain.com
+STATIC_ROOT=/opt/notif/backend/staticfiles
+BACKEND_UPSTREAM=localhost
+BACKEND_PORT=8000
+ENV
 
-# Link into Caddy's config directory
+# Load the env file before Caddy starts.
+systemctl edit caddy
+```
+
+Add this override, then save:
+
+```ini
+[Service]
+EnvironmentFile=/etc/caddy/notif.env
+```
+
+Then install and reload the Caddyfile:
+
+```bash
 ln -sf /opt/notif/Caddyfile /etc/caddy/Caddyfile
-
+systemctl daemon-reload
 systemctl enable --now caddy
+systemctl reload caddy
 ```
 
 ### B5. Verify
@@ -214,8 +252,8 @@ systemctl enable --now caddy
 # Check both services are running
 systemctl status notif caddy
 
-# Health check (local)
-curl http://localhost:8000/api/v1/monitoring/health/
+# Health check (local). Header avoids HTTPS redirect from Django.
+curl -H 'X-Forwarded-Proto: https' http://localhost:8000/api/v1/monitoring/health/
 # → {"status":"ok","db":"ok"}
 
 # Health check (public, through Caddy)
@@ -231,7 +269,7 @@ journalctl -u caddy --no-pager | grep -i "certificate"
 ```bash
 cat > /etc/cron.d/notif-scrape << 'CRON'
 # Scrape every 15 minutes
-*/15 * * * * notif /opt/notif/backend/.venv/bin/python /opt/notif/backend/manage.py scrape
+*/15 * * * * notif cd /opt/notif/backend && /opt/notif/backend/.venv/bin/python manage.py scrape
 CRON
 ```
 
@@ -244,14 +282,17 @@ journalctl -u caddy -f
 
 # Restart after .env or code changes
 systemctl restart notif
+systemctl reload caddy
 
 # Pull updates
 cd /opt/notif
 sudo -u notif git pull
-sudo -u notif /opt/notif/backend/.venv/bin/pip install uv
 cd /opt/notif/backend
-sudo -u notif uv sync --no-dev
+sudo -u notif -H uv sync --frozen --no-dev --python 3.14
+sudo -u notif -H .venv/bin/python manage.py migrate --noinput
+sudo -u notif -H .venv/bin/python manage.py collectstatic --noinput
 systemctl restart notif
+systemctl reload caddy
 
 # Backup the database
 cp /var/lib/notif/db.sqlite3 /var/backups/notif/db-$(date +%Y%m%d-%H%M).sqlite3
@@ -294,9 +335,9 @@ Browser ──HTTPS──▶ Cloudflare ──HTTPS──▶ Caddy:443 ──HTT
 | Layer | What it does | Config |
 |-------|-------------|--------|
 | Cloudflare | DNS, DDoS protection, global CDN | A-record + orange cloud |
-| Caddy | TLS termination, static files, reverse proxy | `Caddyfile` (12 lines) |
+| Caddy | TLS termination, static files, reverse proxy | `Caddyfile` + deployment env |
 | gunicorn | WSGI server, runs Django | systemd unit or Docker |
-| Django | Application — API, auth, scraping | `settings.py` + `.env` |
+| Django | Application — API, auth, scraping | `settings.py` + `backend/.env` |
 | SQLite | Database | Single file in a persistent volume/directory |
 
 ---
@@ -313,7 +354,7 @@ ufw allow 443/tcp
 ufw enable
 ```
 
-gunicorn binds to `127.0.0.1:8000` — not reachable from outside. Only Caddy (on 443) and SSH (on 22) are exposed.
+In production Compose, only Caddy publishes public ports. In bare-metal mode, gunicorn binds to `127.0.0.1:8000`, so it is not reachable from outside. Only Caddy (80/443) and SSH (22) should be exposed.
 
 ---
 
