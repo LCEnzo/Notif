@@ -196,7 +196,7 @@ SPECTACULAR_SETTINGS = {
 		"Monitors URLs for changes via pluggable scraping strategies "
 		"(RSS/Atom feeds, CSS selectors, forum threadmarks, and more)."
 	),
-	"VERSION": "1.0.0",
+	"VERSION": "0.2.0",
 	"SERVE_INCLUDE_SCHEMA": False,
 }
 
