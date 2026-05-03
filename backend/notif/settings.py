@@ -10,10 +10,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
+import sys
 from datetime import timedelta
 from pathlib import Path
 
 from notif.config import settings
+
+# Disable throttling during test runs — rate limits would break the test suite.
+TESTING = "test" in sys.argv or "pytest" in sys.modules
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -155,6 +159,14 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # REST Framework stuff
+_REST_THROTTLE_RATES = {
+	"user": "500/hour",
+	"login": "5/min",
+	"register": "3/min",
+	"token_refresh": "10/min",
+	"token_verify": "20/min",
+}
+
 REST_FRAMEWORK = {
 	"DEFAULT_PERMISSION_CLASSES": [
 		"rest_framework.permissions.IsAuthenticated",
@@ -163,6 +175,12 @@ REST_FRAMEWORK = {
 		"rest_framework_simplejwt.authentication.JWTAuthentication",
 	],
 	"DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+	"DEFAULT_THROTTLE_CLASSES": []
+	if TESTING
+	else [
+		"rest_framework.throttling.UserRateThrottle",
+	],
+	"DEFAULT_THROTTLE_RATES": _REST_THROTTLE_RATES,
 }
 
 SPECTACULAR_SETTINGS = {
