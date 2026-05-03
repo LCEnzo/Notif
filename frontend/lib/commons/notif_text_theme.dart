@@ -235,7 +235,12 @@ NotifTextTheme _buildCurrent() {
   const sans = NotifFontFamilies.skyling;
   const mono = NotifFontFamilies.suisseMono;
 
-  final display = _serif(family: serif, size: 34, lineHeight: 42, letterSpacing: -0.5);
+  final display = _serif(
+    family: serif,
+    size: 34,
+    lineHeight: 42,
+    letterSpacing: -0.5,
+  );
   final title = _serif(family: serif, size: 22, lineHeight: 28);
   final heading = _serif(family: serif, size: 22, lineHeight: 28);
 
@@ -255,15 +260,11 @@ NotifTextTheme _buildCurrent() {
     letterSpacing: 0.1,
   );
 
-  // Current set has no long-read serif. bodyLong falls back to body — spec
-  // §6.3 explicitly allows this, and §6.4 forbids faking it with italic.
+  // Current set has no long-read serif. bodyLong falls back to body; for this
+  // set, §6.4 forbids faking it with italic. Hybrid deliberately differs.
   final bodyLong = body;
 
-  const code = TextStyle(
-    fontFamily: mono,
-    fontSize: 14,
-    height: 20 / 14,
-  );
+  const code = TextStyle(fontFamily: mono, fontSize: 14, height: 20 / 14);
 
   return NotifTextTheme(
     fontSet: NotifFontSet.current,
@@ -294,13 +295,40 @@ NotifTextTheme _buildExperiment() {
   // "Newsreader, JetBrains Mono, and Inter Tight."
   return NotifTextTheme(
     fontSet: NotifFontSet.experiment,
-    display: _serif(family: serif, size: 64, lineHeight: 61, letterSpacing: -1.28),
-    title: _serif(family: serif, size: 40, lineHeight: 41, letterSpacing: -0.60),
-    heading: _serif(family: serif, size: 22, lineHeight: 25, letterSpacing: -0.22),
-    eyebrow: _mono(family: mono, size: 11, lineHeight: 11, letterSpacing: 2.2, weight: FontWeight.w500),
+    display: _serif(
+      family: serif,
+      size: 64,
+      lineHeight: 61,
+      letterSpacing: -1.28,
+    ),
+    title: _serif(
+      family: serif,
+      size: 40,
+      lineHeight: 41,
+      letterSpacing: -0.60,
+    ),
+    heading: _serif(
+      family: serif,
+      size: 22,
+      lineHeight: 25,
+      letterSpacing: -0.22,
+    ),
+    eyebrow: _mono(
+      family: mono,
+      size: 11,
+      lineHeight: 11,
+      letterSpacing: 2.2,
+      weight: FontWeight.w500,
+    ),
     body: _sans(family: sans, size: 14, lineHeight: 22),
     bodyLong: _serif(family: serifLong, size: 15, lineHeight: 23),
-    micro: _mono(family: mono, size: 10.5, lineHeight: 14, letterSpacing: 1.26, weight: FontWeight.w500),
+    micro: _mono(
+      family: mono,
+      size: 10.5,
+      lineHeight: 14,
+      letterSpacing: 1.26,
+      weight: FontWeight.w500,
+    ),
     code: _mono(family: mono, size: 12, lineHeight: 18),
   );
 }
@@ -317,13 +345,45 @@ NotifTextTheme _buildHybrid() {
 
   return NotifTextTheme(
     fontSet: NotifFontSet.hybrid,
-    display: _serif(family: serif, size: 64, lineHeight: 61, letterSpacing: -1.28),
-    title: _serif(family: serif, size: 40, lineHeight: 41, letterSpacing: -0.60),
-    heading: _serif(family: serif, size: 22, lineHeight: 25, letterSpacing: -0.22),
-    eyebrow: _mono(family: mono, size: 11, lineHeight: 11, letterSpacing: 2.2, weight: FontWeight.w500),
+    display: _serif(
+      family: serif,
+      size: 64,
+      lineHeight: 61,
+      letterSpacing: -1.28,
+    ),
+    title: _serif(
+      family: serif,
+      size: 40,
+      lineHeight: 41,
+      letterSpacing: -0.60,
+    ),
+    heading: _serif(
+      family: serif,
+      size: 22,
+      lineHeight: 25,
+      letterSpacing: -0.22,
+    ),
+    eyebrow: _mono(
+      family: mono,
+      size: 11,
+      lineHeight: 11,
+      letterSpacing: 2.2,
+      weight: FontWeight.w500,
+    ),
     body: _mono(family: mono, size: 13, lineHeight: 20),
-    bodyLong: _serif(family: serif, size: 15, lineHeight: 23, style: FontStyle.italic),
-    micro: _mono(family: mono, size: 10.5, lineHeight: 14, letterSpacing: 1.26, weight: FontWeight.w500),
+    bodyLong: _serif(
+      family: serif,
+      size: 15,
+      lineHeight: 23,
+      style: FontStyle.italic,
+    ),
+    micro: _mono(
+      family: mono,
+      size: 10.5,
+      lineHeight: 14,
+      letterSpacing: 1.26,
+      weight: FontWeight.w500,
+    ),
     code: _mono(family: mono, size: 12, lineHeight: 18),
   );
 }

@@ -123,14 +123,14 @@ class AuthTextureSettings {
           halftoneOpacityGrowth ?? this.halftoneOpacityGrowth,
       halftoneColorLerpScale:
           halftoneColorLerpScale ?? this.halftoneColorLerpScale,
-      halftoneConvexCurveDepthFactor: halftoneConvexCurveDepthFactor ??
-          this.halftoneConvexCurveDepthFactor,
+      halftoneConvexCurveDepthFactor:
+          halftoneConvexCurveDepthFactor ?? this.halftoneConvexCurveDepthFactor,
       halftoneLandscapeCurveBoost:
           halftoneLandscapeCurveBoost ?? this.halftoneLandscapeCurveBoost,
       halftoneCurveExponent:
           halftoneCurveExponent ?? this.halftoneCurveExponent,
-      halftoneLandscapeExponentPull: halftoneLandscapeExponentPull ??
-          this.halftoneLandscapeExponentPull,
+      halftoneLandscapeExponentPull:
+          halftoneLandscapeExponentPull ?? this.halftoneLandscapeExponentPull,
     );
   }
 
@@ -331,9 +331,7 @@ class PageBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final notifier = debugSettingsNotifier;
-    final tokens =
-        Theme.of(context).extension<NotifTokens>() ??
-        NotifTokens.build(NotifColorway.dusk1);
+    final tokens = NotifTokens.of(context);
     final palette = _AuthBackdropPalette.fromTokens(tokens);
     final baseOperations = [
       _LinearGradientOp(
@@ -370,9 +368,7 @@ class PageBackground extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CustomPaint(
-            painter: _PosterBackgroundPainter(baseOperations),
-          ),
+          CustomPaint(painter: _PosterBackgroundPainter(baseOperations)),
           if (notifier != null)
             ValueListenableBuilder<AuthTextureSettings>(
               valueListenable: notifier,
@@ -384,9 +380,7 @@ class PageBackground extends StatelessWidget {
               settings: AuthTextureSettings.defaults,
               palette: palette,
             ),
-          CustomPaint(
-            painter: _PosterBackgroundPainter(foregroundOperations),
-          ),
+          CustomPaint(painter: _PosterBackgroundPainter(foregroundOperations)),
           child,
           if (debugOverlayBuilder != null)
             Builder(builder: debugOverlayBuilder!),
@@ -422,15 +416,68 @@ class _PosterTextureLayer extends StatelessWidget {
           return const SizedBox.expand();
         }
         final dpr = MediaQuery.devicePixelRatioOf(context);
-        return CustomPaint(
-          painter: _PosterTexturePainter(
-            program: program,
-            settings: settings,
-            palette: palette,
-            dpr: dpr,
-          ),
+        return _PosterTexturePaint(
+          program: program,
+          settings: settings,
+          palette: palette,
+          dpr: dpr,
         );
       },
+    );
+  }
+}
+
+class _PosterTexturePaint extends StatefulWidget {
+  final ui.FragmentProgram program;
+  final AuthTextureSettings settings;
+  final _AuthBackdropPalette palette;
+  final double dpr;
+
+  const _PosterTexturePaint({
+    required this.program,
+    required this.settings,
+    required this.palette,
+    required this.dpr,
+  });
+
+  @override
+  State<_PosterTexturePaint> createState() => _PosterTexturePaintState();
+}
+
+class _PosterTexturePaintState extends State<_PosterTexturePaint> {
+  late ui.FragmentShader _shader;
+
+  @override
+  void initState() {
+    super.initState();
+    _shader = widget.program.fragmentShader();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PosterTexturePaint oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.program != widget.program) {
+      _shader.dispose();
+      _shader = widget.program.fragmentShader();
+    }
+  }
+
+  @override
+  void dispose() {
+    _shader.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _PosterTexturePainter(
+        program: widget.program,
+        shader: _shader,
+        settings: widget.settings,
+        palette: widget.palette,
+        dpr: widget.dpr,
+      ),
     );
   }
 }
@@ -459,12 +506,14 @@ class _PosterBackgroundPainter extends CustomPainter {
 
 class _PosterTexturePainter extends CustomPainter {
   final ui.FragmentProgram program;
+  final ui.FragmentShader shader;
   final AuthTextureSettings settings;
   final _AuthBackdropPalette palette;
   final double dpr;
 
   const _PosterTexturePainter({
     required this.program,
+    required this.shader,
     required this.settings,
     required this.palette,
     required this.dpr,
@@ -474,7 +523,6 @@ class _PosterTexturePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final grain = settings._toGrainOp(palette);
     final halftone = settings._toHalftoneOp(palette);
-    final shader = program.fragmentShader();
     var index = 0;
 
     // uSize — logical pixels to match CustomPainter size
@@ -565,10 +613,10 @@ class _RelativeRect {
   });
 
   const _RelativeRect.full()
-      : leftFactor = 0,
-        topFactor = 0,
-        widthFactor = 1,
-        heightFactor = 1;
+    : leftFactor = 0,
+      topFactor = 0,
+      widthFactor = 1,
+      heightFactor = 1;
 
   Rect resolve(Size size) {
     return Rect.fromLTWH(
@@ -590,12 +638,8 @@ class _RelativeRect {
   }
 
   @override
-  int get hashCode => Object.hash(
-        leftFactor,
-        topFactor,
-        widthFactor,
-        heightFactor,
-      );
+  int get hashCode =>
+      Object.hash(leftFactor, topFactor, widthFactor, heightFactor);
 }
 
 class _LinearGradientOp extends _BackgroundOp {
@@ -643,13 +687,13 @@ class _LinearGradientOp extends _BackgroundOp {
 
   @override
   int get hashCode => Object.hash(
-        begin,
-        end,
-        Object.hashAll(colors),
-        stops == null ? null : Object.hashAll(stops!),
-        rect,
-        shape,
-      );
+    begin,
+    end,
+    Object.hashAll(colors),
+    stops == null ? null : Object.hashAll(stops!),
+    rect,
+    shape,
+  );
 }
 
 class _CircularGradientOp extends _BackgroundOp {
@@ -692,11 +736,11 @@ class _CircularGradientOp extends _BackgroundOp {
 
   @override
   int get hashCode => Object.hash(
-        centerYFactor,
-        diameterFactor,
-        Object.hashAll(colors),
-        stops == null ? null : Object.hashAll(stops!),
-      );
+    centerYFactor,
+    diameterFactor,
+    Object.hashAll(colors),
+    stops == null ? null : Object.hashAll(stops!),
+  );
 }
 
 class _GrainOp {
@@ -759,12 +803,7 @@ class _HalftoneOp {
   });
 }
 
-void _drawShape(
-  Canvas canvas,
-  Rect rect,
-  Paint paint,
-  _BackgroundShape shape,
-) {
+void _drawShape(Canvas canvas, Rect rect, Paint paint, _BackgroundShape shape) {
   if (shape == _BackgroundShape.oval) {
     canvas.drawOval(rect, paint);
     return;

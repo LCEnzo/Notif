@@ -17,6 +17,7 @@ class _SettingsPageState extends State<SettingsPage> {
   late final TextEditingController _backendUrlController;
   late final AppSettingsController _settings;
   late String _backendUrlSyncedValue;
+  String? _backendUrlError;
 
   @override
   void initState() {
@@ -155,7 +156,8 @@ class _SettingsPageState extends State<SettingsPage> {
                           _UnderlineInput(
                             controller: _backendUrlController,
                             hint: 'http://192.168.1.50:42069/api/v1',
-                            onChanged: settings.setCustomBackendUrl,
+                            errorText: _backendUrlError,
+                            onChanged: _setCustomBackendUrl,
                           ),
                         ],
                       ],
@@ -186,6 +188,22 @@ class _SettingsPageState extends State<SettingsPage> {
       text: settingsValue,
       selection: TextSelection.collapsed(offset: settingsValue.length),
     );
+  }
+
+  Future<void> _setCustomBackendUrl(String value) async {
+    try {
+      await _settings.setCustomBackendUrl(value);
+      if (_backendUrlError != null && mounted) {
+        setState(() {
+          _backendUrlError = null;
+        });
+      }
+    } on ArgumentError catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _backendUrlError = error.message?.toString() ?? 'Invalid URL.';
+      });
+    }
   }
 }
 
@@ -811,11 +829,13 @@ class _BackendUrlModeSelector extends StatelessWidget {
 class _UnderlineInput extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
+  final String? errorText;
   final ValueChanged<String> onChanged;
 
   const _UnderlineInput({
     required this.controller,
     required this.hint,
+    this.errorText,
     required this.onChanged,
   });
 
@@ -831,6 +851,8 @@ class _UnderlineInput extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: text$.code.copyWith(color: tokens.inkMute),
+        errorText: errorText,
+        errorStyle: text$.micro.copyWith(color: NotifFeedback.error),
         contentPadding: const EdgeInsets.symmetric(vertical: 10),
         enabledBorder: UnderlineInputBorder(
           borderSide: BorderSide(color: tokens.ruleStrong, width: 1),
@@ -838,6 +860,14 @@ class _UnderlineInput extends StatelessWidget {
         ),
         focusedBorder: UnderlineInputBorder(
           borderSide: BorderSide(color: tokens.accent, width: 2),
+          borderRadius: BorderRadius.zero,
+        ),
+        errorBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: NotifFeedback.error, width: 1),
+          borderRadius: BorderRadius.zero,
+        ),
+        focusedErrorBorder: const UnderlineInputBorder(
+          borderSide: BorderSide(color: NotifFeedback.error, width: 2),
           borderRadius: BorderRadius.zero,
         ),
       ),

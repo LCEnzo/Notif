@@ -68,21 +68,17 @@ class _DarkFadeUpTransitionBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    final curve = CurvedAnimation(
-      parent: animation,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
+    final curveTween = CurveTween(curve: Curves.easeOutCubic);
+    final slideTween = Tween<Offset>(
+      begin: const Offset(0, 0.03),
+      end: Offset.zero,
+    ).chain(curveTween);
+    final fadeTween = Tween<double>(begin: 0, end: 1).chain(curveTween);
+
     return FadeTransition(
-      opacity: Tween<double>(
-        begin: 0,
-        end: 1,
-      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+      opacity: animation.drive(fadeTween),
       child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.03),
-          end: Offset.zero,
-        ).animate(curve),
+        position: animation.drive(slideTween),
         child: child,
       ),
     );

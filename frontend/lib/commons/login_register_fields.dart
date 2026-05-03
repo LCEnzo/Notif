@@ -14,13 +14,11 @@ bool _useFramedAuthMode(BuildContext context) {
 }
 
 NotifTokens _authTokens(BuildContext context) {
-  return Theme.of(context).extension<NotifTokens>() ??
-      NotifTokens.build(NotifColorway.dusk1);
+  return NotifTokens.of(context);
 }
 
 NotifTextTheme _authTextTheme(BuildContext context) {
-  return Theme.of(context).extension<NotifTextTheme>() ??
-      NotifTextTheme.forSet(NotifFontSet.current);
+  return NotifTextTheme.of(context);
 }
 
 TextStyle _buildAuthFieldTextStyle(BuildContext context) {

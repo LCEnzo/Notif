@@ -204,6 +204,18 @@ class AppSettingsController extends ChangeNotifier {
 
   Future<void> setCustomBackendUrl(String url) async {
     final trimmed = url.trim();
+    if (trimmed.isNotEmpty) {
+      final parsed = Uri.tryParse(trimmed);
+      if (parsed == null ||
+          !parsed.hasScheme ||
+          (parsed.scheme != 'http' && parsed.scheme != 'https')) {
+        throw ArgumentError.value(
+          url,
+          'url',
+          'Custom backend URL must be http(s) or empty',
+        );
+      }
+    }
     if (_customBackendUrl == trimmed) return;
     _customBackendUrl = trimmed;
     notifyListeners();

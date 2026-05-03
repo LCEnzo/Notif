@@ -79,6 +79,37 @@ void main() {
       expect(settings.customBackendUrl, 'https://api.example.com');
     });
 
+    test('setCustomBackendUrl accepts empty and http schemes only', () async {
+      final settings = await createLoadedSettings();
+
+      await settings.setCustomBackendUrl('http://localhost:8000');
+      expect(settings.customBackendUrl, 'http://localhost:8000');
+
+      await settings.setCustomBackendUrl('');
+      expect(settings.customBackendUrl, isEmpty);
+
+      await settings.setCustomBackendUrl('https://api.example.com');
+      expect(settings.customBackendUrl, 'https://api.example.com');
+    });
+
+    test('setCustomBackendUrl rejects unsafe or malformed schemes', () async {
+      final settings = await createLoadedSettings();
+
+      expect(
+        () => settings.setCustomBackendUrl('javascript:alert(1)'),
+        throwsArgumentError,
+      );
+      expect(
+        () => settings.setCustomBackendUrl('file:///tmp/notif'),
+        throwsArgumentError,
+      );
+      expect(
+        () => settings.setCustomBackendUrl('api.example.com'),
+        throwsArgumentError,
+      );
+      expect(settings.customBackendUrl, isEmpty);
+    });
+
     test('setCustomBackendUrl skips redundant writes', () async {
       final settings = await createLoadedSettings();
 

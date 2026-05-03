@@ -102,9 +102,7 @@ class GlassHelpButton extends StatelessWidget {
     final appSettings = context.watch<AppSettingsController?>();
     final authCardStyle = appSettings?.authCardStyle ?? AuthCardStyle.glass;
     final isFramed = authCardStyle == AuthCardStyle.framed;
-    final tokens =
-        Theme.of(context).extension<NotifTokens>() ??
-        NotifTokens.build(NotifColorway.dusk1);
+    final tokens = NotifTokens.of(context);
     final radius = isFramed
         ? BorderRadius.zero
         : BorderRadius.circular(AuthPalette.glassRadius);
@@ -150,12 +148,8 @@ class AuthPanel extends StatelessWidget {
     final appSettings = context.watch<AppSettingsController?>();
     final authCardStyle = appSettings?.authCardStyle ?? AuthCardStyle.glass;
     final isFramed = authCardStyle == AuthCardStyle.framed;
-    final tokens =
-        Theme.of(context).extension<NotifTokens>() ??
-        NotifTokens.build(NotifColorway.dusk1);
-    final text$ =
-        Theme.of(context).extension<NotifTextTheme>() ??
-        NotifTextTheme.forSet(NotifFontSet.current);
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
 
     final content = DefaultTextStyle.merge(
       style: isFramed
@@ -192,9 +186,7 @@ class _AuthFramedSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens =
-        Theme.of(context).extension<NotifTokens>() ??
-        NotifTokens.build(NotifColorway.dusk1);
+    final tokens = NotifTokens.of(context);
     return Container(
       padding: padding,
       decoration: BoxDecoration(
@@ -259,12 +251,8 @@ Future<void> showAuthFailureDialog(
   required String title,
   required String message,
 }) {
-  final tokens =
-      Theme.of(context).extension<NotifTokens>() ??
-      NotifTokens.build(NotifColorway.dusk1);
-  final text$ =
-      Theme.of(context).extension<NotifTextTheme>() ??
-      NotifTextTheme.forSet(NotifFontSet.current);
+  final tokens = NotifTokens.of(context);
+  final text$ = NotifTextTheme.of(context);
 
   ButtonStyle actionStyle({
     required Color foreground,

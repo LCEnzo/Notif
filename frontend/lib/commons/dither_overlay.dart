@@ -30,14 +30,18 @@ final Future<ui.FragmentProgram> _ditherProgram = ui.FragmentProgram.fromAsset(
 // Widget — waits for the shader to load, then paints with it.
 // ---------------------------------------------------------------------------
 
+@visibleForTesting
+int ditherShaderAllocationCount = 0;
+
+@visibleForTesting
+int ditherShaderDisposalCount = 0;
+
 class _DitherShaderLayer extends StatelessWidget {
   const _DitherShaderLayer();
 
   @override
   Widget build(BuildContext context) {
-    final tokens =
-        Theme.of(context).extension<NotifTokens>() ??
-        NotifTokens.build(NotifColorway.dusk1);
+    final tokens = NotifTokens.of(context);
     final palette = ditherOverlayPaletteFor(tokens);
 
     return FutureBuilder<ui.FragmentProgram>(
@@ -51,15 +55,78 @@ class _DitherShaderLayer extends StatelessWidget {
           return const SizedBox.expand();
         }
         final dpr = MediaQuery.devicePixelRatioOf(context);
-        return CustomPaint(
-          painter: _DitherShaderPainter(
-            program: program,
-            dpr: dpr,
-            neutralColor: palette.neutral,
-            accentColor: palette.accent,
-          ),
+        return _DitherShaderPaint(
+          program: program,
+          dpr: dpr,
+          neutralColor: palette.neutral,
+          accentColor: palette.accent,
         );
       },
+    );
+  }
+}
+
+class _DitherShaderPaint extends StatefulWidget {
+  final ui.FragmentProgram program;
+  final double dpr;
+  final Color neutralColor;
+  final Color accentColor;
+
+  const _DitherShaderPaint({
+    required this.program,
+    required this.dpr,
+    required this.neutralColor,
+    required this.accentColor,
+  });
+
+  @override
+  State<_DitherShaderPaint> createState() => _DitherShaderPaintState();
+}
+
+class _DitherShaderPaintState extends State<_DitherShaderPaint> {
+  late ui.FragmentShader _shader;
+
+  @override
+  void initState() {
+    super.initState();
+    _shader = _createShader();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DitherShaderPaint oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.program != widget.program) {
+      _disposeShader();
+      _shader = _createShader();
+    }
+  }
+
+  @override
+  void dispose() {
+    _disposeShader();
+    super.dispose();
+  }
+
+  ui.FragmentShader _createShader() {
+    ditherShaderAllocationCount += 1;
+    return widget.program.fragmentShader();
+  }
+
+  void _disposeShader() {
+    ditherShaderDisposalCount += 1;
+    _shader.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DitherShaderPainter(
+        program: widget.program,
+        shader: _shader,
+        dpr: widget.dpr,
+        neutralColor: widget.neutralColor,
+        accentColor: widget.accentColor,
+      ),
     );
   }
 }
@@ -83,12 +150,14 @@ class _DitherShaderPainter extends CustomPainter {
   static const double _accentCutoff = 0.42;
 
   final ui.FragmentProgram program;
+  final ui.FragmentShader shader;
   final double dpr;
   final Color neutralColor;
   final Color accentColor;
 
   const _DitherShaderPainter({
     required this.program,
+    required this.shader,
     required this.dpr,
     required this.neutralColor,
     required this.accentColor,
@@ -96,7 +165,6 @@ class _DitherShaderPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final shader = program.fragmentShader();
     var i = 0;
 
     // uSize — physical pixels so it matches FlutterFragCoord().xy
@@ -143,9 +211,9 @@ int _setColorRGBA(
   double alpha,
 ) {
   final argb = color.toARGB32();
-  shader.setFloat(index++, ((argb >> 16) & 0xFF) / 255.0); // R
-  shader.setFloat(index++, ((argb >> 8) & 0xFF) / 255.0); // G
-  shader.setFloat(index++, (argb & 0xFF) / 255.0); // B
-  shader.setFloat(index++, alpha); // A (override)
-  return index;
+  shader.setFloat(index, ((argb >> 16) & 0xFF) / 255.0); // R
+  shader.setFloat(index + 1, ((argb >> 8) & 0xFF) / 255.0); // G
+  shader.setFloat(index + 2, (argb & 0xFF) / 255.0); // B
+  shader.setFloat(index + 3, alpha); // A (override)
+  return index + 4;
 }

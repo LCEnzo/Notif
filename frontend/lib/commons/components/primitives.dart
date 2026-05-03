@@ -138,9 +138,7 @@ class CornerMarks extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens =
-        Theme.of(context).extension<NotifTokens>() ??
-        NotifTokens.build(NotifColorway.dusk1);
+    final tokens = NotifTokens.of(context);
     final c = color ?? tokens.ruleStrong;
 
     return Stack(clipBehavior: Clip.none, children: [child, ..._ticks(c)]);
@@ -408,10 +406,7 @@ class _FramedButtonState extends State<_FramedButton> {
       return Semantics(
         button: true,
         enabled: false,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.forbidden,
-          child: frame,
-        ),
+        child: MouseRegion(cursor: SystemMouseCursors.forbidden, child: frame),
       );
     }
 
