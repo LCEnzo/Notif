@@ -3,8 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_texture_tuner.dart';
+import 'package:notif/commons/notif_theme.dart';
+import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/screens/login.dart';
 import 'package:notif/screens/register.dart';
+import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -45,8 +49,12 @@ void main() {
     final controller = enableAuthTextureTuner();
 
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
+      MaterialApp(
+        theme: buildNotifTheme(
+          colorway: NotifColorway.dusk1,
+          fontSet: NotifFontSet.current,
+        ),
+        home: const Scaffold(
           body: PageBackground(
             child: SizedBox.expand(),
           ),
@@ -78,6 +86,7 @@ void main() {
   testWidgets('Texture settings persist between login and register in one session',
       (WidgetTester tester) async {
     final controller = enableAuthTextureTuner();
+    final settings = AppSettingsController();
     final authService = AuthService();
     final router = GoRouter(
       initialLocation: '/login',
@@ -91,13 +100,20 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider<AppSettingsController>.value(value: settings),
           ChangeNotifierProvider<AuthService>.value(value: authService),
         ],
         child: MaterialApp.router(
+          theme: buildNotifTheme(
+            colorway: settings.colorway,
+            fontSet: settings.fontSet,
+          ),
           routerConfig: router,
         ),
       ),
     );
+    addTearDown(settings.dispose);
+    addTearDown(router.dispose);
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('authTextureTunerLauncher')));

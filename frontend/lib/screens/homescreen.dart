@@ -104,7 +104,7 @@ class _HomePageState extends State<HomePage> {
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message.trim())));
+      ..showSnackBar(SnackBar(content: SelectableText(message.trim())));
   }
 
   @override
@@ -284,7 +284,7 @@ class _SourcesPageState extends State<SourcesPage> {
     if (!mounted || message == null || message.trim().isEmpty) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message.trim())));
+      ..showSnackBar(SnackBar(content: SelectableText(message.trim())));
   }
 
   @override
@@ -2137,10 +2137,9 @@ class _ConsoleErrorStrip extends StatelessWidget {
       width: double.infinity,
       color: NotifFeedback.error.withValues(alpha: 0.12),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-      child: Text(
+      child: SelectableText(
         errors.join(' | '),
         maxLines: 2,
-        overflow: TextOverflow.ellipsis,
         style: text$.micro.copyWith(color: NotifFeedback.error),
       ),
     );
@@ -2426,7 +2425,7 @@ class _ErrorBanner extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
+            child: SelectableText(
               message,
               style: text$.body.copyWith(
                 color: tokens.brightness == Brightness.dark

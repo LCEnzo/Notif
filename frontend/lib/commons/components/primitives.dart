@@ -360,6 +360,37 @@ class _FramedButtonState extends State<_FramedButton> {
   bool _pressed = false;
 
   @override
+  void didUpdateWidget(covariant _FramedButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.onPressed == null && oldWidget.onPressed != null) {
+      _clearInteraction();
+    }
+  }
+
+  void _setHovered(bool hovered) {
+    if (_hovered == hovered) return;
+    setState(() {
+      _hovered = hovered;
+      if (!hovered) {
+        _pressed = false;
+      }
+    });
+  }
+
+  void _setPressed(bool pressed) {
+    if (_pressed == pressed) return;
+    setState(() => _pressed = pressed);
+  }
+
+  void _clearInteraction() {
+    if (!_hovered && !_pressed) return;
+    setState(() {
+      _hovered = false;
+      _pressed = false;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
     final enabled = widget.onPressed != null;
@@ -415,21 +446,21 @@ class _FramedButtonState extends State<_FramedButton> {
       enabled: true,
       child: Material(
         color: Colors.transparent,
-        child: InkResponse(
-          onTap: widget.onPressed,
-          onHover: (hovered) {
-            setState(() => _hovered = hovered);
-          },
-          onHighlightChanged: (pressed) {
-            setState(() => _pressed = pressed);
-          },
-          splashColor: colors.bg == Colors.transparent
-              ? tokens.ink.withValues(alpha: 0.08)
-              : tokens.accent.withValues(alpha: 0.08),
-          highlightColor: colors.bg == Colors.transparent
-              ? tokens.ink.withValues(alpha: 0.06)
-              : Colors.black.withValues(alpha: 0.06),
-          child: frame,
+        child: MouseRegion(
+          onExit: (_) => _clearInteraction(),
+          child: InkResponse(
+            onTap: widget.onPressed,
+            onHover: _setHovered,
+            onHighlightChanged: _setPressed,
+            containedInkWell: true,
+            highlightShape: BoxShape.rectangle,
+            splashFactory: NoSplash.splashFactory,
+            splashColor: Colors.transparent,
+            hoverColor: Colors.transparent,
+            focusColor: Colors.transparent,
+            highlightColor: Colors.transparent,
+            child: frame,
+          ),
         ),
       ),
     );
