@@ -77,6 +77,28 @@ void main() {
       expect(urls, isEmpty);
     });
 
+    test('apiPost fails clearly when customOnly has no custom URL', () async {
+      final settings = AppSettingsController();
+      await Future<void>.delayed(Duration.zero);
+      await settings.setBackendUrlMode(BackendUrlMode.customOnly);
+
+      await expectLater(
+        () => apiPost(
+          '/token/',
+          settings: settings,
+          headers: const {'Content-Type': 'application/json'},
+          body: '{}',
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            contains('POST /token/ failed: no backend URL configured'),
+          ),
+        ),
+      );
+    });
+
     test('custom base URL is trimmed', () async {
       final settings = await createLoadedSettings();
       await settings.setBackendUrlMode(BackendUrlMode.customOnly);

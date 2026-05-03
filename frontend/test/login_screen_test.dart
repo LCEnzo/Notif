@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notif/commons/notif_theme.dart';
 import 'package:notif/screens/login.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
@@ -17,13 +18,22 @@ void main() {
   testWidgets('login screen prefills username and exposes autofill hints', (
     WidgetTester tester,
   ) async {
+    final settings = AppSettingsController();
+    addTearDown(settings.dispose);
+
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider(create: (_) => AppSettingsController()),
+          ChangeNotifierProvider.value(value: settings),
           ChangeNotifierProvider(create: (_) => AuthService()),
         ],
-        child: const MaterialApp(home: LogInPage()),
+        child: MaterialApp(
+          theme: buildNotifTheme(
+            colorway: settings.colorway,
+            fontSet: settings.fontSet,
+          ),
+          home: const LogInPage(),
+        ),
       ),
     );
 

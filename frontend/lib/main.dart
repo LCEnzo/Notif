@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_texture_tuner.dart';
-import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_theme.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/data.dart';
@@ -66,23 +68,17 @@ class _DarkFadeUpTransitionBuilder extends PageTransitionsBuilder {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    // Fade in + slight upward slide. Uses the dark scaffold color as
-    // transition background instead of the default white.
-    final curve = CurvedAnimation(
-      parent: animation,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
+    final curveTween = CurveTween(curve: Curves.easeOutCubic);
+    final slideTween = Tween<Offset>(
+      begin: const Offset(0, 0.03),
+      end: Offset.zero,
+    ).chain(curveTween);
+    final fadeTween = Tween<double>(begin: 0, end: 1).chain(curveTween);
+
     return FadeTransition(
-      opacity: Tween<double>(
-        begin: 0,
-        end: 1,
-      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+      opacity: animation.drive(fadeTween),
       child: SlideTransition(
-        position: Tween<Offset>(
-          begin: const Offset(0, 0.03),
-          end: Offset.zero,
-        ).animate(curve),
+        position: animation.drive(slideTween),
         child: child,
       ),
     );
@@ -113,63 +109,31 @@ class _AppState extends State<App> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<AppSettingsController>();
+    final baseTheme = buildNotifTheme(
+      colorway: settings.colorway,
+      fontSet: settings.fontSet,
+    );
+    final tokens = baseTheme.extension<NotifTokens>()!;
+    final text$ = baseTheme.extension<NotifTextTheme>()!;
+
     return MaterialApp.router(
       title: 'Notif',
-      theme: ThemeData(
-        useMaterial3: true,
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: NotifDesignTokens.structBg,
-        colorScheme: const ColorScheme.dark(
-          primary: NotifDesignTokens.accentPrimary,
-          onPrimary: NotifDesignTokens.accentOnAccent,
-          secondary: NotifDesignTokens.accentText,
-          onSecondary: NotifDesignTokens.structText,
-          surface: NotifDesignTokens.structSurface,
-          onSurface: NotifDesignTokens.structText,
-          error: FeedbackColors.error,
-          onError: Colors.white,
+      theme: baseTheme.copyWith(
+        dialogTheme: DialogThemeData(
+          backgroundColor: tokens.bg2,
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          titleTextStyle: text$.title.copyWith(color: tokens.ink),
+          contentTextStyle: text$.body.copyWith(color: tokens.inkDim),
         ),
-        fontFamily: NotifDesignTokens.bodyFont,
-        textTheme: const TextTheme(
-          displayLarge: TextStyle(
-            fontFamily: NotifDesignTokens.displayFont,
-            fontSize: 72,
-          ),
-          titleLarge: TextStyle(
-            fontFamily: NotifDesignTokens.displayFont,
-            fontSize: 36,
-          ),
-          bodyMedium: TextStyle(
-            fontFamily: NotifDesignTokens.bodyFont,
-            fontSize: 14,
-          ),
-        ),
-        dialogTheme: const DialogThemeData(
-          backgroundColor: NotifDesignTokens.structRaised,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-          titleTextStyle: TextStyle(
-            fontFamily: NotifDesignTokens.displayFont,
-            color: NotifDesignTokens.structText,
-            fontSize: 24,
-          ),
-          contentTextStyle: TextStyle(
-            fontFamily: NotifDesignTokens.bodyFont,
-            color: NotifDesignTokens.structText2,
-            fontSize: 14,
-            height: 1.4,
-          ),
-        ),
-        snackBarTheme: const SnackBarThemeData(
-          backgroundColor: NotifDesignTokens.structRaised,
-          contentTextStyle: TextStyle(
-            fontFamily: NotifDesignTokens.bodyFont,
-            color: NotifDesignTokens.structText,
-          ),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+        snackBarTheme: SnackBarThemeData(
+          backgroundColor: tokens.bg2,
+          contentTextStyle: text$.body.copyWith(color: tokens.ink),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
           behavior: SnackBarBehavior.floating,
-          actionTextColor: NotifDesignTokens.accentText,
+          actionTextColor: tokens.accent,
         ),
-        dividerColor: NotifDesignTokens.structDivider,
+        dividerColor: tokens.rule,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
             TargetPlatform.android: _DarkFadeUpTransitionBuilder(),

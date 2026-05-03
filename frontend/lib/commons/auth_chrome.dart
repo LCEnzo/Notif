@@ -5,9 +5,20 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_palette.dart';
-import 'package:notif/commons/notif_design_tokens.dart';
+import 'package:notif/commons/components/primitives.dart';
+import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:provider/provider.dart';
+
+class AuthPanelWidth {
+  const AuthPanelWidth._();
+
+  static const double glass = 330;
+  static const double loginFramed = 380;
+  static const double registerFramed = 414;
+  static const double recoveryFramed = 380;
+}
 
 class AuthScaffold extends StatefulWidget {
   final Widget child;
@@ -91,9 +102,10 @@ class GlassHelpButton extends StatelessWidget {
     final appSettings = context.watch<AppSettingsController?>();
     final authCardStyle = appSettings?.authCardStyle ?? AuthCardStyle.glass;
     final isFramed = authCardStyle == AuthCardStyle.framed;
-    final radius = BorderRadius.circular(
-      isFramed ? NotifDesignTokens.radiusNone : AuthPalette.glassRadius,
-    );
+    final tokens = NotifTokens.of(context);
+    final radius = isFramed
+        ? BorderRadius.zero
+        : BorderRadius.circular(AuthPalette.glassRadius);
 
     final button = Material(
       color: Colors.transparent,
@@ -101,16 +113,14 @@ class GlassHelpButton extends StatelessWidget {
         onTap: onPressed,
         borderRadius: radius,
         splashColor: isFramed
-            ? NotifDesignTokens.accentText.withValues(alpha: 0.08)
+            ? tokens.accent.withValues(alpha: 0.08)
             : Colors.white.withValues(alpha: 0.12),
         child: SizedBox.square(
           dimension: 58,
           child: Center(
             child: IconTheme.merge(
               data: IconThemeData(
-                color: isFramed
-                    ? NotifDesignTokens.accentText
-                    : AuthPalette.fabIcon,
+                color: isFramed ? tokens.accent : AuthPalette.fabIcon,
               ),
               child: child,
             ),
@@ -137,32 +147,26 @@ class AuthPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final appSettings = context.watch<AppSettingsController?>();
     final authCardStyle = appSettings?.authCardStyle ?? AuthCardStyle.glass;
+    final isFramed = authCardStyle == AuthCardStyle.framed;
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
 
     final content = DefaultTextStyle.merge(
-      style: TextStyle(
-        color: authCardStyle == AuthCardStyle.glass
-            ? Colors.white
-            : NotifDesignTokens.structText,
-        fontFamily: authCardStyle == AuthCardStyle.glass
-            ? null
-            : NotifDesignTokens.bodyFont,
-        fontSize: authCardStyle == AuthCardStyle.glass ? null : 15,
-        height: authCardStyle == AuthCardStyle.glass ? null : 22 / 15,
-      ),
+      style: isFramed
+          ? text$.body.copyWith(color: tokens.ink)
+          : const TextStyle(color: Colors.white),
       child: IconTheme.merge(
-        data: IconThemeData(
-          color: authCardStyle == AuthCardStyle.glass
-              ? Colors.white70
-              : NotifDesignTokens.structText2,
-        ),
+        data: IconThemeData(color: isFramed ? tokens.inkDim : Colors.white70),
         child: child,
       ),
     );
 
-    if (authCardStyle == AuthCardStyle.framed) {
-      return _AuthFramedSurface(
-        padding: const EdgeInsets.all(28),
-        child: content,
+    if (isFramed) {
+      return CornerMarks(
+        child: _AuthFramedSurface(
+          padding: const EdgeInsets.all(28),
+          child: content,
+        ),
       );
     }
 
@@ -182,11 +186,12 @@ class _AuthFramedSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
     return Container(
       padding: padding,
       decoration: BoxDecoration(
-        color: NotifDesignTokens.structSurface,
-        border: Border.all(color: NotifDesignTokens.structBorder),
+        color: tokens.bg1,
+        border: Border.all(color: tokens.ruleStrong),
       ),
       child: child,
     );
@@ -239,4 +244,125 @@ class _AuthGlassSurface extends StatelessWidget {
       ),
     );
   }
+}
+
+Future<void> showAuthFailureDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) {
+  final tokens = NotifTokens.of(context);
+  final text$ = NotifTextTheme.of(context);
+
+  ButtonStyle actionStyle({
+    required Color foreground,
+    required Color background,
+    required Color border,
+  }) {
+    return TextButton.styleFrom(
+      foregroundColor: foreground,
+      backgroundColor: background,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      minimumSize: const Size(0, 44),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      side: BorderSide(color: border, width: 1),
+      textStyle: text$.eyebrow.copyWith(
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.2,
+      ),
+    );
+  }
+
+  return showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: NotifCard(
+            cornerMarks: true,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: text$.title.copyWith(
+                    color: tokens.ink,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Request details',
+                  style: text$.eyebrow.copyWith(color: tokens.accent),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: tokens.bg1,
+                    border: Border.all(color: tokens.rule, width: 1),
+                  ),
+                  child: SelectionArea(
+                    child: SelectableText(
+                      message,
+                      style: text$.code.copyWith(color: tokens.inkDim),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton.icon(
+                        onPressed: () async {
+                          await Clipboard.setData(
+                            ClipboardData(text: '$title\n$message'),
+                          );
+                          if (!dialogContext.mounted) return;
+                          final messenger = ScaffoldMessenger.of(dialogContext);
+                          messenger
+                            ..clearSnackBars()
+                            ..showSnackBar(
+                              SnackBar(
+                                content: const Text('Copied auth error.'),
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: tokens.bg3,
+                              ),
+                            );
+                        },
+                        style: actionStyle(
+                          foreground: tokens.accent,
+                          background: Colors.transparent,
+                          border: tokens.rule,
+                        ),
+                        icon: const Icon(Icons.content_copy_rounded, size: 18),
+                        label: const Text('COPY'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        style: actionStyle(
+                          foreground: tokens.btnInk,
+                          background: tokens.btnBg,
+                          border: tokens.btnBg,
+                        ),
+                        child: const Text('OK'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }

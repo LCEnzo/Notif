@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
 import 'package:notif/commons/login_register_fields.dart';
+import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
@@ -30,7 +31,7 @@ class _FormContent extends StatefulWidget {
   const _FormContent();
 
   @override
-  _FormContentState createState() => _FormContentState();
+  State<_FormContent> createState() => _FormContentState();
 }
 
 class _FormContentState extends State<_FormContent> {
@@ -41,73 +42,151 @@ class _FormContentState extends State<_FormContent> {
   @override
   void initState() {
     super.initState();
-
     _loadUsername();
   }
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context, listen: false);
+    final authService = context.read<AuthService>();
+    final isFramed =
+        context.watch<AppSettingsController?>()?.authCardStyle ==
+        AuthCardStyle.framed;
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 330),
+      constraints: BoxConstraints(
+        maxWidth: isFramed
+            ? AuthPanelWidth.loginFramed
+            : AuthPanelWidth.glass,
+      ),
       child: AuthPanel(
         child: AutofillGroup(
           child: Form(
             key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                AppTextField(
-                  key: const Key('usernameField'),
-                  labelText: 'Username',
-                  hintText: 'Enter your username',
-                  controller: usernameController,
-                  prefixIcon: Icons.account_box_outlined,
-                  autofillHints: const [AutofillHints.username],
-                  textInputAction: TextInputAction.next,
-                  autocorrect: false,
-                ),
-                const SizedBox(height: 16),
-                PasswordTextField(
-                  key: const Key('passwordField'),
-                  labelText: 'Password',
-                  hintText: 'Enter your password',
-                  controller: passwordController,
-                  validator: noValidate,
-                  autofillHints: const [AutofillHints.password],
-                  textInputAction: TextInputAction.done,
-                  onFieldSubmitted: (_) => _submitLogin(authService),
-                ),
-                const SizedBox(height: 16),
-                CustomButton(
-                  buttonText: 'Log in',
-                  onPressed: () => _submitLogin(authService),
-                ),
-                if (kDebugMode) ...[
-                  const SizedBox(height: 16),
-                  CustomButton(
-                    buttonText: 'Debug login',
-                    buttonColor: const Color(0x805E4A92),
-                    onPressed: () => _submitDebugLogin(authService),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                CustomButton(
-                  buttonText: 'Register',
-                  buttonColor: AuthPalette.secondaryButtonBase,
-                  onPressed: () {
-                    context.go('/register');
-                  },
-                ),
-
-                // TODO: add logic and/or navigation for password recovery
-              ],
-            ),
+            child: isFramed
+                ? _buildFramedForm(authService)
+                : _buildGlassForm(authService),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildFramedForm(AuthService authService) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppTextField(
+          key: const Key('usernameField'),
+          labelText: 'Username',
+          hintText: 'Enter your username',
+          controller: usernameController,
+          prefixIcon: Icons.account_box_outlined,
+          autofillHints: const [AutofillHints.username],
+          textInputAction: TextInputAction.next,
+          autocorrect: false,
+        ),
+        const SizedBox(height: 16),
+        PasswordTextField(
+          key: const Key('passwordField'),
+          labelText: 'Password',
+          hintText: 'Enter your password',
+          controller: passwordController,
+          validator: noValidate,
+          autofillHints: const [AutofillHints.password],
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _submitLogin(authService),
+        ),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerRight,
+          child: AuthInlineAction(
+            label: 'Forgot password?',
+            onPressed: () => context.go('/forgot-password'),
+          ),
+        ),
+        const SizedBox(height: 18),
+        CustomButton(
+          buttonText: 'Log in',
+          trailingIcon: const Icon(Icons.arrow_forward_rounded, size: 16),
+          onPressed: () => _submitLogin(authService),
+        ),
+        if (kDebugMode) ...[
+          const SizedBox(height: 12),
+          CustomButton(
+            buttonText: 'Debug login',
+            buttonColor: AuthPalette.secondaryButtonBase,
+            onPressed: () => _submitDebugLogin(authService),
+          ),
+        ],
+        const SizedBox(height: 12),
+        const AuthRuleDivider(),
+        const SizedBox(height: 12),
+        CustomButton(
+          key: const Key('loginRegisterButton'),
+          buttonText: 'Create account',
+          buttonColor: AuthPalette.secondaryButtonBase,
+          onPressed: () => context.go('/register'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGlassForm(AuthService authService) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        AppTextField(
+          key: const Key('usernameField'),
+          labelText: 'Username',
+          hintText: 'Enter your username',
+          controller: usernameController,
+          prefixIcon: Icons.account_box_outlined,
+          autofillHints: const [AutofillHints.username],
+          textInputAction: TextInputAction.next,
+          autocorrect: false,
+        ),
+        const SizedBox(height: 16),
+        PasswordTextField(
+          key: const Key('passwordField'),
+          labelText: 'Password',
+          hintText: 'Enter your password',
+          controller: passwordController,
+          validator: noValidate,
+          autofillHints: const [AutofillHints.password],
+          textInputAction: TextInputAction.done,
+          onFieldSubmitted: (_) => _submitLogin(authService),
+        ),
+        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerRight,
+          child: AuthInlineAction(
+            label: 'Forgot password?',
+            onPressed: () => context.go('/forgot-password'),
+          ),
+        ),
+        const SizedBox(height: 16),
+        CustomButton(
+          buttonText: 'Log in',
+          onPressed: () => _submitLogin(authService),
+        ),
+        if (kDebugMode) ...[
+          const SizedBox(height: 16),
+          CustomButton(
+            buttonText: 'Debug login',
+            buttonColor: const Color(0x805E4A92),
+            onPressed: () => _submitDebugLogin(authService),
+          ),
+        ],
+        const SizedBox(height: 16),
+        CustomButton(
+          key: const Key('loginRegisterButton'),
+          buttonText: 'Create account',
+          buttonColor: AuthPalette.secondaryButtonBase,
+          onPressed: () => context.go('/register'),
+        ),
+      ],
     );
   }
 
@@ -149,18 +228,10 @@ class _FormContentState extends State<_FormContent> {
         if (context.mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!context.mounted) return;
-            showDialog<dynamic>(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Login Failed'),
-                content: Text('$e'),
-                actions: [
-                  TextButton(
-                    onPressed: () => context.pop(),
-                    child: const Text('OK'),
-                  ),
-                ],
-              ),
+            showAuthFailureDialog(
+              context,
+              title: 'Login failed',
+              message: '$e',
             );
           });
         }
@@ -189,7 +260,7 @@ class _FormContentState extends State<_FormContent> {
 
   String? noValidate(String? password) {
     if (password == null || password.isEmpty) {
-      return "Password cannot be empty";
+      return 'Password cannot be empty';
     }
 
     return null;
