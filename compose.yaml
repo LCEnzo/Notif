@@ -16,7 +16,7 @@ services:
     environment:
       # ── required in production ─────────────────────────────────
       - DEBUG=false
-      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:?err: set DJANGO_SECRET_KEY in backend/.env}
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-notif.example.com}
       - NOTIF_ENV=production
       - SQLITE_PATH=/app/data/db.sqlite3

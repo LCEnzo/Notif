@@ -36,6 +36,9 @@ class Settings(BaseSettings):
 	CORS_ALLOWED_ORIGINS: str = Field(default="", description="Comma-separated origins, e.g. https://notif.example.com")
 	SQLITE_PATH: str = Field(default="db.sqlite3", min_length=1)
 
+	# ── static files ───────────────────────────────────────
+	STATIC_ROOT: str = Field(default="staticfiles", min_length=1)
+
 	# ── runserver ─────────────────────────────────────────
 	BACKEND_PORT: int | None = Field(default=None, ge=1, le=65_535)
 	RUNSERVER_HOST: str = Field(default="127.0.0.1", min_length=1)
