@@ -405,29 +405,37 @@ class _FramedButtonState extends State<_FramedButton> {
     }
 
     if (!enabled) {
-      return MouseRegion(
-        cursor: SystemMouseCursors.forbidden,
-        child: frame,
+      return Semantics(
+        button: true,
+        enabled: false,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.forbidden,
+          child: frame,
+        ),
       );
     }
 
-    return Material(
-      color: Colors.transparent,
-      child: InkResponse(
-        onTap: widget.onPressed,
-        onHover: (hovered) {
-          setState(() => _hovered = hovered);
-        },
-        onHighlightChanged: (pressed) {
-          setState(() => _pressed = pressed);
-        },
-        splashColor: colors.bg == Colors.transparent
-            ? tokens.ink.withValues(alpha: 0.08)
-            : tokens.accent.withValues(alpha: 0.08),
-        highlightColor: colors.bg == Colors.transparent
-            ? tokens.ink.withValues(alpha: 0.06)
-            : Colors.black.withValues(alpha: 0.06),
-        child: frame,
+    return Semantics(
+      button: true,
+      enabled: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkResponse(
+          onTap: widget.onPressed,
+          onHover: (hovered) {
+            setState(() => _hovered = hovered);
+          },
+          onHighlightChanged: (pressed) {
+            setState(() => _pressed = pressed);
+          },
+          splashColor: colors.bg == Colors.transparent
+              ? tokens.ink.withValues(alpha: 0.08)
+              : tokens.accent.withValues(alpha: 0.08),
+          highlightColor: colors.bg == Colors.transparent
+              ? tokens.ink.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.06),
+          child: frame,
+        ),
       ),
     );
   }
