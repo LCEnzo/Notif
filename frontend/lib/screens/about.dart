@@ -5,11 +5,11 @@ import 'package:notif/commons/components/primitives.dart';
 import 'package:notif/commons/dither_overlay.dart';
 import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
+import 'package:notif/commons/url_launcher_helper.dart';
 import 'package:notif/services/app_settings.dart' show AppSettingsController;
 import 'package:notif/services/auth.dart' show AuthService;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class AboutPage extends StatefulWidget {
   final Future<PackageInfo>? packageInfoFuture;
@@ -30,32 +30,7 @@ class _AboutPageState extends State<AboutPage> {
   }
 
   Future<void> _openUri(Uri uri) async {
-    // launchUrl can throw (e.g., no handler registered) — report rather
-    // than swallow. We still show a snackbar in the recoverable "false"
-    // case; unexpected exceptions propagate to a visible error.
-    final bool launched;
-    try {
-      launched = await launchUrl(uri);
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Launcher error: $e'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      return;
-    }
-
-    if (launched) return;
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Could not open $uri'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    await openUriSafely(context, uri);
   }
 
   @override

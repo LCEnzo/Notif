@@ -6,11 +6,11 @@ import 'package:notif/commons/components/primitives.dart';
 import 'package:notif/commons/dither_overlay.dart';
 import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
+import 'package:notif/commons/url_launcher_helper.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/data.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -71,11 +71,7 @@ class _HomePageState extends State<HomePage> {
       _showMessage('That URL could not be opened.');
       return;
     }
-
-    if (await launchUrl(uri)) return;
-
-    if (!mounted) return;
-    _showMessage('Could not open $url');
+    await openUriSafely(context, uri);
   }
 
   Future<void> _handleNotificationTap(NotificationItem notification) async {
@@ -85,6 +81,17 @@ class _HomePageState extends State<HomePage> {
     }
     if (!mounted || notification.itemUrl.isEmpty) return;
     await _openExternalUrl(notification.itemUrl);
+  }
+
+  Future<void> _handleNotificationMarkRead(int id) async {
+    final notificationService = context.read<NotificationService>();
+    await notificationService.markRead(id);
+    if (!mounted) return;
+    _showMessage('Marked as read.');
+  }
+
+  Future<void> _handleNotificationOpenUrl(String url) async {
+    await _openExternalUrl(url);
   }
 
   void _logout() {
@@ -124,6 +131,8 @@ class _HomePageState extends State<HomePage> {
               onScrapeAll: linkService.scrapingAll ? null : _handleScrapeAll,
               onScrapeLink: _handleScrapeLink,
               onNotificationTap: _handleNotificationTap,
+              onNotificationMarkRead: _handleNotificationMarkRead,
+              onNotificationOpenUrl: _handleNotificationOpenUrl,
               onMarkAllRead: notificationService.unreadCount == 0 ||
                       notificationService.markingAllRead
                   ? null
@@ -268,10 +277,7 @@ class _SourcesPageState extends State<SourcesPage> {
       return;
     }
 
-    if (await launchUrl(uri)) return;
-
-    if (!mounted) return;
-    _showMessage('Could not open $url');
+    await openUriSafely(context, uri);
   }
 
   void _showMessage(String? message) {
@@ -430,6 +436,8 @@ class _HomeConsole extends StatelessWidget {
     required this.onScrapeAll,
     required this.onScrapeLink,
     required this.onNotificationTap,
+    required this.onNotificationMarkRead,
+    required this.onNotificationOpenUrl,
     required this.onMarkAllRead,
     required this.onSources,
     required this.onSettings,
@@ -445,6 +453,8 @@ class _HomeConsole extends StatelessWidget {
   final VoidCallback? onScrapeAll;
   final Future<void> Function(Link link) onScrapeLink;
   final Future<void> Function(NotificationItem notification) onNotificationTap;
+  final Future<void> Function(int id) onNotificationMarkRead;
+  final Future<void> Function(String url) onNotificationOpenUrl;
   final VoidCallback? onMarkAllRead;
   final VoidCallback onSources;
   final VoidCallback onSettings;
@@ -518,6 +528,8 @@ class _HomeConsole extends StatelessWidget {
                             isMarkingRead: notificationService.isMarkingRead,
                             onRefresh: onRefresh,
                             onNotificationTap: onNotificationTap,
+                            onNotificationMarkRead: onNotificationMarkRead,
+                            onNotificationOpenUrl: onNotificationOpenUrl,
                             onMarkAllRead: onMarkAllRead,
                             onSources: onSources,
                           ),
@@ -543,6 +555,8 @@ class _HomeConsole extends StatelessWidget {
                             isMarkingRead: notificationService.isMarkingRead,
                             onRefresh: onRefresh,
                             onNotificationTap: onNotificationTap,
+                            onNotificationMarkRead: onNotificationMarkRead,
+                            onNotificationOpenUrl: onNotificationOpenUrl,
                             onMarkAllRead: onMarkAllRead,
                             onSources: onSources,
                             mobileTui: true,
@@ -1231,19 +1245,22 @@ class _SourceRailRow extends StatelessWidget {
             InkWell(
               onTap: onScrape,
               child: busy
-                  ? SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: tokens.accent,
+                  ? GestureDetector(
+                      onTap: () {},
+                      child: SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 1.5,
+                          color: tokens.accent,
+                        ),
                       ),
                     )
-                    : Icon(
-                        Icons.radar_sharp,
-                        size: metrics.bodySize + 2,
-                        color: tokens.inkMute,
-                      ),
+                  : Icon(
+                      Icons.radar_sharp,
+                      size: metrics.bodySize + 2,
+                      color: tokens.inkMute,
+                    ),
             ),
           ],
         ),
@@ -1363,6 +1380,8 @@ class _UpdateConsole extends StatelessWidget {
     required this.isMarkingRead,
     required this.onRefresh,
     required this.onNotificationTap,
+    required this.onNotificationMarkRead,
+    required this.onNotificationOpenUrl,
     required this.onMarkAllRead,
     required this.onSources,
     this.mobileTui = false,
@@ -1376,6 +1395,8 @@ class _UpdateConsole extends StatelessWidget {
   final bool Function(int id) isMarkingRead;
   final Future<void> Function() onRefresh;
   final Future<void> Function(NotificationItem notification) onNotificationTap;
+  final Future<void> Function(int id) onNotificationMarkRead;
+  final Future<void> Function(String url) onNotificationOpenUrl;
   final VoidCallback? onMarkAllRead;
   final VoidCallback onSources;
   final bool mobileTui;
@@ -1482,6 +1503,11 @@ class _UpdateConsole extends StatelessWidget {
                   mobileTui: mobileTui,
                   busy: isMarkingRead(item.id),
                   onTap: () => onNotificationTap(item),
+                  onChipTap: item.isUnread
+                      ? () => onNotificationMarkRead(item.id)
+                      : item.itemUrl.isNotEmpty
+                          ? () => onNotificationOpenUrl(item.itemUrl)
+                          : null,
                 );
               },
             ),
@@ -1708,6 +1734,7 @@ class _ConsoleNotificationRow extends StatelessWidget {
     required this.mobileTui,
     required this.busy,
     required this.onTap,
+    this.onChipTap,
   });
 
   final NotificationItem notification;
@@ -1716,6 +1743,7 @@ class _ConsoleNotificationRow extends StatelessWidget {
   final bool mobileTui;
   final bool busy;
   final VoidCallback onTap;
+  final VoidCallback? onChipTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1871,30 +1899,33 @@ class _ConsoleNotificationRow extends StatelessWidget {
                           )
                         : Align(
                             alignment: Alignment.centerRight,
-                            child: Container(
-                              padding: EdgeInsets.symmetric(
-                                horizontal: metrics.actionHPad,
-                                vertical: metrics.actionVPad,
-                              ),
-                              decoration: BoxDecoration(
-                                color: notification.isUnread
-                                    ? tokens.bg1
-                                    : Colors.transparent,
-                                border: Border.all(
-                                  color: notification.isUnread
-                                      ? tokens.ruleStrong
-                                      : tokens.rule,
+                            child: InkWell(
+                              onTap: onChipTap,
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: metrics.actionHPad,
+                                  vertical: metrics.actionVPad,
                                 ),
-                              ),
-                              child: Text(
-                                notification.isUnread ? 'READ' : 'OPEN',
-                                textAlign: TextAlign.right,
-                                style: text$.micro.copyWith(
+                                decoration: BoxDecoration(
                                   color: notification.isUnread
-                                      ? tokens.accent
-                                      : tokens.inkDim,
-                                  letterSpacing: 0,
-                                  fontSize: metrics.microSize,
+                                      ? tokens.bg1
+                                      : Colors.transparent,
+                                  border: Border.all(
+                                    color: notification.isUnread
+                                        ? tokens.ruleStrong
+                                        : tokens.rule,
+                                  ),
+                                ),
+                                child: Text(
+                                  notification.isUnread ? 'READ' : 'OPEN',
+                                  textAlign: TextAlign.right,
+                                  style: text$.micro.copyWith(
+                                    color: notification.isUnread
+                                        ? tokens.accent
+                                        : tokens.inkDim,
+                                    letterSpacing: 0,
+                                    fontSize: metrics.microSize,
+                                  ),
                                 ),
                               ),
                             ),

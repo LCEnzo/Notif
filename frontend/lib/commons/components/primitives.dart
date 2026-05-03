@@ -404,25 +404,29 @@ class _FramedButtonState extends State<_FramedButton> {
       frame = SizedBox(width: double.infinity, child: frame);
     }
 
-    return MouseRegion(
-      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.forbidden,
-      onEnter: (_) {
-        if (enabled) setState(() => _hovered = true);
-      },
-      onExit: (_) {
-        if (enabled) setState(() => _hovered = false);
-      },
-      child: GestureDetector(
-        onTapDown: (_) {
-          if (enabled) setState(() => _pressed = true);
-        },
-        onTapCancel: () {
-          if (enabled) setState(() => _pressed = false);
-        },
-        onTapUp: (_) {
-          if (enabled) setState(() => _pressed = false);
-        },
+    if (!enabled) {
+      return MouseRegion(
+        cursor: SystemMouseCursors.forbidden,
+        child: frame,
+      );
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkResponse(
         onTap: widget.onPressed,
+        onHover: (hovered) {
+          setState(() => _hovered = hovered);
+        },
+        onHighlightChanged: (pressed) {
+          setState(() => _pressed = pressed);
+        },
+        splashColor: colors.bg == Colors.transparent
+            ? tokens.ink.withValues(alpha: 0.08)
+            : tokens.accent.withValues(alpha: 0.08),
+        highlightColor: colors.bg == Colors.transparent
+            ? tokens.ink.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.06),
         child: frame,
       ),
     );

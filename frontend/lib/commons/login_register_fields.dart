@@ -45,8 +45,11 @@ InputDecoration _buildAuthInputDecoration({
     final text$ = _authTextTheme(context);
 
     return InputDecoration(
+      labelText: labelText.isEmpty ? null : labelText,
       hintText: hintText.isEmpty ? null : hintText,
+      labelStyle: text$.body.copyWith(color: tokens.inkDim),
       hintStyle: text$.body.copyWith(color: tokens.inkMute),
+      floatingLabelStyle: text$.body.copyWith(color: tokens.accent),
       prefixIcon: prefixIcon,
       suffixIcon: suffixIcon,
       prefixIconColor: tokens.inkDim,
