@@ -77,55 +77,30 @@ The following will change the Django secret key in `.env`.
 python manage.py regenerate_secret_key
 ```
 
-## TODOs
-* Figure out design
-* Create Django app
-  * Create accounts app - Initial implementation done
-  * Create URL monitoring app - Initial implementation done
-  * Setup scraping on a schedule
-    * Repeat function
-    * Test to make sure the scraping is working
-      * Create a test site for this? 
-  * Fix timezone code - Given default zones, unsure if that's fine
-  * Set up environ - Done
-* Create some kind of client
-  * Add registration - Done
-    * First screen for new/logged out users - Done, need to fix logo
-  * Create a main screen to display a list of updates, and have navigation to other screens
-    * Figure out platform agnostic storage model
-  * Add basic account management screen (CRUD w/o C)
-    * User Profile screen for reading and updating, with a delete button
-  * Add UI for URL/link (CRUD), new screen
-  * Add push notification receiver
-    * No screen, but have to figure out notifications on multiple platforms
-      * Notifications for mobile
-      * Notifications for Win/Linux
-      * Web notifications (number in favicon?)
-    * Main screen already lists notifications
-* Create full end to end tests if not difficult
-* Create docker image for server - Initial implementation is done
-* Figure out deployment
+## Current status (v0.2.0)
 
-Should polish as the project is being written. This includes:
-* Fingerprint login
-* OpenAPI documentation (would be great if something like FastAPI docs could be had)
-* API versioning — all endpoints under `/api/v1/`. JWT endpoints are consistent. DRF URLPathVersioning can be adopted later when v2 is needed.
-* Rate limiting
-* Search
-* CI/CD for making migrations, deployment, and running tests, among other things
-* Social login/register
-* End to end testing
-* Refactor arch for scalability (examples include adding , , ) 
-  * caching (redis?)
-  * refactoring scraping 
-	* to limit per second requests to a single domain	
-	* spreading out requests over time
-	* serve multiple users (who have the same link) with a single request
-	* ...
-* Add Selenium as a (fallback) option
-* Investigate stuff such as scrapy
-* Discord and/or Slack bots
-* Email notifications
+**Backend** — Django REST API with JWT auth, 5 scraping strategies, in-app notifications, OpenAPI docs, rate limiting, and production Docker + compose setup. 73 tests passing.
+
+**Frontend** — Flutter app with login/registration, link/strategy management, notification list, and an About screen.
+
+### Done
+- [x] User auth (JWT, registration, dev bootstrap)
+- [x] Link CRUD with owner-scoped querysets
+- [x] 5 scraping strategies (feed, CSS selectors, forum threadmarks, Kemono, QQ Alerts)
+- [x] In-app notifications (unread/read/dismissed, mark-all-read)
+- [x] Rate limiting (UserRateThrottle + per-endpoint ScopedRateThrottle)
+- [x] OpenAPI schema + Swagger/ReDoc (drf-spectacular)
+- [x] Production Dockerfile (gunicorn, HEALTHCHECK, collectstatic)
+- [x] CI (ruff, mypy, Django checks, pytest via GitHub Actions)
+- [x] Security hardening (HSTS, SSL redirect, secure cookies — gated on production)
+- [x] Health/status endpoints (liveness + readiness probes with version/commit info)
+
+### Next up
+- [ ] Scheduled scraping (cron on VPS — `manage.py scrape` exists, needs scheduling)
+- [ ] Push notifications (Telegram delivery first — token already configured)
+- [ ] First deployment (Hetzner VPS + Cloudflare + Porkbun domain)
+- [ ] Search endpoint
+- [ ] Social login
 
 ## Note on tech used:
 
