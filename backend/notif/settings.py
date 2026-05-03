@@ -153,6 +153,12 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+# Directory where ``collectstatic`` gathers all static files for production serving.
+# In development (runserver), Django serves from each app's ``static/`` dir directly.
+# In production, gunicorn/nginx/Caddy serves from this single directory.
+STATIC_ROOT = BASE_DIR / settings.STATIC_ROOT
+
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 
