@@ -4,10 +4,10 @@ set -eu
 # ── always run migrations ─────────────────────────────────────────
 python manage.py migrate --noinput
 
-# ── collect static if not already done during build ───────────────
-# (Dockerfile does it at build time; dev override may skip it)
+# ── collect static at startup too ─────────────────────────────────
+# Dockerfile collects during build; this keeps a mounted static volume populated.
 if [ -z "${SKIP_COLLECTSTATIC:-}" ]; then
-    python manage.py collectstatic --noinput --clear 2>/dev/null || true
+    python manage.py collectstatic --noinput --clear
 fi
 
 exec "$@"
