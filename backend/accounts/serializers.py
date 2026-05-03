@@ -37,7 +37,7 @@ class UserCreationSerializer(ModelSerializer):
 		# This will only validate password during creation and not during update.
 		password = attrs.get("password", None)
 		if self.instance is None and password is None:
-			raise serializers.ValidationError({"password": "Passwo...xist"})
+			raise serializers.ValidationError({"password": "Password is required."})
 
 		if password is not None:
 			validate_password(password)
