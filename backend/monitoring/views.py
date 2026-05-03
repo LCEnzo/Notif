@@ -17,6 +17,7 @@ from monitoring.models import Link, Notification, Strategy
 from monitoring.serializers import LinkSerializer, NotificationSerializer, StrategySerializer
 from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
+from notif.config import settings
 
 
 class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
@@ -109,11 +110,28 @@ def get_strat_choices(request: Request) -> Response:
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request: Request) -> Response:
-	"""Health check endpoint — returns 200 if DB is reachable, 503 otherwise."""
+	"""Health check endpoint — returns 200 if DB is reachable, 503 otherwise.
+
+	Also returns build metadata (version, commit, environment) so operators
+	can confirm which code is deployed without SSH access.
+	"""
 	from django.db import connections
 
 	try:
 		connections["default"].cursor()
-		return Response({"status": "ok", "db": "ok"})
+		db_status = "ok"
+		status_code = 200
 	except Exception:
-		return Response({"status": "error", "db": "down"}, status=503)
+		db_status = "down"
+		status_code = 503
+
+	return Response(
+		{
+			"status": "ok" if db_status == "ok" else "error",
+			"db": db_status,
+			"version": settings.VERSION,
+			"commit": settings.GIT_HASH,
+			"environment": str(settings.NOTIF_ENV),
+		},
+		status=status_code,
+	)
