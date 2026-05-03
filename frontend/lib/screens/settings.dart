@@ -841,7 +841,17 @@ class _UnderlineInput extends StatelessWidget {
           borderRadius: BorderRadius.zero,
         ),
       ),
-      onChanged: onChanged,
+      onChanged: (value) {
+        onChanged(value);
+
+        final trimmed = value.trim();
+        if (trimmed == value) return;
+
+        controller.value = TextEditingValue(
+          text: trimmed,
+          selection: TextSelection.collapsed(offset: trimmed.length),
+        );
+      },
     );
   }
 }
