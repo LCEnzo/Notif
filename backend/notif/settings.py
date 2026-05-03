@@ -168,6 +168,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # REST Framework stuff
 _REST_THROTTLE_RATES = {
 	"user": "500/hour",
+	"anon": "60/min",
 	"login": "5/min",
 	"register": "3/min",
 	"token_refresh": "10/min",
@@ -186,6 +187,7 @@ REST_FRAMEWORK = {
 	if TESTING
 	else [
 		"rest_framework.throttling.UserRateThrottle",
+		"rest_framework.throttling.AnonRateThrottle",
 	],
 	"DEFAULT_THROTTLE_RATES": _REST_THROTTLE_RATES,
 }
