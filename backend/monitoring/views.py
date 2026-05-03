@@ -110,10 +110,22 @@ def get_strat_choices(request: Request) -> Response:
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request: Request) -> Response:
-	"""Health check endpoint — returns 200 if DB is reachable, 503 otherwise.
+	"""Liveness probe — returns 200 as long as the process is running.
 
-	Also returns build metadata (version, commit, environment) so operators
-	can confirm which code is deployed without SSH access.
+	No dependency checks. Used by Docker HEALTHCHECK and orchestrators
+	to decide whether to restart the container.
+	"""
+	return Response({"status": "ok"})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def status_check(request: Request) -> Response:
+	"""Readiness probe — checks DB connectivity and returns build metadata.
+
+	Returns 200 if all dependencies are healthy, 503 otherwise.
+	Used by load balancers and operators to confirm the service can handle traffic
+	and to verify which code is deployed.
 	"""
 	from django.db import connections
 

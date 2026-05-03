@@ -7,6 +7,7 @@ from monitoring.views import (
 	StrategyViewSet,
 	get_strat_choices,
 	health_check,
+	status_check,
 	trigger_scrape,
 )
 
@@ -21,4 +22,5 @@ urlpatterns += [
 	path("strat-choices", get_strat_choices, name="get-strat-choices"),
 	path("trigger-scrape/", trigger_scrape, name="trigger-scrape"),
 	path("health/", health_check, name="health-check"),
+	path("status/", status_check, name="status-check"),
 ]
