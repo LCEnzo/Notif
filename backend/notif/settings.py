@@ -40,6 +40,7 @@ DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]  # type: ignore
 CORS_ALLOW_ALL_ORIGINS = settings.DEBUG
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in settings.CSRF_TRUSTED_ORIGINS.split(",") if origin.strip()]
 
 
 # Application definition

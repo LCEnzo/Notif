@@ -11,10 +11,27 @@ Pick one. The app runs identically either way.
 
 Before SSHing into anything:
 
-1. **Domain** — bought and pointing at Cloudflare's nameservers
-2. **Cloudflare** — DNS A-record `notif` → `<VPS-IP>` with orange cloud (proxy) **enabled**
+1. **Domain** — bought (Porkbun, Namecheap, etc.) and delegated to Cloudflare's nameservers
+2. **Cloudflare** — site added to your account; DNS A-record `notif` → `<VPS-IP>` with orange cloud (proxy) **enabled**
 3. **SSL/TLS mode** in Cloudflare: **Full (strict)** — Caddy provides a valid Let's Encrypt certificate
 4. **Hetzner CX22** (or any VPS with ≥1 GB RAM, Ubuntu 22.04 or 24.04)
+
+### Domain delegation (Porkbun → Cloudflare)
+
+Order matters: add the site to Cloudflare *first*, then point Porkbun at the nameservers it gives you.
+
+1. In Cloudflare, **Add a site** → enter your domain → choose Free plan. Cloudflare assigns two nameservers (e.g. `xxx.ns.cloudflare.com`, `yyy.ns.cloudflare.com`).
+2. In Porkbun, open the domain → **Authoritative Nameservers** → replace the defaults with the two Cloudflare nameservers. Disable Porkbun's URL Forwarding if it's set on the apex — it silently overrides A-records.
+3. Wait for delegation. `dig NS notif.yourdomain.com +short` should return Cloudflare's NSes. Up to a few hours; sometimes minutes.
+4. Only then create the `notif` A-record in Cloudflare. If Caddy boots before delegation completes it will burn Let's Encrypt rate-limit attempts trying to validate.
+
+### TLS issuance behind Cloudflare's proxy
+
+The orange cloud terminates TLS, which means **TLS-ALPN-01 cannot reach Caddy**. Caddy will fall back to HTTP-01, which usually works because Cloudflare proxies `/.well-known/acme-challenge/*` through — but it's fragile (a "Always Use HTTPS" rule or strict WAF rule can break it). Pick one:
+
+- **Easiest:** grey-cloud the `notif` A-record during the first deploy so HTTP-01 hits the origin directly, then re-enable the orange cloud once `journalctl -u caddy` (or the compose logs) shows a certificate was obtained.
+- **Most robust:** issue a [Cloudflare Origin Certificate](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/), drop it on the VPS, and tell Caddy to use it via `tls /path/to/cert.pem /path/to/key.pem`. Skips Let's Encrypt entirely and renews every 15 years.
+- **DNS-01 with Cloudflare API token:** requires the `caddy-dns/cloudflare` module, which is **not** in `apt install caddy`. Either build Caddy with `xcaddy` or use the official Caddy image variant that bundles it.
 
 ---
 
@@ -59,6 +76,7 @@ cp backend/.env.example backend/.env
 # DJANGO_SECRET_KEY=<run after install/build, or paste a generated secret>
 # ALLOWED_HOSTS=notif.yourdomain.com
 # CORS_ALLOWED_ORIGINS=https://notif.yourdomain.com
+# CSRF_TRUSTED_ORIGINS=https://notif.yourdomain.com
 # SQLITE_PATH=/app/data/db.sqlite3
 # STATIC_ROOT=staticfiles
 
@@ -163,6 +181,7 @@ sudo -u notif cp .env.example .env
 # DJANGO_SECRET_KEY=<generate fresh>
 # ALLOWED_HOSTS=notif.yourdomain.com
 # CORS_ALLOWED_ORIGINS=https://notif.yourdomain.com
+# CSRF_TRUSTED_ORIGINS=https://notif.yourdomain.com
 # SQLITE_PATH=/var/lib/notif/db.sqlite3
 # STATIC_ROOT=staticfiles
 
