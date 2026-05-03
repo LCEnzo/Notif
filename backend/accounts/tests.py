@@ -12,12 +12,12 @@ from commons.utils import create_users, password  # noqa: F401
 
 class UserViewSetTestCase(ViewSetMixin):
 	def setUp(
-			self,
-			list_view_name: str = "users-list",
-			detail_view_name: str = "users-detail",
-			model: type[Model] = User,
-			obj: Model | None = None,
-		) -> None:
+		self,
+		list_view_name: str = "users-list",
+		detail_view_name: str = "users-detail",
+		model: type[Model] = User,
+		obj: Model | None = None,
+	) -> None:
 		super().setUp(
 			list_view_name=list_view_name,
 			detail_view_name=detail_view_name,
@@ -36,14 +36,14 @@ class UserViewSetTestCase(ViewSetMixin):
 			"username": "test_username01",
 			"email": "fake@example.com",
 			"name": "Ichi Nii",
-			"password": "securepassword123 securepassword123"
+			"password": "securepassword123 securepassword123",
 		}
 		_ = self._test_create_object(fields=fields)
 
 		fields = {
 			"username": "newuser",
 			"email": "newuser@example.com",
-			"password": "securepassword123 securepassword123"
+			"password": "securepassword123 securepassword123",
 		}
 		self._test_create_object(fields=fields)
 
@@ -64,9 +64,7 @@ class UserViewSetTestCase(ViewSetMixin):
 		create_resp = self.api_client.post(reverse(self.list_view_name), create_fields)
 		self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
 
-		disposable_client = login_client(
-			APIClient(), create_fields["username"], create_fields["password"]
-		)
+		disposable_client = login_client(APIClient(), create_fields["username"], create_fields["password"])
 		disposable_user = User.objects.get(username=create_fields["username"])
 		pk = disposable_user.pk
 		url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: pk})
@@ -79,38 +77,36 @@ class UserViewSetTestCase(ViewSetMixin):
 			"username": "test_username01",
 			"email": "fake@example.com",
 			"name": "Ichi Nii",
-			"password": "securepassword123"
+			"password": "securepassword123",
 		}
 		update_fields = {"name": "Maria"}
-		permissions = {'list': True, 'retrieve': True, 'create': True}
+		permissions = {"list": True, "retrieve": True, "create": True}
 
 		self._test_permissions(
-			user=self.regular_user, # type: ignore
-			obj_pk=self.secondary_user.pk, # type: ignore
+			user=self.regular_user,  # type: ignore
+			obj_pk=self.secondary_user.pk,  # type: ignore
 			fields=fields,
 			update_fields=update_fields,
-			permissions=permissions
+			permissions=permissions,
 		)
 
 
 class DevBootstrapTokenViewTestCase(TestCase):
 	def test_dev_login_bootstraps_user_when_missing(self):
-		self.assertFalse(
-			User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists()
-		)
+		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())
 
 		response = APIClient().post(
-			reverse('token_obtain_pair'),
+			reverse("token_obtain_pair"),
 			{
-				'username': settings.DEV_BOOTSTRAP_USERNAME,
-				'password': settings.DEV_BOOTSTRAP_PASSWORD,
+				"username": settings.DEV_BOOTSTRAP_USERNAME,
+				"password": settings.DEV_BOOTSTRAP_PASSWORD,
 			},
-			format='json',
+			format="json",
 		)
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertIn('access', response.data)
-		self.assertIn('refresh', response.data)
+		self.assertIn("access", response.data)
+		self.assertIn("refresh", response.data)
 
 		user = User._base_manager.get(username=settings.DEV_BOOTSTRAP_USERNAME)
 		self.assertEqual(user.email, settings.DEV_BOOTSTRAP_EMAIL)
@@ -118,15 +114,13 @@ class DevBootstrapTokenViewTestCase(TestCase):
 
 	def test_wrong_password_does_not_bootstrap_dev_user(self):
 		response = APIClient().post(
-			reverse('token_obtain_pair'),
+			reverse("token_obtain_pair"),
 			{
-				'username': settings.DEV_BOOTSTRAP_USERNAME,
-				'password': 'definitely-not-the-dev-password',
+				"username": settings.DEV_BOOTSTRAP_USERNAME,
+				"password": "definitely-not-the-dev-password",
 			},
-			format='json',
+			format="json",
 		)
 
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-		self.assertFalse(
-			User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists()
-		)
+		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())

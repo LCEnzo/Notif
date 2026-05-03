@@ -16,24 +16,22 @@ from notif.config import settings
 
 
 class DevLatencyMiddleware:
-    """Add artificial latency to /api/ requests for frontend testing."""
+	"""Add artificial latency to /api/ requests for frontend testing."""
 
-    def __init__(self, get_response):
-        self.get_response = get_response
+	def __init__(self, get_response):
+		self.get_response = get_response
 
-    @property
-    def active(self) -> bool:
-        return settings.DEV_API_LATENCY_MS > 0 or settings.DEV_API_LATENCY_JITTER_MS > 0
+	@property
+	def active(self) -> bool:
+		return settings.DEV_API_LATENCY_MS > 0 or settings.DEV_API_LATENCY_JITTER_MS > 0
 
-    def __call__(self, request):
-        if not self.active or not request.path.startswith("/api/"):
-            return self.get_response(request)
+	def __call__(self, request):
+		if not self.active or not request.path.startswith("/api/"):
+			return self.get_response(request)
 
-        delay_ms = settings.DEV_API_LATENCY_MS + (
-            random.randint(0, settings.DEV_API_LATENCY_JITTER_MS)
-            if settings.DEV_API_LATENCY_JITTER_MS > 0
-            else 0
-        )
-        time.sleep(delay_ms / 1000.0)
+		delay_ms = settings.DEV_API_LATENCY_MS + (
+			random.randint(0, settings.DEV_API_LATENCY_JITTER_MS) if settings.DEV_API_LATENCY_JITTER_MS > 0 else 0
+		)
+		time.sleep(delay_ms / 1000.0)
 
-        return self.get_response(request)
+		return self.get_response(request)
