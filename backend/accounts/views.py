@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
-from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
+from rest_framework.throttling import BaseThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
@@ -58,7 +58,7 @@ class DevBootstrapTokenObtainPairView(TokenObtainPairView):
 	throttle_scope = 'login'
 
 	def get_throttles(self):
-		throttles = [UserRateThrottle()]
+		throttles: list[BaseThrottle] = [UserRateThrottle()]
 		if not TESTING:
 			throttles.append(ScopedRateThrottle())
 		return throttles
@@ -68,7 +68,7 @@ class ThrottledTokenRefreshView(TokenRefreshView):
 	throttle_scope = 'token_refresh'
 
 	def get_throttles(self):
-		throttles = [UserRateThrottle()]
+		throttles: list[BaseThrottle] = [UserRateThrottle()]
 		if not TESTING:
 			throttles.append(ScopedRateThrottle())
 		return throttles
@@ -78,7 +78,7 @@ class ThrottledTokenVerifyView(TokenVerifyView):
 	throttle_scope = 'token_verify'
 
 	def get_throttles(self):
-		throttles = [UserRateThrottle()]
+		throttles: list[BaseThrottle] = [UserRateThrottle()]
 		if not TESTING:
 			throttles.append(ScopedRateThrottle())
 		return throttles
