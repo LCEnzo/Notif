@@ -24,9 +24,14 @@ from accounts.views import (
 	ThrottledTokenRefreshView,
 	ThrottledTokenVerifyView,
 )
+from notif.config import settings as app_settings
+
+_admin_url = app_settings.DJANGO_ADMIN_URL.lstrip("/")
+if not _admin_url.endswith("/"):
+	_admin_url += "/"
 
 urlpatterns = [
-	path("admin/", admin.site.urls),
+	path(_admin_url, admin.site.urls),
 	path("api/v1/accounts/", include("accounts.urls")),
 	path("api/v1/monitoring/", include("monitoring.urls")),
 	# JWT config

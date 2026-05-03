@@ -38,6 +38,11 @@ class Settings(BaseSettings):
 		default="",
 		description="Comma-separated scheme+host origins that POSTs are accepted from, e.g. https://notif.example.com. Required behind an HTTPS reverse proxy.",
 	)
+	DJANGO_ADMIN_URL: str = Field(
+		default="admin/",
+		min_length=1,
+		description="URL prefix for the Django admin (must end with '/'). Override in production to reduce brute-force log noise.",
+	)
 	SQLITE_PATH: str = Field(default="db.sqlite3", min_length=1)
 
 	# ── static files ───────────────────────────────────────
