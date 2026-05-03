@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:notif/commons/notif_tokens.dart';
 
@@ -272,6 +273,42 @@ class _AuthBackdropPalette {
       halftoneBottom: colors.halftoneBottom,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is _AuthBackdropPalette &&
+            listEquals(other.baseGradientColors, baseGradientColors) &&
+            listEquals(other.baseGradientStops, baseGradientStops) &&
+            listEquals(other.bloomColors, bloomColors) &&
+            listEquals(other.bloomStops, bloomStops) &&
+            listEquals(other.transitionColors, transitionColors) &&
+            listEquals(other.transitionStops, transitionStops) &&
+            listEquals(other.floorFadeColors, floorFadeColors) &&
+            listEquals(other.floorFadeStops, floorFadeStops) &&
+            other.grainFrom == grainFrom &&
+            other.grainTo == grainTo &&
+            other.halftoneTop == halftoneTop &&
+            other.halftoneBottom == halftoneBottom;
+  }
+
+  @override
+  int get hashCode {
+    return Object.hash(
+      Object.hashAll(baseGradientColors),
+      Object.hashAll(baseGradientStops),
+      Object.hashAll(bloomColors),
+      Object.hashAll(bloomStops),
+      Object.hashAll(transitionColors),
+      Object.hashAll(transitionStops),
+      Object.hashAll(floorFadeColors),
+      Object.hashAll(floorFadeStops),
+      grainFrom,
+      grainTo,
+      halftoneTop,
+      halftoneBottom,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -416,7 +453,7 @@ class _PosterBackgroundPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PosterBackgroundPainter oldDelegate) {
-    return !identical(oldDelegate.operations, operations);
+    return !listEquals(oldDelegate.operations, operations);
   }
 }
 
@@ -541,6 +578,24 @@ class _RelativeRect {
       size.height * heightFactor,
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is _RelativeRect &&
+            other.leftFactor == leftFactor &&
+            other.topFactor == topFactor &&
+            other.widthFactor == widthFactor &&
+            other.heightFactor == heightFactor;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        leftFactor,
+        topFactor,
+        widthFactor,
+        heightFactor,
+      );
 }
 
 class _LinearGradientOp extends _BackgroundOp {
@@ -573,6 +628,28 @@ class _LinearGradientOp extends _BackgroundOp {
 
     _drawShape(canvas, targetRect, paint, shape);
   }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is _LinearGradientOp &&
+            other.begin == begin &&
+            other.end == end &&
+            listEquals(other.colors, colors) &&
+            listEquals(other.stops, stops) &&
+            other.rect == rect &&
+            other.shape == shape;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        begin,
+        end,
+        Object.hashAll(colors),
+        stops == null ? null : Object.hashAll(stops!),
+        rect,
+        shape,
+      );
 }
 
 class _CircularGradientOp extends _BackgroundOp {
@@ -602,6 +679,24 @@ class _CircularGradientOp extends _BackgroundOp {
 
     canvas.drawRect(Offset.zero & size, paint);
   }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is _CircularGradientOp &&
+            other.centerYFactor == centerYFactor &&
+            other.diameterFactor == diameterFactor &&
+            listEquals(other.colors, colors) &&
+            listEquals(other.stops, stops);
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        centerYFactor,
+        diameterFactor,
+        Object.hashAll(colors),
+        stops == null ? null : Object.hashAll(stops!),
+      );
 }
 
 class _GrainOp {
