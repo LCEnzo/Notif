@@ -256,6 +256,19 @@ class LinkViewSetTestCase(ViewSetMixin):
 		self.assertTrue(isinstance(response.data, list))
 		self.assertGreater(len(response.data), 0)
 
+	def test_links_list_is_paginated(self):
+		response = self.api_client.get(reverse("links-list"))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(set(response.data.keys()), {"count", "next", "previous", "results"})
+		self.assertIsNone(response.data["next"])  # fixture has < 100 links
+
+	def test_links_list_respects_page_size(self):
+		response = self.api_client.get(reverse("links-list"), {"page_size": 1})
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertGreater(response.data["count"], 1)
+		self.assertIsNotNone(response.data["next"])
+
 	def test_update_link(self):
 		self._test_update_object()
 
@@ -379,7 +392,25 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 	def test_list_response_is_paginated(self):
 		response = self.api_client.get(reverse("notifications-list"))
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(set(response.data.keys()), {"count", "next", "previous", "results"})
+		self.assertEqual(
+			set(response.data.keys()), {"count", "next", "previous", "unread_count", "results"}
+		)
+
+	def test_envelope_unread_count_is_global_not_filtered(self):
+		# Add a read notification so the user has 1 unread + 1 read total.
+		create_notification(
+			link=self.links[0],
+			title="Read one",
+			item_url="https://example.com/read-one",
+			status=Notification.Status.READ,
+			read_at=timezone.now(),
+		)
+		# Filter the listing to status=read; the envelope's unread_count should
+		# still report the user's actual unread total (1), not 0.
+		response = self.api_client.get(reverse("notifications-list"), {"status": "read"})
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["unread_count"], 1)
 
 	def test_pagination_respects_page_size(self):
 		# Existing setUp creates one regular_user notification; add 2 more so we

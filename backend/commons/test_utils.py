@@ -117,7 +117,10 @@ class ViewSetMixin(SetupMixin, TestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		actual_count = self.model_manager.count() if not filters else self.model_manager.filter(**filters).count()
-		self.assertEqual(len(response.data), actual_count)
+		# Paginated viewsets return {count, next, previous, results} instead of a list.
+		body = response.data
+		items = body["results"] if isinstance(body, dict) and "results" in body else body
+		self.assertEqual(len(items), actual_count)
 
 		return response
 
