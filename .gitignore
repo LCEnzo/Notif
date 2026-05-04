@@ -20,6 +20,7 @@ __pycache__/
 
 # Logs and secrets
 debug.log
+logs/
 secrets.*
 *.secrets
 *.env

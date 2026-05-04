@@ -203,21 +203,42 @@ SPECTACULAR_SETTINGS = {
 	"SERVE_INCLUDE_SCHEMA": False,
 }
 
+# Logs go to stdout/stderr so Docker's json-file driver and systemd's
+# journald can capture them. In local dev we additionally write a rotating
+# file under backend/logs/ so the user gets persistent logs without
+# remembering to pipe runserver through tee.
 LOGGING = {
 	"version": 1,
 	"disable_existing_loggers": False,
+	"formatters": {
+		"default": {
+			"format": "{asctime} {levelname} {name} {message}",
+			"style": "{",
+		},
+	},
 	"handlers": {
-		"file": {
-			"level": "DEBUG",
-			"class": "logging.FileHandler",
-			"filename": "debug.log",
+		"console": {
+			"class": "logging.StreamHandler",
+			"formatter": "default",
 		},
 	},
 	"root": {
-		"handlers": ["file"],
-		"level": "DEBUG",
+		"handlers": ["console"],
+		"level": "DEBUG" if DEBUG else "INFO",
 	},
 }
+
+if DEBUG and not TESTING:
+	_LOG_DIR = BASE_DIR / "logs"
+	_LOG_DIR.mkdir(exist_ok=True)
+	LOGGING["handlers"]["file"] = {  # type: ignore[index]
+		"class": "logging.handlers.RotatingFileHandler",
+		"filename": str(_LOG_DIR / "dev.log"),
+		"maxBytes": 5_000_000,
+		"backupCount": 3,
+		"formatter": "default",
+	}
+	LOGGING["root"]["handlers"].append("file")  # type: ignore[union-attr]
 
 
 if DEBUG:
