@@ -1548,12 +1548,13 @@ class _UpdateConsole extends StatelessWidget {
               itemCount: items.length + 1,
               itemBuilder: (context, index) {
                 if (index == items.length) {
-                  if (totalPages > 1)
+                  if (totalPages > 1) {
                     return _PageNumbers(
                       currentPage: currentPage,
                       totalPages: totalPages,
                       onPageSelected: (page) => onGoToPage(page),
                     );
+                  }
                   return const SizedBox.shrink();
                 }
 
