@@ -290,6 +290,7 @@ class AppTextField extends StatelessWidget {
   final ValueChanged<String>? onFieldSubmitted;
   final bool enableSuggestions;
   final bool autocorrect;
+  final bool enabled;
 
   const AppTextField({
     super.key,
@@ -306,6 +307,7 @@ class AppTextField extends StatelessWidget {
     this.onFieldSubmitted,
     this.enableSuggestions = true,
     this.autocorrect = true,
+    this.enabled = true,
   });
 
   @override
@@ -320,6 +322,7 @@ class AppTextField extends StatelessWidget {
       onFieldSubmitted: onFieldSubmitted,
       enableSuggestions: enableSuggestions,
       autocorrect: autocorrect,
+      enabled: enabled,
       style: _buildAuthFieldTextStyle(context),
       cursorColor: _cursorColor(context),
       decoration: _buildAuthInputDecoration(
@@ -341,6 +344,7 @@ class PasswordTextField extends StatefulWidget {
   final Iterable<String>? autofillHints;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onFieldSubmitted;
+  final bool enabled;
 
   const PasswordTextField({
     super.key,
@@ -351,6 +355,7 @@ class PasswordTextField extends StatefulWidget {
     this.autofillHints,
     this.textInputAction,
     this.onFieldSubmitted,
+    this.enabled = true,
   });
 
   @override
@@ -374,6 +379,7 @@ class _PasswordTextFieldState extends State<PasswordTextField> {
       onFieldSubmitted: widget.onFieldSubmitted,
       enableSuggestions: false,
       autocorrect: false,
+      enabled: widget.enabled,
       suffixIcon: IconButton(
         icon: Icon(_visible ? Icons.visibility_off : Icons.visibility),
         onPressed: () => setState(() => _visible = !_visible),
@@ -392,6 +398,7 @@ class CustomButton extends StatelessWidget {
   final VoidCallback onPressed;
   final Color? buttonColor;
   final Widget? trailingIcon;
+  final bool isLoading;
 
   const CustomButton({
     super.key,
@@ -399,7 +406,38 @@ class CustomButton extends StatelessWidget {
     required this.onPressed,
     this.buttonColor,
     this.trailingIcon,
+    this.isLoading = false,
   });
+
+  static const _submitDuration = Duration(milliseconds: 110);
+
+  Widget _buttonChild(Color spinnerColor) {
+    return AnimatedSwitcher(
+      duration: _submitDuration,
+      child: isLoading
+          ? SizedBox(
+              key: const ValueKey('auth-submit-loading'),
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(spinnerColor),
+              ),
+            )
+          : Row(
+              key: const ValueKey('auth-submit-label'),
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(buttonText),
+                if (trailingIcon != null) ...[
+                  const SizedBox(width: 8),
+                  trailingIcon!,
+                ],
+              ],
+            ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -409,25 +447,24 @@ class CustomButton extends StatelessWidget {
     if (isFramed) {
       final tokens = _authTokens(context);
       final text$ = _authTextTheme(context);
-      return SizedBox(
-        width: double.infinity,
-        child: TextButton(
-          onPressed: onPressed,
-          style: _framedAuthButtonStyle(
-            isPrimary: isPrimary,
-            tokens: tokens,
-            text$: text$,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(buttonText),
-              if (trailingIcon != null) ...[
-                const SizedBox(width: 8),
-                trailingIcon!,
-              ],
-            ],
+      final spinnerColor = isPrimary ? tokens.btnInk : tokens.accent;
+
+      return AnimatedOpacity(
+        opacity: isLoading ? 0.65 : 1.0,
+        duration: _submitDuration,
+        child: IgnorePointer(
+          ignoring: isLoading,
+          child: SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: onPressed,
+              style: _framedAuthButtonStyle(
+                isPrimary: isPrimary,
+                tokens: tokens,
+                text$: text$,
+              ),
+              child: _buttonChild(spinnerColor),
+            ),
           ),
         ),
       );
@@ -439,46 +476,45 @@ class CustomButton extends StatelessWidget {
         : AuthPalette.secondaryButtonForeground;
     final radius = BorderRadius.circular(AuthPalette.glassRadius);
 
-    return SizedBox(
-      width: double.infinity,
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          boxShadow: [
-            const BoxShadow(
-              color: AuthPalette.buttonShadow,
-              blurRadius: 16,
-              offset: Offset(0, 10),
+    return AnimatedOpacity(
+      opacity: isLoading ? 0.65 : 1.0,
+      duration: _submitDuration,
+      child: IgnorePointer(
+        ignoring: isLoading,
+        child: SizedBox(
+          width: double.infinity,
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              boxShadow: [
+                const BoxShadow(
+                  color: AuthPalette.buttonShadow,
+                  blurRadius: 16,
+                  offset: Offset(0, 10),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: backgroundColor,
-                borderRadius: radius,
-                border: Border.all(color: AuthPalette.buttonBorder),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: onPressed,
-                  borderRadius: radius,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: 12,
-                      horizontal: 14,
-                    ),
-                    child: Center(
-                      child: Text(
-                        buttonText,
-                        style: TextStyle(
-                          color: foregroundColor,
-                          fontWeight: FontWeight.w600,
+            child: ClipRRect(
+              borderRadius: radius,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: backgroundColor,
+                    borderRadius: radius,
+                    border: Border.all(color: AuthPalette.buttonBorder),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onPressed,
+                      borderRadius: radius,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 12,
+                          horizontal: 14,
                         ),
+                        child: Center(child: _buttonChild(foregroundColor)),
                       ),
                     ),
                   ),

@@ -39,6 +39,7 @@ class _FormContentState extends State<_FormContent> {
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final formKey = GlobalKey<FormState>();
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -86,6 +87,7 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.username],
           textInputAction: TextInputAction.next,
           autocorrect: false,
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 16),
         PasswordTextField(
@@ -97,13 +99,15 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.password],
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => _submitLogin(authService),
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 10),
         Align(
           alignment: Alignment.centerRight,
           child: AuthInlineAction(
             label: 'Forgot password?',
-            onPressed: () => context.go('/forgot-password'),
+            onPressed:
+                _isSubmitting ? () {} : () => context.go('/forgot-password'),
           ),
         ),
         const SizedBox(height: 18),
@@ -111,6 +115,7 @@ class _FormContentState extends State<_FormContent> {
           buttonText: 'Log in',
           trailingIcon: const Icon(Icons.arrow_forward_rounded, size: 16),
           onPressed: () => _submitLogin(authService),
+          isLoading: _isSubmitting,
         ),
         if (kDebugMode) ...[
           const SizedBox(height: 12),
@@ -118,6 +123,7 @@ class _FormContentState extends State<_FormContent> {
             buttonText: 'Debug login',
             buttonColor: AuthPalette.secondaryButtonBase,
             onPressed: () => _submitDebugLogin(authService),
+            isLoading: _isSubmitting,
           ),
         ],
         const SizedBox(height: 12),
@@ -127,7 +133,8 @@ class _FormContentState extends State<_FormContent> {
           key: const Key('loginRegisterButton'),
           buttonText: 'Create account',
           buttonColor: AuthPalette.secondaryButtonBase,
-          onPressed: () => context.go('/register'),
+          onPressed:
+              _isSubmitting ? () {} : () => context.go('/register'),
         ),
       ],
     );
@@ -147,6 +154,7 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.username],
           textInputAction: TextInputAction.next,
           autocorrect: false,
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 16),
         PasswordTextField(
@@ -158,19 +166,22 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.password],
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => _submitLogin(authService),
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 10),
         Align(
           alignment: Alignment.centerRight,
           child: AuthInlineAction(
             label: 'Forgot password?',
-            onPressed: () => context.go('/forgot-password'),
+            onPressed:
+                _isSubmitting ? () {} : () => context.go('/forgot-password'),
           ),
         ),
         const SizedBox(height: 16),
         CustomButton(
           buttonText: 'Log in',
           onPressed: () => _submitLogin(authService),
+          isLoading: _isSubmitting,
         ),
         if (kDebugMode) ...[
           const SizedBox(height: 16),
@@ -178,6 +189,7 @@ class _FormContentState extends State<_FormContent> {
             buttonText: 'Debug login',
             buttonColor: const Color(0x805E4A92),
             onPressed: () => _submitDebugLogin(authService),
+            isLoading: _isSubmitting,
           ),
         ],
         const SizedBox(height: 16),
@@ -185,7 +197,8 @@ class _FormContentState extends State<_FormContent> {
           key: const Key('loginRegisterButton'),
           buttonText: 'Create account',
           buttonColor: AuthPalette.secondaryButtonBase,
-          onPressed: () => context.go('/register'),
+          onPressed:
+              _isSubmitting ? () {} : () => context.go('/register'),
         ),
       ],
     );
@@ -219,6 +232,7 @@ class _FormContentState extends State<_FormContent> {
           "Validated data:\n\tusername: ${usernameController.text}, password: $masked",
         );
       }
+      setState(() => _isSubmitting = true);
       try {
         await authService.login(
           usernameController.text.trim(),
@@ -236,6 +250,8 @@ class _FormContentState extends State<_FormContent> {
             );
           });
         }
+      } finally {
+        if (mounted) setState(() => _isSubmitting = false);
       }
     }
 
