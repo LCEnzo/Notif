@@ -71,10 +71,7 @@ void main() {
     });
 
     test('fromJson handles missing update gracefully', () {
-      final json = <String, dynamic>{
-        'id': 3,
-        'status': 'unread',
-      };
+      final json = <String, dynamic>{'id': 3, 'status': 'unread'};
 
       final item = NotificationItem.fromJson(json);
 
@@ -144,10 +141,7 @@ void main() {
     });
 
     test('fromJson defaults missing strat_cls to GeneralSelectorStrategy', () {
-      final json = <String, dynamic>{
-        'id': 1,
-        'data': <String, dynamic>{},
-      };
+      final json = <String, dynamic>{'id': 1, 'data': <String, dynamic>{}};
 
       final record = StrategyRecord.fromJson(json);
 
@@ -177,11 +171,7 @@ void main() {
     });
 
     test('selectors returns empty list when data has no selectors key', () {
-      const record = StrategyRecord(
-        id: 1,
-        className: 'Test',
-        data: {},
-      );
+      const record = StrategyRecord(id: 1, className: 'Test', data: {});
 
       expect(record.selectors, isEmpty);
     });
@@ -193,7 +183,9 @@ void main() {
         42: const StrategyRecord(
           id: 42,
           className: 'GeneralSelectorStrategy',
-          data: {'selectors': ['div.post']},
+          data: {
+            'selectors': ['div.post'],
+          },
         ),
       };
       final json = <String, dynamic>{
@@ -303,17 +295,11 @@ void main() {
         type: DioExceptionType.connectionTimeout,
         message: 'Connection timed out',
       );
-      expect(
-        describeDataError(error),
-        'Connection timed out',
-      );
+      expect(describeDataError(error), 'Connection timed out');
     });
 
     test('returns toString for non-DioException objects', () {
-      expect(
-        describeDataError('Connection refused'),
-        'Connection refused',
-      );
+      expect(describeDataError('Connection refused'), 'Connection refused');
     });
   });
 }

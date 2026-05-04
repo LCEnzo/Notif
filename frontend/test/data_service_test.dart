@@ -63,11 +63,7 @@ void main() {
       }
 
       final items = <_PageItem>[];
-      items.add(_PageItem(
-        label: '1',
-        page: 1,
-        isActive: currentPage == 1,
-      ));
+      items.add(_PageItem(label: '1', page: 1, isActive: currentPage == 1));
 
       if (currentPage > 1) {
         items.add(_PageItem(label: 'prev', page: currentPage - 1));
@@ -79,11 +75,9 @@ void main() {
       if (start > 2) items.add(const _PageItem(label: '...'));
 
       for (var p = start; p <= end; p++) {
-        items.add(_PageItem(
-          label: p.toString(),
-          page: p,
-          isActive: p == currentPage,
-        ));
+        items.add(
+          _PageItem(label: p.toString(), page: p, isActive: p == currentPage),
+        );
       }
 
       if (end < totalPages - 1) items.add(const _PageItem(label: '...'));
@@ -92,11 +86,13 @@ void main() {
         items.add(_PageItem(label: 'next', page: currentPage + 1));
       }
 
-      items.add(_PageItem(
-        label: totalPages.toString(),
-        page: totalPages,
-        isActive: currentPage == totalPages,
-      ));
+      items.add(
+        _PageItem(
+          label: totalPages.toString(),
+          page: totalPages,
+          isActive: currentPage == totalPages,
+        ),
+      );
 
       return items;
     }

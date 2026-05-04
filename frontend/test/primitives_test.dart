@@ -7,18 +7,21 @@ import 'package:notif/commons/notif_tokens.dart';
 
 Widget _wrapApp(Widget child) {
   return MaterialApp(
-    theme: ThemeData(extensions: [
-      NotifTokens.build(NotifColorway.dusk1),
-      NotifTextTheme.forSet(NotifFontSet.current),
-    ]),
+    theme: ThemeData(
+      extensions: [
+        NotifTokens.build(NotifColorway.dusk1),
+        NotifTextTheme.forSet(NotifFontSet.current),
+      ],
+    ),
     home: Scaffold(body: Center(child: child)),
   );
 }
 
 void main() {
   group('NotifButton', () {
-    testWidgets('primary variant announces as a button to screen readers',
-        (tester) async {
+    testWidgets('primary variant announces as a button to screen readers', (
+      tester,
+    ) async {
       final handle = tester.ensureSemantics();
       await tester.pumpWidget(
         _wrapApp(
@@ -46,8 +49,9 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('primary variant focuses via Tab and activates via Enter',
-        (tester) async {
+    testWidgets('primary variant focuses via Tab and activates via Enter', (
+      tester,
+    ) async {
       int taps = 0;
       await tester.pumpWidget(
         _wrapApp(
@@ -74,8 +78,9 @@ void main() {
       expect(taps, 1);
     });
 
-    testWidgets('disabled button is announced as disabled and ignores taps',
-        (tester) async {
+    testWidgets('disabled button is announced as disabled and ignores taps', (
+      tester,
+    ) async {
       final handle = tester.ensureSemantics();
       int taps = 0;
 

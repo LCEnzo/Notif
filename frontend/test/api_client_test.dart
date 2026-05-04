@@ -55,17 +55,19 @@ void main() {
       expect(urls.first, 'https://prod.example.com/api');
     });
 
-    test('customWithFallback with empty custom falls back to builtin',
-        () async {
-      final settings = await createLoadedSettings();
-      await settings.setBackendUrlMode(BackendUrlMode.customWithFallback);
-      // customBackendUrl is empty by default
+    test(
+      'customWithFallback with empty custom falls back to builtin',
+      () async {
+        final settings = await createLoadedSettings();
+        await settings.setBackendUrlMode(BackendUrlMode.customWithFallback);
+        // customBackendUrl is empty by default
 
-      final urls = resolveUrls('/users', settings);
+        final urls = resolveUrls('/users', settings);
 
-      expect(urls, hasLength(1));
-      expect(urls.first, builtinApiUrl);
-    });
+        expect(urls, hasLength(1));
+        expect(urls.first, builtinApiUrl);
+      },
+    );
 
     test('customOnly with empty custom returns empty list', () async {
       final settings = await createLoadedSettings();
@@ -177,7 +179,10 @@ void main() {
       final response = Response<dynamic>(
         requestOptions: RequestOptions(path: '/test'),
         statusCode: 200,
-        data: [{'a': 1}, {'b': 2}],
+        data: [
+          {'a': 1},
+          {'b': 2},
+        ],
       );
 
       final result = expectSuccessList(response, 'Test');

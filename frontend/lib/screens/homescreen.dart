@@ -141,7 +141,8 @@ class _HomePageState extends State<HomePage> {
               onNotificationTap: _handleNotificationTap,
               onNotificationToggleRead: _handleNotificationToggleRead,
               onGoToPage: _handleGoToPageNotif,
-              onMarkAllRead: notificationService.unreadCount == 0 ||
+              onMarkAllRead:
+                  notificationService.unreadCount == 0 ||
                       notificationService.markingAllRead
                   ? null
                   : notificationService.markAllRead,
@@ -249,7 +250,9 @@ class _SourcesPageState extends State<SourcesPage> {
             style: TextButton.styleFrom(
               foregroundColor: tokens.bg1,
               backgroundColor: NotifFeedback.error,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.zero,
+              ),
               textStyle: text$.eyebrow,
             ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -329,7 +332,10 @@ class _SourcesPageState extends State<SourcesPage> {
               ),
             ),
             const SizedBox(width: 8),
-            Text('/ sources', style: text$.micro.copyWith(color: tokens.inkMute)),
+            Text(
+              '/ sources',
+              style: text$.micro.copyWith(color: tokens.inkMute),
+            ),
           ],
         ),
         actions: [
@@ -371,10 +377,7 @@ class _SourcesPageState extends State<SourcesPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Eyebrow(
-                              'Registry',
-                              tone: EyebrowTone.accent,
-                            ),
+                            const Eyebrow('Registry', tone: EyebrowTone.accent),
                             const SizedBox(height: 8),
                             Text(
                               'Sources are managed here, not in the feed.',
@@ -428,12 +431,12 @@ class _SourcesPageState extends State<SourcesPage> {
                       if (link != linkService.links.last)
                         const SizedBox(height: 12),
                     ],
-                    if (linkService.totalPages > 1)
-                      _PageNumbers(
-                        currentPage: linkService.currentPage,
-                        totalPages: linkService.totalPages,
-                        onPageSelected: _handleGoToPage,
-                      ),
+                  if (linkService.totalPages > 1)
+                    _PageNumbers(
+                      currentPage: linkService.currentPage,
+                      totalPages: linkService.totalPages,
+                      onPageSelected: _handleGoToPage,
+                    ),
                 ],
               ),
             ),
@@ -478,11 +481,7 @@ class _PageNumbers extends StatelessWidget {
     if (start > 2) items.add(const _PageItem(label: '\u2026'));
 
     for (var p = start; p <= end; p++) {
-      items.add(_PageItem(
-        label: '$p',
-        page: p,
-        isActive: p == currentPage,
-      ));
+      items.add(_PageItem(label: '$p', page: p, isActive: p == currentPage));
     }
 
     if (end < totalPages - 1) items.add(const _PageItem(label: '\u2026'));
@@ -491,11 +490,13 @@ class _PageNumbers extends StatelessWidget {
       items.add(_PageItem(label: '\u27e9', page: currentPage + 1));
     }
 
-    items.add(_PageItem(
-      label: '$totalPages',
-      page: totalPages,
-      isActive: currentPage == totalPages,
-    ));
+    items.add(
+      _PageItem(
+        label: '$totalPages',
+        page: totalPages,
+        isActive: currentPage == totalPages,
+      ),
+    );
 
     return items;
   }
@@ -514,60 +515,62 @@ class _PageNumbers extends StatelessWidget {
         alignment: WrapAlignment.center,
         spacing: 2,
         runSpacing: 4,
-        children: pages.map((item) {
-          if (!item.isActive && item.page != null) {
-            return SizedBox(
-              width: _buttonSize,
-              height: _buttonSize,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  backgroundColor: tokens.bg2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
+        children: pages
+            .map((item) {
+              if (!item.isActive && item.page != null) {
+                return SizedBox(
+                  width: _buttonSize,
+                  height: _buttonSize,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      backgroundColor: tokens.bg2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    onPressed: () async => await onPageSelected(item.page!),
+                    child: Text(
+                      item.label,
+                      style: text$.body.copyWith(color: tokens.inkMute),
+                    ),
+                  ),
+                );
+              }
+              if (item.isActive) {
+                return SizedBox(
+                  width: _buttonSize,
+                  height: _buttonSize,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      backgroundColor: tokens.accent,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    onPressed: null,
+                    child: Text(
+                      item.label,
+                      style: text$.body
+                          .copyWith(fontWeight: FontWeight.w600)
+                          .copyWith(color: tokens.ink),
+                    ),
+                  ),
+                );
+              }
+              return SizedBox(
+                width: _buttonSize,
+                height: _buttonSize,
+                child: Center(
+                  child: Text(
+                    item.label,
+                    style: text$.body.copyWith(color: tokens.inkMute),
                   ),
                 ),
-                onPressed: () async => await onPageSelected(item.page!),
-                child: Text(
-                  item.label,
-                  style: text$.body.copyWith(color: tokens.inkMute),
-                ),
-              ),
-            );
-          }
-          if (item.isActive) {
-            return SizedBox(
-              width: _buttonSize,
-              height: _buttonSize,
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.zero,
-                  backgroundColor: tokens.accent,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                ),
-                onPressed: null,
-                child: Text(
-                  item.label,
-                  style: text$.body
-                      .copyWith(fontWeight: FontWeight.w600)
-                      .copyWith(color: tokens.ink),
-                ),
-              ),
-            );
-          }
-          return SizedBox(
-            width: _buttonSize,
-            height: _buttonSize,
-            child: Center(
-              child: Text(
-                item.label,
-                style: text$.body.copyWith(color: tokens.inkMute),
-              ),
-            ),
-          );
-        }).toList(growable: false),
+              );
+            })
+            .toList(growable: false),
       ),
     );
   }
@@ -708,8 +711,7 @@ class _HomeConsole extends StatelessWidget {
                             currentPage: notificationService.currentPage,
                             totalPages: notificationService.totalPages,
                             unreadCount: notificationService.unreadCount,
-                            markingAllRead:
-                                notificationService.markingAllRead,
+                            markingAllRead: notificationService.markingAllRead,
                             isMarkingRead: notificationService.isMarkingRead,
                             onRefresh: onRefresh,
                             onGoToPage: onGoToPage,
@@ -780,7 +782,9 @@ class _ConsoleTopBar extends StatelessWidget {
     final text$ = NotifTextTheme.of(context);
     final compact = MediaQuery.sizeOf(context).width < 1120;
     final username = userData?.username.trim();
-    final identity = username == null || username.isEmpty ? 'operator' : username;
+    final identity = username == null || username.isEmpty
+        ? 'operator'
+        : username;
     final selectedHome = activeSection == 'home';
     final selectedSources = activeSection == 'sources';
 
@@ -813,7 +817,11 @@ class _ConsoleTopBar extends StatelessWidget {
                       value: '$unreadCount',
                       accent: true,
                     ),
-                    _MiniStat(metrics: metrics, label: 'S', value: '$sourceCount'),
+                    _MiniStat(
+                      metrics: metrics,
+                      label: 'S',
+                      value: '$sourceCount',
+                    ),
                     const SizedBox(width: 6),
                     _TopBarAction(
                       metrics: metrics,
@@ -897,7 +905,11 @@ class _ConsoleTopBar extends StatelessWidget {
                   value: '$unreadCount',
                   accent: true,
                 ),
-                _MiniStat(metrics: metrics, label: 'SRC', value: '$sourceCount'),
+                _MiniStat(
+                  metrics: metrics,
+                  label: 'SRC',
+                  value: '$sourceCount',
+                ),
                 _MiniStat(metrics: metrics, label: 'SYNC', value: syncLabel),
                 _MiniStat(metrics: metrics, label: 'API', value: backendLabel),
                 const SizedBox(width: 8),
@@ -929,7 +941,11 @@ class _ConsoleTopBar extends StatelessWidget {
                   label: 'settings',
                   onPressed: onSettings,
                 ),
-                _TopBarAction(metrics: metrics, label: 'about', onPressed: onAbout),
+                _TopBarAction(
+                  metrics: metrics,
+                  label: 'about',
+                  onPressed: onAbout,
+                ),
                 _TopBarAction(
                   metrics: metrics,
                   label: 'logout',
@@ -1197,7 +1213,9 @@ class _DensitySegment extends StatelessWidget {
                   vertical: metrics.actionVPad,
                 ),
                 decoration: BoxDecoration(
-                  color: density == selected ? tokens.accent : Colors.transparent,
+                  color: density == selected
+                      ? tokens.accent
+                      : Colors.transparent,
                   border: Border(
                     left: density == HomeDensity.comfortable
                         ? BorderSide.none
@@ -1636,7 +1654,8 @@ class _UpdateConsole extends StatelessWidget {
                 }
 
                 final item = items[index];
-                final canToggle = item.status == NotificationStatus.unread ||
+                final canToggle =
+                    item.status == NotificationStatus.unread ||
                     item.status == NotificationStatus.read;
                 return _ConsoleNotificationRow(
                   notification: item,
@@ -1779,7 +1798,11 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => minExtent;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
 
@@ -1954,7 +1977,11 @@ class _ConsoleNotificationRow extends StatelessWidget {
                       ),
                     )
                   else
-                    Icon(Icons.north_east_sharp, size: 12, color: tokens.inkMute),
+                    Icon(
+                      Icons.north_east_sharp,
+                      size: 12,
+                      color: tokens.inkMute,
+                    ),
                 ],
               )
             : Row(
@@ -2113,20 +2140,14 @@ class _SignalOrb extends StatelessWidget {
     return SizedBox.square(
       dimension: size,
       child: CustomPaint(
-        painter: _SignalOrbPainter(
-          ink: tokens.ink,
-          accent: tokens.accent,
-        ),
+        painter: _SignalOrbPainter(ink: tokens.ink, accent: tokens.accent),
       ),
     );
   }
 }
 
 class _SignalOrbPainter extends CustomPainter {
-  const _SignalOrbPainter({
-    required this.ink,
-    required this.accent,
-  });
+  const _SignalOrbPainter({required this.ink, required this.accent});
 
   final Color ink;
   final Color accent;
@@ -2327,7 +2348,10 @@ class _LinkCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(link.name, style: text$.heading.copyWith(color: tokens.ink)),
+                    Text(
+                      link.name,
+                      style: text$.heading.copyWith(color: tokens.ink),
+                    ),
                     const SizedBox(height: 6),
                     SelectableText(
                       link.url,
@@ -2528,10 +2552,7 @@ class _EmptyState extends StatelessWidget {
               style: text$.body.copyWith(color: tokens.inkDim),
             ),
           ),
-          if (action != null) ...[
-            const SizedBox(height: 18),
-            action!,
-          ],
+          if (action != null) ...[const SizedBox(height: 18), action!],
         ],
       ),
     );
