@@ -1,5 +1,6 @@
 from typing import cast
 
+from django.core.paginator import Page
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
@@ -60,14 +61,18 @@ class NotificationPagination(PageNumberPagination):
 		# unread_count is the user's *global* unread total, not the count within
 		# the current filter. The FE needs it to render the badge / enable
 		# "mark all read" correctly even when the visible page is all read.
-		user = self.request.user
+		# self.request and self.page are set by paginate_queryset before this
+		# is called; cast to satisfy mypy's nullable view of the attrs.
+		request = cast(Request, self.request)
+		page = cast(Page, self.page)
+		user = cast(User, request.user)
 		unread_count = Notification.objects.filter(
 			update__link__user=user,
 			status=Notification.Status.UNREAD,
 		).count()
 		return Response(
 			{
-				"count": self.page.paginator.count,
+				"count": page.paginator.count,
 				"next": self.get_next_link(),
 				"previous": self.get_previous_link(),
 				"unread_count": unread_count,
