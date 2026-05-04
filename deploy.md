@@ -22,7 +22,7 @@ Order matters: add the site to Cloudflare *first*, then point Porkbun at the nam
 
 1. In Cloudflare, **Add a site** → enter your domain → choose Free plan. Cloudflare assigns two nameservers (e.g. `xxx.ns.cloudflare.com`, `yyy.ns.cloudflare.com`).
 2. In Porkbun, open the domain → **Authoritative Nameservers** → replace the defaults with the two Cloudflare nameservers. Disable Porkbun's URL Forwarding if it's set on the apex — it silently overrides A-records.
-3. Wait for delegation. `dig NS notif.yourdomain.com +short` should return Cloudflare's NSes. Up to a few hours; sometimes minutes.
+3. Wait for delegation. `dig NS notif.lcenzo.com +short` should return Cloudflare's NSes. Up to a few hours; sometimes minutes.
 4. Only then create the `notif` A-record in Cloudflare. If Caddy boots before delegation completes it will burn Let's Encrypt rate-limit attempts trying to validate.
 
 ### TLS issuance behind Cloudflare's proxy
@@ -32,6 +32,8 @@ The orange cloud terminates TLS, which means **TLS-ALPN-01 cannot reach Caddy**.
 - **Easiest:** grey-cloud the `notif` A-record during the first deploy so HTTP-01 hits the origin directly, then re-enable the orange cloud once `journalctl -u caddy` (or the compose logs) shows a certificate was obtained.
 - **Most robust:** issue a [Cloudflare Origin Certificate](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/), drop it on the VPS, and tell Caddy to use it via `tls /path/to/cert.pem /path/to/key.pem`. Skips Let's Encrypt entirely and renews every 15 years.
 - **DNS-01 with Cloudflare API token:** requires the `caddy-dns/cloudflare` module, which is **not** in `apt install caddy`. Either build Caddy with `xcaddy` or use the official Caddy image variant that bundles it.
+
+The `Caddyfile` is pre-configured with Cloudflare's IP ranges in `trusted_proxies`, so behind the orange cloud, Caddy logs the real client IP from the `CF-Connecting-IP` header instead of Cloudflare's proxy IPs. When CF publishes new ranges (rare, see https://www.cloudflare.com/ips/), update the list in `Caddyfile` and reload Caddy.
 
 ---
 
@@ -64,7 +66,7 @@ cd /home/deploy/notif
 # Project-level env used by Docker Compose/Caddy interpolation.
 # backend/.env is still used for Django settings and secrets.
 cat > .env << 'ENV'
-NOTIF_DOMAIN=notif.yourdomain.com
+NOTIF_DOMAIN=notif.lcenzo.com
 ENV
 
 # Create production Django env from the example.
@@ -74,9 +76,10 @@ cp backend/.env.example backend/.env
 # DEBUG=false
 # NOTIF_ENV=production
 # DJANGO_SECRET_KEY=<run after install/build, or paste a generated secret>
-# ALLOWED_HOSTS=notif.yourdomain.com
-# CORS_ALLOWED_ORIGINS=https://notif.yourdomain.com
-# CSRF_TRUSTED_ORIGINS=https://notif.yourdomain.com
+# ALLOWED_HOSTS=notif.lcenzo.com
+# CORS_ALLOWED_ORIGINS=https://notif.lcenzo.com
+# CSRF_TRUSTED_ORIGINS=https://notif.lcenzo.com
+# DJANGO_ADMIN_URL=ops-<random-suffix>/   # don't leave the default "admin/" in prod
 # SQLITE_PATH=/app/data/db.sqlite3
 # STATIC_ROOT=staticfiles
 
@@ -98,7 +101,7 @@ docker compose -f compose.yaml --profile prod up -d
 docker compose -f compose.yaml ps
 
 # Verify the deploy works — /status checks DB + returns version/commit.
-curl https://notif.yourdomain.com/api/v1/monitoring/status/
+curl https://notif.lcenzo.com/api/v1/monitoring/status/
 # → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
 # Check Caddy got a certificate.
@@ -179,9 +182,10 @@ sudo -u notif cp .env.example .env
 # DEBUG=false
 # NOTIF_ENV=production
 # DJANGO_SECRET_KEY=<generate fresh>
-# ALLOWED_HOSTS=notif.yourdomain.com
-# CORS_ALLOWED_ORIGINS=https://notif.yourdomain.com
-# CSRF_TRUSTED_ORIGINS=https://notif.yourdomain.com
+# ALLOWED_HOSTS=notif.lcenzo.com
+# CORS_ALLOWED_ORIGINS=https://notif.lcenzo.com
+# CSRF_TRUSTED_ORIGINS=https://notif.lcenzo.com
+# DJANGO_ADMIN_URL=ops-<random-suffix>/   # don't leave the default "admin/" in prod
 # SQLITE_PATH=/var/lib/notif/db.sqlite3
 # STATIC_ROOT=staticfiles
 
@@ -239,7 +243,7 @@ systemctl enable --now notif
 ```bash
 # Configure Caddy env for this deployment.
 cat > /etc/caddy/notif.env << 'ENV'
-NOTIF_DOMAIN=notif.yourdomain.com
+NOTIF_DOMAIN=notif.lcenzo.com
 STATIC_ROOT=/opt/notif/backend/staticfiles
 BACKEND_UPSTREAM=localhost
 BACKEND_PORT=8000
@@ -276,7 +280,7 @@ curl -H 'X-Forwarded-Proto: https' http://localhost:8000/api/v1/monitoring/statu
 # → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
 # Status check (public, through Caddy)
-curl https://notif.yourdomain.com/api/v1/monitoring/status/
+curl https://notif.lcenzo.com/api/v1/monitoring/status/
 # → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
 # Check Caddy got a certificate
@@ -325,21 +329,21 @@ cp /var/lib/notif/db.sqlite3 /var/backups/notif/db-$(date +%Y%m%d-%H%M).sqlite3
 # ── These should all work from any machine ──
 
 # Liveness (process alive?)
-curl https://notif.yourdomain.com/api/v1/monitoring/health/
+curl https://notif.lcenzo.com/api/v1/monitoring/health/
 
 # Status (DB connectivity + version info)
-curl https://notif.yourdomain.com/api/v1/monitoring/status/
+curl https://notif.lcenzo.com/api/v1/monitoring/status/
 
 # API docs (public)
-open https://notif.yourdomain.com/api/v1/docs/
+open https://notif.lcenzo.com/api/v1/docs/
 
 # Register a user
-curl -X POST https://notif.yourdomain.com/api/v1/accounts/ \
+curl -X POST https://notif.lcenzo.com/api/v1/accounts/ \
   -H "Content-Type: application/json" \
   -d '{"username":"test","email":"test@example.com","password":"correct horse battery staple"}'
 
 # Get a token
-curl -X POST https://notif.yourdomain.com/api/v1/token/ \
+curl -X POST https://notif.lcenzo.com/api/v1/token/ \
   -H "Content-Type: application/json" \
   -d '{"username":"test","password":"correct horse battery staple"}'
 ```
