@@ -1,0 +1,67 @@
+name: Backend CI
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    branches: [master, new-master]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod
+      DJANGO_SETTINGS_MODULE: notif.settings
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set build info
+        run: echo "GIT_HASH=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Verify lockfile
+        run: uv lock --check
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Format (ruff)
+        run: uv run ruff format --check .
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Type check (mypy)
+        run: uv run mypy .
+
+      - name: Django system check
+        run: uv run python manage.py check
+
+      - name: Missing migrations
+        run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Test (pytest)
+        run: uv run pytest -v
