@@ -28,8 +28,13 @@ class UserCreationSerializer(ModelSerializer):
 	def update(self, instance: User, validated_data: dict):
 		# Ensure a user can only update their own password.
 		request = self.context.get("request")
-		if validated_data is not None and (request is None or request.user != instance):
-			validated_data.pop("password", None)
+		password = validated_data.pop("password", None)
+		if password is not None:
+			if request is None or request.user != instance:
+				# Silently drop password update from other users
+				pass
+			else:
+				instance.set_password(password)
 
 		return super().update(instance, validated_data)
 

@@ -114,3 +114,43 @@ class UserViewSet(ModelViewSet):
 		user = request.user
 		assert isinstance(user, User)
 		return Response(status=status.HTTP_200_OK, data=UserFullReadSerializer(user).data)
+
+	@action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
+	def change_password(self, request: Request) -> Response:
+		"""Change the authenticated user's password.
+
+		Requires current_password for verification.  Returns 400 on wrong
+		current password or validation failure.
+		"""
+		user = request.user
+		assert isinstance(user, User)
+
+		current_password = request.data.get("current_password")
+		new_password = request.data.get("new_password")
+
+		if not current_password or not new_password:
+			return Response(
+				{"error": "Both current_password and new_password are required."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+
+		if not user.check_password(current_password):
+			return Response(
+				{"error": "Current password is incorrect."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+
+		try:
+			from django.contrib.auth.password_validation import validate_password
+
+			validate_password(new_password, user)
+		except Exception as exc:
+			return Response(
+				{"error": str(exc)},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+
+		user.set_password(new_password)
+		user.save(update_fields=["password", "date_modified"])
+
+		return Response({"status": "ok"})
