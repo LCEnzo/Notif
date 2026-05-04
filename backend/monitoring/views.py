@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -34,11 +35,13 @@ class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
 	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = LinkSerializer
 	pagination_class = LinkPagination
+	filter_backends = [OrderingFilter]
+	ordering_fields = ["pk", "last_scraped"]
+	ordering = ["-pk"]
 
 	def get_queryset(self) -> QuerySet[Link]:
-		# Stable ordering needed once paginated; pk ASC keeps the user's links
-		# in the order they were created so the list does not jump on refresh.
-		return self._scoped_queryset(Link.objects.all()).order_by("pk")
+		# OrderingFilter applies ordering on top of this scoped base queryset.
+		return self._scoped_queryset(Link.objects.all())
 
 
 class StrategyViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
@@ -85,6 +88,9 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 	permission_classes = [IsAuthenticated]
 	serializer_class = NotificationSerializer
 	pagination_class = NotificationPagination
+	filter_backends = [OrderingFilter]
+	ordering_fields = ["update__created_at", "pk"]
+	ordering = ["-update__created_at", "-pk"]
 
 	def get_queryset(self) -> QuerySet[Notification]:
 		user = cast(User, self.request.user)
@@ -98,10 +104,8 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		if since:
 			queryset = queryset.filter(update__created_at__gte=since)
 
-		# Stable ordering required for paginated results — Update.Meta.ordering
-		# is on the related table, so we need an explicit order on the join.
-		# pk tiebreaker keeps pages deterministic when timestamps collide.
-		return queryset.select_related("update").order_by("-update__created_at", "-pk")
+		# OrderingFilter applies ordering on top; select_related avoids N+1.
+		return queryset.select_related("update")
 
 	def perform_update(self, serializer):
 		new_status = serializer.validated_data.get("status")
