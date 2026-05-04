@@ -130,7 +130,8 @@ def status_check(request: Request) -> Response:
 	from django.db import connections
 
 	try:
-		connections["default"].cursor()
+		with connections["default"].cursor() as cursor:
+			cursor.execute("SELECT 1")
 		db_status = "ok"
 		status_code = 200
 	except Exception:

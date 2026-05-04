@@ -115,7 +115,7 @@ The backend is not published directly to the host in production Compose. Caddy e
 ```bash
 crontab -e
 # Add:
-*/15 * * * * cd /home/deploy/notif && docker compose -f compose.yaml run --rm backend python manage.py scrape
+*/15 * * * * cd /home/deploy/notif && docker compose -f compose.yaml exec -T backend python manage.py scrape
 ```
 
 ### A5. Maintenance
@@ -133,10 +133,10 @@ git pull
 docker compose -f compose.yaml build
 docker compose -f compose.yaml --profile prod up -d
 
-# Backup the database
+# Backup the database (sqlite3 .backup produces a consistent snapshot).
+# Backups land on the persistent backend_data volume under /app/data/backups/.
 mkdir -p backups
-docker compose -f compose.yaml exec backend cp /app/data/db.sqlite3 /app/data/db-$(date +%Y%m%d).sqlite3
-docker compose -f compose.yaml cp backend:/app/data/db-$(date +%Y%m%d).sqlite3 ./backups/
+docker compose -f compose.yaml exec -T backend ./scripts/backup-db.sh
 ```
 
 ---
@@ -317,8 +317,8 @@ sudo -u notif -H .venv/bin/python manage.py collectstatic --noinput
 systemctl restart notif
 systemctl reload caddy
 
-# Backup the database
-cp /var/lib/notif/db.sqlite3 /var/backups/notif/db-$(date +%Y%m%d-%H%M).sqlite3
+# Backup the database (sqlite3 .backup for consistent snapshot)
+SQLITE_PATH=/var/lib/notif/db.sqlite3 BACKUP_DIR=/var/backups/notif /opt/notif/backend/scripts/backup-db.sh
 ```
 
 ---
