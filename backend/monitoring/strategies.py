@@ -37,10 +37,10 @@ type ComparisonStateUpdate = ComparisonState | None
 type ScrapeResult = Result[NotifData, str]
 
 # Used for choices for the Strategy model
-STRATEGY_CHOICES = {}
+STRATEGY_CHOICES: dict[str, type[BaseStrategy]] = {}
 
 
-def register(cls: type):
+def register(cls: type[BaseStrategy]) -> type[BaseStrategy]:
 	STRATEGY_CHOICES[cls.__name__] = cls
 	return cls  # return the class so that it's still defined
 
@@ -73,6 +73,8 @@ def _get_content_with_css_selector(html_content: str, css_selector: str) -> Resu
 
 
 class BaseStrategy(ABC):
+	display_name: str = ""  # set by subclasses; used in admin labels
+
 	@abstractmethod
 	def can_scrape_url(self, url: URL) -> bool:
 		"""
