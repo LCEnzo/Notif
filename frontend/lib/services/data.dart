@@ -170,8 +170,8 @@ class _StrategyResolution {
 }
 
 enum LinkSort {
-  newest('-pk,-pk', 'Newest'),
-  oldest('pk,pk', 'Oldest'),
+  newest('-pk', 'Newest'),
+  oldest('pk', 'Oldest'),
   recentlyScraped('-last_scraped,-pk', 'Recently scraped'),
   leastRecentlyScraped('last_scraped,pk', 'Least recently scraped');
 
@@ -515,12 +515,11 @@ class LinkService extends ChangeNotifier {
       );
 
       expectSuccessStatus(response, 'Delete link');
-      _links = _links
-          .where((item) => item.id != link.id)
-          .toList(growable: false);
       if (link.strategyId != null) {
         await _deleteStrategyIfUnused(jwt, link.strategyId!);
       }
+      // Refetch current page — backend owns the truth after deletion.
+      await goToPage(_currentPage);
       return true;
     } catch (error) {
       _error = describeDataError(error);
@@ -949,8 +948,7 @@ class NotificationService extends ChangeNotifier {
                   Map<String, dynamic>.from(item as Map),
                 ),
               )
-              .toList(growable: false)
-            ..sort(_compareNotifications);
+              .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
         return;
@@ -1007,8 +1005,7 @@ class NotificationService extends ChangeNotifier {
                   Map<String, dynamic>.from(item as Map),
                 ),
               )
-              .toList(growable: false)
-            ..sort(_compareNotifications);
+              .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
         return;
