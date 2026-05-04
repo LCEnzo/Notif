@@ -144,6 +144,34 @@ class AuthService extends ChangeNotifier {
     return response.statusCode == 200;
   }
 
+  Future<void> requestPasswordReset(String email) async {
+    final response = await apiPost(
+      '/accounts/password/reset/',
+      settings: _settings,
+      headers: _jsonHeaders,
+      body: {'email': email.trim().toLowerCase()},
+    );
+    expectSuccessJson(response, 'Password reset request');
+  }
+
+  Future<void> confirmPasswordReset(
+    String email,
+    String code,
+    String newPassword,
+  ) async {
+    final response = await apiPost(
+      '/accounts/password/reset/confirm/',
+      settings: _settings,
+      headers: _jsonHeaders,
+      body: {
+        'email': email.trim().toLowerCase(),
+        'code': code.trim(),
+        'new_password': newPassword,
+      },
+    );
+    expectSuccessJson(response, 'Password reset confirm');
+  }
+
   JWT? get jwt => _jwt;
   int? get currentUserId => _jwt?.userId;
 }
