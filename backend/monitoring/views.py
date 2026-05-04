@@ -21,12 +21,23 @@ from monitoring.strategies import STRATEGY_CHOICES
 from notif.config import settings
 
 
+class LinkPagination(PageNumberPagination):
+	# Most users will fit under page_size and never see the paginated envelope's
+	# next/previous; the FE keeps its UI flat until total exceeds the page.
+	page_size = 100
+	page_size_query_param = "page_size"
+	max_page_size = 500
+
+
 class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
 	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = LinkSerializer
+	pagination_class = LinkPagination
 
 	def get_queryset(self) -> QuerySet[Link]:
-		return self._scoped_queryset(Link.objects.all())
+		# Stable ordering needed once paginated; pk ASC keeps the user's links
+		# in the order they were created so the list does not jump on refresh.
+		return self._scoped_queryset(Link.objects.all()).order_by("pk")
 
 
 class StrategyViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
@@ -44,6 +55,25 @@ class NotificationPagination(PageNumberPagination):
 	page_size = 50
 	page_size_query_param = "page_size"
 	max_page_size = 200
+
+	def get_paginated_response(self, data):
+		# unread_count is the user's *global* unread total, not the count within
+		# the current filter. The FE needs it to render the badge / enable
+		# "mark all read" correctly even when the visible page is all read.
+		user = self.request.user
+		unread_count = Notification.objects.filter(
+			update__link__user=user,
+			status=Notification.Status.UNREAD,
+		).count()
+		return Response(
+			{
+				"count": self.page.paginator.count,
+				"next": self.get_next_link(),
+				"previous": self.get_previous_link(),
+				"unread_count": unread_count,
+				"results": data,
+			}
+		)
 
 
 class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):

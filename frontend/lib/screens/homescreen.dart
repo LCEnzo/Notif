@@ -89,9 +89,13 @@ class _HomePageState extends State<HomePage> {
         .cast<NotificationItem?>()
         .firstWhere((item) => item?.id == id, orElse: () => null);
     final wasUnread = notification?.isUnread ?? false;
-    await notificationService.toggleRead(id);
+    final success = await notificationService.toggleRead(id);
     if (!mounted) return;
-    _showMessage(wasUnread ? 'Marked as read.' : 'Marked as unread.');
+    if (success) {
+      _showMessage(wasUnread ? 'Marked as read.' : 'Marked as unread.');
+    } else if (notificationService.error != null) {
+      _showMessage(notificationService.error);
+    }
   }
 
   Future<void> _handleLoadMore() async {
@@ -1487,6 +1491,8 @@ class _UpdateConsole extends StatelessWidget {
                 }
 
                 final item = items[index];
+                final canToggle = item.status == NotificationStatus.unread ||
+                    item.status == NotificationStatus.read;
                 return _ConsoleNotificationRow(
                   notification: item,
                   metrics: metrics,
@@ -1494,7 +1500,9 @@ class _UpdateConsole extends StatelessWidget {
                   mobileTui: mobileTui,
                   busy: isMarkingRead(item.id),
                   onTap: () => onNotificationTap(item),
-                  onChipTap: () => onNotificationToggleRead(item.id),
+                  onChipTap: canToggle
+                      ? () => onNotificationToggleRead(item.id)
+                      : null,
                 );
               },
             ),
@@ -1967,6 +1975,8 @@ class _ConsoleNotificationRow extends StatelessWidget {
                               ),
                             ),
                           )
+                        : onChipTap == null
+                        ? const SizedBox.shrink()
                         : Align(
                             alignment: Alignment.centerRight,
                             child: InkWell(

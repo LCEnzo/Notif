@@ -250,7 +250,9 @@ class LinkService extends ChangeNotifier {
         headers: _authHeaders(jwt),
       );
 
-      final links = expectSuccessList(response, 'Fetch links')
+      final body = expectSuccessJson(response, 'Fetch links');
+      final results = (body['results'] as List?) ?? const [];
+      final links = results
           .map(
             (item) => Link.fromJson(
               Map<String, dynamic>.from(item as Map),
@@ -806,6 +808,9 @@ class NotificationService extends ChangeNotifier {
   int _fetchEpoch = 0;
   int _currentPage = 0;
   bool _hasMore = false;
+  // Server-reported global unread count. Local count over `_notifications`
+  // would be wrong under pagination — unread items can sit on later pages.
+  int _totalUnreadCount = 0;
   String? _error;
 
   final Set<int> _markingReadIds = <int>{};
@@ -827,7 +832,7 @@ class NotificationService extends ChangeNotifier {
   bool get hasMore => _hasMore;
   bool get markingAllRead => _markingAllRead;
   String? get error => _error;
-  int get unreadCount => _notifications.where((item) => item.isUnread).length;
+  int get unreadCount => _totalUnreadCount;
 
   bool isMarkingRead(int id) => _markingReadIds.contains(id);
 
@@ -840,6 +845,10 @@ class NotificationService extends ChangeNotifier {
 
     final fetchEpoch = ++_fetchEpoch;
     _loading = true;
+    // A refresh racing with an in-flight loadMore would otherwise leave
+    // _loadingMore = true forever, since the stale loadMore's epoch check
+    // exits without clearing it.
+    _loadingMore = false;
     _error = null;
     notifyListeners();
 
@@ -868,6 +877,7 @@ class NotificationService extends ChangeNotifier {
       _notifications = notifications;
       _currentPage = 1;
       _hasMore = body['next'] != null;
+      _totalUnreadCount = (body['unread_count'] as int?) ?? 0;
     } catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
@@ -921,6 +931,7 @@ class NotificationService extends ChangeNotifier {
           [..._notifications, ...added]..sort(_compareNotifications);
       _currentPage = nextPage;
       _hasMore = body['next'] != null;
+      _totalUnreadCount = (body['unread_count'] as int?) ?? _totalUnreadCount;
     } catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
@@ -934,14 +945,20 @@ class NotificationService extends ChangeNotifier {
     }
   }
 
-  Future<void> toggleRead(int id) async {
+  Future<bool> toggleRead(int id) async {
     final jwt = _authService.jwt;
     final notification = _notifications.cast<NotificationItem?>().firstWhere(
       (item) => item?.id == id,
       orElse: () => null,
     );
     if (jwt == null || notification == null) {
-      return;
+      return false;
+    }
+    // Only read↔unread is a valid flip. Dismissed and unknown states should
+    // not be resurrected to unread by a chip tap.
+    if (notification.status != NotificationStatus.unread &&
+        notification.status != NotificationStatus.read) {
+      return false;
     }
 
     final wasUnread = notification.isUnread;
@@ -977,23 +994,29 @@ class NotificationService extends ChangeNotifier {
               )
               .toList(growable: false)
             ..sort(_compareNotifications);
+      // Mirror the server-side change locally; the count stays accurate
+      // until the next fetch refreshes it from the envelope.
+      _totalUnreadCount = (_totalUnreadCount + (wasUnread ? -1 : 1))
+          .clamp(0, 1 << 30);
+      return true;
     } catch (error) {
       _error = describeDataError(error);
+      return false;
     } finally {
       _markingReadIds.remove(id);
       notifyListeners();
     }
   }
 
-  Future<void> markRead(int id) async {
+  Future<bool> markRead(int id) async {
     final notification = _notifications.cast<NotificationItem?>().firstWhere(
       (item) => item?.id == id,
       orElse: () => null,
     );
     if (notification == null || !notification.isUnread) {
-      return;
+      return false;
     }
-    await toggleRead(id);
+    return toggleRead(id);
   }
 
   Future<void> markAllRead() async {
@@ -1026,6 +1049,9 @@ class NotificationService extends ChangeNotifier {
               )
               .toList(growable: false)
             ..sort(_compareNotifications);
+      // Server clears all unread for the user, including pages we haven't
+      // loaded; reflect that locally rather than counting visible items.
+      _totalUnreadCount = 0;
     } catch (error) {
       _error = describeDataError(error);
     } finally {
@@ -1041,7 +1067,8 @@ class NotificationService extends ChangeNotifier {
         !_loadingMore &&
         !_markingAllRead &&
         _currentPage == 0 &&
-        !_hasMore) {
+        !_hasMore &&
+        _totalUnreadCount == 0) {
       return;
     }
 
@@ -1052,6 +1079,7 @@ class NotificationService extends ChangeNotifier {
     _markingAllRead = false;
     _currentPage = 0;
     _hasMore = false;
+    _totalUnreadCount = 0;
     _error = null;
     _markingReadIds.clear();
     notifyListeners();
