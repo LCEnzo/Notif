@@ -368,9 +368,11 @@ class _AccountPageState extends State<AccountPage> {
 											style: text$.body.copyWith(color: tokens.inkDim),
 										),
 										const SizedBox(height: 16),
-										NotifCard(
-											bordered: true,
-											borderColor: Colors.redAccent.withValues(alpha: 0.3),
+										Container(
+											decoration: BoxDecoration(
+												color: tokens.bg2,
+												border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3), width: 1),
+											),
 											padding: const EdgeInsets.all(20),
 											child: Column(
 												crossAxisAlignment: CrossAxisAlignment.start,
