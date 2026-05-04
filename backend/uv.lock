@@ -544,6 +544,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "requests" },
+    { name = "resend" },
 ]
 
 [package.dev-dependencies]
@@ -575,6 +576,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.0,<3.0" },
     { name = "python-dotenv", specifier = ">=1.1,<2.0" },
     { name = "requests", specifier = ">=2.32,<3.0" },
+    { name = "resend", specifier = ">=2.30.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -881,6 +883,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/92/32/587625f91f9a0a3d84688bf9cfc4b2480a7e8ec327cefd0ff2ac891fd2cf/requests-mock-1.12.1.tar.gz", hash = "sha256:e9e12e333b525156e82a3c852f22016b9158220d2f47454de9cae8a77d371401", size = 60901, upload-time = "2024-03-29T03:54:29.446Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/97/ec/889fbc557727da0c34a33850950310240f2040f3b1955175fdb2b36a8910/requests_mock-1.12.1-py2.py3-none-any.whl", hash = "sha256:b1e37054004cdd5e56c84454cc7df12b25f90f382159087f4b6915aaeef39563", size = 27695, upload-time = "2024-03-29T03:54:27.64Z" },
+]
+
+[[package]]
+name = "resend"
+version = "2.30.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d5/b5/dffc1acd852c708c48626d064a54c83acf0f6c8f097efc14e3b5c3a3ad99/resend-2.30.0.tar.gz", hash = "sha256:4c3c634316ad1a1fe7c5453afdd560c7d318ba18960149a8159f3bed334eb386", size = 43201, upload-time = "2026-05-04T16:23:43.203Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/05/c1114a7d29e0543d815cb9b5ac0f00b6ea7bb65507d952f2896d61acdc2b/resend-2.30.0-py2.py3-none-any.whl", hash = "sha256:a8993ad6be911b039f86d5853bb2b478cc2aa66c82f1829f0b1b2e0753cf09c4", size = 68388, upload-time = "2026-05-04T16:23:42.172Z" },
 ]
 
 [[package]]
