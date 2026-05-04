@@ -359,6 +359,12 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 204)
 		self.assertFalse(Strategy.objects.filter(pk=orphan.pk).exists())
 
+	def test_delete_strategy_still_in_use(self):
+		"""Deleting a strategy with active links returns 400."""
+		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": self.strat.pk}))
+		self.assertEqual(response.status_code, 400)
+		self.assertTrue(Strategy.objects.filter(pk=self.strat.pk).exists())
+
 
 class NotificationViewSetTestCase(SetupMixin, TestCase):
 	def setUp(self):

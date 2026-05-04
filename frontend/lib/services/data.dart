@@ -478,11 +478,7 @@ class LinkService extends ChangeNotifier {
       linkUpdated = true;
 
       if (link.strategyId != null && link.strategyId != strategyId) {
-        await _deleteStrategyIfUnused(
-          jwt,
-          link.strategyId!,
-          excludingLinkId: link.id,
-        );
+        await _deleteStrategyIfUnused(jwt, link.strategyId!);
       }
 
       await fetchLinks();
@@ -490,11 +486,7 @@ class LinkService extends ChangeNotifier {
     } catch (error) {
       _error = describeDataError(error);
       if (!linkUpdated && strategyResolution?.created == true) {
-        await _deleteStrategyIfUnused(
-          jwt,
-          strategyResolution!.id,
-          excludingLinkId: link.id,
-        );
+        await _deleteStrategyIfUnused(jwt, strategyResolution!.id);
       }
       return false;
     } finally {
@@ -527,11 +519,7 @@ class LinkService extends ChangeNotifier {
           .where((item) => item.id != link.id)
           .toList(growable: false);
       if (link.strategyId != null) {
-        await _deleteStrategyIfUnused(
-          jwt,
-          link.strategyId!,
-          excludingLinkId: link.id,
-        );
+        await _deleteStrategyIfUnused(jwt, link.strategyId!);
       }
       return true;
     } catch (error) {
@@ -671,33 +659,10 @@ class LinkService extends ChangeNotifier {
     return null;
   }
 
-  bool _hasOtherCurrentUserLinkWithStrategy(
-    int strategyId, {
-    required int? excludingLinkId,
-  }) {
-    for (final link in _links) {
-      if (link.id == excludingLinkId) {
-        continue;
-      }
-      if (link.strategyId == strategyId) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   Future<void> _deleteStrategyIfUnused(
     JWT jwt,
-    int strategyId, {
-    int? excludingLinkId,
-  }) async {
-    if (_hasOtherCurrentUserLinkWithStrategy(
-      strategyId,
-      excludingLinkId: excludingLinkId,
-    )) {
-      return;
-    }
-
+    int strategyId,
+  ) async {
     try {
       final response = await apiDelete(
         '/monitoring/strategies/$strategyId/',
