@@ -1,11 +1,14 @@
+import logging
+
 from django.conf import settings
 from rest_framework import status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.throttling import BaseThrottle, ScopedRateThrottle, UserRateThrottle
+from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
@@ -47,6 +50,9 @@ class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 			password=settings.DEV_BOOTSTRAP_PASSWORD,
 			name=settings.DEV_BOOTSTRAP_NAME,
 		)
+
+
+logger = logging.getLogger(__name__)
 
 
 class TokenThrottleMixin:
@@ -152,5 +158,118 @@ class UserViewSet(ModelViewSet):
 
 		user.set_password(new_password)
 		user.save(update_fields=["password", "date_modified"])
+
+		return Response({"status": "ok"})
+
+
+# ── password reset ───────────────────────────────────────────
+
+
+class PasswordResetRequestView(APIView):
+	"""Send a password reset code to the given email address.
+
+	Always returns 200 regardless of whether the email exists,
+	to prevent user enumeration.  If the user exists, a 6-digit
+	code is generated, stored, and emailed.
+	"""
+
+	permission_classes = [AllowAny]
+	throttle_scope = "password_reset"
+
+	def get_throttles(self) -> list[BaseThrottle]:
+		if settings.TESTING:
+			return []
+		return [UserRateThrottle(), ScopedRateThrottle()]
+
+	def post(self, request: Request) -> Response:
+		from accounts.models.password_reset import PasswordResetCode
+		from accounts.serializers import PasswordResetRequestSerializer
+		from commons.email import send_password_reset_email
+
+		serializer = PasswordResetRequestSerializer(data=request.data)
+		if not serializer.is_valid():
+			# Return 200 to prevent enumeration via validation errors
+			return Response({"status": "ok"})
+
+		email = serializer.validated_data["email"]
+		user = User._base_manager.filter(email=email, is_active=True).first()
+
+		if user is not None:
+			# Invalidate any existing reset codes for this user
+			PasswordResetCode.objects.filter(user=user).delete()
+
+			import secrets
+
+			code = str(secrets.randbelow(1_000_000)).zfill(6)
+
+			PasswordResetCode.objects.create(user=user, code=code)
+
+			try:
+				send_password_reset_email(email, code)
+			except Exception:
+				logger.exception("Failed to send reset email to %s", email)
+				return Response(
+					{"error": "Failed to send reset email. Please try again later."},
+					status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+				)
+
+		return Response({"status": "ok"})
+
+
+class PasswordResetConfirmView(APIView):
+	"""Validate a reset code and set a new password."""
+
+	permission_classes = [AllowAny]
+	throttle_scope = "password_reset_confirm"
+
+	def get_throttles(self) -> list[BaseThrottle]:
+		if settings.TESTING:
+			return []
+		return [UserRateThrottle(), ScopedRateThrottle()]
+
+	def post(self, request: Request) -> Response:
+		from accounts.models.password_reset import PasswordResetCode
+		from accounts.serializers import PasswordResetConfirmSerializer
+
+		serializer = PasswordResetConfirmSerializer(data=request.data)
+		if not serializer.is_valid():
+			return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+		email = serializer.validated_data["email"]
+		code = serializer.validated_data["code"]
+		new_password = serializer.validated_data["new_password"]
+
+		user = User._base_manager.filter(email=email, is_active=True).first()
+		if user is None:
+			return Response(
+				{"error": "Invalid or expired reset code."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+
+		reset_code = PasswordResetCode.objects.filter(user=user, code=code).order_by("-created_at").first()
+		if reset_code is None or reset_code.is_expired:
+			return Response(
+				{"error": "Invalid or expired reset code."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+
+		# Validate password against this specific user
+		try:
+			from django.contrib.auth.password_validation import (
+				validate_password,
+			)
+
+			validate_password(new_password, user)
+		except Exception as exc:
+			return Response(
+				{"error": str(exc)},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+
+		user.set_password(new_password)
+		user.save(update_fields=["password", "date_modified"])
+
+		# Clean up used code
+		PasswordResetCode.objects.filter(user=user).delete()
 
 		return Response({"status": "ok"})

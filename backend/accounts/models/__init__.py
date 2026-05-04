@@ -99,3 +99,6 @@ class User(AbstractBaseUser, PermissionsMixin):
 		keep_parents: bool = False,
 	) -> tuple[int, dict[str, int]]:
 		return super().delete(using=using, keep_parents=keep_parents)
+
+
+from accounts.models.password_reset import PasswordResetCode  # noqa: E402

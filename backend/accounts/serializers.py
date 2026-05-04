@@ -42,7 +42,7 @@ class UserCreationSerializer(ModelSerializer):
 		# This will only validate password during creation and not during update.
 		password = attrs.get("password", None)
 		if self.instance is None and password is None:
-			raise serializers.ValidationError({"password": "Password is required."})
+			raise serializers.ValidationError({"password": "Passwo...red."})
 
 		if password is not None:
 			validate_password(password)
@@ -60,3 +60,29 @@ class UserMinimalReadSerializer(ModelSerializer):
 	class Meta:
 		model = User
 		fields = ["username", "date_created"]
+
+
+# ── password reset ───────────────────────────────────────────
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+	"""Accepts an email address for password reset."""
+
+	email = serializers.EmailField()
+
+	def validate_email(self, value: str) -> str:
+		return value.strip().lower()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+	"""Accepts email, code, and new password to complete reset."""
+
+	email = serializers.EmailField()
+	code = serializers.CharField(min_length=6, max_length=6)
+	new_password = serializers.CharField(min_length=1)
+
+	def validate_email(self, value: str) -> str:
+		return value.strip().lower()
+
+	def validate_code(self, value: str) -> str:
+		return value.strip()
