@@ -56,9 +56,7 @@ class _FormContentState extends State<_FormContent> {
 
     return ConstrainedBox(
       constraints: BoxConstraints(
-        maxWidth: isFramed
-            ? AuthPanelWidth.loginFramed
-            : AuthPanelWidth.glass,
+        maxWidth: isFramed ? AuthPanelWidth.loginFramed : AuthPanelWidth.glass,
       ),
       child: AuthPanel(
         child: AutofillGroup(
@@ -106,8 +104,9 @@ class _FormContentState extends State<_FormContent> {
           alignment: Alignment.centerRight,
           child: AuthInlineAction(
             label: 'Forgot password?',
-            onPressed:
-                _isSubmitting ? () {} : () => context.go('/forgot-password'),
+            onPressed: _isSubmitting
+                ? () {}
+                : () => context.go('/forgot-password'),
           ),
         ),
         const SizedBox(height: 18),
@@ -133,8 +132,7 @@ class _FormContentState extends State<_FormContent> {
           key: const Key('loginRegisterButton'),
           buttonText: 'Create account',
           buttonColor: AuthPalette.secondaryButtonBase,
-          onPressed:
-              _isSubmitting ? () {} : () => context.go('/register'),
+          onPressed: _isSubmitting ? () {} : () => context.go('/register'),
         ),
       ],
     );
@@ -173,8 +171,9 @@ class _FormContentState extends State<_FormContent> {
           alignment: Alignment.centerRight,
           child: AuthInlineAction(
             label: 'Forgot password?',
-            onPressed:
-                _isSubmitting ? () {} : () => context.go('/forgot-password'),
+            onPressed: _isSubmitting
+                ? () {}
+                : () => context.go('/forgot-password'),
           ),
         ),
         const SizedBox(height: 16),
@@ -197,8 +196,7 @@ class _FormContentState extends State<_FormContent> {
           key: const Key('loginRegisterButton'),
           buttonText: 'Create account',
           buttonColor: AuthPalette.secondaryButtonBase,
-          onPressed:
-              _isSubmitting ? () {} : () => context.go('/register'),
+          onPressed: _isSubmitting ? () {} : () => context.go('/register'),
         ),
       ],
     );

@@ -232,8 +232,7 @@ class LinkService extends ChangeNotifier {
   LinkSort get ordering => _ordering;
   int get currentPage => _currentPage;
   int get totalCount => _totalCount;
-  int get totalPages =>
-      _totalCount == 0 ? 1 : (_totalCount / 100).ceil();
+  int get totalPages => _totalCount == 0 ? 1 : (_totalCount / 100).ceil();
   String? get error => _error;
 
   bool isScrapingLink(int id) => _scrapingIds.contains(id);
@@ -662,10 +661,7 @@ class LinkService extends ChangeNotifier {
     return null;
   }
 
-  Future<void> _deleteStrategyIfUnused(
-    JWT jwt,
-    int strategyId,
-  ) async {
+  Future<void> _deleteStrategyIfUnused(JWT jwt, int strategyId) async {
     try {
       final response = await apiDelete(
         '/monitoring/strategies/$strategyId/',
@@ -764,10 +760,7 @@ class LinkService extends ChangeNotifier {
     }
   }
 
-  Future<void> _fetchStrategyChoices(
-    JWT jwt, {
-    required int stateEpoch,
-  }) async {
+  Future<void> _fetchStrategyChoices(JWT jwt, {required int stateEpoch}) async {
     try {
       final response = await apiGet(
         '/monitoring/strat-choices',
@@ -913,8 +906,7 @@ class NotificationService extends ChangeNotifier {
   NotifSort get ordering => _ordering;
   int get currentPage => _currentPage;
   int get totalCount => _totalCount;
-  int get totalPages =>
-      _totalCount == 0 ? 1 : (_totalCount / _pageSize).ceil();
+  int get totalPages => _totalCount == 0 ? 1 : (_totalCount / _pageSize).ceil();
   String? get error => _error;
   int get unreadCount => _totalUnreadCount;
 
@@ -945,14 +937,13 @@ class NotificationService extends ChangeNotifier {
 
       final body = expectSuccessJson(response, 'Fetch notifications');
       final results = (body['results'] as List?) ?? const [];
-      final notifications =
-          results
-              .map(
-                (item) => NotificationItem.fromJson(
-                  Map<String, dynamic>.from(item as Map),
-                ),
-              )
-              .toList(growable: false);
+      final notifications = results
+          .map(
+            (item) => NotificationItem.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
+          .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
         return;
@@ -1000,16 +991,18 @@ class NotificationService extends ChangeNotifier {
         headers: _authHeaders(jwt),
       );
 
-      final body = expectSuccessJson(response, 'Fetch notifications page $page');
+      final body = expectSuccessJson(
+        response,
+        'Fetch notifications page $page',
+      );
       final results = (body['results'] as List?) ?? const [];
-      final notifications =
-          results
-              .map(
-                (item) => NotificationItem.fromJson(
-                  Map<String, dynamic>.from(item as Map),
-                ),
-              )
-              .toList(growable: false);
+      final notifications = results
+          .map(
+            (item) => NotificationItem.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
+          .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
         return;
@@ -1083,8 +1076,10 @@ class NotificationService extends ChangeNotifier {
             ..sort(_compareNotifications);
       // Mirror the server-side change locally; the count stays accurate
       // until the next fetch refreshes it from the envelope.
-      _totalUnreadCount = (_totalUnreadCount + (wasUnread ? -1 : 1))
-          .clamp(0, 1 << 30);
+      _totalUnreadCount = (_totalUnreadCount + (wasUnread ? -1 : 1)).clamp(
+        0,
+        1 << 30,
+      );
       return true;
     } catch (error) {
       _error = describeDataError(error);
@@ -1129,10 +1124,8 @@ class NotificationService extends ChangeNotifier {
       _notifications =
           _notifications
               .map(
-                (item) => item.copyWith(
-                  status: NotificationStatus.read,
-                  readAt: now,
-                ),
+                (item) =>
+                    item.copyWith(status: NotificationStatus.read, readAt: now),
               )
               .toList(growable: false)
             ..sort(_compareNotifications);

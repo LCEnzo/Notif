@@ -76,7 +76,9 @@ void main() {
     final heroIntro = tester.getTopLeft(
       find.byKey(const ValueKey('aboutHeroIntro')),
     );
-    final heroMeta = tester.getTopLeft(find.byKey(const ValueKey('aboutHeroMeta')));
+    final heroMeta = tester.getTopLeft(
+      find.byKey(const ValueKey('aboutHeroMeta')),
+    );
     final heroIntroSize = tester.getSize(
       find.byKey(const ValueKey('aboutHeroIntro')),
     );
@@ -102,10 +104,19 @@ void main() {
     expect(typography.dy, greaterThan(pageNotes.dy + 40));
     expect(contact.dy, moreOrLessEquals(typography.dy, epsilon: 1));
     expect(contact.dx, greaterThan(typography.dx + 100));
-    expect(designSystemSize.height, moreOrLessEquals(pageNotesSize.height, epsilon: 1));
-    expect(contactSize.height, moreOrLessEquals(typographySize.height, epsilon: 1));
+    expect(
+      designSystemSize.height,
+      moreOrLessEquals(pageNotesSize.height, epsilon: 1),
+    );
+    expect(
+      contactSize.height,
+      moreOrLessEquals(typographySize.height, epsilon: 1),
+    );
     expect(heroMeta.dx, greaterThan(heroIntro.dx + 100));
-    expect(heroMetaSize.height, moreOrLessEquals(heroIntroSize.height, epsilon: 1));
+    expect(
+      heroMetaSize.height,
+      moreOrLessEquals(heroIntroSize.height, epsilon: 1),
+    );
     expect(heroPlaceholder.dy, moreOrLessEquals(heroGitHub.dy, epsilon: 1));
     expect(heroDiscord.dy, moreOrLessEquals(heroGitHub.dy, epsilon: 1));
     expect(heroContact.dy, moreOrLessEquals(heroGitHub.dy, epsilon: 1));

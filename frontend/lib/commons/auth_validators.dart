@@ -5,7 +5,9 @@ String? validateEmail(String? value) {
     return 'Please enter an email address';
   }
 
-  if (!RegExp(r'^[a-zA-Z0-9.+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$').hasMatch(value)) {
+  if (!RegExp(
+    r'^[a-zA-Z0-9.+\-]+@[a-zA-Z0-9\-]+(\.[a-zA-Z0-9\-]+)*\.[a-zA-Z]{2,}$',
+  ).hasMatch(value)) {
     return 'Please enter a valid email address';
   }
 
@@ -14,7 +16,7 @@ String? validateEmail(String? value) {
 
 class EntropyValidator {
   const EntropyValidator();
-  
+
   static const double timeInSeconds =
       100 * 365 * 24 * 60 * 60; // 100 years in seconds
   static const double attemptsPerSecond =

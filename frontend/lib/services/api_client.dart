@@ -201,9 +201,7 @@ Future<Response<dynamic>> _performRequest(
   }
 }
 
-Map<String, String> _headersWithLatestAccessToken(
-  Map<String, String> headers,
-) {
+Map<String, String> _headersWithLatestAccessToken(Map<String, String> headers) {
   final currentAuthorization = headers['Authorization'];
   if (currentAuthorization == null ||
       !currentAuthorization.startsWith('Bearer ')) {

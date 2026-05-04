@@ -121,15 +121,9 @@ class AuthBackdropColors {
     );
   }
 
-  static List<Color> _lerpColorList(
-    List<Color> a,
-    List<Color> b,
-    double t,
-  ) {
+  static List<Color> _lerpColorList(List<Color> a, List<Color> b, double t) {
     assert(a.length == b.length, 'Auth backdrop color lists must align.');
-    return [
-      for (var i = 0; i < a.length; i++) Color.lerp(a[i], b[i], t)!,
-    ];
+    return [for (var i = 0; i < a.length; i++) Color.lerp(a[i], b[i], t)!];
   }
 }
 
