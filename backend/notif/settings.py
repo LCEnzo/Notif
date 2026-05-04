@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 import sys
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 from notif.config import settings
 
@@ -207,6 +208,26 @@ SPECTACULAR_SETTINGS = {
 # journald can capture them. In local dev we additionally write a rotating
 # file under backend/logs/ so the user gets persistent logs without
 # remembering to pipe runserver through tee.
+_log_handlers: dict[str, Any] = {
+	"console": {
+		"class": "logging.StreamHandler",
+		"formatter": "default",
+	},
+}
+_root_handlers: list[str] = ["console"]
+
+if DEBUG and not TESTING:
+	_LOG_DIR = BASE_DIR / "logs"
+	_LOG_DIR.mkdir(exist_ok=True)
+	_log_handlers["file"] = {
+		"class": "logging.handlers.RotatingFileHandler",
+		"filename": str(_LOG_DIR / "dev.log"),
+		"maxBytes": 5_000_000,
+		"backupCount": 3,
+		"formatter": "default",
+	}
+	_root_handlers.append("file")
+
 LOGGING = {
 	"version": 1,
 	"disable_existing_loggers": False,
@@ -216,29 +237,12 @@ LOGGING = {
 			"style": "{",
 		},
 	},
-	"handlers": {
-		"console": {
-			"class": "logging.StreamHandler",
-			"formatter": "default",
-		},
-	},
+	"handlers": _log_handlers,
 	"root": {
-		"handlers": ["console"],
+		"handlers": _root_handlers,
 		"level": "DEBUG" if DEBUG else "INFO",
 	},
 }
-
-if DEBUG and not TESTING:
-	_LOG_DIR = BASE_DIR / "logs"
-	_LOG_DIR.mkdir(exist_ok=True)
-	LOGGING["handlers"]["file"] = {  # type: ignore[index]
-		"class": "logging.handlers.RotatingFileHandler",
-		"filename": str(_LOG_DIR / "dev.log"),
-		"maxBytes": 5_000_000,
-		"backupCount": 3,
-		"formatter": "default",
-	}
-	LOGGING["root"]["handlers"].append("file")  # type: ignore[union-attr]
 
 
 if DEBUG:
