@@ -7,16 +7,19 @@
 
 FROM python:3.14-slim
 
+ARG GIT_HASH=dev
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    GIT_HASH=$GIT_HASH
 
 WORKDIR /app
 
 # ── system deps (lxml needs libxml2/libxslt) ──────────────────────
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential libxml2-dev libxslt1-dev \
+    && apt-get install -y --no-install-recommends build-essential libxml2-dev libxslt1-dev sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 # ── uv + deps (layer cached unless pyproject/uv.lock change) ──────
@@ -41,6 +44,7 @@ RUN mkdir -p /app/staticfiles \
 
 # ── volume permissions (directory must exist before chown) ─────────
 RUN mkdir -p /app/data /app/staticfiles \
+    && chmod +x /app/scripts/*.sh \
     && useradd --create-home appuser \
     && chown -R appuser:appuser /app
 

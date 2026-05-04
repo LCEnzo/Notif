@@ -76,26 +76,6 @@ indent-style = "tab"
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 
-[tool.pyright]
-exclude = [
-	"**/node_modules",
-	"**/__pycache__",
-	"**/experimental",
-	"**/migrations",
-	".venv",
-	"venv", 
-	"**/.*",
-]
-ignore = []
-defineConstant = { DEBUG = true }
-stubPath = "stubs"
-venv = ".venv"
-
-reportMissingImports = true
-reportMissingTypeStubs = true
-
-pythonPlatform = "Linux"
-
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main", "pydantic.mypy"]
 exclude = ["migrations", "\\.venv", "venv"]

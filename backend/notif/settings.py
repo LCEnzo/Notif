@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 import sys
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 from notif.config import settings
 
@@ -40,6 +41,7 @@ DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]  # type: ignore
 CORS_ALLOW_ALL_ORIGINS = settings.DEBUG
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in settings.CSRF_TRUSTED_ORIGINS.split(",") if origin.strip()]
 
 
 # Application definition
@@ -167,6 +169,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # REST Framework stuff
 _REST_THROTTLE_RATES = {
 	"user": "500/hour",
+	"anon": "60/min",
 	"login": "5/min",
 	"register": "3/min",
 	"token_refresh": "10/min",
@@ -185,6 +188,7 @@ REST_FRAMEWORK = {
 	if TESTING
 	else [
 		"rest_framework.throttling.UserRateThrottle",
+		"rest_framework.throttling.AnonRateThrottle",
 	],
 	"DEFAULT_THROTTLE_RATES": _REST_THROTTLE_RATES,
 }
@@ -196,23 +200,47 @@ SPECTACULAR_SETTINGS = {
 		"Monitors URLs for changes via pluggable scraping strategies "
 		"(RSS/Atom feeds, CSS selectors, forum threadmarks, and more)."
 	),
-	"VERSION": "1.0.0",
+	"VERSION": "0.2.0",
 	"SERVE_INCLUDE_SCHEMA": False,
 }
+
+# Logs go to stdout/stderr so Docker's json-file driver and systemd's
+# journald can capture them. In local dev we additionally write a rotating
+# file under backend/logs/ so the user gets persistent logs without
+# remembering to pipe runserver through tee.
+_log_handlers: dict[str, Any] = {
+	"console": {
+		"class": "logging.StreamHandler",
+		"formatter": "default",
+	},
+}
+_root_handlers: list[str] = ["console"]
+
+if DEBUG and not TESTING:
+	_LOG_DIR = BASE_DIR / "logs"
+	_LOG_DIR.mkdir(exist_ok=True)
+	_log_handlers["file"] = {
+		"class": "logging.handlers.RotatingFileHandler",
+		"filename": str(_LOG_DIR / "dev.log"),
+		"maxBytes": 5_000_000,
+		"backupCount": 3,
+		"formatter": "default",
+	}
+	_root_handlers.append("file")
 
 LOGGING = {
 	"version": 1,
 	"disable_existing_loggers": False,
-	"handlers": {
-		"file": {
-			"level": "DEBUG",
-			"class": "logging.FileHandler",
-			"filename": "debug.log",
+	"formatters": {
+		"default": {
+			"format": "{asctime} {levelname} {name} {message}",
+			"style": "{",
 		},
 	},
+	"handlers": _log_handlers,
 	"root": {
-		"handlers": ["file"],
-		"level": "DEBUG",
+		"handlers": _root_handlers,
+		"level": "DEBUG" if DEBUG else "INFO",
 	},
 }
 

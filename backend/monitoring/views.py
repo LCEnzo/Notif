@@ -17,6 +17,7 @@ from monitoring.models import Link, Notification, Strategy
 from monitoring.serializers import LinkSerializer, NotificationSerializer, StrategySerializer
 from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
+from notif.config import settings
 
 
 class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
@@ -109,11 +110,41 @@ def get_strat_choices(request: Request) -> Response:
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request: Request) -> Response:
-	"""Health check endpoint — returns 200 if DB is reachable, 503 otherwise."""
+	"""Liveness probe — returns 200 as long as the process is running.
+
+	No dependency checks. Used by Docker HEALTHCHECK and orchestrators
+	to decide whether to restart the container.
+	"""
+	return Response({"status": "ok"})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def status_check(request: Request) -> Response:
+	"""Readiness probe — checks DB connectivity and returns build metadata.
+
+	Returns 200 if all dependencies are healthy, 503 otherwise.
+	Used by load balancers and operators to confirm the service can handle traffic
+	and to verify which code is deployed.
+	"""
 	from django.db import connections
 
 	try:
-		connections["default"].cursor()
-		return Response({"status": "ok", "db": "ok"})
+		with connections["default"].cursor() as cursor:
+			cursor.execute("SELECT 1")
+		db_status = "ok"
+		status_code = 200
 	except Exception:
-		return Response({"status": "error", "db": "down"}, status=503)
+		db_status = "down"
+		status_code = 503
+
+	return Response(
+		{
+			"status": "ok" if db_status == "ok" else "error",
+			"db": db_status,
+			"version": settings.VERSION,
+			"commit": settings.GIT_HASH,
+			"environment": str(settings.NOTIF_ENV),
+		},
+		status=status_code,
+	)

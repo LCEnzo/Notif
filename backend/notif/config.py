@@ -34,6 +34,15 @@ class Settings(BaseSettings):
 	DJANGO_SECRET_KEY: str = Field(min_length=1)
 	ALLOWED_HOSTS: str = Field(default="localhost,127.0.0.1,[::1]", min_length=1)
 	CORS_ALLOWED_ORIGINS: str = Field(default="", description="Comma-separated origins, e.g. https://notif.example.com")
+	CSRF_TRUSTED_ORIGINS: str = Field(
+		default="",
+		description="Comma-separated scheme+host origins that POSTs are accepted from, e.g. https://notif.example.com. Required behind an HTTPS reverse proxy.",
+	)
+	DJANGO_ADMIN_URL: str = Field(
+		default="admin/",
+		min_length=1,
+		description="URL prefix for the Django admin (must end with '/'). Override in production to reduce brute-force log noise.",
+	)
 	SQLITE_PATH: str = Field(default="db.sqlite3", min_length=1)
 
 	# ── static files ───────────────────────────────────────
@@ -53,6 +62,10 @@ class Settings(BaseSettings):
 	# ── dev latency middleware ────────────────────────────
 	DEV_API_LATENCY_MS: int = Field(default=0, ge=0, le=_MAX_DEV_API_LATENCY_MS)
 	DEV_API_LATENCY_JITTER_MS: int = Field(default=0, ge=0, le=_MAX_DEV_API_LATENCY_MS)
+
+	# ── build info (exposed via status endpoint) ──────────
+	VERSION: str = "0.2.0"
+	GIT_HASH: str = "dev"
 
 	@model_validator(mode="after")
 	def _resolve_conditional_defaults(self) -> Settings:
