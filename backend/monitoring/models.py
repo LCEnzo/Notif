@@ -6,8 +6,7 @@ from monitoring import strategies
 
 
 def choices_dict_to_tuple() -> list[tuple[str, str]]:
-	names = strategies.STRATEGY_CHOICES.keys()
-	return [(el, el) for el in names]
+	return [(name, cls.display_name) for name, cls in strategies.STRATEGY_CHOICES.items()]
 
 
 class Strategy(models.Model):
