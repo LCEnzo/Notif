@@ -455,52 +455,129 @@ class _PageNumbers extends StatelessWidget {
   final int totalPages;
   final Future<void> Function(int) onPageSelected;
 
+  static const _buttonSize = 32.0;
+
+  List<_PageItem> _buildPageList() {
+    if (totalPages <= 7) {
+      return [
+        for (var p = 1; p <= totalPages; p++)
+          _PageItem(label: '$p', page: p, isActive: p == currentPage),
+      ];
+    }
+
+    final items = <_PageItem>[];
+    items.add(_PageItem(label: '1', page: 1, isActive: currentPage == 1));
+
+    if (currentPage > 1) {
+      items.add(_PageItem(label: '\u27e8', page: currentPage - 1));
+    }
+
+    final start = (currentPage - 2).clamp(2, totalPages - 4);
+    final end = (currentPage + 2).clamp(5, totalPages - 1);
+
+    if (start > 2) items.add(const _PageItem(label: '\u2026'));
+
+    for (var p = start; p <= end; p++) {
+      items.add(_PageItem(
+        label: '$p',
+        page: p,
+        isActive: p == currentPage,
+      ));
+    }
+
+    if (end < totalPages - 1) items.add(const _PageItem(label: '\u2026'));
+
+    if (currentPage < totalPages - 1) {
+      items.add(_PageItem(label: '\u27e9', page: currentPage + 1));
+    }
+
+    items.add(_PageItem(
+      label: '$totalPages',
+      page: totalPages,
+      isActive: currentPage == totalPages,
+    ));
+
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (totalPages <= 1) return const SizedBox.shrink();
+
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
+    final pages = _buildPageList();
 
     return Padding(
       padding: const EdgeInsets.only(top: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var page = 1; page <= totalPages; page++)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: SizedBox(
-                width: 32,
-                height: 32,
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    backgroundColor:
-                        page == currentPage ? tokens.accent : tokens.bg2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                  ),
-                  onPressed: page == currentPage
-                      ? null
-                      : () async => await onPageSelected(page),
-                  child: Text(
-                    '$page',
-                    style: (page == currentPage
-                            ? text$.body.copyWith(fontWeight: FontWeight.w600)
-                            : text$.body)
-                        .copyWith(
-                      color: page == currentPage
-                          ? tokens.ink
-                          : tokens.inkMute,
-                    ),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 2,
+        runSpacing: 4,
+        children: pages.map((item) {
+          if (!item.isActive && item.page != null) {
+            return SizedBox(
+              width: _buttonSize,
+              height: _buttonSize,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: tokens.bg2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
                   ),
                 ),
+                onPressed: () async => await onPageSelected(item.page!),
+                child: Text(
+                  item.label,
+                  style: text$.body.copyWith(color: tokens.inkMute),
+                ),
+              ),
+            );
+          }
+          if (item.isActive) {
+            return SizedBox(
+              width: _buttonSize,
+              height: _buttonSize,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: tokens.accent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed: null,
+                child: Text(
+                  item.label,
+                  style: text$.body
+                      .copyWith(fontWeight: FontWeight.w600)
+                      .copyWith(color: tokens.ink),
+                ),
+              ),
+            );
+          }
+          return SizedBox(
+            width: _buttonSize,
+            height: _buttonSize,
+            child: Center(
+              child: Text(
+                item.label,
+                style: text$.body.copyWith(color: tokens.inkMute),
               ),
             ),
-        ],
+          );
+        }).toList(growable: false),
       ),
     );
   }
+}
+
+class _PageItem {
+  const _PageItem({required this.label, this.page, this.isActive = false});
+  final String label;
+  final int? page;
+  final bool isActive;
 }
 
 class _HomeConsole extends StatelessWidget {
