@@ -107,6 +107,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 	"""
 	Uses a CSS selector to check just   some element on a page, instead of the whole thing.
 	"""
+
 	display_name = "General Selector"
 
 	def can_scrape_url(self, url: URL) -> bool:
@@ -188,6 +189,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 	Check SpaceBattles and SufficientVelocity threadmarks.
 	TODO: Specify in configuration which threadmark tabs should be checked.
 	"""
+
 	display_name = "SB/SV Threadmarks"
 
 	# format used by strptime strftime
@@ -379,6 +381,7 @@ class QQAlertsStrategy(BaseStrategy):
 	Config data should include username, password, and optionally
 	whether to include notifications other than likely story updates.
 	"""
+
 	display_name = "QQ Alerts"
 
 	login_url = "https://forum.questionablequesting.com/login/login"
@@ -630,6 +633,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 	Config data should include username, password.
 	"""
+
 	display_name = "Kemono Favourites"
 
 	login_url = "https://kemono.party/account/login"
@@ -744,8 +748,6 @@ class KemonoFavouritesStrategy(BaseStrategy):
 class FeedStrategy(BaseStrategy):
 	"""
 	Parse RSS and Atom feeds using feedparser.
-	"""
-	display_name = "RSS"
 
 	Works with:
 	- Substack (e.g. https://example.substack.com/feed)
@@ -759,6 +761,8 @@ class FeedStrategy(BaseStrategy):
 	- ``last_entry_id``: the best newest-entry marker available for backwards compatibility.
 	- ``seen_entry_hashes``: a bounded list of recently seen entry identifier hashes for compact dedupe.
 	"""
+
+	display_name = "RSS"
 
 	ENTRY_ID_HASH_BYTES = 16
 	MAX_SEEN_ENTRY_HASHES = 1000

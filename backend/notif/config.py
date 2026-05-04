@@ -52,6 +52,13 @@ class Settings(BaseSettings):
 	BACKEND_PORT: int | None = Field(default=None, ge=1, le=65_535)
 	RUNSERVER_HOST: str = Field(default="127.0.0.1", min_length=1)
 
+	# ── resend ────────────────────────────────────────────
+	RESEND_API_KEY: str | None = Field(default=None, min_length=1)
+	EMAIL_FROM: str = Field(default="Notif <notif@notif.lcenzo.com>", min_length=1)
+	RESEND_WEBHOOK_SECRET: str | None = Field(default=None)
+	RESEND_AUDIENCE_ID: str | None = Field(default=None)
+	CONFIRM_REDIRECT_URL: str = Field(default="https://notif.lcenzo.com")
+
 	# ── dev bootstrap ─────────────────────────────────────
 	DEV_BOOTSTRAP_LOGIN_ENABLED: bool | None = None
 	DEV_BOOTSTRAP_USERNAME: str = Field(default="LCEnzo", min_length=1)

@@ -174,6 +174,8 @@ _REST_THROTTLE_RATES = {
 	"register": "3/min",
 	"token_refresh": "10/min",
 	"token_verify": "20/min",
+	"password_reset": "3/min",
+	"password_reset_confirm": "5/min",
 }
 
 REST_FRAMEWORK = {
@@ -287,3 +289,11 @@ SIMPLE_JWT = {
 	"SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
 	"SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
 }
+
+# Email
+RESEND_API_KEY = settings.RESEND_API_KEY
+RESEND_WEBHOOK_SECRET = settings.RESEND_WEBHOOK_SECRET
+RESEND_AUDIENCE_ID = settings.RESEND_AUDIENCE_ID
+
+CONFIRM_REDIRECT_URL = settings.CONFIRM_REDIRECT_URL
+EMAIL_FROM = settings.EMAIL_FROM
