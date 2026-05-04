@@ -1,8 +1,10 @@
 name: Backend CI
 
 on:
+  # `push` only fires on long-lived branches; pull_request covers feature
+  # branches so we don't double-run CI for every PR push.
   push:
-    branches: ['**']
+    branches: [master]
     paths:
       - 'backend/**'
       - '.github/workflows/backend.yml'
@@ -27,7 +29,7 @@ jobs:
       DJANGO_SETTINGS_MODULE: notif.settings
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set build info
         run: echo "GIT_HASH=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
