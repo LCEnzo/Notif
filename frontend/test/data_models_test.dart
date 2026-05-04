@@ -103,6 +103,27 @@ void main() {
       expect(withReadAt.readAt, DateTime(2026, 4, 1));
       expect(original.readAt, isNull);
     });
+
+    test('copyWith with clearReadAt drops the timestamp', () {
+      // Toggling read → unread needs to actively null out read_at, which a
+      // plain `?? this.readAt` fallback can't express.
+      final read = NotificationItem(
+        id: 1,
+        title: 'Test',
+        description: '',
+        itemUrl: '',
+        status: NotificationStatus.read,
+        createdAt: DateTime(2026),
+        readAt: DateTime(2026, 4, 1),
+      );
+
+      final unread = read.copyWith(
+        status: NotificationStatus.unread,
+        clearReadAt: true,
+      );
+      expect(unread.status, NotificationStatus.unread);
+      expect(unread.readAt, isNull);
+    });
   });
 
   group('StrategyRecord', () {

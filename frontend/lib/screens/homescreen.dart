@@ -83,15 +83,20 @@ class _HomePageState extends State<HomePage> {
     await _openExternalUrl(notification.itemUrl);
   }
 
-  Future<void> _handleNotificationMarkRead(int id) async {
+  Future<void> _handleNotificationToggleRead(int id) async {
     final notificationService = context.read<NotificationService>();
-    await notificationService.markRead(id);
+    final notification = notificationService.notifications
+        .cast<NotificationItem?>()
+        .firstWhere((item) => item?.id == id, orElse: () => null);
+    final wasUnread = notification?.isUnread ?? false;
+    await notificationService.toggleRead(id);
     if (!mounted) return;
-    _showMessage('Marked as read.');
+    _showMessage(wasUnread ? 'Marked as read.' : 'Marked as unread.');
   }
 
-  Future<void> _handleNotificationOpenUrl(String url) async {
-    await _openExternalUrl(url);
+  Future<void> _handleLoadMore() async {
+    final notificationService = context.read<NotificationService>();
+    await notificationService.loadMore();
   }
 
   void _logout() {
@@ -131,8 +136,8 @@ class _HomePageState extends State<HomePage> {
               onScrapeAll: linkService.scrapingAll ? null : _handleScrapeAll,
               onScrapeLink: _handleScrapeLink,
               onNotificationTap: _handleNotificationTap,
-              onNotificationMarkRead: _handleNotificationMarkRead,
-              onNotificationOpenUrl: _handleNotificationOpenUrl,
+              onNotificationToggleRead: _handleNotificationToggleRead,
+              onLoadMore: _handleLoadMore,
               onMarkAllRead: notificationService.unreadCount == 0 ||
                       notificationService.markingAllRead
                   ? null
@@ -436,8 +441,8 @@ class _HomeConsole extends StatelessWidget {
     required this.onScrapeAll,
     required this.onScrapeLink,
     required this.onNotificationTap,
-    required this.onNotificationMarkRead,
-    required this.onNotificationOpenUrl,
+    required this.onNotificationToggleRead,
+    required this.onLoadMore,
     required this.onMarkAllRead,
     required this.onSources,
     required this.onSettings,
@@ -453,8 +458,8 @@ class _HomeConsole extends StatelessWidget {
   final VoidCallback? onScrapeAll;
   final Future<void> Function(Link link) onScrapeLink;
   final Future<void> Function(NotificationItem notification) onNotificationTap;
-  final Future<void> Function(int id) onNotificationMarkRead;
-  final Future<void> Function(String url) onNotificationOpenUrl;
+  final Future<void> Function(int id) onNotificationToggleRead;
+  final Future<void> Function() onLoadMore;
   final VoidCallback? onMarkAllRead;
   final VoidCallback onSources;
   final VoidCallback onSettings;
@@ -523,13 +528,15 @@ class _HomeConsole extends StatelessWidget {
                             metrics: metrics,
                             notifications: notificationService.notifications,
                             loading: notificationService.loading,
+                            loadingMore: notificationService.loadingMore,
+                            hasMore: notificationService.hasMore,
                             unreadCount: notificationService.unreadCount,
                             markingAllRead: notificationService.markingAllRead,
                             isMarkingRead: notificationService.isMarkingRead,
                             onRefresh: onRefresh,
+                            onLoadMore: onLoadMore,
                             onNotificationTap: onNotificationTap,
-                            onNotificationMarkRead: onNotificationMarkRead,
-                            onNotificationOpenUrl: onNotificationOpenUrl,
+                            onNotificationToggleRead: onNotificationToggleRead,
                             onMarkAllRead: onMarkAllRead,
                             onSources: onSources,
                           ),
@@ -549,14 +556,16 @@ class _HomeConsole extends StatelessWidget {
                             metrics: metrics,
                             notifications: notificationService.notifications,
                             loading: notificationService.loading,
+                            loadingMore: notificationService.loadingMore,
+                            hasMore: notificationService.hasMore,
                             unreadCount: notificationService.unreadCount,
                             markingAllRead:
                                 notificationService.markingAllRead,
                             isMarkingRead: notificationService.isMarkingRead,
                             onRefresh: onRefresh,
+                            onLoadMore: onLoadMore,
                             onNotificationTap: onNotificationTap,
-                            onNotificationMarkRead: onNotificationMarkRead,
-                            onNotificationOpenUrl: onNotificationOpenUrl,
+                            onNotificationToggleRead: onNotificationToggleRead,
                             onMarkAllRead: onMarkAllRead,
                             onSources: onSources,
                             mobileTui: true,
@@ -1375,13 +1384,15 @@ class _UpdateConsole extends StatelessWidget {
     required this.metrics,
     required this.notifications,
     required this.loading,
+    required this.loadingMore,
+    required this.hasMore,
     required this.unreadCount,
     required this.markingAllRead,
     required this.isMarkingRead,
     required this.onRefresh,
+    required this.onLoadMore,
     required this.onNotificationTap,
-    required this.onNotificationMarkRead,
-    required this.onNotificationOpenUrl,
+    required this.onNotificationToggleRead,
     required this.onMarkAllRead,
     required this.onSources,
     this.mobileTui = false,
@@ -1390,13 +1401,15 @@ class _UpdateConsole extends StatelessWidget {
   final _HomeConsoleMetrics metrics;
   final List<NotificationItem> notifications;
   final bool loading;
+  final bool loadingMore;
+  final bool hasMore;
   final int unreadCount;
   final bool markingAllRead;
   final bool Function(int id) isMarkingRead;
   final Future<void> Function() onRefresh;
+  final Future<void> Function() onLoadMore;
   final Future<void> Function(NotificationItem notification) onNotificationTap;
-  final Future<void> Function(int id) onNotificationMarkRead;
-  final Future<void> Function(String url) onNotificationOpenUrl;
+  final Future<void> Function(int id) onNotificationToggleRead;
   final VoidCallback? onMarkAllRead;
   final VoidCallback onSources;
   final bool mobileTui;
@@ -1404,7 +1417,6 @@ class _UpdateConsole extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
     final items = notifications;
 
     return RefreshIndicator(
@@ -1464,34 +1476,13 @@ class _UpdateConsole extends StatelessWidget {
               itemCount: items.length + 1,
               itemBuilder: (context, index) {
                 if (index == items.length) {
-                  return Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: mobileTui ? 10 : 14,
-                      vertical: mobileTui ? 6 : metrics.updateRowVPad,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: tokens.rule)),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          'EOF - ${items.length} entries',
-                          style: text$.micro.copyWith(
-                            color: tokens.inkMute,
-                            fontSize: metrics.microSize,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (!mobileTui)
-                          Text(
-                            'pull to refresh - enter opens browser',
-                            style: text$.micro.copyWith(
-                              color: tokens.inkMute,
-                              fontSize: metrics.microSize,
-                            ),
-                          ),
-                      ],
-                    ),
+                  return _ConsoleListFooter(
+                    metrics: metrics,
+                    mobileTui: mobileTui,
+                    entryCount: items.length,
+                    hasMore: hasMore,
+                    loadingMore: loadingMore,
+                    onLoadMore: onLoadMore,
                   );
                 }
 
@@ -1503,13 +1494,92 @@ class _UpdateConsole extends StatelessWidget {
                   mobileTui: mobileTui,
                   busy: isMarkingRead(item.id),
                   onTap: () => onNotificationTap(item),
-                  onChipTap: item.isUnread
-                      ? () => onNotificationMarkRead(item.id)
-                      : item.itemUrl.isNotEmpty
-                          ? () => onNotificationOpenUrl(item.itemUrl)
-                          : null,
+                  onChipTap: () => onNotificationToggleRead(item.id),
                 );
               },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConsoleListFooter extends StatelessWidget {
+  const _ConsoleListFooter({
+    required this.metrics,
+    required this.mobileTui,
+    required this.entryCount,
+    required this.hasMore,
+    required this.loadingMore,
+    required this.onLoadMore,
+  });
+
+  final _HomeConsoleMetrics metrics;
+  final bool mobileTui;
+  final int entryCount;
+  final bool hasMore;
+  final bool loadingMore;
+  final Future<void> Function() onLoadMore;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final padding = EdgeInsets.symmetric(
+      horizontal: mobileTui ? 10 : 14,
+      vertical: mobileTui ? 6 : metrics.updateRowVPad,
+    );
+    final border = Border(top: BorderSide(color: tokens.rule));
+
+    if (hasMore) {
+      return InkWell(
+        onTap: loadingMore ? null : onLoadMore,
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(border: border),
+          child: Row(
+            children: [
+              Text(
+                loadingMore ? 'LOADING...' : 'LOAD MORE',
+                style: text$.micro.copyWith(
+                  color: loadingMore ? tokens.inkMute : tokens.accent,
+                  fontSize: metrics.microSize,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '$entryCount loaded',
+                style: text$.micro.copyWith(
+                  color: tokens.inkMute,
+                  fontSize: metrics.microSize,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(border: border),
+      child: Row(
+        children: [
+          Text(
+            'EOF - $entryCount entries',
+            style: text$.micro.copyWith(
+              color: tokens.inkMute,
+              fontSize: metrics.microSize,
+            ),
+          ),
+          const Spacer(),
+          if (!mobileTui)
+            Text(
+              'pull to refresh - enter opens browser',
+              style: text$.micro.copyWith(
+                color: tokens.inkMute,
+                fontSize: metrics.microSize,
+              ),
             ),
         ],
       ),
@@ -1917,7 +1987,7 @@ class _ConsoleNotificationRow extends StatelessWidget {
                                   ),
                                 ),
                                 child: Text(
-                                  notification.isUnread ? 'READ' : 'OPEN',
+                                  notification.isUnread ? 'READ' : 'UNREAD',
                                   textAlign: TextAlign.right,
                                   style: text$.micro.copyWith(
                                     color: notification.isUnread

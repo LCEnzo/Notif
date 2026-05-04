@@ -39,6 +39,13 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 		case Ok(value=updates):
 			created_count = 0
 			cutoff = timezone.now() - timedelta(hours=24)
+			# First scrape backfills the source's existing items as already-read so
+			# the user isn't flooded with a backlog they never asked about. Only
+			# items found on subsequent scrapes count as actual notifications.
+			is_first_scrape = link.last_scraped is None
+			notif_kwargs: dict = (
+				{"status": Notification.Status.READ, "read_at": timezone.now()} if is_first_scrape else {}
+			)
 
 			for title, description, item_url in updates:
 				# Deduplicate: skip if identical update exists within last 24h
@@ -51,7 +58,7 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 					description=description,
 					item_url=item_url,
 				)
-				Notification.objects.create(update=update)
+				Notification.objects.create(update=update, **notif_kwargs)
 				created_count += 1
 
 			if new_data is not None:
