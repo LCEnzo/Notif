@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:notif/commons/components/primitives.dart';
 import 'package:notif/commons/dither_overlay.dart';
 import 'package:notif/commons/notif_text_theme.dart';
@@ -101,6 +102,20 @@ class _SettingsPageState extends State<SettingsPage> {
                           const SizedBox(height: 16),
                           _PersistenceBanner(error: settings.persistenceError!),
                         ],
+                        const SizedBox(height: 32),
+
+                        const IndexRule(index: 0, title: 'Account'),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Manage your profile, password, and account.',
+                          style: text$.body.copyWith(color: tokens.inkDim),
+                        ),
+                        const SizedBox(height: 12),
+                        NotifButton(
+                          label: 'Manage account',
+                          icon: Icons.person_outline,
+                          onPressed: () => context.push('/account'),
+                        ),
                         const SizedBox(height: 32),
 
                         const IndexRule(index: 1, title: 'Appearance'),
