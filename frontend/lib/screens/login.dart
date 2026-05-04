@@ -205,6 +205,7 @@ class _FormContentState extends State<_FormContent> {
   }
 
   Future<void> _submitLogin(AuthService authService) async {
+    if (_isSubmitting) return;
     final loggedIn = await loginClick(authService, context);
     if (!mounted || !loggedIn) {
       return;
