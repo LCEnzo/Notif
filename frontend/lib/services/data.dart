@@ -144,7 +144,11 @@ class NotificationItem {
 
   bool get isUnread => status == NotificationStatus.unread;
 
-  NotificationItem copyWith({NotificationStatus? status, DateTime? readAt}) {
+  NotificationItem copyWith({
+    NotificationStatus? status,
+    DateTime? readAt,
+    bool clearReadAt = false,
+  }) {
     return NotificationItem(
       id: id,
       title: title,
@@ -152,7 +156,7 @@ class NotificationItem {
       itemUrl: itemUrl,
       status: status ?? this.status,
       createdAt: createdAt,
-      readAt: readAt ?? this.readAt,
+      readAt: clearReadAt ? null : (readAt ?? this.readAt),
     );
   }
 }
@@ -790,13 +794,18 @@ class LinkService extends ChangeNotifier {
 class NotificationService extends ChangeNotifier {
   NotificationService(this._authService);
 
+  static const int _pageSize = 50;
+
   final AuthService _authService;
   AppSettingsController? _settings;
 
   List<NotificationItem> _notifications = const [];
   bool _loading = false;
+  bool _loadingMore = false;
   bool _markingAllRead = false;
   int _fetchEpoch = 0;
+  int _currentPage = 0;
+  bool _hasMore = false;
   String? _error;
 
   final Set<int> _markingReadIds = <int>{};
@@ -814,6 +823,8 @@ class NotificationService extends ChangeNotifier {
 
   List<NotificationItem> get notifications => _notifications;
   bool get loading => _loading;
+  bool get loadingMore => _loadingMore;
+  bool get hasMore => _hasMore;
   bool get markingAllRead => _markingAllRead;
   String? get error => _error;
   int get unreadCount => _notifications.where((item) => item.isUnread).length;
@@ -834,13 +845,15 @@ class NotificationService extends ChangeNotifier {
 
     try {
       final response = await apiGet(
-        '/monitoring/notifications/',
+        '/monitoring/notifications/?page=1&page_size=$_pageSize',
         settings: _settings,
         headers: _authHeaders(jwt),
       );
 
+      final body = expectSuccessJson(response, 'Fetch notifications');
+      final results = (body['results'] as List?) ?? const [];
       final notifications =
-          expectSuccessList(response, 'Fetch notifications')
+          results
               .map(
                 (item) => NotificationItem.fromJson(
                   Map<String, dynamic>.from(item as Map),
@@ -853,6 +866,8 @@ class NotificationService extends ChangeNotifier {
         return;
       }
       _notifications = notifications;
+      _currentPage = 1;
+      _hasMore = body['next'] != null;
     } catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
@@ -866,15 +881,74 @@ class NotificationService extends ChangeNotifier {
     }
   }
 
-  Future<void> markRead(int id) async {
+  Future<void> loadMore() async {
+    final jwt = _authService.jwt;
+    if (jwt == null || !_hasMore || _loadingMore || _loading) {
+      return;
+    }
+
+    final fetchEpoch = _fetchEpoch;
+    _loadingMore = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final nextPage = _currentPage + 1;
+      final response = await apiGet(
+        '/monitoring/notifications/?page=$nextPage&page_size=$_pageSize',
+        settings: _settings,
+        headers: _authHeaders(jwt),
+      );
+
+      final body = expectSuccessJson(response, 'Load more notifications');
+      final results = (body['results'] as List?) ?? const [];
+      final newItems = results
+          .map(
+            (item) => NotificationItem.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
+          .toList(growable: false);
+
+      if (_fetchEpoch != fetchEpoch) {
+        return;
+      }
+      // Dedup against current list — pages can shift if a new item lands
+      // between fetch and load-more, and we'd rather drop a dup than show one.
+      final existingIds = _notifications.map((n) => n.id).toSet();
+      final added = newItems.where((n) => !existingIds.contains(n.id));
+      _notifications =
+          [..._notifications, ...added]..sort(_compareNotifications);
+      _currentPage = nextPage;
+      _hasMore = body['next'] != null;
+    } catch (error) {
+      if (_fetchEpoch != fetchEpoch) {
+        return;
+      }
+      _error = describeDataError(error);
+    } finally {
+      if (_fetchEpoch == fetchEpoch) {
+        _loadingMore = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> toggleRead(int id) async {
     final jwt = _authService.jwt;
     final notification = _notifications.cast<NotificationItem?>().firstWhere(
       (item) => item?.id == id,
       orElse: () => null,
     );
-    if (jwt == null || notification == null || !notification.isUnread) {
+    if (jwt == null || notification == null) {
       return;
     }
+
+    final wasUnread = notification.isUnread;
+    final targetStatus = wasUnread
+        ? NotificationStatus.read
+        : NotificationStatus.unread;
+    final wireStatus = wasUnread ? 'read' : 'unread';
 
     _markingReadIds.add(id);
     _error = null;
@@ -885,18 +959,19 @@ class NotificationService extends ChangeNotifier {
         '/monitoring/notifications/$id/',
         settings: _settings,
         headers: _authHeaders(jwt),
-        body: const {'status': 'read'},
+        body: {'status': wireStatus},
       );
 
-      expectSuccessStatus(response, 'Mark notification as read');
+      expectSuccessStatus(response, 'Toggle notification read state');
 
       _notifications =
           _notifications
               .map(
                 (item) => item.id == id
                     ? item.copyWith(
-                        status: NotificationStatus.read,
-                        readAt: DateTime.now(),
+                        status: targetStatus,
+                        readAt: wasUnread ? DateTime.now() : null,
+                        clearReadAt: !wasUnread,
                       )
                     : item,
               )
@@ -908,6 +983,17 @@ class NotificationService extends ChangeNotifier {
       _markingReadIds.remove(id);
       notifyListeners();
     }
+  }
+
+  Future<void> markRead(int id) async {
+    final notification = _notifications.cast<NotificationItem?>().firstWhere(
+      (item) => item?.id == id,
+      orElse: () => null,
+    );
+    if (notification == null || !notification.isUnread) {
+      return;
+    }
+    await toggleRead(id);
   }
 
   Future<void> markAllRead() async {
@@ -952,14 +1038,20 @@ class NotificationService extends ChangeNotifier {
     if (_notifications.isEmpty &&
         _error == null &&
         !_loading &&
-        !_markingAllRead) {
+        !_loadingMore &&
+        !_markingAllRead &&
+        _currentPage == 0 &&
+        !_hasMore) {
       return;
     }
 
     _fetchEpoch += 1;
     _notifications = const [];
     _loading = false;
+    _loadingMore = false;
     _markingAllRead = false;
+    _currentPage = 0;
+    _hasMore = false;
     _error = null;
     _markingReadIds.clear();
     notifyListeners();

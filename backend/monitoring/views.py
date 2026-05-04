@@ -5,6 +5,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -39,9 +40,16 @@ class StrategyViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
 		)
 
 
+class NotificationPagination(PageNumberPagination):
+	page_size = 50
+	page_size_query_param = "page_size"
+	max_page_size = 200
+
+
 class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):
 	permission_classes = [IsAuthenticated]
 	serializer_class = NotificationSerializer
+	pagination_class = NotificationPagination
 
 	def get_queryset(self) -> QuerySet[Notification]:
 		user = cast(User, self.request.user)
@@ -55,11 +63,17 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		if since:
 			queryset = queryset.filter(update__created_at__gte=since)
 
-		return queryset.select_related("update")
+		# Stable ordering required for paginated results — Update.Meta.ordering
+		# is on the related table, so we need an explicit order on the join.
+		# pk tiebreaker keeps pages deterministic when timestamps collide.
+		return queryset.select_related("update").order_by("-update__created_at", "-pk")
 
 	def perform_update(self, serializer):
-		if serializer.validated_data.get("status") == Notification.Status.READ:
+		new_status = serializer.validated_data.get("status")
+		if new_status == Notification.Status.READ:
 			serializer.save(read_at=timezone.now())
+		elif new_status == Notification.Status.UNREAD:
+			serializer.save(read_at=None)
 		else:
 			serializer.save()
 
