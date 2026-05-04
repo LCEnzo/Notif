@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# Pre-push hook: run quick CI checks on changed code before pushing.
+#
+# Detects which part of the stack changed (backend, frontend, or both)
+# and runs the matching fast checks:
+#   backend  → ruff format --check, ruff check, mypy
+#   frontend → flutter analyze
+#
+# Bypass: git -c core.hooksPath=/dev/null push
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+check_backend=false
+check_frontend=false
+exit_code=0
+
+# ── detect what changed ──────────────────────────────────────────
+while read -r local_ref local_sha remote_ref remote_sha; do
+	if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+		# New branch — diff against merge-base with master.
+		base=$(git merge-base "$local_sha" origin/master 2>/dev/null || echo "")
+		if [ -n "$base" ]; then
+			changed=$(git diff --name-only "$base..$local_sha" 2>/dev/null || true)
+		else
+			# No merge-base (e.g. initial commit) — check everything.
+			changed=$(git diff --name-only "$local_sha" 2>/dev/null || true)
+		fi
+	else
+		range="$remote_sha..$local_sha"
+		changed=$(git diff --name-only "$range" 2>/dev/null || true)
+	fi
+
+	if echo "$changed" | grep -q '^backend/'; then
+		check_backend=true
+	fi
+	if echo "$changed" | grep -q '^frontend/'; then
+		check_frontend=true
+	fi
+done
+
+# ── backend checks ───────────────────────────────────────────────
+if $check_backend; then
+	echo -e "${YELLOW}━━━ backend changed — running quick checks ━━━${NC}"
+
+	cd backend
+
+	echo -n "  ruff format --check … "
+	if uv run ruff format --check . &>/dev/null; then
+		echo -e "${GREEN}OK${NC}"
+	else
+		echo -e "${RED}FAIL${NC}"
+		uv run ruff format --check .
+		exit_code=1
+	fi
+
+	echo -n "  ruff check … "
+	if uv run ruff check . &>/dev/null; then
+		echo -e "${GREEN}OK${NC}"
+	else
+		echo -e "${RED}FAIL${NC}"
+		uv run ruff check .
+		exit_code=1
+	fi
+
+	echo -n "  mypy … "
+	SECRET="${DJANGO_SECRET_KEY:-test-key-for-pre-push-hook}"
+	if DJANGO_SECRET_KEY="$SECRET" uv run mypy . &>/dev/null; then
+		echo -e "${GREEN}OK${NC}"
+	else
+		echo -e "${RED}FAIL${NC}"
+		DJANGO_SECRET_KEY="$SECRET" uv run mypy .
+		exit_code=1
+	fi
+
+	cd "$OLDPWD"
+fi
+
+# ── frontend checks ──────────────────────────────────────────────
+if $check_frontend; then
+	echo -e "${YELLOW}━━━ frontend changed — running quick checks ━━━${NC}"
+
+	# Prefer snap Flutter; fall back to whatever is on PATH.
+	if [ -x /home/lcenzo/snap/flutter/common/flutter/bin/flutter ]; then
+		FLUTTER=/home/lcenzo/snap/flutter/common/flutter/bin/flutter
+	else
+		FLUTTER=flutter
+	fi
+
+	cd frontend
+
+	echo -n "  flutter analyze … "
+	if $FLUTTER analyze &>/dev/null; then
+		echo -e "${GREEN}OK${NC}"
+	else
+		echo -e "${RED}FAIL${NC}"
+		$FLUTTER analyze
+		exit_code=1
+	fi
+
+	cd "$OLDPWD"
+fi
+
+if [ $exit_code -ne 0 ]; then
+	echo -e "\n${RED}Pre-push checks failed. Fix the issues above, then push again.${NC}"
+	echo -e "Bypass:  git -c core.hooksPath=/dev/null push"
+fi
+
+exit $exit_code
