@@ -518,8 +518,12 @@ class LinkService extends ChangeNotifier {
       if (link.strategyId != null) {
         await _deleteStrategyIfUnused(jwt, link.strategyId!);
       }
-      // Refetch current page — backend owns the truth after deletion.
-      await goToPage(_currentPage);
+      // If we deleted the last item on this page and it's not page 1,
+      // fall back to the previous page — the current page is now empty.
+      final targetPage = _links.length == 1 && _currentPage > 1
+          ? _currentPage - 1
+          : _currentPage;
+      await goToPage(targetPage);
       return true;
     } catch (error) {
       _error = describeDataError(error);
