@@ -51,14 +51,20 @@ Use when you want: CI-identical environments, dev parity via `compose.override.y
 ssh root@<VPS-IP>
 
 # If apt update fails with "File has unexpected size. Mirror sync in progress?",
-# the Hetzner Debian mirror is mid-sync.  Disable it and use deb.debian.org:
-#   mv /etc/apt/sources.list.d/hetzner-mirror.list /etc/apt/sources.list.d/hetzner-mirror.list.bak
+# the Hetzner Debian mirror source is mid-sync.  Disable it and fall back to
+# deb.debian.org (main Debian mirrors):
+#   mv /etc/apt/sources.list.d/hetzner-mirror.sources /etc/apt/sources.list.d/hetzner-mirror.sources.bak
+#   mv /etc/apt/sources.list.d/hetzner-security-mirror.sources /etc/apt/sources.list.d/hetzner-security-mirror.sources.bak
 #   apt update
 # Then re-enable after the sync window passes.
 
-# Docker (docker-ce + docker-compose-v2 plugin)
+# Docker Engine + Compose plugin (official Docker repo)
+# get.docker.com detects Debian 13 and configures the right repo automatically.
 curl -fsSL https://get.docker.com | sh
-apt update && apt install -y docker-compose-v2 git
+
+# Verify Docker + Compose are available:
+docker --version
+docker compose version
 
 # Create deploy user (don't run services as root)
 useradd -m -s /bin/bash deploy
@@ -77,12 +83,13 @@ su - deploy
 git clone https://github.com/LCEnzo/Notif /home/deploy/notif
 cd /home/deploy/notif
 
-# Write backend/.env with generated secrets, domain, and git hash.
-# Safe to re-run with --force if you need to rotate secrets.
+# Writes two files:
+#   .env          — NOTIF_DOMAIN for Docker Compose / Caddy interpolation
+#   backend/.env  — Django settings + secrets
 bash deploy/write-prod-env.sh
 ```
 
-The script writes these values into `backend/.env`:
+The script writes `backend/.env` with these values:
 
 | Key | Value |
 |-----|-------|
@@ -97,6 +104,10 @@ The script writes these values into `backend/.env`:
 | `GIT_HASH` | `git rev-parse --short HEAD` |
 | `DEV_API_LATENCY_MS` / `JITTER_MS` | `0` (no artificial latency in prod) |
 
+The script also writes a root `.env` containing only `NOTIF_DOMAIN=<your-domain>`.
+This is consumed by `compose.yaml`'s Caddy service (`${NOTIF_DOMAIN:-notif.example.com}`)
+so Caddy serves the correct domain instead of the `notif.example.com` fallback.
+
 To override the domain, set `NOTIF_DOMAIN` before running:
 
 ```bash
@@ -104,6 +115,13 @@ NOTIF_DOMAIN=notif.example.com bash deploy/write-prod-env.sh
 ```
 
 If `backend/.env` already exists, the script refuses to overwrite unless you pass `--force`.
+
+> ⚠️ **`--force` rotates secrets.**  It regenerates `DJANGO_SECRET_KEY`, which
+> invalidates all existing sessions (JWTs, password resets, CSRF tokens).  On a
+> live production deploy, prefer editing the existing `backend/.env` by hand or
+> only use `--force` when you intend a full secret rotation and expect users to
+> re-authenticate.  The idempotent default (no `--force`) is the right choice
+> for first-time deploy.
 
 > **Why a script instead of manual editing?**  Manual editing on the first deploy
 > led to `$` characters in `DJANGO_SECRET_KEY` that Docker Compose tried to
@@ -148,10 +166,13 @@ The backend is not published directly to the host in production Compose. Caddy e
 
 ### A5. Cron for scraping
 
+Use `exec -T` (not `run --rm`) — `exec` runs in the already-started container, skipping
+the entrypoint (no migrate + collectstatic on every cron tick):
+
 ```bash
 crontab -e
 # Add:
-*/15 * * * * cd /home/deploy/notif && docker compose -f compose.yaml run --rm backend python manage.py scrape
+*/15 * * * * cd /home/deploy/notif && docker compose -f compose.yaml exec -T backend python manage.py scrape
 ```
 
 ### A6. Database backups
