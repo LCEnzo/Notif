@@ -509,7 +509,7 @@ class _PageNumbers extends StatelessWidget {
     final pages = _buildPageList();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.only(top: 16, bottom: 32),
       child: Wrap(
         alignment: WrapAlignment.center,
         spacing: 2,
@@ -530,7 +530,7 @@ class _PageNumbers extends StatelessWidget {
                 onPressed: () async => await onPageSelected(item.page!),
                 child: Text(
                   item.label,
-                  style: text$.body.copyWith(color: tokens.inkMute),
+                  style: text$.eyebrow.copyWith(color: tokens.inkMute),
                 ),
               ),
             );
@@ -550,9 +550,10 @@ class _PageNumbers extends StatelessWidget {
                 onPressed: null,
                 child: Text(
                   item.label,
-                  style: text$.body
-                      .copyWith(fontWeight: FontWeight.w600)
-                      .copyWith(color: tokens.ink),
+                  style: text$.eyebrow.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: tokens.ink,
+                  ),
                 ),
               ),
             );
@@ -563,7 +564,7 @@ class _PageNumbers extends StatelessWidget {
             child: Center(
               child: Text(
                 item.label,
-                style: text$.body.copyWith(color: tokens.inkMute),
+                style: text$.eyebrow.copyWith(color: tokens.inkMute),
               ),
             ),
           );
