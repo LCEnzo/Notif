@@ -43,7 +43,7 @@ class _ForgotPasswordCard extends StatelessWidget {
               eyebrow: 'Recovery',
               title: 'Forgot the passphrase?',
               description:
-                  'Password reset is not wired up in this build yet.',
+                  'Self-hosted: run "python manage.py set_password <username>" on the server.',
             ),
             const SizedBox(height: 20),
             Container(
@@ -61,7 +61,7 @@ class _ForgotPasswordCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'What works right now',
+                    'Recovery instructions',
                     style: (isFramed
                             ? text$.body.copyWith(color: tokens.ink)
                             : (Theme.of(context).textTheme.titleMedium ??
@@ -76,8 +76,9 @@ class _ForgotPasswordCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'If you self-host this build, recover the account on the '
-                    'server or create a new one here.',
+                    'SSH into the VPS and run:\n'
+                    'docker compose -f compose.yaml exec -T backend python manage.py set_password <username>\n\n'
+                    'The command prompts for a new password interactively.',
                     style: isFramed
                         ? text$.body.copyWith(color: tokens.inkDim)
                         : const TextStyle(color: Colors.white70, height: 20 / 14),
