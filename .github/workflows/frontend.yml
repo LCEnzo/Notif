@@ -40,3 +40,6 @@ jobs:
 
       - name: Test
         run: flutter test --no-pub
+
+      - name: Build web (smoke test)
+        run: flutter build web --no-pub

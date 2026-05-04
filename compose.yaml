@@ -36,15 +36,28 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Build-only — produces the Flutter web assets. The output lives in
+  # the frontend_dist volume, which Caddy mounts read-only.
+  frontend:
+    build:
+      context: ./frontend
+    image: notif-frontend:latest
+    restart: "no"
+    command: ["true"]
+    volumes:
+      - frontend_dist:/dist
+
   caddy:
     image: caddy:2
     restart: unless-stopped
     profiles: ["prod"]
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       - NOTIF_DOMAIN=${NOTIF_DOMAIN:-notif.example.com}
       - STATIC_ROOT=/app/staticfiles
+      - FRONTEND_ROOT=/app/frontend
       - BACKEND_UPSTREAM=backend
       - BACKEND_PORT=8000
     ports:
@@ -53,6 +66,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - staticfiles:/app/staticfiles:ro
+      - frontend_dist:/app/frontend:ro
       - caddy_data:/data
       - caddy_config:/config
     logging:
@@ -64,5 +78,6 @@ services:
 volumes:
   backend_data:
   staticfiles:
+  frontend_dist:
   caddy_data:
   caddy_config:

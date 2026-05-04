@@ -1,7 +1,7 @@
 # Deployment Runbook
 
-Production deployment of the Notif backend on a Hetzner CX22 (or equivalent ~€4/mo VPS).
-Two options: **Docker Compose** (portable, heavier) or **bare systemd** (lighter, fewer moving parts).
+Production deployment of the Notif backend + Flutter web frontend on a Hetzner VPS.
+Two options: **Docker Compose** (full-stack, recommended) or **bare systemd** (backend-only, lighter).
 
 Pick one. The app runs identically either way.
 
@@ -39,7 +39,7 @@ The `Caddyfile` is pre-configured with Cloudflare's IP ranges in `trusted_proxie
 
 ## Option A: Docker Compose
 
-Use when you want: CI-identical environments, dev parity via `compose.override.yaml`, Caddy + TLS in Compose, or eventual multi-service orchestration.
+Use when you want: full-stack deployment (backend API + Flutter web frontend), CI-identical environments, dev parity via `compose.override.yaml`, Caddy + TLS in Compose.
 
 ### A1. Provision the VPS
 
@@ -91,24 +91,31 @@ vim backend/.env
 ### A3. Build and launch
 
 ```bash
-# Build the image. collectstatic runs during the build with a build-only dummy secret.
+# Build all images (backend + frontend). collectstatic runs during the backend
+# build; flutter build web runs during the frontend build.
 docker compose -f compose.yaml build
 
-# Start backend + Caddy. The prod profile enables Caddy.
+# Start backend + frontend build + Caddy. The prod profile enables Caddy.
+# The frontend service runs once to populate the frontend_dist volume, then exits.
 docker compose -f compose.yaml --profile prod up -d
 
-# Check backend locally through the container healthcheck (liveness).
+# Check all services are healthy.
 docker compose -f compose.yaml ps
 
-# Verify the deploy works — /status checks DB + returns version/commit.
+# Verify the API works — /status checks DB + returns version/commit.
 curl https://notif.lcenzo.com/api/v1/monitoring/status/
 # → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
+
+# Verify the frontend is served.
+curl -sI https://notif.lcenzo.com/ | head -3
+# → HTTP/2 200
+# → content-type: text/html
 
 # Check Caddy got a certificate.
 docker compose -f compose.yaml --profile prod logs caddy | grep -i "certificate"
 ```
 
-The backend is not published directly to the host in production Compose. Caddy exposes ports 80/443 and proxies internally to `backend:8000`.
+Caddy serves the Flutter web app at `/`, the API at `/api/*`, and Django static files at `/static/*`. The backend is not published directly to the host — Caddy proxies internally.
 
 ### A4. Cron for scraping
 
@@ -132,6 +139,10 @@ cd /home/deploy/notif
 git pull
 docker compose -f compose.yaml build
 docker compose -f compose.yaml --profile prod up -d
+
+# Rebuild only the frontend after UI changes
+docker compose -f compose.yaml build frontend
+docker compose -f compose.yaml --profile prod up -d frontend caddy
 
 # Backup the database (sqlite3 .backup produces a consistent snapshot).
 # Backups land on the persistent backend_data volume under /app/data/backups/.
@@ -328,6 +339,9 @@ SQLITE_PATH=/var/lib/notif/db.sqlite3 BACKUP_DIR=/var/backups/notif /opt/notif/b
 ```bash
 # ── These should all work from any machine ──
 
+# Frontend (Flutter web app)
+open https://notif.lcenzo.com/
+
 # Liveness (process alive?)
 curl https://notif.lcenzo.com/api/v1/monitoring/health/
 
@@ -340,12 +354,12 @@ open https://notif.lcenzo.com/api/v1/docs/
 # Register a user
 curl -X POST https://notif.lcenzo.com/api/v1/accounts/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"test","email":"test@example.com","password":"correct horse battery staple"}'
+  -d '{"username":"test","email":"test@example.com","password": "correct horse battery staple"}'
 
 # Get a token
 curl -X POST https://notif.lcenzo.com/api/v1/token/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"correct horse battery staple"}'
+  -d '{"username":"test","password": "correct horse battery staple"}'
 ```
 
 ---
@@ -353,18 +367,30 @@ curl -X POST https://notif.lcenzo.com/api/v1/token/ \
 ## Architecture (how the pieces connect)
 
 ```
-Browser ──HTTPS──▶ Cloudflare ──HTTPS──▶ Caddy:443 ──HTTP──▶ gunicorn:8000 ── Django
+Browser ──HTTPS──▶ Cloudflare ──HTTPS──▶ Caddy:443
                                             │
-                                            └── /static/* from disk (zero Python)
+                         /api/* ──HTTP──▶ gunicorn:8000 ── Django
+                         /static/* ── disk (zero Python overhead)
+                         /* ── Flutter web app (SPA, from disk)
 ```
 
 | Layer | What it does | Config |
 |-------|-------------|--------|
 | Cloudflare | DNS, DDoS protection, global CDN | A-record + orange cloud |
-| Caddy | TLS termination, static files, reverse proxy | `Caddyfile` + deployment env |
+| Caddy | TLS termination, routing, static files | `Caddyfile` + deployment env |
+| Flutter web | Frontend SPA at `/` | Built into `frontend_dist` volume |
 | gunicorn | WSGI server, runs Django | systemd unit or Docker |
 | Django | Application — API, auth, scraping | `settings.py` + `backend/.env` |
 | SQLite | Database | Single file in a persistent volume/directory |
+
+### Routing
+
+| Path | Served by | Notes |
+|------|-----------|-------|
+| `/` | Caddy → frontend_dist | Flutter web app with SPA fallback |
+| `/api/*` | Caddy → gunicorn → Django | REST API |
+| `/static/*` | Caddy → staticfiles volume | Django admin static assets |
+| `/DJANGO_ADMIN_URL` | Caddy → gunicorn → Django | Admin panel (configure in Caddyfile if not under `/api/`) |
 
 ---
 

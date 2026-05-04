@@ -24,7 +24,14 @@
 }
 
 {$NOTIF_DOMAIN:notif.example.com} {
-	# Serve static files directly from disk — never touches Python.
+	# API — reverse proxy to Django/gunicorn.
+	# Docker default: backend:8000
+	# Bare override:  BACKEND_UPSTREAM=localhost BACKEND_PORT=8000
+	handle /api/* {
+		reverse_proxy {$BACKEND_UPSTREAM:localhost}:{$BACKEND_PORT:8000}
+	}
+
+	# Django static files — served directly from disk, zero Python overhead.
 	# Docker default: /app/staticfiles
 	# Bare default:   /opt/notif/backend/staticfiles
 	handle /static/* {
@@ -32,10 +39,18 @@
 		file_server
 	}
 
-	# Everything else → gunicorn/Django.
-	# Docker default: backend:8000
-	# Bare override:  BACKEND_UPSTREAM=localhost BACKEND_PORT=8000
+	# Admin path — if DJANGO_ADMIN_URL is set to something outside /api/,
+	# uncomment and adjust this block to proxy it to Django.
+	# handle /supah-admin/* {
+	#     reverse_proxy {$BACKEND_UPSTREAM:localhost}:{$BACKEND_PORT:8000}
+	# }
+
+	# Flutter web app — SPA fallback: unknown routes serve index.html
+	# so that Flutter's client-side router handles deep links.
+	# Docker default: /app/frontend
 	handle {
-		reverse_proxy {$BACKEND_UPSTREAM:localhost}:{$BACKEND_PORT:8000}
+		root * {$FRONTEND_ROOT:/app/frontend}
+		try_files {path} /index.html
+		file_server
 	}
 }
