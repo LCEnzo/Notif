@@ -62,7 +62,7 @@ void main() {
     await tester.tap(find.text('FORGOT PASSWORD?'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Forgot the passphrase?'), findsOneWidget);
+    expect(find.text('Forgot password?'), findsOneWidget);
     expect(find.text('Back to log in'), findsOneWidget);
   });
 }
