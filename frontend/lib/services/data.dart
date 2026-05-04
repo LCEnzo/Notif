@@ -170,10 +170,10 @@ class _StrategyResolution {
 }
 
 enum LinkSort {
-  newest('-pk', 'Newest'),
-  oldest('pk', 'Oldest'),
-  recentlyScraped('-last_scraped', 'Recently scraped'),
-  leastRecentlyScraped('last_scraped', 'Least recently scraped');
+  newest('-pk,-pk', 'Newest'),
+  oldest('pk,pk', 'Oldest'),
+  recentlyScraped('-last_scraped,-pk', 'Recently scraped'),
+  leastRecentlyScraped('last_scraped,pk', 'Least recently scraped');
 
   const LinkSort(this.apiValue, this.label);
   final String apiValue;
@@ -985,7 +985,7 @@ class NotificationService extends ChangeNotifier {
     final jwt = _authService.jwt;
     if (jwt == null || page < 1) return;
 
-    final fetchEpoch = _fetchEpoch;
+    final fetchEpoch = ++_fetchEpoch;
     _loadingMore = false;
     _loading = true;
     _error = null;
