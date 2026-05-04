@@ -42,8 +42,7 @@ class _ForgotPasswordCard extends StatelessWidget {
             const AuthPanelHeader(
               eyebrow: 'Recovery',
               title: 'Forgot the passphrase?',
-              description:
-                  'Self-hosted: run "python manage.py set_password <username>" on the server.',
+              description: 'Contact your server administrator to reset your password.',
             ),
             const SizedBox(height: 20),
             Container(
@@ -61,7 +60,7 @@ class _ForgotPasswordCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Recovery instructions',
+                    'What to do',
                     style: (isFramed
                             ? text$.body.copyWith(color: tokens.ink)
                             : (Theme.of(context).textTheme.titleMedium ??
@@ -76,9 +75,8 @@ class _ForgotPasswordCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'SSH into the VPS and run:\n'
-                    'docker compose -f compose.yaml exec -T backend python manage.py set_password <username>\n\n'
-                    'The command prompts for a new password interactively.',
+                    'Reach out to the person who set up this Notif instance. '
+                    'They can reset your password from the server.',
                     style: isFramed
                         ? text$.body.copyWith(color: tokens.inkDim)
                         : const TextStyle(color: Colors.white70, height: 20 / 14),
