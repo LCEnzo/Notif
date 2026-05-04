@@ -982,7 +982,7 @@ class _HomeConsoleMetrics {
           actionVPad: 9,
           railRowVPad: 14,
           updateRowVPad: 14,
-          headerHeight: 52,
+          headerHeight: 58,
         );
       case HomeDensity.compact:
         return const _HomeConsoleMetrics(
@@ -996,7 +996,7 @@ class _HomeConsoleMetrics {
           actionVPad: 6,
           railRowVPad: 7,
           updateRowVPad: 7,
-          headerHeight: 37,
+          headerHeight: 42,
         );
       case HomeDensity.dense:
         return const _HomeConsoleMetrics(
@@ -1010,7 +1010,7 @@ class _HomeConsoleMetrics {
           actionVPad: 4,
           railRowVPad: 5,
           updateRowVPad: 5,
-          headerHeight: 32,
+          headerHeight: 36,
         );
     }
   }
