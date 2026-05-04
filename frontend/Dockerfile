@@ -2,8 +2,10 @@
 # Builds the Notif Flutter frontend for web deployment.
 #
 # Two stages: build → export. The export stage copies only the built
-# web assets so the final image is small and the output can be mounted
-# as a named volume for Caddy to serve.
+# web assets to /image-dist (inside the image). At runtime, the
+# entrypoint copies them into the mounted /web-dist volume so Caddy
+# can serve them. This avoids Docker's first-time-only volume copy
+# behavior — every deploy refreshes the volume.
 #
 # The API_URL dart-define points to the same-origin /api/v1 path because
 # the frontend and backend share a single domain in production.
@@ -25,6 +27,12 @@ RUN flutter build web --release \
     --dart-define=API_URL=/api/v1 \
     --web-renderer canvaskit
 
-# Export stage — minimal image containing only the built web assets.
+# Export stage — minimal image. Assets stay in /image-dist.
+# The entrypoint copies them into the shared volume at runtime.
 FROM alpine:3.21
-COPY --from=build /app/build/web /dist
+
+COPY --from=build /app/build/web /image-dist
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

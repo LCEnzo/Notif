@@ -39,11 +39,12 @@
 		file_server
 	}
 
-	# Admin path — if DJANGO_ADMIN_URL is set to something outside /api/,
-	# uncomment and adjust this block to proxy it to Django.
-	# handle /supah-admin/* {
-	#     reverse_proxy {$BACKEND_UPSTREAM:localhost}:{$BACKEND_PORT:8000}
-	# }
+	# Django admin — proxied to backend so it isn't swallowed by the SPA
+	# fallback below. The path is controlled by DJANGO_ADMIN_ROUTE
+	# (defaults to /supah-admin/*, matching the DJANGO_ADMIN_URL setting).
+	handle {$DJANGO_ADMIN_ROUTE} {
+		reverse_proxy {$BACKEND_UPSTREAM:localhost}:{$BACKEND_PORT:8000}
+	}
 
 	# Flutter web app — SPA fallback: unknown routes serve index.html
 	# so that Flutter's client-side router handles deep links.
