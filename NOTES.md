@@ -114,3 +114,28 @@ Current scraper limitations worth remembering:
 - **FlareSolverr** -- self-hosted proxy that solves Cloudflare via headless browser, Dockerizable
 - **undetected-chromedriver** -- patched ChromeDriver, less maintained than Playwright
 - Not needed currently -- forum targets (SB, SV, QQ) don't use aggressive Cloudflare
+
+---
+
+## Pagination & Filtering (added 2026-05-04)
+
+### Architecture
+
+- **Notifications** use page-based navigation (page numbers at bottom when `totalPages > 1`). Each page fetch replaces the list entirely — no infinite scroll / "load more" append model. `NotificationPagination` page_size=50, max_page_size=200.
+- **Links** use the same page-based model. `LinkPagination` page_size=100, max_page_size=500.
+- Sorting is delegated to the backend via DRF's `OrderingFilter`; the FE sends `?ordering=<field>` and the server returns correctly ordered pages. Sort enums (`LinkSort`, `NotifSort`) include tiebreaker fields (`-pk`) to keep page boundaries deterministic.
+
+### Why not continuous scroll?
+
+Continuous scroll (infinite scroll / "load more") was explicitly rejected for this app. Reasons:
+
+1. **Dedup complexity** — pages shift when new items land (a new notification on page 1 pushes the old page 1's last item to page 2). Load-more-then-dedup creates visual glitches where items appear, disappear, or reorder.
+2. **Navigation loss** — you can't link to or return to "page 3 of notifications." With page numbers, the current position is explicit and recoverable.
+3. **Unread count accuracy** — the server reports a global `unread_count` independent of the current page filter. Continuous scroll would make the relationship between visible items and unread count confusing ("UNREAD 0" with unread items on unloaded pages).
+4. **Power-user ergonomics** — for an app meant to handle hundreds of sources and thousands of notifications, scanning by page is faster than endless scrolling.
+
+### Filtering
+
+Status filtering (`?status=unread`) and time-based filtering (`?since=<ISO datetime>`) are supported on the notifications endpoint. These filters scope the queryset before pagination, so page counts and unread counts reflect the filtered set.
+
+Adding more filter dimensions (by link/source, by strategy type, text search) would follow the same pattern: query param → `get_queryset().filter(...)` → paginated response. The `unread_count` field in the paginated envelope is computed independently of any `?status=` filter — it always represents the user's global unread total — so the FE badge stays accurate regardless of what page/filter the user is viewing.
