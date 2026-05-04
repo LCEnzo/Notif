@@ -41,14 +41,14 @@ class UserViewSetTestCase(ViewSetMixin):
 			"username": "test_username01",
 			"email": "fake@example.com",
 			"name": "Ichi Nii",
-			"password": "securepassword123 securepassword123",
+			"password": "secure...d123",
 		}
 		_ = self._test_create_object(fields=fields)
 
 		fields = {
 			"username": "newuser",
 			"email": "newuser@example.com",
-			"password": "securepassword123 securepassword123",
+			"password": "secure...d123",
 		}
 		self._test_create_object(fields=fields)
 
@@ -64,7 +64,7 @@ class UserViewSetTestCase(ViewSetMixin):
 			"username": "disposable_delete_me",
 			"email": "del@example.com",
 			"name": "Delete Me",
-			"password": "disposable123!",
+			"password": "***",
 		}
 		create_resp = self.api_client.post(reverse(self.list_view_name), create_fields)
 		self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
@@ -82,7 +82,7 @@ class UserViewSetTestCase(ViewSetMixin):
 			"username": "test_username01",
 			"email": "fake@example.com",
 			"name": "Ichi Nii",
-			"password": "securepassword123",
+			"password": "***",
 		}
 		update_fields = {"name": "Maria"}
 		permissions = {"list": True, "retrieve": True, "create": True}
@@ -122,7 +122,7 @@ class DevBootstrapTokenViewTestCase(TestCase):
 			reverse("token_obtain_pair"),
 			{
 				"username": settings.DEV_BOOTSTRAP_USERNAME,
-				"password": "definitely-not-the-dev-password",
+				"password": "defini...word",
 			},
 			format="json",
 		)
@@ -133,6 +133,11 @@ class DevBootstrapTokenViewTestCase(TestCase):
 
 class PasswordResetTestCase(TestCase):
 	"""End-to-end tests for the password reset flow."""
+
+	user: User
+	client: APIClient
+	reset_url: str
+	confirm_url: str
 
 	@classmethod
 	def setUpTestData(cls):
@@ -156,6 +161,7 @@ class PasswordResetTestCase(TestCase):
 
 		self.assertEqual(PasswordResetCode.objects.count(), 1)
 		code = PasswordResetCode.objects.first()
+		assert code is not None
 		self.assertEqual(code.user, self.user)
 		self.assertEqual(len(code.code), 6)
 
@@ -171,7 +177,7 @@ class PasswordResetTestCase(TestCase):
 			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
 		# Must still be 200 — a 500 would leak that the email exists.
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertEqual(response.data, {"status": "ok"})
+		self.assertEqual(response.data, {"status": "ok"})  # type: ignore[union-attr]
 
 	def test_request_replaces_existing_code(self):
 		"""New request invalidates any previous code for the same user."""
@@ -181,7 +187,7 @@ class PasswordResetTestCase(TestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 		self.assertEqual(PasswordResetCode.objects.count(), 1)
-		self.assertNotEqual(PasswordResetCode.objects.first().code, "111111")
+		self.assertNotEqual(PasswordResetCode.objects.first().code, "111111")  # type: ignore[union-attr]
 
 	def test_request_sends_email_for_known_user(self):
 		"""Reset request triggers email send for existing user."""
@@ -230,7 +236,7 @@ class PasswordResetTestCase(TestCase):
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("error", response.data)
+		self.assertIn("error", response.data)  # type: ignore[union-attr]
 
 	def test_confirm_with_unknown_email_fails(self):
 		"""Unknown email returns 400 — same message as wrong code (no enumeration)."""
@@ -243,7 +249,7 @@ class PasswordResetTestCase(TestCase):
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("error", response.data)
+		self.assertIn("error", response.data)  # type: ignore[union-attr]
 
 	def test_confirm_with_expired_code_fails(self):
 		"""A code older than 30 minutes is rejected."""
@@ -261,7 +267,7 @@ class PasswordResetTestCase(TestCase):
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("error", response.data)
+		self.assertIn("error", response.data)  # type: ignore[union-attr]
 
 	def test_confirm_deletes_code_after_use(self):
 		"""Successful reset deletes the code — single-use."""
@@ -290,7 +296,7 @@ class PasswordResetTestCase(TestCase):
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("error", response.data)
+		self.assertIn("error", response.data)  # type: ignore[union-attr]
 
 		# Password was NOT changed
 		self.user.refresh_from_db()
