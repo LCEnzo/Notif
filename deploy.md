@@ -1,13 +1,9 @@
 # Deployment Runbook
 
-Production deployment of the Notif backend on a Hetzner CX22 (or equivalent ~€4/mo VPS).
-Two options: **Docker Compose** (portable, heavier) or **bare systemd** (lighter, fewer moving parts).
+Production deployment of the Notif backend + Flutter web frontend on a Hetzner VPS.
+Two options: **Docker Compose** (full-stack, recommended) or **bare systemd** (backend-only, lighter).
 
 Pick one. The app runs identically either way.
-
-> **Current phase:** backend-only.  Flutter frontend deployment is not included.
-> **Platform:** Debian 13 (trixie), Docker Compose v2 via `docker compose` (the
-> plugin, not the standalone `docker-compose` binary).
 
 ---
 
@@ -15,56 +11,44 @@ Pick one. The app runs identically either way.
 
 Before SSHing into anything:
 
-1. **Domain** — bought and pointing at Cloudflare's nameservers
-2. **Cloudflare** — DNS A-record `notif` → `<VPS-IP>` with **grey cloud** (DNS-only, not proxied) initially:
-   - Grey-cloud lets Caddy get a Let's Encrypt certificate without Cloudflare's edge interfering
-   - Once TLS is verified, switch to **orange cloud** (proxied)
+1. **Domain** — bought (Porkbun, Namecheap, etc.) and delegated to Cloudflare's nameservers
+2. **Cloudflare** — site added to your account; DNS A-record `notif` → `<VPS-IP>` with orange cloud (proxy) **enabled**
 3. **SSL/TLS mode** in Cloudflare: **Full (strict)** — Caddy provides a valid Let's Encrypt certificate
-4. **Hetzner CX22** (or any VPS with ≥1 GB RAM)
-5. **Do not enable DNSSEC** or restrict the origin firewall to Cloudflare IPs until after basic deploy is verified — both can break first-time TLS issuance
+4. **Hetzner CX22** (or any VPS with ≥1 GB RAM, Ubuntu 22.04 or 24.04)
 
----
+### Domain delegation (Porkbun → Cloudflare)
 
-## First-Deploy Cloudflare Flow
+Order matters: add the site to Cloudflare *first*, then point Porkbun at the nameservers it gives you.
 
-This is the exact sequence used on the first production deploy. Follow it for any fresh VPS:
+1. In Cloudflare, **Add a site** → enter your domain → choose Free plan. Cloudflare assigns two nameservers (e.g. `xxx.ns.cloudflare.com`, `yyy.ns.cloudflare.com`).
+2. In Porkbun, open the domain → **Authoritative Nameservers** → replace the defaults with the two Cloudflare nameservers. Disable Porkbun's URL Forwarding if it's set on the apex — it silently overrides A-records.
+3. Wait for delegation. `dig NS notif.lcenzo.com +short` should return Cloudflare's NSes. Up to a few hours; sometimes minutes.
+4. Only then create the `notif` A-record in Cloudflare. If Caddy boots before delegation completes it will burn Let's Encrypt rate-limit attempts trying to validate.
 
-```
-Step 1: Cloudflare A record notif → VPS IPv4, grey-cloud (DNS-only)
-Step 2: Start Caddy + backend → Caddy obtains Let's Encrypt certificate
-Step 3: Verify /health and /status respond correctly over HTTPS
-Step 4: Only then switch Cloudflare record to orange-cloud (proxied)
-Step 5: Keep SSL/TLS mode Full (strict)
-```
+### TLS issuance behind Cloudflare's proxy
 
-If you skip step 1 and go straight to orange-cloud, Cloudflare's TLS terminates at the edge and Caddy sees the CF edge cert — it will not obtain its own Let's Encrypt cert, and you'll get certificate errors locally.
+The orange cloud terminates TLS, which means **TLS-ALPN-01 cannot reach Caddy**. Caddy will fall back to HTTP-01, which usually works because Cloudflare proxies `/.well-known/acme-challenge/*` through — but it's fragile (a "Always Use HTTPS" rule or strict WAF rule can break it). Pick one:
+
+- **Easiest:** grey-cloud the `notif` A-record during the first deploy so HTTP-01 hits the origin directly, then re-enable the orange cloud once `journalctl -u caddy` (or the compose logs) shows a certificate was obtained.
+- **Most robust:** issue a [Cloudflare Origin Certificate](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/), drop it on the VPS, and tell Caddy to use it via `tls /path/to/cert.pem /path/to/key.pem`. Skips Let's Encrypt entirely and renews every 15 years.
+- **DNS-01 with Cloudflare API token:** requires the `caddy-dns/cloudflare` module, which is **not** in `apt install caddy`. Either build Caddy with `xcaddy` or use the official Caddy image variant that bundles it.
+
+The `Caddyfile` is pre-configured with Cloudflare's IP ranges in `trusted_proxies`, so behind the orange cloud, Caddy logs the real client IP from the `CF-Connecting-IP` header instead of Cloudflare's proxy IPs. When CF publishes new ranges (rare, see https://www.cloudflare.com/ips/), update the list in `Caddyfile` and reload Caddy.
 
 ---
 
 ## Option A: Docker Compose
 
-Use when you want: CI-identical environments, dev parity via `compose.override.yaml`, Caddy + TLS in Compose, or eventual multi-service orchestration.
+Use when you want: full-stack deployment (backend API + Flutter web frontend), CI-identical environments, dev parity via `compose.override.yaml`, Caddy + TLS in Compose.
 
 ### A1. Provision the VPS
 
 ```bash
 ssh root@<VPS-IP>
 
-# If apt update fails with "File has unexpected size. Mirror sync in progress?",
-# the Hetzner Debian mirror source is mid-sync.  Disable it and fall back to
-# deb.debian.org (main Debian mirrors):
-#   mv /etc/apt/sources.list.d/hetzner-mirror.sources /etc/apt/sources.list.d/hetzner-mirror.sources.bak
-#   mv /etc/apt/sources.list.d/hetzner-security-mirror.sources /etc/apt/sources.list.d/hetzner-security-mirror.sources.bak
-#   apt update
-# Then re-enable after the sync window passes.
-
-# Docker Engine + Compose plugin (official Docker repo)
-# get.docker.com detects Debian 13 and configures the right repo automatically.
+# Docker
 curl -fsSL https://get.docker.com | sh
-
-# Verify Docker + Compose are available:
-docker --version
-docker compose version
+apt update && apt install -y docker-compose-v2 git
 
 # Create deploy user (don't run services as root)
 useradd -m -s /bin/bash deploy
@@ -73,101 +57,67 @@ usermod -aG docker deploy
 su - deploy
 ```
 
-> **Note:** Docker Compose is installed as the `docker-compose-plugin` package.
-> All commands use `docker compose` (v2 plugin syntax), not `docker-compose` (v1 standalone).
-> The two are different binaries — this runbook assumes v2.
-
-### A2. Clone and write production .env
+### A2. Clone and configure
 
 ```bash
 git clone https://github.com/LCEnzo/Notif /home/deploy/notif
 cd /home/deploy/notif
 
-# Writes two files:
-#   .env          — NOTIF_DOMAIN for Docker Compose / Caddy interpolation
-#   backend/.env  — Django settings + secrets
-bash deploy/write-prod-env.sh
+# Project-level env used by Docker Compose/Caddy interpolation.
+# backend/.env is still used for Django settings and secrets.
+cat > .env << 'ENV'
+NOTIF_DOMAIN=notif.lcenzo.com
+ENV
+
+# Create production Django env from the example.
+cp backend/.env.example backend/.env
+
+# ── REQUIRED: edit backend/.env ──
+# DEBUG=false
+# NOTIF_ENV=production
+# DJANGO_SECRET_KEY=<run after install/build, or paste a generated secret>
+# ALLOWED_HOSTS=notif.lcenzo.com
+# CORS_ALLOWED_ORIGINS=https://notif.lcenzo.com
+# CSRF_TRUSTED_ORIGINS=https://notif.lcenzo.com
+# DJANGO_ADMIN_URL=ops-<random-suffix>/   # don't leave the default "admin/" in prod
+# SQLITE_PATH=/app/data/db.sqlite3
+# STATIC_ROOT=staticfiles
+
+vim backend/.env
 ```
 
-The script writes `backend/.env` with these values:
-
-| Key | Value |
-|-----|-------|
-| `DEBUG` | `false` |
-| `NOTIF_ENV` | `production` |
-| `DJANGO_SECRET_KEY` | 48 hex bytes from `openssl rand -hex 48` |
-| `ALLOWED_HOSTS` | your domain |
-| `CORS_ALLOWED_ORIGINS` | `https://<your-domain>` |
-| `CSRF_TRUSTED_ORIGINS` | `https://<your-domain>` |
-| `DJANGO_ADMIN_URL` | random 16-hex suffix with trailing `/` |
-| `SQLITE_PATH` | `/app/data/db.sqlite3` |
-| `GIT_HASH` | `git rev-parse --short HEAD` |
-| `DEV_API_LATENCY_MS` / `JITTER_MS` | `0` (no artificial latency in prod) |
-
-The script also writes a root `.env` containing only `NOTIF_DOMAIN=<your-domain>`.
-This is consumed by `compose.yaml`'s Caddy service (`${NOTIF_DOMAIN:-notif.example.com}`)
-so Caddy serves the correct domain instead of the `notif.example.com` fallback.
-
-To override the domain, set `NOTIF_DOMAIN` before running:
-
-```bash
-NOTIF_DOMAIN=notif.example.com bash deploy/write-prod-env.sh
-```
-
-If `backend/.env` already exists, the script refuses to overwrite unless you pass `--force`.
-
-> ⚠️ **`--force` rotates secrets.**  It regenerates `DJANGO_SECRET_KEY`, which
-> invalidates all existing sessions (JWTs, password resets, CSRF tokens).  On a
-> live production deploy, prefer editing the existing `backend/.env` by hand or
-> only use `--force` when you intend a full secret rotation and expect users to
-> re-authenticate.  The idempotent default (no `--force`) is the right choice
-> for first-time deploy.
-
-> **Why a script instead of manual editing?**  Manual editing on the first deploy
-> led to `$` characters in `DJANGO_SECRET_KEY` that Docker Compose tried to
-> interpolate from `env_file`, silently mutating the secret.  The script generates
-> hex-only secrets and writes all domain-derived values correctly in one shot.
+`DJANGO_SECRET_KEY` belongs in `backend/.env`, not in the project-level `.env`. Compose reads `backend/.env` into the backend container; the project-level `.env` is only for Compose interpolation such as `NOTIF_DOMAIN`.
 
 ### A3. Build and launch
 
 ```bash
-# Build the image. collectstatic runs during the build with a build-only dummy secret.
+# Build all images (backend + frontend). collectstatic runs during the backend
+# build; flutter build web runs during the frontend build.
 docker compose -f compose.yaml build
 
-# Start backend + Caddy. The prod profile enables Caddy.
+# Start backend + frontend build + Caddy. The prod profile enables Caddy.
+# The frontend service runs once to populate the frontend_dist volume, then exits.
 docker compose -f compose.yaml --profile prod up -d
 
-# Check containers are running.
-docker compose -f compose.yaml --profile prod ps
-```
+# Check all services are healthy.
+docker compose -f compose.yaml ps
 
-### A4. Verify
-
-```bash
-# Liveness — is the process alive?
-curl -i https://notif.yourdomain.com/api/v1/monitoring/health/
-
-# Status — can it serve traffic? Returns version + commit hash.
-curl -i https://notif.yourdomain.com/api/v1/monitoring/status/
+# Verify the API works — /status checks DB + returns version/commit.
+curl https://notif.lcenzo.com/api/v1/monitoring/status/
 # → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
-# Confirm Caddy got a certificate.
-docker compose -f compose.yaml --profile prod logs caddy | grep -i "certificate"
+# Verify the frontend is served.
+curl -sI https://notif.lcenzo.com/ | head -3
+# → HTTP/2 200
+# → content-type: text/html
 
-# Full verification checklist:
-#   docker compose -f compose.yaml --profile prod ps
-#   curl -i https://notif.yourdomain.com/api/v1/monitoring/health/
-#   curl -i https://notif.yourdomain.com/api/v1/monitoring/status/
-#   docker compose -f compose.yaml --profile prod logs caddy | tail -20
-#   docker compose -f compose.yaml --profile prod logs backend | tail -20
+# Check Caddy got a certificate.
+docker compose -f compose.yaml --profile prod logs caddy | grep -i "certificate"
 ```
 
-The backend is not published directly to the host in production Compose. Caddy exposes ports 80/443 and proxies internally to `backend:8000`.
+Caddy serves the Flutter web app at `/`, the API at `/api/*`, and Django static files at `/static/*`. The backend is not published directly to the host — Caddy proxies internally.
 
-### A5. Cron for scraping
-
-Use `exec -T` (not `run --rm`) — `exec` runs in the already-started container, skipping
-the entrypoint (no migrate + collectstatic on every cron tick):
+### A4. Cron for scraping
 
 ```bash
 crontab -e
@@ -175,28 +125,7 @@ crontab -e
 */15 * * * * cd /home/deploy/notif && docker compose -f compose.yaml exec -T backend python manage.py scrape
 ```
 
-### A6. Database backups
-
-A backup script is included at `backend/scripts/backup-db.sh`. It uses `sqlite3 .backup`
-for atomic snapshots and retains the 10 most recent backups.
-
-```bash
-# Run a backup (inside the running container):
-docker compose -f compose.yaml exec -T backend ./scripts/backup-db.sh
-
-# Backups land in a 'backups/' directory next to the SQLite file:
-#   /app/data/backups/db-YYYYMMDD-HHMMSS.sqlite3
-# By default, the 10 most recent are kept; older ones are rotated out.
-
-# Copy backups to the host:
-docker compose -f compose.yaml cp backend:/app/data/backups /home/deploy/notif/backups/
-
-# ── Daily cron backup (add to host crontab) ──
-# 3:00 AM every day — sqlite3 .backup for atomic copies.
-0 3 * * * cd /home/deploy/notif && docker compose -f compose.yaml exec -T backend ./scripts/backup-db.sh
-```
-
-### A7. Maintenance
+### A5. Maintenance
 
 ```bash
 # View logs
@@ -210,6 +139,15 @@ cd /home/deploy/notif
 git pull
 docker compose -f compose.yaml build
 docker compose -f compose.yaml --profile prod up -d
+
+# Rebuild only the frontend after UI changes
+docker compose -f compose.yaml build frontend
+docker compose -f compose.yaml --profile prod up -d frontend caddy
+
+# Backup the database (sqlite3 .backup produces a consistent snapshot).
+# Backups land on the persistent backend_data volume under /app/data/backups/.
+mkdir -p backups
+docker compose -f compose.yaml exec -T backend ./scripts/backup-db.sh
 ```
 
 ---
@@ -224,9 +162,6 @@ The project currently requires Python `>=3.14,<3.15`. Ubuntu 22.04/24.04 default
 
 ```bash
 ssh root@<VPS-IP>
-
-# If apt update fails with "File has unexpected size. Mirror sync in progress?",
-# see the note in A1 above — disable the Hetzner mirror temporarily.
 
 # Runtime deps + Caddy. uv manages Python 3.14.
 apt update && apt install -y curl git caddy
@@ -252,17 +187,27 @@ cd /opt/notif/backend
 sudo -u notif -H uv python install 3.14
 sudo -u notif -H uv sync --frozen --no-dev --python 3.14
 
-# Write production .env (generates secrets, sets domain-derived values)
-cd /opt/notif
-NOTIF_DOMAIN=notif.yourdomain.com bash deploy/write-prod-env.sh
-chown notif:notif backend/.env
+# .env
+sudo -u notif cp .env.example .env
+# ── REQUIRED: edit .env (use /var/lib/notif for data paths) ──
+# DEBUG=false
+# NOTIF_ENV=production
+# DJANGO_SECRET_KEY=<generate fresh>
+# ALLOWED_HOSTS=notif.lcenzo.com
+# CORS_ALLOWED_ORIGINS=https://notif.lcenzo.com
+# CSRF_TRUSTED_ORIGINS=https://notif.lcenzo.com
+# DJANGO_ADMIN_URL=ops-<random-suffix>/   # don't leave the default "admin/" in prod
+# SQLITE_PATH=/var/lib/notif/db.sqlite3
+# STATIC_ROOT=staticfiles
 
-# Override SQLITE_PATH for bare-metal (the script writes /app/data/ by default)
-# Edit backend/.env and change:
-#   SQLITE_PATH=/var/lib/notif/db.sqlite3
+vim .env
+chown notif:notif .env
+chmod 600 .env
+
+# Generate real secret key
+sudo -u notif -H .venv/bin/python manage.py regenerate_secret_key --update-env
 
 # Migrate + collect static
-cd backend
 sudo -u notif -H .venv/bin/python manage.py migrate --noinput
 sudo -u notif -H .venv/bin/python manage.py collectstatic --noinput
 ```
@@ -309,7 +254,7 @@ systemctl enable --now notif
 ```bash
 # Configure Caddy env for this deployment.
 cat > /etc/caddy/notif.env << 'ENV'
-NOTIF_DOMAIN=notif.yourdomain.com
+NOTIF_DOMAIN=notif.lcenzo.com
 STATIC_ROOT=/opt/notif/backend/staticfiles
 BACKEND_UPSTREAM=localhost
 BACKEND_PORT=8000
@@ -346,7 +291,7 @@ curl -H 'X-Forwarded-Proto: https' http://localhost:8000/api/v1/monitoring/statu
 # → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
 # Status check (public, through Caddy)
-curl https://notif.yourdomain.com/api/v1/monitoring/status/
+curl https://notif.lcenzo.com/api/v1/monitoring/status/
 # → {"status":"ok","db":"ok","version":"0.2.0","commit":"abc1234","environment":"production"}
 
 # Check Caddy got a certificate
@@ -362,23 +307,7 @@ cat > /etc/cron.d/notif-scrape << 'CRON'
 CRON
 ```
 
-### B7. Database backups
-
-The backup script at `backend/scripts/backup-db.sh` works outside Docker too. It
-respects `SQLITE_PATH` and `BACKUP_DIR` from the environment.
-
-```bash
-# Run a backup
-sudo -u notif -H SQLITE_PATH=/var/lib/notif/db.sqlite3 \
-    BACKUP_DIR=/var/backups/notif \
-    bash /opt/notif/backend/scripts/backup-db.sh
-
-# ── Daily cron backup ──
-# Add to /etc/cron.d/notif-backup:
-# 0 3 * * * notif SQLITE_PATH=/var/lib/notif/db.sqlite3 BACKUP_DIR=/var/backups/notif bash /opt/notif/backend/scripts/backup-db.sh
-```
-
-### B8. Maintenance
+### B7. Maintenance
 
 ```bash
 # View service logs
@@ -398,6 +327,9 @@ sudo -u notif -H .venv/bin/python manage.py migrate --noinput
 sudo -u notif -H .venv/bin/python manage.py collectstatic --noinput
 systemctl restart notif
 systemctl reload caddy
+
+# Backup the database (sqlite3 .backup for consistent snapshot)
+SQLITE_PATH=/var/lib/notif/db.sqlite3 BACKUP_DIR=/var/backups/notif /opt/notif/backend/scripts/backup-db.sh
 ```
 
 ---
@@ -407,24 +339,27 @@ systemctl reload caddy
 ```bash
 # ── These should all work from any machine ──
 
+# Frontend (Flutter web app)
+open https://notif.lcenzo.com/
+
 # Liveness (process alive?)
-curl https://notif.yourdomain.com/api/v1/monitoring/health/
+curl https://notif.lcenzo.com/api/v1/monitoring/health/
 
 # Status (DB connectivity + version info)
-curl https://notif.yourdomain.com/api/v1/monitoring/status/
+curl https://notif.lcenzo.com/api/v1/monitoring/status/
 
 # API docs (public)
-open https://notif.yourdomain.com/api/v1/docs/
+open https://notif.lcenzo.com/api/v1/docs/
 
 # Register a user
-curl -X POST https://notif.yourdomain.com/api/v1/accounts/ \
+curl -X POST https://notif.lcenzo.com/api/v1/accounts/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"test","email":"test@example.com","password":"correcthorsebatterystaple"}'
+  -d '{"username":"test","email":"test@example.com","password": "correct horse battery staple"}'
 
 # Get a token
-curl -X POST https://notif.yourdomain.com/api/v1/token/ \
+curl -X POST https://notif.lcenzo.com/api/v1/token/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"test","password":"correcthorsebatterystaple"}'
+  -d '{"username":"test","password": "correct horse battery staple"}'
 ```
 
 ---
@@ -432,18 +367,30 @@ curl -X POST https://notif.yourdomain.com/api/v1/token/ \
 ## Architecture (how the pieces connect)
 
 ```
-Browser ──HTTPS──▶ Cloudflare ──HTTPS──▶ Caddy:443 ──HTTP──▶ gunicorn:8000 ── Django
+Browser ──HTTPS──▶ Cloudflare ──HTTPS──▶ Caddy:443
                                             │
-                                            └── /static/* from disk (zero Python)
+                         /api/* ──HTTP──▶ gunicorn:8000 ── Django
+                         /static/* ── disk (zero Python overhead)
+                         /* ── Flutter web app (SPA, from disk)
 ```
 
 | Layer | What it does | Config |
 |-------|-------------|--------|
 | Cloudflare | DNS, DDoS protection, global CDN | A-record + orange cloud |
-| Caddy | TLS termination, static files, reverse proxy | `Caddyfile` + deployment env |
+| Caddy | TLS termination, routing, static files | `Caddyfile` + deployment env |
+| Flutter web | Frontend SPA at `/` | Built into `frontend_dist` volume |
 | gunicorn | WSGI server, runs Django | systemd unit or Docker |
 | Django | Application — API, auth, scraping | `settings.py` + `backend/.env` |
 | SQLite | Database | Single file in a persistent volume/directory |
+
+### Routing
+
+| Path | Served by | Notes |
+|------|-----------|-------|
+| `/` | Caddy → frontend_dist | Flutter web app with SPA fallback |
+| `/api/*` | Caddy → gunicorn → Django | REST API |
+| `/static/*` | Caddy → staticfiles volume | Django admin static assets |
+| `/DJANGO_ADMIN_URL` | Caddy → gunicorn → Django | Admin panel (configure in Caddyfile if not under `/api/`) |
 
 ---
 
