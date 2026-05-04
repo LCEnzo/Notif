@@ -392,9 +392,7 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 	def test_list_response_is_paginated(self):
 		response = self.api_client.get(reverse("notifications-list"))
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(
-			set(response.data.keys()), {"count", "next", "previous", "unread_count", "results"}
-		)
+		self.assertEqual(set(response.data.keys()), {"count", "next", "previous", "unread_count", "results"})
 
 	def test_envelope_unread_count_is_global_not_filtered(self):
 		# Add a read notification so the user has 1 unread + 1 read total.
