@@ -63,14 +63,11 @@ su - deploy
 git clone https://github.com/LCEnzo/Notif /home/deploy/notif
 cd /home/deploy/notif
 
-# Project-level env used by Docker Compose/Caddy interpolation.
-# backend/.env is still used for Django settings and secrets.
-cat > .env << 'ENV'
-NOTIF_DOMAIN=notif.lcenzo.com
-ENV
-
-# Create production Django env from the example.
-cp backend/.env.example backend/.env
+# Generate both .env files with matching secrets, domain, and admin route.
+# This creates:
+#   .env        → NOTIF_DOMAIN + DJANGO_ADMIN_ROUTE (Compose/Caddy interpolation)
+#   backend/.env → Django settings + secrets (DJANGO_ADMIN_URL matches the route)
+bash deploy/write-prod-env.sh
 
 # ── REQUIRED: edit backend/.env ──
 # DEBUG=false
@@ -96,7 +93,9 @@ vim backend/.env
 docker compose -f compose.yaml build
 
 # Start backend + frontend build + Caddy. The prod profile enables Caddy.
-# The frontend service runs once to populate the frontend_dist volume, then exits.
+# The frontend service runs once to copy built assets from the image's
+# /image-dist into the frontend_dist volume at /web-dist (via entrypoint.sh),
+# then exits. Caddy mounts the same volume and serves from /web-dist.
 docker compose -f compose.yaml --profile prod up -d
 
 # Check all services are healthy.
@@ -378,7 +377,7 @@ Browser ──HTTPS──▶ Cloudflare ──HTTPS──▶ Caddy:443
 |-------|-------------|--------|
 | Cloudflare | DNS, DDoS protection, global CDN | A-record + orange cloud |
 | Caddy | TLS termination, routing, static files | `Caddyfile` + deployment env |
-| Flutter web | Frontend SPA at `/` | Built into `frontend_dist` volume |
+| Flutter web | Frontend SPA at `/` | Built and copied into `frontend_dist` volume at `/web-dist` via entrypoint |
 | gunicorn | WSGI server, runs Django | systemd unit or Docker |
 | Django | Application — API, auth, scraping | `settings.py` + `backend/.env` |
 | SQLite | Database | Single file in a persistent volume/directory |
@@ -390,7 +389,7 @@ Browser ──HTTPS──▶ Cloudflare ──HTTPS──▶ Caddy:443
 | `/` | Caddy → frontend_dist | Flutter web app with SPA fallback |
 | `/api/*` | Caddy → gunicorn → Django | REST API |
 | `/static/*` | Caddy → staticfiles volume | Django admin static assets |
-| `/DJANGO_ADMIN_URL` | Caddy → gunicorn → Django | Admin panel (configure in Caddyfile if not under `/api/`) |
+| `/{$DJANGO_ADMIN_ROUTE}` | Caddy → gunicorn → Django | Admin panel (path set by DJANGO_ADMIN_ROUTE in root .env, matches DJANGO_ADMIN_URL in backend/.env) |
 
 ---
 

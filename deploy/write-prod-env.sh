@@ -48,6 +48,7 @@ GIT_HASH=$(git rev-parse --short HEAD)
 # Admin URL: non-guessable suffix so bots can't find /admin/
 ADMIN_SUFFIX=$(openssl rand -hex 16)
 ADMIN_URL="${ADMIN_SUFFIX}/"
+ADMIN_ROUTE="/${ADMIN_SUFFIX}/*"
 
 # ── Write root .env (Compose interpolation — no secrets) ──────────
 cat > ".env" << EOF
@@ -55,10 +56,12 @@ cat > ".env" << EOF
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 # No secrets here — secrets live in backend/.env
 NOTIF_DOMAIN=$DOMAIN
+DJANGO_ADMIN_ROUTE=$ADMIN_ROUTE
 EOF
 
 echo "✅  Wrote .env (root, Compose interpolation)"
 echo "    NOTIF_DOMAIN=$DOMAIN"
+echo "    DJANGO_ADMIN_ROUTE=$ADMIN_ROUTE"
 
 # ── Write backend/.env (Django settings + secrets) ────────────────
 cat > "backend/.env" << EOF
