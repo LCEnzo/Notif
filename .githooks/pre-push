@@ -49,30 +49,30 @@ if $check_backend; then
 	cd backend
 
 	echo -n "  ruff format --check … "
-	if uv run ruff format --check . &>/dev/null; then
+	if OUTPUT=$(uv run ruff format --check . 2>&1); then
 		echo -e "${GREEN}OK${NC}"
 	else
 		echo -e "${RED}FAIL${NC}"
-		uv run ruff format --check .
+		echo "$OUTPUT"
 		exit_code=1
 	fi
 
 	echo -n "  ruff check … "
-	if uv run ruff check . &>/dev/null; then
+	if OUTPUT=$(uv run ruff check . 2>&1); then
 		echo -e "${GREEN}OK${NC}"
 	else
 		echo -e "${RED}FAIL${NC}"
-		uv run ruff check .
+		echo "$OUTPUT"
 		exit_code=1
 	fi
 
 	echo -n "  mypy … "
 	SECRET="${DJANGO_SECRET_KEY:-test-key-for-pre-push-hook}"
-	if DJANGO_SECRET_KEY="$SECRET" uv run mypy . &>/dev/null; then
+	if OUTPUT=$(DJANGO_SECRET_KEY="$SECRET" uv run mypy . 2>&1); then
 		echo -e "${GREEN}OK${NC}"
 	else
 		echo -e "${RED}FAIL${NC}"
-		DJANGO_SECRET_KEY="$SECRET" uv run mypy .
+		echo "$OUTPUT"
 		exit_code=1
 	fi
 
@@ -95,20 +95,20 @@ if $check_frontend; then
 	cd frontend
 
 	echo -n "  dart format --set-exit-if-changed … "
-	if $DART format --set-exit-if-changed . &>/dev/null; then
+	if OUTPUT=$($DART format --set-exit-if-changed . 2>&1); then
 		echo -e "${GREEN}OK${NC}"
 	else
 		echo -e "${RED}FAIL${NC}"
-		$DART format --set-exit-if-changed .
+		echo "$OUTPUT"
 		exit_code=1
 	fi
 
 	echo -n "  flutter analyze … "
-	if $FLUTTER analyze &>/dev/null; then
+	if OUTPUT=$($FLUTTER analyze 2>&1); then
 		echo -e "${GREEN}OK${NC}"
 	else
 		echo -e "${RED}FAIL${NC}"
-		$FLUTTER analyze
+		echo "$OUTPUT"
 		exit_code=1
 	fi
 
