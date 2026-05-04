@@ -21,11 +21,10 @@ RUN flutter pub get
 
 COPY . .
 
-# Web-specific: canvaskit renderer for consistent text rendering across
-# browsers, --dart-define injects the production API base URL.
+# --dart-define injects the production API base URL.
+# canvaskit is the default web renderer since Flutter 3.22.
 RUN flutter build web --release \
-    --dart-define=API_URL=/api/v1 \
-    --web-renderer canvaskit
+    --dart-define=API_URL=/api/v1
 
 # Export stage — minimal image. Assets stay in /image-dist.
 # The entrypoint copies them into the shared volume at runtime.
