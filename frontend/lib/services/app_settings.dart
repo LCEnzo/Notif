@@ -45,7 +45,7 @@ class AppSettingsController extends ChangeNotifier {
   AuthCardStyle _authCardStyle = AuthCardStyle.framed;
   BackendUrlMode _backendUrlMode = BackendUrlMode.builtin;
   String _customBackendUrl = '';
-  NotifColorway _colorway = NotifColorway.dusk1;
+  NotifColorway _colorway = NotifColorway.midnight;
   NotifFontSet _fontSet = NotifFontSet.current;
   HomeDensity _homeDensity = HomeDensity.compact;
 
@@ -108,7 +108,7 @@ class AppSettingsController extends ChangeNotifier {
       final colorway = _parseEnum(
         readPref<String>(prefs, _colorwayKey, prefs.getString),
         NotifColorway.values,
-        NotifColorway.dusk1,
+        NotifColorway.midnight,
       );
       final fontSet = _parseEnum(
         readPref<String>(prefs, _fontSetKey, prefs.getString),
