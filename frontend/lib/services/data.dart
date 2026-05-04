@@ -144,7 +144,11 @@ class NotificationItem {
 
   bool get isUnread => status == NotificationStatus.unread;
 
-  NotificationItem copyWith({NotificationStatus? status, DateTime? readAt}) {
+  NotificationItem copyWith({
+    NotificationStatus? status,
+    DateTime? readAt,
+    bool clearReadAt = false,
+  }) {
     return NotificationItem(
       id: id,
       title: title,
@@ -152,7 +156,7 @@ class NotificationItem {
       itemUrl: itemUrl,
       status: status ?? this.status,
       createdAt: createdAt,
-      readAt: readAt ?? this.readAt,
+      readAt: clearReadAt ? null : (readAt ?? this.readAt),
     );
   }
 }
@@ -163,6 +167,17 @@ class _StrategyResolution {
 
   final int id;
   final bool created;
+}
+
+enum LinkSort {
+  newest('-pk', 'Newest'),
+  oldest('pk', 'Oldest'),
+  recentlyScraped('-last_scraped,-pk', 'Recently scraped'),
+  leastRecentlyScraped('last_scraped,pk', 'Least recently scraped');
+
+  const LinkSort(this.apiValue, this.label);
+  final String apiValue;
+  final String label;
 }
 
 class LinkService extends ChangeNotifier {
@@ -185,6 +200,13 @@ class LinkService extends ChangeNotifier {
   bool _scrapingAll = false;
   String? _error;
 
+  // Pagination & ordering — plumbing only, no UI exposed yet.
+  int _currentPage = 0;
+  bool _hasMore = false;
+  bool _loadingMore = false;
+  LinkSort _ordering = LinkSort.newest;
+  int _totalCount = 0;
+
   final Set<int> _scrapingIds = <int>{};
   final Set<int> _updatingIds = <int>{};
   final Set<int> _deletingIds = <int>{};
@@ -205,6 +227,13 @@ class LinkService extends ChangeNotifier {
   bool get loading => _loading;
   bool get creating => _creating;
   bool get scrapingAll => _scrapingAll;
+  bool get loadingMore => _loadingMore;
+  bool get hasMore => _hasMore;
+  LinkSort get ordering => _ordering;
+  int get currentPage => _currentPage;
+  int get totalCount => _totalCount;
+  int get totalPages =>
+      _totalCount == 0 ? 1 : (_totalCount / 100).ceil();
   String? get error => _error;
 
   bool isScrapingLink(int id) => _scrapingIds.contains(id);
@@ -230,6 +259,7 @@ class LinkService extends ChangeNotifier {
     final stateEpoch = _stateEpoch;
     final fetchEpoch = ++_linksFetchEpoch;
     _loading = true;
+    _loadingMore = false;
     _error = null;
     notifyListeners();
 
@@ -241,12 +271,14 @@ class LinkService extends ChangeNotifier {
       await _ensureStrategyChoicesLoaded(jwt, stateEpoch: stateEpoch);
 
       final response = await apiGet(
-        '/monitoring/links/',
+        '/monitoring/links/?page=1&page_size=100&ordering=${_ordering.apiValue}',
         settings: _settings,
         headers: _authHeaders(jwt),
       );
 
-      final links = expectSuccessList(response, 'Fetch links')
+      final body = expectSuccessJson(response, 'Fetch links');
+      final results = (body['results'] as List?) ?? const [];
+      final links = results
           .map(
             (item) => Link.fromJson(
               Map<String, dynamic>.from(item as Map),
@@ -259,6 +291,70 @@ class LinkService extends ChangeNotifier {
         return;
       }
       _links = links;
+      _currentPage = 1;
+      _hasMore = body['next'] != null;
+      _totalCount = (body['count'] as int?) ?? links.length;
+    } catch (error) {
+      if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
+        return;
+      }
+      _error = describeDataError(error);
+    } finally {
+      if (_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
+        _loading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  /// Change sort order and re-fetch from page 1.
+  Future<void> setOrdering(LinkSort value) async {
+    if (_ordering == value) return;
+    _ordering = value;
+    await fetchLinks();
+  }
+
+  /// Fetch a specific page and replace the current list entirely.
+  Future<void> goToPage(int page) async {
+    final jwt = _authService.jwt;
+    if (jwt == null || page < 1) return;
+
+    final stateEpoch = _stateEpoch;
+    final fetchEpoch = ++_linksFetchEpoch;
+    _loading = true;
+    _loadingMore = false;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final strategies = await _ensureStrategiesLoaded(
+        jwt,
+        stateEpoch: stateEpoch,
+      );
+      final response = await apiGet(
+        '/monitoring/links/?page=$page&page_size=100&ordering=${_ordering.apiValue}',
+        settings: _settings,
+        headers: _authHeaders(jwt),
+      );
+
+      final body = expectSuccessJson(response, 'Fetch links page $page');
+      final results = (body['results'] as List?) ?? const [];
+      final links = results
+          .map(
+            (item) => Link.fromJson(
+              Map<String, dynamic>.from(item as Map),
+              strategies,
+            ),
+          )
+          .toList(growable: false);
+
+      if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
+        return;
+      }
+      _links = links;
+      _currentPage = page;
+      _hasMore = body['next'] != null;
+      _totalCount = (body['count'] as int?) ?? links.length;
     } catch (error) {
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
         return;
@@ -382,11 +478,7 @@ class LinkService extends ChangeNotifier {
       linkUpdated = true;
 
       if (link.strategyId != null && link.strategyId != strategyId) {
-        await _deleteStrategyIfUnused(
-          jwt,
-          link.strategyId!,
-          excludingLinkId: link.id,
-        );
+        await _deleteStrategyIfUnused(jwt, link.strategyId!);
       }
 
       await fetchLinks();
@@ -394,11 +486,7 @@ class LinkService extends ChangeNotifier {
     } catch (error) {
       _error = describeDataError(error);
       if (!linkUpdated && strategyResolution?.created == true) {
-        await _deleteStrategyIfUnused(
-          jwt,
-          strategyResolution!.id,
-          excludingLinkId: link.id,
-        );
+        await _deleteStrategyIfUnused(jwt, strategyResolution!.id);
       }
       return false;
     } finally {
@@ -427,16 +515,15 @@ class LinkService extends ChangeNotifier {
       );
 
       expectSuccessStatus(response, 'Delete link');
-      _links = _links
-          .where((item) => item.id != link.id)
-          .toList(growable: false);
       if (link.strategyId != null) {
-        await _deleteStrategyIfUnused(
-          jwt,
-          link.strategyId!,
-          excludingLinkId: link.id,
-        );
+        await _deleteStrategyIfUnused(jwt, link.strategyId!);
       }
+      // If we deleted the last item on this page and it's not page 1,
+      // fall back to the previous page — the current page is now empty.
+      final targetPage = _links.length == 1 && _currentPage > 1
+          ? _currentPage - 1
+          : _currentPage;
+      await goToPage(targetPage);
       return true;
     } catch (error) {
       _error = describeDataError(error);
@@ -575,33 +662,10 @@ class LinkService extends ChangeNotifier {
     return null;
   }
 
-  bool _hasOtherCurrentUserLinkWithStrategy(
-    int strategyId, {
-    required int? excludingLinkId,
-  }) {
-    for (final link in _links) {
-      if (link.id == excludingLinkId) {
-        continue;
-      }
-      if (link.strategyId == strategyId) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   Future<void> _deleteStrategyIfUnused(
     JWT jwt,
-    int strategyId, {
-    int? excludingLinkId,
-  }) async {
-    if (_hasOtherCurrentUserLinkWithStrategy(
-      strategyId,
-      excludingLinkId: excludingLinkId,
-    )) {
-      return;
-    }
-
+    int strategyId,
+  ) async {
     try {
       final response = await apiDelete(
         '/monitoring/strategies/$strategyId/',
@@ -759,6 +823,11 @@ class LinkService extends ChangeNotifier {
         _strategyChoicesLoad == null &&
         _error == null &&
         !_loading &&
+        !_loadingMore &&
+        !_hasMore &&
+        _currentPage == 0 &&
+        _totalCount == 0 &&
+        _ordering == LinkSort.newest &&
         !_creating &&
         !_scrapingAll &&
         _scrapingIds.isEmpty &&
@@ -777,6 +846,11 @@ class LinkService extends ChangeNotifier {
     _strategiesLoad = null;
     _strategyChoicesLoad = null;
     _loading = false;
+    _loadingMore = false;
+    _hasMore = false;
+    _currentPage = 0;
+    _totalCount = 0;
+    _ordering = LinkSort.newest;
     _creating = false;
     _scrapingAll = false;
     _error = null;
@@ -787,16 +861,35 @@ class LinkService extends ChangeNotifier {
   }
 }
 
+enum NotifSort {
+  newest('-update__created_at,-pk', 'Newest'),
+  oldest('update__created_at,pk', 'Oldest');
+
+  const NotifSort(this.apiValue, this.label);
+  final String apiValue;
+  final String label;
+}
+
 class NotificationService extends ChangeNotifier {
   NotificationService(this._authService);
+
+  static const int _pageSize = 50;
 
   final AuthService _authService;
   AppSettingsController? _settings;
 
   List<NotificationItem> _notifications = const [];
   bool _loading = false;
+  bool _loadingMore = false;
   bool _markingAllRead = false;
   int _fetchEpoch = 0;
+  int _currentPage = 0;
+  bool _hasMore = false;
+  // Server-reported global unread count. Local count over `_notifications`
+  // would be wrong under pagination — unread items can sit on later pages.
+  int _totalUnreadCount = 0;
+  NotifSort _ordering = NotifSort.newest;
+  int _totalCount = 0;
   String? _error;
 
   final Set<int> _markingReadIds = <int>{};
@@ -814,9 +907,16 @@ class NotificationService extends ChangeNotifier {
 
   List<NotificationItem> get notifications => _notifications;
   bool get loading => _loading;
+  bool get loadingMore => _loadingMore;
+  bool get hasMore => _hasMore;
   bool get markingAllRead => _markingAllRead;
+  NotifSort get ordering => _ordering;
+  int get currentPage => _currentPage;
+  int get totalCount => _totalCount;
+  int get totalPages =>
+      _totalCount == 0 ? 1 : (_totalCount / _pageSize).ceil();
   String? get error => _error;
-  int get unreadCount => _notifications.where((item) => item.isUnread).length;
+  int get unreadCount => _totalUnreadCount;
 
   bool isMarkingRead(int id) => _markingReadIds.contains(id);
 
@@ -829,30 +929,39 @@ class NotificationService extends ChangeNotifier {
 
     final fetchEpoch = ++_fetchEpoch;
     _loading = true;
+    // A refresh racing with an in-flight loadMore would otherwise leave
+    // _loadingMore = true forever, since the stale loadMore's epoch check
+    // exits without clearing it.
+    _loadingMore = false;
     _error = null;
     notifyListeners();
 
     try {
       final response = await apiGet(
-        '/monitoring/notifications/',
+        '/monitoring/notifications/?page=1&page_size=$_pageSize&ordering=${_ordering.apiValue}',
         settings: _settings,
         headers: _authHeaders(jwt),
       );
 
+      final body = expectSuccessJson(response, 'Fetch notifications');
+      final results = (body['results'] as List?) ?? const [];
       final notifications =
-          expectSuccessList(response, 'Fetch notifications')
+          results
               .map(
                 (item) => NotificationItem.fromJson(
                   Map<String, dynamic>.from(item as Map),
                 ),
               )
-              .toList(growable: false)
-            ..sort(_compareNotifications);
+              .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
         return;
       }
       _notifications = notifications;
+      _currentPage = 1;
+      _hasMore = body['next'] != null;
+      _totalCount = (body['count'] as int?) ?? 0;
+      _totalUnreadCount = (body['unread_count'] as int?) ?? 0;
     } catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
@@ -866,15 +975,84 @@ class NotificationService extends ChangeNotifier {
     }
   }
 
-  Future<void> markRead(int id) async {
+  /// Change sort order and re-fetch from page 1.
+  Future<void> setOrdering(NotifSort value) async {
+    if (_ordering == value) return;
+    _ordering = value;
+    await fetchNotifications();
+  }
+
+  /// Fetch a specific page and replace the current list entirely.
+  Future<void> goToPage(int page) async {
+    final jwt = _authService.jwt;
+    if (jwt == null || page < 1) return;
+
+    final fetchEpoch = ++_fetchEpoch;
+    _loadingMore = false;
+    _loading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await apiGet(
+        '/monitoring/notifications/?page=$page&page_size=$_pageSize&ordering=${_ordering.apiValue}',
+        settings: _settings,
+        headers: _authHeaders(jwt),
+      );
+
+      final body = expectSuccessJson(response, 'Fetch notifications page $page');
+      final results = (body['results'] as List?) ?? const [];
+      final notifications =
+          results
+              .map(
+                (item) => NotificationItem.fromJson(
+                  Map<String, dynamic>.from(item as Map),
+                ),
+              )
+              .toList(growable: false);
+
+      if (_fetchEpoch != fetchEpoch) {
+        return;
+      }
+      _notifications = notifications;
+      _currentPage = page;
+      _hasMore = body['next'] != null;
+      _totalCount = (body['count'] as int?) ?? 0;
+      _totalUnreadCount = (body['unread_count'] as int?) ?? _totalUnreadCount;
+    } catch (error) {
+      if (_fetchEpoch != fetchEpoch) {
+        return;
+      }
+      _error = describeDataError(error);
+    } finally {
+      if (_fetchEpoch == fetchEpoch) {
+        _loading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<bool> toggleRead(int id) async {
     final jwt = _authService.jwt;
     final notification = _notifications.cast<NotificationItem?>().firstWhere(
       (item) => item?.id == id,
       orElse: () => null,
     );
-    if (jwt == null || notification == null || !notification.isUnread) {
-      return;
+    if (jwt == null || notification == null) {
+      return false;
     }
+    // Only read↔unread is a valid flip. Dismissed and unknown states should
+    // not be resurrected to unread by a chip tap.
+    if (notification.status != NotificationStatus.unread &&
+        notification.status != NotificationStatus.read) {
+      return false;
+    }
+
+    final wasUnread = notification.isUnread;
+    final targetStatus = wasUnread
+        ? NotificationStatus.read
+        : NotificationStatus.unread;
+    final wireStatus = wasUnread ? 'read' : 'unread';
 
     _markingReadIds.add(id);
     _error = null;
@@ -885,29 +1063,47 @@ class NotificationService extends ChangeNotifier {
         '/monitoring/notifications/$id/',
         settings: _settings,
         headers: _authHeaders(jwt),
-        body: const {'status': 'read'},
+        body: {'status': wireStatus},
       );
 
-      expectSuccessStatus(response, 'Mark notification as read');
+      expectSuccessStatus(response, 'Toggle notification read state');
 
       _notifications =
           _notifications
               .map(
                 (item) => item.id == id
                     ? item.copyWith(
-                        status: NotificationStatus.read,
-                        readAt: DateTime.now(),
+                        status: targetStatus,
+                        readAt: wasUnread ? DateTime.now() : null,
+                        clearReadAt: !wasUnread,
                       )
                     : item,
               )
               .toList(growable: false)
             ..sort(_compareNotifications);
+      // Mirror the server-side change locally; the count stays accurate
+      // until the next fetch refreshes it from the envelope.
+      _totalUnreadCount = (_totalUnreadCount + (wasUnread ? -1 : 1))
+          .clamp(0, 1 << 30);
+      return true;
     } catch (error) {
       _error = describeDataError(error);
+      return false;
     } finally {
       _markingReadIds.remove(id);
       notifyListeners();
     }
+  }
+
+  Future<bool> markRead(int id) async {
+    final notification = _notifications.cast<NotificationItem?>().firstWhere(
+      (item) => item?.id == id,
+      orElse: () => null,
+    );
+    if (notification == null || !notification.isUnread) {
+      return false;
+    }
+    return toggleRead(id);
   }
 
   Future<void> markAllRead() async {
@@ -940,6 +1136,9 @@ class NotificationService extends ChangeNotifier {
               )
               .toList(growable: false)
             ..sort(_compareNotifications);
+      // Server clears all unread for the user, including pages we haven't
+      // loaded; reflect that locally rather than counting visible items.
+      _totalUnreadCount = 0;
     } catch (error) {
       _error = describeDataError(error);
     } finally {
@@ -952,14 +1151,26 @@ class NotificationService extends ChangeNotifier {
     if (_notifications.isEmpty &&
         _error == null &&
         !_loading &&
-        !_markingAllRead) {
+        !_loadingMore &&
+        !_markingAllRead &&
+        _currentPage == 0 &&
+        !_hasMore &&
+        _totalCount == 0 &&
+        _totalUnreadCount == 0 &&
+        _ordering == NotifSort.newest) {
       return;
     }
 
     _fetchEpoch += 1;
     _notifications = const [];
     _loading = false;
+    _loadingMore = false;
     _markingAllRead = false;
+    _currentPage = 0;
+    _hasMore = false;
+    _totalCount = 0;
+    _totalUnreadCount = 0;
+    _ordering = NotifSort.newest;
     _error = null;
     _markingReadIds.clear();
     notifyListeners();

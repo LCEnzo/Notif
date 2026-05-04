@@ -83,15 +83,23 @@ class _HomePageState extends State<HomePage> {
     await _openExternalUrl(notification.itemUrl);
   }
 
-  Future<void> _handleNotificationMarkRead(int id) async {
+  Future<void> _handleNotificationToggleRead(int id) async {
     final notificationService = context.read<NotificationService>();
-    await notificationService.markRead(id);
+    final notification = notificationService.notifications
+        .cast<NotificationItem?>()
+        .firstWhere((item) => item?.id == id, orElse: () => null);
+    final wasUnread = notification?.isUnread ?? false;
+    final success = await notificationService.toggleRead(id);
     if (!mounted) return;
-    _showMessage('Marked as read.');
+    if (success) {
+      _showMessage(wasUnread ? 'Marked as read.' : 'Marked as unread.');
+    } else if (notificationService.error != null) {
+      _showMessage(notificationService.error);
+    }
   }
 
-  Future<void> _handleNotificationOpenUrl(String url) async {
-    await _openExternalUrl(url);
+  Future<void> _handleGoToPageNotif(int page) async {
+    await context.read<NotificationService>().goToPage(page);
   }
 
   void _logout() {
@@ -131,8 +139,8 @@ class _HomePageState extends State<HomePage> {
               onScrapeAll: linkService.scrapingAll ? null : _handleScrapeAll,
               onScrapeLink: _handleScrapeLink,
               onNotificationTap: _handleNotificationTap,
-              onNotificationMarkRead: _handleNotificationMarkRead,
-              onNotificationOpenUrl: _handleNotificationOpenUrl,
+              onNotificationToggleRead: _handleNotificationToggleRead,
+              onGoToPage: _handleGoToPageNotif,
               onMarkAllRead: notificationService.unreadCount == 0 ||
                       notificationService.markingAllRead
                   ? null
@@ -257,6 +265,10 @@ class _SourcesPageState extends State<SourcesPage> {
     if (!mounted) return;
 
     _showMessage(success ? 'Source removed.' : linkService.error);
+  }
+
+  Future<void> _handleGoToPage(int page) async {
+    await context.read<LinkService>().goToPage(page);
   }
 
   Future<void> _handleScrapeLink(Link link) async {
@@ -416,6 +428,12 @@ class _SourcesPageState extends State<SourcesPage> {
                       if (link != linkService.links.last)
                         const SizedBox(height: 12),
                     ],
+                    if (linkService.totalPages > 1)
+                      _PageNumbers(
+                        currentPage: linkService.currentPage,
+                        totalPages: linkService.totalPages,
+                        onPageSelected: _handleGoToPage,
+                      ),
                 ],
               ),
             ),
@@ -424,6 +442,142 @@ class _SourcesPageState extends State<SourcesPage> {
       ),
     );
   }
+}
+
+class _PageNumbers extends StatelessWidget {
+  const _PageNumbers({
+    required this.currentPage,
+    required this.totalPages,
+    required this.onPageSelected,
+  });
+
+  final int currentPage;
+  final int totalPages;
+  final Future<void> Function(int) onPageSelected;
+
+  static const _buttonSize = 32.0;
+
+  List<_PageItem> _buildPageList() {
+    if (totalPages <= 7) {
+      return [
+        for (var p = 1; p <= totalPages; p++)
+          _PageItem(label: '$p', page: p, isActive: p == currentPage),
+      ];
+    }
+
+    final items = <_PageItem>[];
+    items.add(_PageItem(label: '1', page: 1, isActive: currentPage == 1));
+
+    if (currentPage > 1) {
+      items.add(_PageItem(label: '\u27e8', page: currentPage - 1));
+    }
+
+    final start = (currentPage - 2).clamp(2, totalPages - 4);
+    final end = (currentPage + 2).clamp(5, totalPages - 1);
+
+    if (start > 2) items.add(const _PageItem(label: '\u2026'));
+
+    for (var p = start; p <= end; p++) {
+      items.add(_PageItem(
+        label: '$p',
+        page: p,
+        isActive: p == currentPage,
+      ));
+    }
+
+    if (end < totalPages - 1) items.add(const _PageItem(label: '\u2026'));
+
+    if (currentPage < totalPages - 1) {
+      items.add(_PageItem(label: '\u27e9', page: currentPage + 1));
+    }
+
+    items.add(_PageItem(
+      label: '$totalPages',
+      page: totalPages,
+      isActive: currentPage == totalPages,
+    ));
+
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (totalPages <= 1) return const SizedBox.shrink();
+
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final pages = _buildPageList();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        spacing: 2,
+        runSpacing: 4,
+        children: pages.map((item) {
+          if (!item.isActive && item.page != null) {
+            return SizedBox(
+              width: _buttonSize,
+              height: _buttonSize,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: tokens.bg2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed: () async => await onPageSelected(item.page!),
+                child: Text(
+                  item.label,
+                  style: text$.body.copyWith(color: tokens.inkMute),
+                ),
+              ),
+            );
+          }
+          if (item.isActive) {
+            return SizedBox(
+              width: _buttonSize,
+              height: _buttonSize,
+              child: TextButton(
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  backgroundColor: tokens.accent,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                ),
+                onPressed: null,
+                child: Text(
+                  item.label,
+                  style: text$.body
+                      .copyWith(fontWeight: FontWeight.w600)
+                      .copyWith(color: tokens.ink),
+                ),
+              ),
+            );
+          }
+          return SizedBox(
+            width: _buttonSize,
+            height: _buttonSize,
+            child: Center(
+              child: Text(
+                item.label,
+                style: text$.body.copyWith(color: tokens.inkMute),
+              ),
+            ),
+          );
+        }).toList(growable: false),
+      ),
+    );
+  }
+}
+
+class _PageItem {
+  const _PageItem({required this.label, this.page, this.isActive = false});
+  final String label;
+  final int? page;
+  final bool isActive;
 }
 
 class _HomeConsole extends StatelessWidget {
@@ -436,8 +590,8 @@ class _HomeConsole extends StatelessWidget {
     required this.onScrapeAll,
     required this.onScrapeLink,
     required this.onNotificationTap,
-    required this.onNotificationMarkRead,
-    required this.onNotificationOpenUrl,
+    required this.onNotificationToggleRead,
+    required this.onGoToPage,
     required this.onMarkAllRead,
     required this.onSources,
     required this.onSettings,
@@ -453,8 +607,8 @@ class _HomeConsole extends StatelessWidget {
   final VoidCallback? onScrapeAll;
   final Future<void> Function(Link link) onScrapeLink;
   final Future<void> Function(NotificationItem notification) onNotificationTap;
-  final Future<void> Function(int id) onNotificationMarkRead;
-  final Future<void> Function(String url) onNotificationOpenUrl;
+  final Future<void> Function(int id) onNotificationToggleRead;
+  final Future<void> Function(int page) onGoToPage;
   final VoidCallback? onMarkAllRead;
   final VoidCallback onSources;
   final VoidCallback onSettings;
@@ -523,13 +677,15 @@ class _HomeConsole extends StatelessWidget {
                             metrics: metrics,
                             notifications: notificationService.notifications,
                             loading: notificationService.loading,
+                            currentPage: notificationService.currentPage,
+                            totalPages: notificationService.totalPages,
                             unreadCount: notificationService.unreadCount,
                             markingAllRead: notificationService.markingAllRead,
                             isMarkingRead: notificationService.isMarkingRead,
                             onRefresh: onRefresh,
+                            onGoToPage: onGoToPage,
                             onNotificationTap: onNotificationTap,
-                            onNotificationMarkRead: onNotificationMarkRead,
-                            onNotificationOpenUrl: onNotificationOpenUrl,
+                            onNotificationToggleRead: onNotificationToggleRead,
                             onMarkAllRead: onMarkAllRead,
                             onSources: onSources,
                           ),
@@ -549,14 +705,16 @@ class _HomeConsole extends StatelessWidget {
                             metrics: metrics,
                             notifications: notificationService.notifications,
                             loading: notificationService.loading,
+                            currentPage: notificationService.currentPage,
+                            totalPages: notificationService.totalPages,
                             unreadCount: notificationService.unreadCount,
                             markingAllRead:
                                 notificationService.markingAllRead,
                             isMarkingRead: notificationService.isMarkingRead,
                             onRefresh: onRefresh,
+                            onGoToPage: onGoToPage,
                             onNotificationTap: onNotificationTap,
-                            onNotificationMarkRead: onNotificationMarkRead,
-                            onNotificationOpenUrl: onNotificationOpenUrl,
+                            onNotificationToggleRead: onNotificationToggleRead,
                             onMarkAllRead: onMarkAllRead,
                             onSources: onSources,
                             mobileTui: true,
@@ -824,7 +982,7 @@ class _HomeConsoleMetrics {
           actionVPad: 9,
           railRowVPad: 14,
           updateRowVPad: 14,
-          headerHeight: 52,
+          headerHeight: 58,
         );
       case HomeDensity.compact:
         return const _HomeConsoleMetrics(
@@ -838,7 +996,7 @@ class _HomeConsoleMetrics {
           actionVPad: 6,
           railRowVPad: 7,
           updateRowVPad: 7,
-          headerHeight: 37,
+          headerHeight: 42,
         );
       case HomeDensity.dense:
         return const _HomeConsoleMetrics(
@@ -852,7 +1010,7 @@ class _HomeConsoleMetrics {
           actionVPad: 4,
           railRowVPad: 5,
           updateRowVPad: 5,
-          headerHeight: 32,
+          headerHeight: 36,
         );
     }
   }
@@ -1375,13 +1533,15 @@ class _UpdateConsole extends StatelessWidget {
     required this.metrics,
     required this.notifications,
     required this.loading,
+    required this.currentPage,
+    required this.totalPages,
     required this.unreadCount,
     required this.markingAllRead,
     required this.isMarkingRead,
     required this.onRefresh,
+    required this.onGoToPage,
     required this.onNotificationTap,
-    required this.onNotificationMarkRead,
-    required this.onNotificationOpenUrl,
+    required this.onNotificationToggleRead,
     required this.onMarkAllRead,
     required this.onSources,
     this.mobileTui = false,
@@ -1390,13 +1550,15 @@ class _UpdateConsole extends StatelessWidget {
   final _HomeConsoleMetrics metrics;
   final List<NotificationItem> notifications;
   final bool loading;
+  final int currentPage;
+  final int totalPages;
   final int unreadCount;
   final bool markingAllRead;
   final bool Function(int id) isMarkingRead;
   final Future<void> Function() onRefresh;
+  final Future<void> Function(int page) onGoToPage;
   final Future<void> Function(NotificationItem notification) onNotificationTap;
-  final Future<void> Function(int id) onNotificationMarkRead;
-  final Future<void> Function(String url) onNotificationOpenUrl;
+  final Future<void> Function(int id) onNotificationToggleRead;
   final VoidCallback? onMarkAllRead;
   final VoidCallback onSources;
   final bool mobileTui;
@@ -1404,7 +1566,6 @@ class _UpdateConsole extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
     final items = notifications;
 
     return RefreshIndicator(
@@ -1464,38 +1625,19 @@ class _UpdateConsole extends StatelessWidget {
               itemCount: items.length + 1,
               itemBuilder: (context, index) {
                 if (index == items.length) {
-                  return Container(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: mobileTui ? 10 : 14,
-                      vertical: mobileTui ? 6 : metrics.updateRowVPad,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border(top: BorderSide(color: tokens.rule)),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          'EOF - ${items.length} entries',
-                          style: text$.micro.copyWith(
-                            color: tokens.inkMute,
-                            fontSize: metrics.microSize,
-                          ),
-                        ),
-                        const Spacer(),
-                        if (!mobileTui)
-                          Text(
-                            'pull to refresh - enter opens browser',
-                            style: text$.micro.copyWith(
-                              color: tokens.inkMute,
-                              fontSize: metrics.microSize,
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
+                  if (totalPages > 1) {
+                    return _PageNumbers(
+                      currentPage: currentPage,
+                      totalPages: totalPages,
+                      onPageSelected: (page) => onGoToPage(page),
+                    );
+                  }
+                  return const SizedBox.shrink();
                 }
 
                 final item = items[index];
+                final canToggle = item.status == NotificationStatus.unread ||
+                    item.status == NotificationStatus.read;
                 return _ConsoleNotificationRow(
                   notification: item,
                   metrics: metrics,
@@ -1503,11 +1645,9 @@ class _UpdateConsole extends StatelessWidget {
                   mobileTui: mobileTui,
                   busy: isMarkingRead(item.id),
                   onTap: () => onNotificationTap(item),
-                  onChipTap: item.isUnread
-                      ? () => onNotificationMarkRead(item.id)
-                      : item.itemUrl.isNotEmpty
-                          ? () => onNotificationOpenUrl(item.itemUrl)
-                          : null,
+                  onChipTap: canToggle
+                      ? () => onNotificationToggleRead(item.id)
+                      : null,
                 );
               },
             ),
@@ -1654,7 +1794,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
           SizedBox(
             width: mobileTui ? 60 : 82,
             child: Text(
-              't',
+              '[t]',
               style: text$.micro.copyWith(
                 color: tokens.inkMute,
                 fontSize: metrics.microSize,
@@ -1665,7 +1805,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
             SizedBox(
               width: 168,
               child: Text(
-                'source',
+                '[source]',
                 style: text$.micro.copyWith(
                   color: tokens.inkMute,
                   fontSize: metrics.microSize,
@@ -1674,7 +1814,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
             ),
           Expanded(
             child: Text(
-              mobileTui ? 'signal - source' : 'signal',
+              mobileTui ? '[signal - source]' : '[signal]',
               style: text$.micro.copyWith(
                 color: tokens.inkMute,
                 fontSize: metrics.microSize,
@@ -1755,7 +1895,7 @@ class _ConsoleNotificationRow extends StatelessWidget {
       onTap: busy ? null : onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: index.isOdd ? tokens.bg1.withValues(alpha: 0.42) : null,
+          color: index.isEven ? tokens.bg1.withValues(alpha: 0.42) : null,
           border: Border(bottom: BorderSide(color: tokens.rule)),
         ),
         padding: EdgeInsets.symmetric(
@@ -1897,6 +2037,8 @@ class _ConsoleNotificationRow extends StatelessWidget {
                               ),
                             ),
                           )
+                        : onChipTap == null
+                        ? const SizedBox.shrink()
                         : Align(
                             alignment: Alignment.centerRight,
                             child: InkWell(
@@ -1917,7 +2059,7 @@ class _ConsoleNotificationRow extends StatelessWidget {
                                   ),
                                 ),
                                 child: Text(
-                                  notification.isUnread ? 'READ' : 'OPEN',
+                                  notification.isUnread ? 'READ' : 'UNREAD',
                                   textAlign: TextAlign.right,
                                   style: text$.micro.copyWith(
                                     color: notification.isUnread

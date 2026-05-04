@@ -12,6 +12,7 @@ from django.core.management import call_command
 from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
@@ -255,6 +256,19 @@ class LinkViewSetTestCase(ViewSetMixin):
 		self.assertTrue(isinstance(response.data, list))
 		self.assertGreater(len(response.data), 0)
 
+	def test_links_list_is_paginated(self):
+		response = self.api_client.get(reverse("links-list"))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(set(response.data.keys()), {"count", "next", "previous", "results"})
+		self.assertIsNone(response.data["next"])  # fixture has < 100 links
+
+	def test_links_list_respects_page_size(self):
+		response = self.api_client.get(reverse("links-list"), {"page_size": 1})
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertGreater(response.data["count"], 1)
+		self.assertIsNotNone(response.data["next"])
+
 	def test_update_link(self):
 		self._test_update_object()
 
@@ -345,6 +359,12 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 204)
 		self.assertFalse(Strategy.objects.filter(pk=orphan.pk).exists())
 
+	def test_delete_strategy_still_in_use(self):
+		"""Deleting a strategy with active links returns 400."""
+		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": self.strat.pk}))
+		self.assertEqual(response.status_code, 400)
+		self.assertTrue(Strategy.objects.filter(pk=self.strat.pk).exists())
+
 
 class NotificationViewSetTestCase(SetupMixin, TestCase):
 	def setUp(self):
@@ -370,14 +390,47 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 	def test_list_returns_only_own_notifications(self):
 		response = self.api_client.get(reverse("notifications-list"))
 		self.assertEqual(response.status_code, 200)
-		ids = [n["id"] for n in response.data]
+		self.assertIn("results", response.data)
+		ids = [n["id"] for n in response.data["results"]]
 		self.assertIn(self.notification.pk, ids)
 		self.assertNotIn(self.other_notification.pk, ids)
+
+	def test_list_response_is_paginated(self):
+		response = self.api_client.get(reverse("notifications-list"))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(set(response.data.keys()), {"count", "next", "previous", "unread_count", "results"})
+
+	def test_envelope_unread_count_is_global_not_filtered(self):
+		# Add a read notification so the user has 1 unread + 1 read total.
+		create_notification(
+			link=self.links[0],
+			title="Read one",
+			item_url="https://example.com/read-one",
+			status=Notification.Status.READ,
+			read_at=timezone.now(),
+		)
+		# Filter the listing to status=read; the envelope's unread_count should
+		# still report the user's actual unread total (1), not 0.
+		response = self.api_client.get(reverse("notifications-list"), {"status": "read"})
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["unread_count"], 1)
+
+	def test_pagination_respects_page_size(self):
+		# Existing setUp creates one regular_user notification; add 2 more so we
+		# have 3 total, then request page_size=2 to force a second page.
+		for i in range(2):
+			create_notification(link=self.links[0], title=f"Extra {i}", item_url=f"https://example.com/extra/{i}")
+		response = self.api_client.get(reverse("notifications-list"), {"page_size": 2})
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["count"], 3)
+		self.assertEqual(len(response.data["results"]), 2)
+		self.assertIsNotNone(response.data["next"])
 
 	def test_filter_by_status(self):
 		response = self.api_client.get(reverse("notifications-list"), {"status": "unread"})
 		self.assertEqual(response.status_code, 200)
-		self.assertEqual(len(response.data), 1)
+		self.assertEqual(len(response.data["results"]), 1)
 
 		# Mark it read, then filter again
 		self.api_client.patch(
@@ -386,7 +439,7 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 			format="json",
 		)
 		response = self.api_client.get(reverse("notifications-list"), {"status": "unread"})
-		self.assertEqual(len(response.data), 0)
+		self.assertEqual(len(response.data["results"]), 0)
 
 	def test_patch_mark_as_read_sets_read_at(self):
 		response = self.api_client.patch(
@@ -398,6 +451,21 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 		self.notification.refresh_from_db()
 		self.assertEqual(self.notification.status, Notification.Status.READ)
 		self.assertIsNotNone(self.notification.read_at)
+
+	def test_patch_mark_as_unread_clears_read_at(self):
+		self.notification.status = Notification.Status.READ
+		self.notification.read_at = timezone.now()
+		self.notification.save()
+
+		response = self.api_client.patch(
+			reverse("notifications-detail", kwargs={"pk": self.notification.pk}),
+			{"status": "unread"},
+			format="json",
+		)
+		self.assertEqual(response.status_code, 200)
+		self.notification.refresh_from_db()
+		self.assertEqual(self.notification.status, Notification.Status.UNREAD)
+		self.assertIsNone(self.notification.read_at)
 
 	def test_other_user_cannot_access(self):
 		other_client = login_client(APIClient(), self.secondary_user.get_username())
@@ -442,6 +510,41 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 		assert result.value > 0
 		assert Update.objects.filter(link=link).exists()
 		assert Notification.objects.filter(update__link=link).exists()
+
+	def test_first_scrape_marks_notifications_read(self):
+		# Fresh link: last_scraped is None until the first scrape completes,
+		# so any items found are treated as backlog and stored as already-read.
+		link = self.links[0]
+		assert link.last_scraped is None
+		html = '<html><body><article class="post-card">Backlog item</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			scrape_link(link)
+
+		notifications = Notification.objects.filter(update__link=link)
+		assert notifications.exists()
+		for notification in notifications:
+			assert notification.status == Notification.Status.READ
+			assert notification.read_at is not None
+
+	def test_subsequent_scrape_marks_notifications_unread(self):
+		# Simulate a link that's been scraped before by pre-setting last_scraped.
+		# Items found on this scrape should arrive as UNREAD, not READ.
+		link = self.links[0]
+		link.last_scraped = timezone.now()
+		link.save()
+		html = '<html><body><article class="post-card">Item</article></body></html>'
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			scrape_link(link)
+
+		notifications = Notification.objects.filter(update__link=link)
+		assert notifications.exists()
+		for notification in notifications:
+			assert notification.status == Notification.Status.UNREAD
+			assert notification.read_at is None
 
 	def test_scrape_link_no_strategy_returns_err(self):
 		link = self.links[0]

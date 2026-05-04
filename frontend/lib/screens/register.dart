@@ -8,6 +8,7 @@ import 'package:notif/commons/auth_validators.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/data.dart';
 import 'package:provider/provider.dart';
 
 class RegisterPage extends StatelessWidget {
@@ -31,6 +32,7 @@ class _FormContentState extends State<_FormContent> {
   final TextEditingController emailController = TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  bool _isSubmitting = false;
 
   @override
   void dispose() {
@@ -79,6 +81,7 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.newUsername],
           textInputAction: TextInputAction.next,
           autocorrect: false,
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 16),
         AppTextField(
@@ -91,6 +94,7 @@ class _FormContentState extends State<_FormContent> {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autocorrect: false,
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 16),
         PasswordTextField(
@@ -100,12 +104,14 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.newPassword],
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => _submitRegister(authService),
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 18),
         CustomButton(
           buttonText: 'Create account',
           trailingIcon: const Icon(Icons.arrow_forward_rounded, size: 16),
           onPressed: () => _submitRegister(authService),
+          isLoading: _isSubmitting,
         ),
         const SizedBox(height: 12),
         const AuthRuleDivider(),
@@ -113,13 +119,15 @@ class _FormContentState extends State<_FormContent> {
         CustomButton(
           buttonText: 'Back to log in',
           buttonColor: AuthPalette.secondaryButtonBase,
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/login');
-            }
-          },
+          onPressed: _isSubmitting
+              ? () {}
+              : () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/login');
+                  }
+                },
         ),
       ],
     );
@@ -138,6 +146,7 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.newUsername],
           textInputAction: TextInputAction.next,
           autocorrect: false,
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 16),
         AppTextField(
@@ -150,6 +159,7 @@ class _FormContentState extends State<_FormContent> {
           keyboardType: TextInputType.emailAddress,
           textInputAction: TextInputAction.next,
           autocorrect: false,
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 16),
         PasswordTextField(
@@ -159,29 +169,34 @@ class _FormContentState extends State<_FormContent> {
           autofillHints: const [AutofillHints.newPassword],
           textInputAction: TextInputAction.done,
           onFieldSubmitted: (_) => _submitRegister(authService),
+          enabled: !_isSubmitting,
         ),
         const SizedBox(height: 16),
         CustomButton(
           buttonText: 'Register',
           onPressed: () => _submitRegister(authService),
+          isLoading: _isSubmitting,
         ),
         const SizedBox(height: 16),
         CustomButton(
           buttonText: 'Back',
           buttonColor: AuthPalette.secondaryButtonBase,
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/login');
-            }
-          },
+          onPressed: _isSubmitting
+              ? () {}
+              : () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/login');
+                  }
+                },
         ),
       ],
     );
   }
 
   Future<void> _submitRegister(AuthService authService) async {
+    if (_isSubmitting) return;
     if (!(formKey.currentState?.validate() ?? false)) {
       return;
     }
@@ -199,6 +214,7 @@ class _FormContentState extends State<_FormContent> {
       debugPrint('\t- password: $masked');
     }
 
+    setState(() => _isSubmitting = true);
     try {
       await authService.register(
         usernameController.text.trim(),
@@ -215,10 +231,12 @@ class _FormContentState extends State<_FormContent> {
           showAuthFailureDialog(
             context,
             title: 'Register failed',
-            message: '$e',
+            message: describeDataError(e),
           );
         });
       }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 }
