@@ -53,7 +53,7 @@ class Settings(BaseSettings):
 	RUNSERVER_HOST: str = Field(default="127.0.0.1", min_length=1)
 
 	# ── resend ────────────────────────────────────────────
-	RESEND_API_KEY: str | None = Field(default=None, min_length=1)
+	RESEND_API_KEY: str | None = Field(default=None)
 	EMAIL_FROM: str = Field(default="Notif <notif@notif.lcenzo.com>", min_length=1)
 	RESEND_WEBHOOK_SECRET: str | None = Field(default=None)
 	RESEND_AUDIENCE_ID: str | None = Field(default=None)
@@ -80,11 +80,16 @@ class Settings(BaseSettings):
 
 		* DEV_BOOTSTRAP_LOGIN_ENABLED defaults to ``DEBUG`` when not set.
 		* DEV_BOOTSTRAP_NAME defaults to DEV_BOOTSTRAP_USERNAME when empty.
+		* RESEND_API_KEY coerces empty string to None (pydantic-settings
+			reads ``RESEND_API_KEY=`` as ``""``, which would fail validation
+			if the field had ``min_length=1``).
 		"""
 		if self.DEV_BOOTSTRAP_LOGIN_ENABLED is None:
 			self.DEV_BOOTSTRAP_LOGIN_ENABLED = self.DEBUG
 		if not self.DEV_BOOTSTRAP_NAME:
 			self.DEV_BOOTSTRAP_NAME = self.DEV_BOOTSTRAP_USERNAME
+		if self.RESEND_API_KEY == "":
+			self.RESEND_API_KEY = None
 		return self
 
 	@property

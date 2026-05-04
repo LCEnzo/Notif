@@ -25,7 +25,10 @@ class PasswordResetCode(models.Model):
 		]
 
 	def __str__(self) -> str:
-		return f"ResetCode(user={self.user_id}, code={self.code})"
+		import hashlib
+
+		code_hash = hashlib.sha256(self.code.encode()).hexdigest()[:8]
+		return f"ResetCode(user={self.user_id}, created_at={self.created_at}, code_hash={code_hash})"
 
 	@property
 	def is_expired(self) -> bool:
