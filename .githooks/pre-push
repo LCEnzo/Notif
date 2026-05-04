@@ -104,11 +104,14 @@ if $check_frontend; then
 	fi
 
 	echo -n "  flutter analyze … "
-	if $FLUTTER analyze &>/dev/null; then
+	# --no-pub avoids triggering pub get, which can fail in minimal
+	# git-hook environments when the Snap Flutter version file is
+	# unreachable.  Run `flutter pub get` manually before pushing.
+	if $FLUTTER analyze --no-pub &>/dev/null; then
 		echo -e "${GREEN}OK${NC}"
 	else
 		echo -e "${RED}FAIL${NC}"
-		$FLUTTER analyze
+		$FLUTTER analyze --no-pub
 		exit_code=1
 	fi
 
