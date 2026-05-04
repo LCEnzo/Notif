@@ -8,6 +8,7 @@ import 'package:notif/commons/auth_validators.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/data.dart';
 import 'package:provider/provider.dart';
 
 class RegisterPage extends StatelessWidget {
@@ -215,7 +216,7 @@ class _FormContentState extends State<_FormContent> {
           showAuthFailureDialog(
             context,
             title: 'Register failed',
-            message: '$e',
+            message: describeDataError(e),
           );
         });
       }
