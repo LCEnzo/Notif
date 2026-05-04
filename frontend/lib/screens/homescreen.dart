@@ -1794,7 +1794,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
           SizedBox(
             width: mobileTui ? 60 : 82,
             child: Text(
-              't',
+              '[t]',
               style: text$.micro.copyWith(
                 color: tokens.inkMute,
                 fontSize: metrics.microSize,
@@ -1805,7 +1805,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
             SizedBox(
               width: 168,
               child: Text(
-                'source',
+                '[source]',
                 style: text$.micro.copyWith(
                   color: tokens.inkMute,
                   fontSize: metrics.microSize,
@@ -1814,7 +1814,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
             ),
           Expanded(
             child: Text(
-              mobileTui ? 'signal - source' : 'signal',
+              mobileTui ? '[signal - source]' : '[signal]',
               style: text$.micro.copyWith(
                 color: tokens.inkMute,
                 fontSize: metrics.microSize,
@@ -1895,7 +1895,7 @@ class _ConsoleNotificationRow extends StatelessWidget {
       onTap: busy ? null : onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: index.isOdd ? tokens.bg1.withValues(alpha: 0.42) : null,
+          color: index.isEven ? tokens.bg1.withValues(alpha: 0.42) : null,
           border: Border(bottom: BorderSide(color: tokens.rule)),
         ),
         padding: EdgeInsets.symmetric(
