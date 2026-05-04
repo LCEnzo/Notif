@@ -26,10 +26,10 @@ def _get_resend():
 def send_password_reset_email(to_email: str, code: str) -> None:
 	"""Send a 6-digit password reset code.
 
-	If RESEND_API_KEY is empty, the code is logged at WARNING level
-	instead (dev fallback).
+	If RESEND_API_KEY is None (unset or explicitly empty in .env),
+	the code is logged at WARNING level instead (dev fallback).
 	"""
-	if not settings.RESEND_API_KEY:
+	if settings.RESEND_API_KEY is None:
 		logger.warning(
 			"RESEND_API_KEY not set — password reset code for %s: %s",
 			to_email,

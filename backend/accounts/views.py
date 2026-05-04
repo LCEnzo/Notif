@@ -208,10 +208,8 @@ class PasswordResetRequestView(APIView):
 				send_password_reset_email(email, code)
 			except Exception:
 				logger.exception("Failed to send reset email to %s", email)
-				return Response(
-					{"error": "Failed to send reset email. Please try again later."},
-					status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-				)
+				# Always return 200 — even a send failure during a Resend
+				# outage must not become an email-enumeration oracle.
 
 		return Response({"status": "ok"})
 
