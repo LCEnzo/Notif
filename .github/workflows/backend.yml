@@ -29,6 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set build info
+        run: echo "GIT_HASH=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
