@@ -196,6 +196,7 @@ class _FormContentState extends State<_FormContent> {
   }
 
   Future<void> _submitRegister(AuthService authService) async {
+    if (_isSubmitting) return;
     if (!(formKey.currentState?.validate() ?? false)) {
       return;
     }
