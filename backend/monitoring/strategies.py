@@ -107,6 +107,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 	"""
 	Uses a CSS selector to check just   some element on a page, instead of the whole thing.
 	"""
+	display_name = "General Selector"
 
 	def can_scrape_url(self, url: URL) -> bool:
 		return True
@@ -187,6 +188,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 	Check SpaceBattles and SufficientVelocity threadmarks.
 	TODO: Specify in configuration which threadmark tabs should be checked.
 	"""
+	display_name = "SB/SV Threadmarks"
 
 	# format used by strptime strftime
 	# found as a attr on an time element
@@ -377,6 +379,7 @@ class QQAlertsStrategy(BaseStrategy):
 	Config data should include username, password, and optionally
 	whether to include notifications other than likely story updates.
 	"""
+	display_name = "QQ Alerts"
 
 	login_url = "https://forum.questionablequesting.com/login/login"
 	alerts_url = "https://forum.questionablequesting.com/account/alerts"
@@ -627,6 +630,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 	Config data should include username, password.
 	"""
+	display_name = "Kemono Favourites"
 
 	login_url = "https://kemono.party/account/login"
 	fav_url = "https://kemono.party/favorites"
@@ -740,6 +744,8 @@ class KemonoFavouritesStrategy(BaseStrategy):
 class FeedStrategy(BaseStrategy):
 	"""
 	Parse RSS and Atom feeds using feedparser.
+	"""
+	display_name = "RSS"
 
 	Works with:
 	- Substack (e.g. https://example.substack.com/feed)
