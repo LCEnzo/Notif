@@ -14,6 +14,9 @@ from accounts.models.password_reset import PasswordResetCode
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
 
+_VALID_TEST_PASSWORD = "N0tif-Test-Credential-2026!"
+_ALTERNATE_VALID_TEST_PASSWORD = "N0tif-Alternate-Credential-2026!"
+
 
 class UserViewSetTestCase(ViewSetMixin):
 	def setUp(
@@ -41,14 +44,14 @@ class UserViewSetTestCase(ViewSetMixin):
 			"username": "test_username01",
 			"email": "fake@example.com",
 			"name": "Ichi Nii",
-			"password": "secure...d123",
+			"password": _VALID_TEST_PASSWORD,
 		}
 		_ = self._test_create_object(fields=fields)
 
 		fields = {
 			"username": "newuser",
 			"email": "newuser@example.com",
-			"password": "secure...d123",
+			"password": _ALTERNATE_VALID_TEST_PASSWORD,
 		}
 		self._test_create_object(fields=fields)
 
@@ -64,7 +67,7 @@ class UserViewSetTestCase(ViewSetMixin):
 			"username": "disposable_delete_me",
 			"email": "del@example.com",
 			"name": "Delete Me",
-			"password": "***",
+			"password": _VALID_TEST_PASSWORD,
 		}
 		create_resp = self.api_client.post(reverse(self.list_view_name), create_fields)
 		self.assertEqual(create_resp.status_code, status.HTTP_201_CREATED)
@@ -82,7 +85,7 @@ class UserViewSetTestCase(ViewSetMixin):
 			"username": "test_username01",
 			"email": "fake@example.com",
 			"name": "Ichi Nii",
-			"password": "***",
+			"password": _VALID_TEST_PASSWORD,
 		}
 		update_fields = {"name": "Maria"}
 		permissions = {"list": True, "retrieve": True, "create": True}
@@ -122,7 +125,7 @@ class DevBootstrapTokenViewTestCase(TestCase):
 			reverse("token_obtain_pair"),
 			{
 				"username": settings.DEV_BOOTSTRAP_USERNAME,
-				"password": "defini...word",
+				"password": "definitely-not-the-dev-password",
 			},
 			format="json",
 		)
