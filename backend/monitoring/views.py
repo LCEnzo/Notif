@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
 from rest_framework.pagination import PageNumberPagination
@@ -53,6 +54,14 @@ class StrategyViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
 			Strategy.objects.all(),
 			user_filter=lambda qs, u: qs.filter(Q(link_set__user=u) | Q(link_set__isnull=True)).distinct(),
 		)
+
+	def perform_destroy(self, instance: Strategy) -> None:
+		if instance.link_set.exists():
+			raise ValidationError(
+				{"detail": "Strategy is still in use by one or more links."},
+				code="strategy_in_use",
+			)
+		instance.delete()
 
 
 class NotificationPagination(PageNumberPagination):
