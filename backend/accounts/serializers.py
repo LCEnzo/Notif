@@ -85,4 +85,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 		return value.strip().lower()
 
 	def validate_code(self, value: str) -> str:
-		return value.strip()
+		code = value.strip()
+		if not code.isdigit():
+			raise serializers.ValidationError("Code must contain 6 digits.")
+		return code

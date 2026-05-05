@@ -166,7 +166,24 @@ class PasswordResetTestCase(TestCase):
 		code = PasswordResetCode.objects.first()
 		assert code is not None
 		self.assertEqual(code.user, self.user)
-		self.assertEqual(len(code.code), 6)
+		self.assertEqual(len(code.code_hash), 64)
+		self.assertNotEqual(code.code_hash, "reset@example.com")
+
+	def test_request_matches_email_case_insensitively(self):
+		User.objects.create_user(
+			username="mixedcase",
+			email="MixedCase@example.com",
+			password="oldpassword123!",
+		)
+
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			response = self.client.post(self.reset_url, {"email": "mixedcase@example.com"})
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		code = PasswordResetCode.objects.get(user__username="mixedcase")
+		self.assertEqual(len(code.code_hash), 64)
+		mock_send.assert_called_once()
+		self.assertEqual(mock_send.call_args.args[0], "MixedCase@example.com")
 
 	def test_request_returns_200_for_nonexistent_user(self):
 		"""Reset request returns 200 even for unknown emails."""
@@ -175,8 +192,8 @@ class PasswordResetTestCase(TestCase):
 		self.assertEqual(PasswordResetCode.objects.count(), 0)
 
 	def test_request_returns_200_on_send_failure(self):
-		"""Reset request returns 200 even when Resend fails — no enumeration."""
-		with patch("commons.email.send_password_reset_email", side_effect=RuntimeError("Resend down")):
+		"""Reset request returns 200 even when email delivery fails - no enumeration."""
+		with patch("commons.email.send_password_reset_email", side_effect=RuntimeError("SMTP down")):
 			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
 		# Must still be 200 — a 500 would leak that the email exists.
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -184,13 +201,16 @@ class PasswordResetTestCase(TestCase):
 
 	def test_request_replaces_existing_code(self):
 		"""New request invalidates any previous code for the same user."""
-		PasswordResetCode.objects.create(user=self.user, code="111111")
+		PasswordResetCode.create_for_user(user=self.user, code="111111")
 
 		response = self.client.post(self.reset_url, {"email": "reset@example.com"})
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 		self.assertEqual(PasswordResetCode.objects.count(), 1)
-		self.assertNotEqual(PasswordResetCode.objects.first().code, "111111")  # type: ignore[union-attr]
+		self.assertNotEqual(
+			PasswordResetCode.objects.first().code_hash,  # type: ignore[union-attr]
+			PasswordResetCode.hash_code("111111"),
+		)
 
 	def test_request_sends_email_for_known_user(self):
 		"""Reset request triggers email send for existing user."""
@@ -210,7 +230,7 @@ class PasswordResetTestCase(TestCase):
 
 	def test_confirm_with_valid_code_changes_password(self):
 		"""A valid code + new password successfully resets the password."""
-		PasswordResetCode.objects.create(user=self.user, code="654321")
+		PasswordResetCode.create_for_user(user=self.user, code="654321")
 
 		response = self.client.post(
 			self.confirm_url,
@@ -228,7 +248,7 @@ class PasswordResetTestCase(TestCase):
 
 	def test_confirm_with_invalid_code_fails(self):
 		"""Wrong code returns 400."""
-		PasswordResetCode.objects.create(user=self.user, code="654321")
+		PasswordResetCode.create_for_user(user=self.user, code="654321")
 
 		response = self.client.post(
 			self.confirm_url,
@@ -256,7 +276,7 @@ class PasswordResetTestCase(TestCase):
 
 	def test_confirm_with_expired_code_fails(self):
 		"""A code older than 30 minutes is rejected."""
-		code = PasswordResetCode.objects.create(user=self.user, code="654321")
+		code = PasswordResetCode.create_for_user(user=self.user, code="654321")
 		# Backdate created_at past the 30-minute window
 		code.created_at = timezone.now() - timedelta(minutes=31)
 		code.save(update_fields=["created_at"])
@@ -274,7 +294,7 @@ class PasswordResetTestCase(TestCase):
 
 	def test_confirm_deletes_code_after_use(self):
 		"""Successful reset deletes the code — single-use."""
-		PasswordResetCode.objects.create(user=self.user, code="654321")
+		PasswordResetCode.create_for_user(user=self.user, code="654321")
 
 		self.client.post(
 			self.confirm_url,
@@ -288,7 +308,7 @@ class PasswordResetTestCase(TestCase):
 
 	def test_confirm_enforces_password_validation(self):
 		"""Weak passwords are still rejected by Django validators."""
-		PasswordResetCode.objects.create(user=self.user, code="654321")
+		PasswordResetCode.create_for_user(user=self.user, code="654321")
 
 		response = self.client.post(
 			self.confirm_url,
@@ -309,7 +329,14 @@ class PasswordResetTestCase(TestCase):
 
 	def test_code_str_does_not_leak_plaintext(self):
 		"""__str__ shows a hash, never the raw code."""
-		code = PasswordResetCode.objects.create(user=self.user, code="654321")
+		code = PasswordResetCode.create_for_user(user=self.user, code="654321")
 		repr_str = str(code)
 		self.assertNotIn("654321", repr_str)
 		self.assertIn("code_hash=", repr_str)
+
+	def test_code_is_stored_as_keyed_hash(self):
+		code = PasswordResetCode.create_for_user(user=self.user, code="654321")
+
+		self.assertNotEqual(code.code_hash, "654321")
+		self.assertTrue(code.matches_code("654321"))
+		self.assertFalse(code.matches_code("000000"))

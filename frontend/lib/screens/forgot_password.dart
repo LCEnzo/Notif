@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_chrome.dart';
 import 'package:notif/commons/auth_palette.dart';
+import 'package:notif/commons/auth_validators.dart';
 import 'package:notif/commons/login_register_fields.dart';
 import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
@@ -86,6 +87,7 @@ class _ForgotPasswordCardState extends State<_ForgotPasswordCard> {
             autofillHints: const [AutofillHints.email],
             autocorrect: false,
             enabled: !_isSubmitting,
+            validator: validateEmail,
             onFieldSubmitted: (_) => _submit(authService),
           ),
           if (_error != null) ...[
