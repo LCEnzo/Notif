@@ -71,6 +71,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./deploy/fallback:/app/fallback:ro
+      - /etc/caddy/origin-certs:/etc/caddy/origin-certs:ro
       - staticfiles:/app/staticfiles:ro
       - frontend_dist:/web-dist:ro
       - caddy_data:/data

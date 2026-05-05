@@ -66,6 +66,8 @@
 }
 
 lcenzo.com, www.lcenzo.com, *.lcenzo.com {
+	tls /etc/caddy/origin-certs/lcenzo.com.pem /etc/caddy/origin-certs/lcenzo.com.key
+
 	root * {$FALLBACK_ROOT:/opt/notif/deploy/fallback}
 	rewrite * /not-found.html
 	file_server {
