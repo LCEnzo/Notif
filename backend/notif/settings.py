@@ -58,6 +58,7 @@ INSTALLED_APPS = [
 	"rest_framework_simplejwt",
 	"accounts",
 	"monitoring",
+	"ops",
 ]
 
 MIDDLEWARE = [
@@ -215,8 +216,15 @@ _log_handlers: dict[str, Any] = {
 		"class": "logging.StreamHandler",
 		"formatter": "default",
 	},
+	"system_event": {
+		"class": "ops.logging.SystemEventHandler",
+		"formatter": "default",
+		"level": "WARNING",
+	},
 }
 _root_handlers: list[str] = ["console"]
+if not TESTING:
+	_root_handlers.append("system_event")
 
 if DEBUG and not TESTING:
 	_LOG_DIR = BASE_DIR / "logs"

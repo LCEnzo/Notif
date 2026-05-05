@@ -5,6 +5,7 @@ import 'package:notif/commons/dither_overlay.dart';
 import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
+import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -43,6 +44,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return Consumer<AppSettingsController>(
       builder: (context, settings, _) {
+        final userData = context.watch<UserDataService>().userData;
+        final hasOpsAccess =
+            userData?.isStaff == true || userData?.isSuperuser == true;
+
         return Scaffold(
           backgroundColor: tokens.bg1,
           appBar: AppBar(
@@ -116,6 +121,15 @@ class _SettingsPageState extends State<SettingsPage> {
                           icon: Icons.person_outline,
                           onPressed: () => context.push('/account'),
                         ),
+                        if (hasOpsAccess) ...[
+                          const SizedBox(height: 12),
+                          NotifButton(
+                            label: 'Operations',
+                            icon: Icons.admin_panel_settings_outlined,
+                            variant: NotifButtonVariant.ghost,
+                            onPressed: () => context.push('/ops'),
+                          ),
+                        ],
                         const SizedBox(height: 32),
 
                         const IndexRule(index: 1, title: 'Appearance'),

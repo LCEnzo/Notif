@@ -8,6 +8,7 @@ import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/data.dart';
+import 'package:notif/services/ops.dart';
 import 'package:notif/services/router.dart';
 import 'package:provider/provider.dart';
 
@@ -50,6 +51,15 @@ void main() {
           create: (context) => NotificationService(context.read<AuthService>()),
           update: (_, auth, settings, notificationService) =>
               notificationService!..updateDependencies(auth, settings),
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthService,
+          AppSettingsController,
+          OpsService
+        >(
+          create: (context) => OpsService(context.read<AuthService>()),
+          update: (_, auth, settings, opsService) =>
+              opsService!..updateDependencies(auth, settings),
         ),
       ],
       child: const App(),
