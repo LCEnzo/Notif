@@ -1,19 +1,26 @@
-// ignore_for_file: avoid_web_libraries_in_flutter, deprecated_member_use
+import 'dart:js_interop';
+import 'dart:typed_data';
 
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
 
 void saveBytesAsFileImpl({
   required List<int> bytes,
   required String filename,
   required String mimeType,
 }) {
-  final blob = html.Blob([bytes], mimeType);
-  final url = html.Url.createObjectUrlFromBlob(blob);
+  final data = bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+  final blob = web.Blob(
+    <JSAny>[data.toJS].toJS,
+    web.BlobPropertyBag(type: mimeType),
+  );
+  final url = web.URL.createObjectURL(blob);
   try {
-    html.AnchorElement(href: url)
+    final anchor = web.HTMLAnchorElement()
+      ..href = url
       ..download = filename
-      ..click();
+      ..rel = 'noopener';
+    anchor.click();
   } finally {
-    html.Url.revokeObjectUrl(url);
+    web.URL.revokeObjectURL(url);
   }
 }

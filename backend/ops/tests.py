@@ -3,6 +3,7 @@ from datetime import timedelta
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+import pytest
 from django.core.management import call_command
 from django.test import TestCase
 from django.test.utils import override_settings
@@ -18,6 +19,8 @@ from commons.result import Err, Ok
 from commons.test_utils import SetupMixin, login_client
 from monitoring.models import Link
 from ops.models import MaintenanceLock, SystemEvent
+
+pytestmark = pytest.mark.timeout(30)
 
 
 class OpsApiTestCase(SetupMixin, TestCase):
@@ -101,8 +104,21 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response["Content-Type"], "application/vnd.sqlite3")
 		self.assertIn("attachment;", response["Content-Disposition"])
+		self.assertEqual(response["Cache-Control"], "no-store")
+		self.assertTrue(response.streaming)
 
-		self.assertTrue(response.content.startswith(b"SQLite format 3"))
+		body = b"".join(response.streaming_content)
+		self.assertTrue(body.startswith(b"SQLite format 3"))
+		self.assertEqual(int(response["Content-Length"]), len(body))
+
+		audit_events = SystemEvent.objects.filter(source="ops.download_sqlite_backup").order_by("id")
+		kinds = list(audit_events.values_list("kind", flat=True))
+		self.assertEqual(kinds, ["audit-prepared", "audit-completed"])
+		prepared, completed = list(audit_events)
+		self.assertEqual(prepared.details["username"], self.superuser.get_username())
+		self.assertEqual(prepared.details["size_bytes"], len(body))
+		self.assertEqual(completed.details["bytes_streamed"], len(body))
+		self.assertEqual(completed.details["size_bytes"], len(body))
 
 
 class RunDueTasksCommandTestCase(SetupMixin, TestCase):

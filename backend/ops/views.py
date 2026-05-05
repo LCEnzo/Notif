@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import sqlite3
+import tempfile
 from collections import deque
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 from django.conf import settings
 from django.db import connection
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.filters import OrderingFilter
@@ -23,7 +27,11 @@ from ops.serializers import SystemEventSerializer
 
 _CADDY_LOG_MAX_LINES = 200
 _CADDY_LOG_DEFAULT_LINES = 50
-_CADDY_LOG_MAX_BYTES = 2_000_000
+# Caddy rolls the active access log at 10 MiB and keeps 5 generations. 32 MiB
+# of tail scan covers the entire active file plus headroom under heavy traffic;
+# memory stays bounded by the deque(maxlen=limit), not by this window.
+_CADDY_LOG_MAX_BYTES = 32 * 1024 * 1024
+_BACKUP_STREAM_CHUNK = 64 * 1024
 
 
 class IsSuperUser(IsAdminUser):
@@ -85,7 +93,7 @@ def caddy_access_logs(request: Request) -> Response:
 
 @api_view(["GET"])
 @permission_classes([IsSuperUser])
-def download_sqlite_backup(request: Request) -> HttpResponse | Response:
+def download_sqlite_backup(request: Request) -> HttpResponse | Response | StreamingHttpResponse:
 	db_config = settings.DATABASES["default"]
 	if db_config["ENGINE"] != "django.db.backends.sqlite3":
 		return Response({"detail": "SQLite backup is only available for sqlite3 databases."}, status=400)
@@ -94,13 +102,113 @@ def download_sqlite_backup(request: Request) -> HttpResponse | Response:
 	source = connection.connection
 	if not isinstance(source, sqlite3.Connection):
 		return Response({"detail": "Active database connection is not sqlite3."}, status=400)
-	data = source.serialize()
+
+	fd, tmp_path = tempfile.mkstemp(suffix=".sqlite3", prefix="notif-backup-")
+	os.close(fd)
+	try:
+		_write_sqlite_backup(source, str(db_config["NAME"]), tmp_path)
+		size_bytes = os.path.getsize(tmp_path)
+	except Exception:
+		_unlink_quiet(tmp_path)
+		raise
+
+	user = request.user
+	audit_context: dict[str, Any] = {
+		"user_id": user.pk,
+		"username": user.get_username(),
+		"size_bytes": size_bytes,
+		"remote_ip": _client_ip(request),
+	}
+	SystemEvent.objects.create(
+		level=SystemEvent.Level.INFO,
+		source="ops.download_sqlite_backup",
+		kind="audit-prepared",
+		message=f"SQLite backup prepared for {user.get_username()} ({size_bytes} bytes).",
+		details=audit_context,
+	)
 
 	timestamp = timezone.now().strftime("%Y%m%d-%H%M%S")
-	response = HttpResponse(data, content_type="application/vnd.sqlite3")
+	response = StreamingHttpResponse(
+		_stream_and_unlink(tmp_path, audit_context),
+		content_type="application/vnd.sqlite3",
+	)
 	response["Content-Disposition"] = f'attachment; filename="notif-db-{timestamp}.sqlite3"'
+	response["Content-Length"] = str(size_bytes)
 	response["Cache-Control"] = "no-store"
 	return response
+
+
+def _write_sqlite_backup(source: sqlite3.Connection, db_name: str, tmp_path: str) -> None:
+	"""Copy the active sqlite3 database into ``tmp_path`` without blowing memory.
+
+	A fresh connection to the on-disk file is used so we don't deadlock against
+	Django's open transaction (notably under ``TestCase``). For in-memory
+	databases (tests with ``:memory:`` or ``file::memory:?…``) we fall back to
+	``serialize()`` because there is no file to reopen.
+	"""
+	if db_name == ":memory:" or db_name.startswith("file::memory:") or db_name.startswith("file:memdb"):
+		data = source.serialize()
+		with open(tmp_path, "wb") as fh:
+			fh.write(data)
+		return
+
+	src_conn = sqlite3.connect(db_name)
+	try:
+		with sqlite3.connect(tmp_path) as dest:
+			src_conn.backup(dest, pages=256, sleep=0.05)
+	finally:
+		src_conn.close()
+
+
+def _stream_and_unlink(path: str, audit_context: dict[str, Any]) -> Iterator[bytes]:
+	bytes_sent = 0
+	completed = False
+	try:
+		with open(path, "rb") as fh:
+			while True:
+				chunk = fh.read(_BACKUP_STREAM_CHUNK)
+				if not chunk:
+					completed = True
+					break
+				bytes_sent += len(chunk)
+				yield chunk
+	finally:
+		_unlink_quiet(path)
+		_record_stream_outcome(audit_context, bytes_sent, completed)
+
+
+def _record_stream_outcome(audit_context: dict[str, Any], bytes_sent: int, completed: bool) -> None:
+	username = audit_context.get("username", "?")
+	size_bytes = audit_context.get("size_bytes", 0)
+	details = {**audit_context, "bytes_streamed": bytes_sent}
+	if completed:
+		SystemEvent.objects.create(
+			level=SystemEvent.Level.INFO,
+			source="ops.download_sqlite_backup",
+			kind="audit-completed",
+			message=f"SQLite backup delivered to {username} ({bytes_sent}/{size_bytes} bytes).",
+			details=details,
+		)
+	else:
+		SystemEvent.objects.create(
+			level=SystemEvent.Level.WARNING,
+			source="ops.download_sqlite_backup",
+			kind="audit-aborted",
+			message=f"SQLite backup transfer aborted for {username} ({bytes_sent}/{size_bytes} bytes).",
+			details=details,
+		)
+
+
+def _unlink_quiet(path: str) -> None:
+	with contextlib.suppress(OSError):
+		os.unlink(path)
+
+
+def _client_ip(request: Request) -> str:
+	forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+	if forwarded:
+		return forwarded.split(",")[0].strip()
+	return request.META.get("REMOTE_ADDR", "")
 
 
 def _read_caddy_log_tail(log_path: Path, limit: int) -> list[dict[str, Any]]:
