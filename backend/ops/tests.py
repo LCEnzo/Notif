@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from django.core.management import call_command
+from django.http import StreamingHttpResponse
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
@@ -106,6 +107,7 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertIn("attachment;", response["Content-Disposition"])
 		self.assertEqual(response["Cache-Control"], "no-store")
 		self.assertTrue(response.streaming)
+		assert isinstance(response, StreamingHttpResponse)
 
 		body = b"".join(response.streaming_content)
 		self.assertTrue(body.startswith(b"SQLite format 3"))
