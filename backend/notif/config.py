@@ -52,9 +52,16 @@ class Settings(BaseSettings):
 	BACKEND_PORT: int | None = Field(default=None, ge=1, le=65_535)
 	RUNSERVER_HOST: str = Field(default="127.0.0.1", min_length=1)
 
-	# ── resend ────────────────────────────────────────────
-	RESEND_API_KEY: str | None = Field(default=None)
+	# ── email ─────────────────────────────────────────────
+	EMAIL_BACKEND: str | None = Field(default=None)
 	EMAIL_FROM: str = Field(default="Notif <notif@notif.lcenzo.com>", min_length=1)
+	EMAIL_HOST: str = Field(default="smtp.resend.com", min_length=1)
+	EMAIL_PORT: int = Field(default=587, ge=1, le=65_535)
+	EMAIL_HOST_USER: str = Field(default="resend", min_length=1)
+	EMAIL_HOST_PASSWORD: str | None = Field(default=None)
+	EMAIL_USE_TLS: bool = True
+	EMAIL_TIMEOUT: int = Field(default=10, ge=1, le=60)
+	RESEND_API_KEY: str | None = Field(default=None)
 	RESEND_WEBHOOK_SECRET: str | None = Field(default=None)
 	RESEND_AUDIENCE_ID: str | None = Field(default=None)
 	CONFIRM_REDIRECT_URL: str = Field(default="https://notif.lcenzo.com")
@@ -80,16 +87,23 @@ class Settings(BaseSettings):
 
 		* DEV_BOOTSTRAP_LOGIN_ENABLED defaults to ``DEBUG`` when not set.
 		* DEV_BOOTSTRAP_NAME defaults to DEV_BOOTSTRAP_USERNAME when empty.
-		* RESEND_API_KEY coerces empty string to None (pydantic-settings
-			reads ``RESEND_API_KEY=`` as ``""``, which would fail validation
-			if the field had ``min_length=1``).
+		* Empty email secrets are coerced to None.
+		* RESEND_API_KEY is accepted as a backward-compatible alias for
+			EMAIL_HOST_PASSWORD because Resend SMTP uses the API key as the
+			SMTP password.
 		"""
 		if self.DEV_BOOTSTRAP_LOGIN_ENABLED is None:
 			self.DEV_BOOTSTRAP_LOGIN_ENABLED = self.DEBUG
 		if not self.DEV_BOOTSTRAP_NAME:
 			self.DEV_BOOTSTRAP_NAME = self.DEV_BOOTSTRAP_USERNAME
+		if self.EMAIL_HOST_PASSWORD == "":
+			self.EMAIL_HOST_PASSWORD = None
+		if self.EMAIL_BACKEND == "":
+			self.EMAIL_BACKEND = None
 		if self.RESEND_API_KEY == "":
 			self.RESEND_API_KEY = None
+		if self.EMAIL_HOST_PASSWORD is None:
+			self.EMAIL_HOST_PASSWORD = self.RESEND_API_KEY
 		return self
 
 	@property

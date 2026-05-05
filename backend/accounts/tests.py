@@ -184,6 +184,22 @@ class PasswordResetTestCase(TestCase):
 		self.assertNotEqual(code.code_hash, sent_code)
 		self.assertEqual(len(code.code_hash), 64)
 
+	def test_request_matches_email_case_insensitively(self):
+		User.objects.create_user(
+			username="mixedcase",
+			email="MixedCase@example.com",
+			password="oldpassword123!",
+		)
+
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			response = self.client.post(self.reset_url, {"email": "mixedcase@example.com"})
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		code = PasswordResetCode.objects.get(user__username="mixedcase")
+		self.assertEqual(len(code.code_hash), 64)
+		mock_send.assert_called_once()
+		self.assertEqual(mock_send.call_args.args[0], "MixedCase@example.com")
+
 	def test_request_returns_200_for_nonexistent_user(self):
 		"""Reset request returns 200 even for unknown emails."""
 		response = self.client.post(self.reset_url, {"email": "nobody@example.com"})
@@ -191,8 +207,8 @@ class PasswordResetTestCase(TestCase):
 		self.assertEqual(PasswordResetCode.objects.count(), 0)
 
 	def test_request_returns_200_on_send_failure(self):
-		"""Reset request returns 200 even when Resend fails — no enumeration."""
-		with patch("commons.email.send_password_reset_email", side_effect=RuntimeError("Resend down")):
+		"""Reset request returns 200 even when email delivery fails - no enumeration."""
+		with patch("commons.email.send_password_reset_email", side_effect=RuntimeError("SMTP down")):
 			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
 		# Must still be 200 — a 500 would leak that the email exists.
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -367,3 +383,10 @@ class PasswordResetTestCase(TestCase):
 		repr_str = str(code)
 		self.assertNotIn("654321", repr_str)
 		self.assertIn("code_hash=", repr_str)
+
+	def test_code_is_stored_as_keyed_hash(self):
+		code = PasswordResetCode.create_for_user(user=self.user, code="654321")
+
+		self.assertNotEqual(code.code_hash, "654321")
+		self.assertTrue(code.check_code("654321"))
+		self.assertFalse(code.check_code("000000"))

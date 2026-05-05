@@ -1,14 +1,18 @@
 """Password reset codes: 6-digit, single-use, short-lived."""
 
+from __future__ import annotations
+
 from datetime import timedelta
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare, salted_hmac
 
 PASSWORD_RESET_CODE_TTL = timedelta(minutes=30)
 PASSWORD_RESET_CODE_MAX_ATTEMPTS = 5
+_RESET_CODE_SALT = "accounts.password_reset_code"
 
 
 class PasswordResetCode(models.Model):
@@ -30,7 +34,7 @@ class PasswordResetCode(models.Model):
 	class Meta:
 		indexes = [
 			models.Index(fields=["user", "created_at"]),
-			models.Index(fields=["code_hash", "created_at"], name="accounts_pa_code_hash_idx"),
+			models.Index(fields=["code_hash", "created_at"]),
 		]
 
 	def __str__(self) -> str:
@@ -38,12 +42,8 @@ class PasswordResetCode(models.Model):
 
 	@classmethod
 	def hash_code(cls, code: str) -> str:
-		return salted_hmac(
-			"accounts.password_reset_code",
-			code,
-			secret=settings.SECRET_KEY,
-			algorithm="sha256",
-		).hexdigest()
+		cls._validate_code(code)
+		return salted_hmac(_RESET_CODE_SALT, code, secret=settings.SECRET_KEY, algorithm="sha256").hexdigest()
 
 	@classmethod
 	def create_for_user(cls, *, user: models.Model, code: str) -> PasswordResetCode:
@@ -65,10 +65,19 @@ class PasswordResetCode(models.Model):
 	def check_code(self, code: str) -> bool:
 		if self.is_expired or self.is_locked:
 			return False
-		return constant_time_compare(self.code_hash, self.hash_code(code))
+		try:
+			candidate_hash = self.hash_code(code)
+		except ValidationError:
+			return False
+		return constant_time_compare(self.code_hash, candidate_hash)
 
 	def record_failure(self) -> None:
 		if self.is_expired or self.is_locked:
 			return
 		self.failed_attempts += 1
 		self.save(update_fields=["failed_attempts"])
+
+	@staticmethod
+	def _validate_code(code: str) -> None:
+		if len(code) != 6 or not code.isascii() or not code.isdigit():
+			raise ValidationError("Password reset code must be exactly 6 ASCII digits.")

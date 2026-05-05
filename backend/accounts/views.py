@@ -193,19 +193,20 @@ class PasswordResetRequestView(APIView):
 			return Response({"status": "ok"})
 
 		email = serializer.validated_data["email"]
-		user = User._base_manager.filter(email=email, is_active=True).first()
+		user = User._base_manager.filter(email__iexact=email, is_active=True).first()
 
 		if user is not None:
 			import secrets
 
 			code = str(secrets.randbelow(1_000_000)).zfill(6)
+
 			PasswordResetCode.issue_for_user(user=user, code=code)
 
 			try:
-				send_password_reset_email(email, code)
+				send_password_reset_email(user.email, code)
 			except Exception:
 				logger.exception("Failed to send reset email to %s", email)
-				# Always return 200 — even a send failure during a Resend
+				# Always return 200 - even a send failure during an email
 				# outage must not become an email-enumeration oracle.
 
 		return Response({"status": "ok"})
@@ -234,7 +235,7 @@ class PasswordResetConfirmView(APIView):
 		code = serializer.validated_data["code"]
 		new_password = serializer.validated_data["new_password"]
 
-		user = User._base_manager.filter(email=email, is_active=True).first()
+		user = User._base_manager.filter(email__iexact=email, is_active=True).first()
 		if user is None:
 			return Response(
 				{"error": "Invalid or expired reset code."},
