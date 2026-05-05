@@ -27,3 +27,11 @@ class SystemEvent(models.Model):
 
 	def __str__(self) -> str:
 		return f"{self.created_at:%Y-%m-%d %H:%M:%S} {self.level} {self.source}: {self.message}"
+
+
+class MaintenanceLock(models.Model):
+	key = models.CharField(max_length=80, primary_key=True)
+	acquired_at = models.DateTimeField()
+
+	def __str__(self) -> str:
+		return f"MaintenanceLock({self.key}, acquired_at={self.acquired_at:%Y-%m-%d %H:%M:%S})"

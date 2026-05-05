@@ -1,13 +1,23 @@
 import json
+from datetime import timedelta
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
+from django.core.management import call_command
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
+from accounts.models.password_reset import (
+	PASSWORD_RESET_CODE_MAX_ATTEMPTS,
+	PasswordResetCode,
+)
+from commons.result import Err, Ok
 from commons.test_utils import SetupMixin, login_client
-from ops.models import SystemEvent
+from monitoring.models import Link
+from ops.models import MaintenanceLock, SystemEvent
 
 
 class OpsApiTestCase(SetupMixin, TestCase):
@@ -93,3 +103,70 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertIn("attachment;", response["Content-Disposition"])
 
 		self.assertTrue(response.content.startswith(b"SQLite format 3"))
+
+
+class RunDueTasksCommandTestCase(SetupMixin, TestCase):
+	def test_command_cleans_expired_and_locked_password_reset_codes(self):
+		expired = PasswordResetCode.objects.create(user=self.regular_user, code_hash="x")
+		expired.created_at = timezone.now() - timedelta(hours=2)
+		expired.save(update_fields=["created_at"])
+		PasswordResetCode.objects.create(
+			user=self.secondary_user,
+			code_hash="y",
+			failed_attempts=PASSWORD_RESET_CODE_MAX_ATTEMPTS,
+		)
+
+		call_command("run_due_tasks", "--max-links", "0")
+
+		self.assertEqual(PasswordResetCode.objects.count(), 0)
+		self.assertTrue(SystemEvent.objects.filter(kind="maintenance").exists())
+
+	def test_command_skips_when_lock_is_held(self):
+		MaintenanceLock.objects.create(key="run_due_tasks", acquired_at=timezone.now())
+
+		with patch("ops.management.commands.run_due_tasks.scrape_link") as scrape_link:
+			call_command("run_due_tasks")
+
+		scrape_link.assert_not_called()
+
+	def test_command_scrapes_due_links_and_sets_next_scrape(self):
+		Link.objects.update(next_scrape_at=timezone.now() + timedelta(hours=1))
+		link = self.regular_user.link_set.first()
+		assert isinstance(link, Link)
+		link.next_scrape_at = timezone.now() - timedelta(minutes=1)
+		link.scrape_interval_minutes = 30
+		link.save(update_fields=["next_scrape_at", "scrape_interval_minutes"])
+
+		with patch("ops.management.commands.run_due_tasks.scrape_link", return_value=Ok(2)):
+			call_command("run_due_tasks", "--max-links", "1", "--delay", "0")
+
+		link.refresh_from_db()
+		self.assertEqual(link.scrape_failure_count, 0)
+		self.assertEqual(link.last_scrape_error, "")
+		self.assertIsNotNone(link.next_scrape_at)
+		self.assertGreater(link.next_scrape_at, timezone.now())
+
+	def test_command_backs_off_failed_scrapes(self):
+		Link.objects.update(next_scrape_at=timezone.now() + timedelta(hours=1))
+		link = self.regular_user.link_set.first()
+		assert isinstance(link, Link)
+		link.next_scrape_at = timezone.now() - timedelta(minutes=1)
+		link.scrape_interval_minutes = 5
+		link.save(update_fields=["next_scrape_at", "scrape_interval_minutes"])
+
+		with patch("ops.management.commands.run_due_tasks.scrape_link", return_value=Err("network failed")):
+			call_command("run_due_tasks", "--max-links", "1", "--delay", "0")
+
+		link.refresh_from_db()
+		self.assertEqual(link.scrape_failure_count, 1)
+		self.assertEqual(link.last_scrape_error, "network failed")
+		self.assertIsNotNone(link.next_scrape_at)
+		self.assertGreater(link.next_scrape_at, timezone.now())
+
+	def test_command_ignores_not_due_links(self):
+		Link.objects.update(next_scrape_at=timezone.now() + timedelta(hours=1))
+
+		with patch("ops.management.commands.run_due_tasks.scrape_link") as scrape_link:
+			call_command("run_due_tasks", "--delay", "0")
+
+		scrape_link.assert_not_called()
