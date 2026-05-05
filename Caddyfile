@@ -64,3 +64,11 @@
 		file_server
 	}
 }
+
+lcenzo.com, www.lcenzo.com, *.lcenzo.com {
+	root * {$FALLBACK_ROOT:/opt/notif/deploy/fallback}
+	rewrite * /not-found.html
+	file_server {
+		status 404
+	}
+}

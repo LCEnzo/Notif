@@ -64,11 +64,13 @@ services:
       - BACKEND_UPSTREAM=backend
       - BACKEND_PORT=8000
       - CADDY_ACCESS_LOG=/var/log/caddy/access.json
+      - FALLBACK_ROOT=/app/fallback
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/fallback:/app/fallback:ro
       - staticfiles:/app/staticfiles:ro
       - frontend_dist:/web-dist:ro
       - caddy_data:/data
