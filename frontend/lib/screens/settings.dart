@@ -856,36 +856,11 @@ class _UnderlineInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-
-    return TextField(
+    return NotifTextField(
       controller: controller,
-      style: text$.code.copyWith(color: tokens.ink),
-      cursorColor: tokens.accent,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: text$.code.copyWith(color: tokens.inkMute),
-        errorText: errorText,
-        errorStyle: text$.micro.copyWith(color: NotifFeedback.error),
-        contentPadding: const EdgeInsets.symmetric(vertical: 10),
-        enabledBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: tokens.ruleStrong, width: 1),
-          borderRadius: BorderRadius.zero,
-        ),
-        focusedBorder: UnderlineInputBorder(
-          borderSide: BorderSide(color: tokens.accent, width: 2),
-          borderRadius: BorderRadius.zero,
-        ),
-        errorBorder: const UnderlineInputBorder(
-          borderSide: BorderSide(color: NotifFeedback.error, width: 1),
-          borderRadius: BorderRadius.zero,
-        ),
-        focusedErrorBorder: const UnderlineInputBorder(
-          borderSide: BorderSide(color: NotifFeedback.error, width: 2),
-          borderRadius: BorderRadius.zero,
-        ),
-      ),
+      hint: hint,
+      errorText: errorText,
+      variant: NotifInputVariant.underline,
       onChanged: (value) {
         onChanged(value);
 

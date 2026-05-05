@@ -3,6 +3,7 @@ import logging
 import os
 import xml.sax.saxutils
 from pprint import pprint  # noqa: F401
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -23,7 +24,16 @@ from commons.test_utils import SetupMixin, ViewSetMixin, login_client
 from commons.utils import create_notification
 from monitoring.models import Link, Notification, Strategy, Update
 from monitoring.services import scrape_link
-from monitoring.strategies import URL, FeedStrategy, GeneralSelectorStrategy, SBSVThreadmarksStrategy
+from monitoring.strategies import (
+	STRATEGY_CHOICES,
+	URL,
+	BaseStrategy,
+	FeedStrategy,
+	GeneralSelectorStrategy,
+	SBSVThreadmarksStrategy,
+	ScrapeResult,
+	ScrapeSuccess,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,10 +118,9 @@ class TestSelectorStratErr(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(url, status_code=404)
-			result, new_data = strat(URL(url), config_data, {})
+			result = strat(URL(url), config_data, {})
 
 		assert isinstance(result, Err)
-		assert new_data is None
 
 	def test_timeout_returns_err(self):
 		strat = GeneralSelectorStrategy()
@@ -120,10 +129,9 @@ class TestSelectorStratErr(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(url, exc=requests.exceptions.ConnectTimeout)
-			result, new_data = strat(URL(url), config_data, {})
+			result = strat(URL(url), config_data, {})
 
 		assert isinstance(result, Err)
-		assert new_data is None
 
 	def test_sbsv_timeout_returns_err(self):
 		strat = SBSVThreadmarksStrategy()
@@ -131,7 +139,7 @@ class TestSelectorStratErr(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(requests_mock.ANY, exc=requests.exceptions.ReadTimeout)
-			result, new_data = strat.scrape(url, {}, {"last_alert": ""})
+			result = strat.scrape(url, {}, {"last_alert": ""})
 
 		assert isinstance(result, Err)
 		assert "Request failed" in result.error
@@ -180,17 +188,13 @@ class TestSelectorStrat(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(url, text=html_content)
-			notif_data, new_data = strat(URL(url), config_data, old_data)
+			result = strat(URL(url), config_data, old_data)
 
-		logger.debug(
-			"selector strat on kemono: \\t"
-			+ f"{notif_data = } \n--------------------------\n"
-			+ f"{new_data = }\n--------------------------\n"
-		)
+		logger.debug("selector strat on kemono: \\t" + f"{result = } \n--------------------------\n")
 
-		assert isinstance(notif_data, Ok)
-		assert len(notif_data.value) > 0
-		assert new_data is not None
+		assert isinstance(result, Ok)
+		assert len(result.value.updates) > 0
+		assert result.value.comparison_state_update is not None
 
 
 class SBSVThreadmarksStrategyTestCase(TestCase):
@@ -208,12 +212,13 @@ class SBSVThreadmarksStrategyTestCase(TestCase):
 			html_content = html_file.read()
 			mocker.get(self.url, text=html_content)
 
-			updates, new_data = self.strategy.scrape(self.url, {}, {"last_alert": "2023-06-08T15:30:00+0000"})
+			result = self.strategy.scrape(self.url, {}, {"last_alert": "2023-06-08T15:30:00+0000"})
 
+			assert isinstance(result, Ok)
+			new_data = result.value.comparison_state_update
 			assert new_data is not None
 			assert "last_alert" in new_data
-			assert isinstance(updates, Ok)
-			assert len(updates.value) >= 2
+			assert len(result.value.updates) >= 2
 
 
 class LinkViewSetTestCase(ViewSetMixin):
@@ -593,6 +598,68 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 		link.refresh_from_db()
 		assert link.comparison_info != ""
 
+	def test_scrape_link_invalid_comparison_info_returns_err(self):
+		link = self.links[0]
+		link.comparison_info = "not-json"
+		link.save(update_fields=["comparison_info"])
+
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			result = scrape_link(link)
+
+		assert isinstance(result, Err)
+		assert "Stored comparison data is invalid" in result.error
+		assert not Update.objects.filter(link=link).exists()
+
+	def test_scrape_link_strategy_crash_returns_logged_err(self):
+		class RaisingStrategy(BaseStrategy):
+			display_name = "Raising"
+
+			def can_scrape_url(self, url: URL) -> bool:
+				return True
+
+			def scrape(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
+				raise RuntimeError("boom")
+
+		link = self.links[0]
+		link.strategy = Strategy.objects.create(strat_cls="RaisingStrategy", data={})
+		link.save(update_fields=["strategy"])
+
+		with (
+			patch.dict(STRATEGY_CHOICES, {"RaisingStrategy": RaisingStrategy}),
+			self.assertLogs("monitoring.services", level="ERROR") as logs,
+		):
+			result = scrape_link(link)
+
+		assert isinstance(result, Err)
+		assert result.error == "Scrape failed unexpectedly: boom"
+		assert any("Scrape crashed for link" in message for message in logs.output)
+
+	def test_scrape_link_invalid_comparison_update_returns_logged_err(self):
+		class InvalidComparisonStateStrategy(BaseStrategy):
+			display_name = "Invalid comparison state"
+
+			def can_scrape_url(self, url: URL) -> bool:
+				return True
+
+			def scrape(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
+				return Ok(ScrapeSuccess(updates=[], comparison_state_update=cast(Any, [])))
+
+		link = self.links[0]
+		link.strategy = Strategy.objects.create(strat_cls="InvalidComparisonStateStrategy", data={})
+		link.save(update_fields=["strategy"])
+
+		with (
+			patch.dict(STRATEGY_CHOICES, {"InvalidComparisonStateStrategy": InvalidComparisonStateStrategy}),
+			self.assertLogs("monitoring.services", level="ERROR") as logs,
+		):
+			result = scrape_link(link)
+
+		assert isinstance(result, Err)
+		assert result.error == "Strategy returned invalid comparison state."
+		assert any("returned invalid comparison state type list" in message for message in logs.output)
+
 	def test_management_command_runs(self):
 		link = self.links[0]
 		html = '<html><body><article class="post-card">Post</article></body></html>'
@@ -660,13 +727,15 @@ class FeedStrategyTestCase(TestCase):
 		"""First scrape of a feed: returns all entries, sets last_entry_id to the first (newest)."""
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=ATOM_FEED_XML)
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Ok)
-		assert len(result.value) == 3
-		assert result.value[0][0] == "First Post"
-		assert result.value[1][0] == "Second Post"
-		assert result.value[2][0] == "Third Post"
+		updates = result.value.updates
+		comparison = result.value.comparison_state_update
+		assert len(updates) == 3
+		assert updates[0][0] == "First Post"
+		assert updates[1][0] == "Second Post"
+		assert updates[2][0] == "Third Post"
 		assert comparison is not None
 		assert comparison["last_entry_id"] == "tag:example.com,2024:1"
 		assert comparison["seen_entry_hashes"] == self._entry_hashes(
@@ -680,7 +749,7 @@ class FeedStrategyTestCase(TestCase):
 		"""Legacy raw seen_entry_ids state still suppresses previously seen entries."""
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=ATOM_FEED_XML)
-			result, comparison = self.strategy.scrape(
+			result = self.strategy.scrape(
 				self.feed_url,
 				{},
 				{
@@ -694,13 +763,13 @@ class FeedStrategyTestCase(TestCase):
 			)
 
 		assert isinstance(result, Ok)
-		assert len(result.value) == 0
-		assert comparison is None
+		assert len(result.value.updates) == 0
+		assert result.value.comparison_state_update is None
 
 	def test_scrape_with_seen_entry_hashes_skips_seen(self):
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=ATOM_FEED_XML)
-			result, comparison = self.strategy.scrape(
+			result = self.strategy.scrape(
 				self.feed_url,
 				{},
 				{
@@ -714,8 +783,8 @@ class FeedStrategyTestCase(TestCase):
 			)
 
 		assert isinstance(result, Ok)
-		assert result.value == []
-		assert comparison is None
+		assert result.value.updates == []
+		assert result.value.comparison_state_update is None
 
 	def test_seen_entry_hashes_migrate_legacy_raw_ids(self):
 		assert self.strategy._seen_entry_hashes(
@@ -737,12 +806,14 @@ class FeedStrategyTestCase(TestCase):
 		"""With last_entry_id set to the middle entry, returns entries before that point."""
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=ATOM_FEED_XML)
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {"last_entry_id": "tag:example.com,2024:3"})
+			result = self.strategy.scrape(self.feed_url, {}, {"last_entry_id": "tag:example.com,2024:3"})
 
 		assert isinstance(result, Ok)
-		assert len(result.value) == 2
-		assert result.value[0][0] == "First Post"
-		assert result.value[1][0] == "Second Post"
+		updates = result.value.updates
+		comparison = result.value.comparison_state_update
+		assert len(updates) == 2
+		assert updates[0][0] == "First Post"
+		assert updates[1][0] == "Second Post"
 		assert comparison is not None
 		assert comparison["last_entry_id"] == "tag:example.com,2024:1"
 
@@ -756,39 +827,36 @@ class FeedStrategyTestCase(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=empty_feed)
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Ok)
-		assert result.value == []
-		assert comparison is None
+		assert result.value.updates == []
+		assert result.value.comparison_state_update is None
 
 	def test_scrape_http_error_returns_err(self):
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, status_code=500)
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Err)
 		assert "500" in result.error or "Feed fetch failed" in result.error
-		assert comparison is None
 
 	def test_scrape_timeout_returns_err(self):
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, exc=requests.exceptions.ConnectTimeout)
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Err)
 		assert "Feed fetch failed" in result.error
-		assert comparison is None
 
 	def test_scrape_invalid_xml_with_no_entries_returns_err(self):
 		"""Bozo parse error and no entries → Err."""
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text="not valid xml {{{")
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Err)
 		assert "parse error" in result.error.lower()
-		assert comparison is None
 
 	def test_scrape_bozo_with_entries_still_works(self):
 		"""Bozo flag on but entries present → still returns entries (feed was partially parseable)."""
@@ -807,11 +875,11 @@ class FeedStrategyTestCase(TestCase):
 """
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=half_broken_feed)
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Ok)
-		assert len(result.value) == 1
-		assert result.value[0][0] == "Still Here"
+		assert len(result.value.updates) == 1
+		assert result.value.updates[0][0] == "Still Here"
 
 	def test_entry_id_falls_back_to_link(self):
 		"""Entry without an <id> field uses <link> as the identifier."""
@@ -831,11 +899,12 @@ class FeedStrategyTestCase(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=no_id_feed)
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Ok)
-		assert len(result.value) == 1
-		assert result.value[0][0] == "Only Item"
+		assert len(result.value.updates) == 1
+		assert result.value.updates[0][0] == "Only Item"
+		comparison = result.value.comparison_state_update
 		assert comparison is not None
 		assert comparison["last_entry_id"] == "https://example.com/post/only"
 
@@ -890,19 +959,21 @@ class FeedStrategyTestCase(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=initial_feed)
-			result1, comparison1 = self.strategy.scrape(self.feed_url, {}, {})
+			result1 = self.strategy.scrape(self.feed_url, {}, {})
+			assert isinstance(result1, Ok)
+			comparison1 = result1.value.comparison_state_update
 			assert comparison1 is not None
 			mocker.get(self.feed_url, text=appended_feed)
-			result2, comparison2 = self.strategy.scrape(self.feed_url, {}, comparison1)
+			result2 = self.strategy.scrape(self.feed_url, {}, comparison1)
 
-		assert isinstance(result1, Ok)
 		assert comparison1["seen_entry_hashes"] == self._entry_hashes(
 			"https://example.com/post/old",
 			"https://example.com/post/middle",
 		)
 
 		assert isinstance(result2, Ok)
-		assert result2.value == [("New Post", "Appended later.", URL("https://example.com/post/new"))]
+		assert result2.value.updates == [("New Post", "Appended later.", URL("https://example.com/post/new"))]
+		comparison2 = result2.value.comparison_state_update
 		assert comparison2 is not None
 		assert comparison2["seen_entry_hashes"] == self._entry_hashes(
 			"https://example.com/post/old",
@@ -932,14 +1003,15 @@ class FeedStrategyTestCase(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=feed)
-			result, comparison = self.strategy.scrape(
+			result = self.strategy.scrape(
 				self.feed_url,
 				{},
 				{"last_entry_id": "https://example.com/post/old"},
 			)
 
 		assert isinstance(result, Ok)
-		assert result.value == [("New Post", "Appended later.", URL("https://example.com/post/new"))]
+		assert result.value.updates == [("New Post", "Appended later.", URL("https://example.com/post/new"))]
+		comparison = result.value.comparison_state_update
 		assert comparison is not None
 		assert comparison["seen_entry_hashes"] == self._entry_hashes(
 			"https://example.com/post/old",
@@ -972,12 +1044,13 @@ class FeedStrategyTestCase(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=rss_feed)
-			result, comparison = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Ok)
-		assert len(result.value) == 2
-		assert result.value[0][0] == "RSS Post One"
-		assert result.value[1][0] == "RSS Post Two"
+		assert len(result.value.updates) == 2
+		assert result.value.updates[0][0] == "RSS Post One"
+		assert result.value.updates[1][0] == "RSS Post Two"
+		comparison = result.value.comparison_state_update
 		assert comparison is not None
 		assert comparison["last_entry_id"] == "https://example.com/post/rss1"
 
@@ -1003,11 +1076,11 @@ class FeedStrategyTestCase(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(self.feed_url, text=feed)
-			result, _ = self.strategy.scrape(self.feed_url, {}, {})
+			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Ok)
-		assert result.value[0][1] == "Explicit description."
-		assert result.value[1][1] == ""
+		assert result.value.updates[0][1] == "Explicit description."
+		assert result.value.updates[1][1] == ""
 
 
 # ── Real Feed Fixture Tests ——————————————————————————————————————————————
@@ -1047,12 +1120,12 @@ class FeedStrategyRealFeedTestCase(TestCase):
 
 				with requests_mock.Mocker() as mocker:
 					mocker.get(url, text=xml)
-					result, comparison = self.strategy.scrape(url, {}, {})
+					result = self.strategy.scrape(url, {}, {})
 
 				assert isinstance(result, Ok), f"{name} returned Err: {result if hasattr(result, 'value') else result}"
-				assert len(result.value) > 0, f"{name} returned 0 entries"
+				assert len(result.value.updates) > 0, f"{name} returned 0 entries"
 				# Each entry must have title, description, url
-				for entry in result.value:
+				for entry in result.value.updates:
 					assert len(entry) == 3
 					assert entry[0], f"{name} entry has empty title"
 					assert entry[2], f"{name} entry has empty url"
@@ -1069,17 +1142,18 @@ class FeedStrategyRealFeedTestCase(TestCase):
 			mocker.get(url, text=xml)
 
 			# First scrape — returns all entries
-			result1, comparison1 = self.strategy.scrape(url, {}, {})
+			result1 = self.strategy.scrape(url, {}, {})
 			assert isinstance(result1, Ok)
-			assert len(result1.value) > 0
+			assert len(result1.value.updates) > 0
+			comparison1 = result1.value.comparison_state_update
 			assert comparison1 is not None
 			assert "last_entry_id" in comparison1
 
 			# Second scrape with comparison data — returns nothing
-			result2, comparison2 = self.strategy.scrape(url, {}, comparison1)
+			result2 = self.strategy.scrape(url, {}, comparison1)
 			assert isinstance(result2, Ok)
-			assert len(result2.value) == 0
-			assert comparison2 is None
+			assert len(result2.value.updates) == 0
+			assert result2.value.comparison_state_update is None
 
 	@pytest.mark.slow
 	@pytest.mark.feed
@@ -1091,11 +1165,12 @@ class FeedStrategyRealFeedTestCase(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(url, text=xml)
-			result, comparison = self.strategy.scrape(url, {}, {})
+			result = self.strategy.scrape(url, {}, {})
 
 		assert isinstance(result, Ok)
 		# SV should have many items
-		assert len(result.value) >= 20, f"Expected >=20, got {len(result.value)}"
+		assert len(result.value.updates) >= 20, f"Expected >=20, got {len(result.value.updates)}"
+		comparison = result.value.comparison_state_update
 		assert comparison is not None
 
 
@@ -1198,16 +1273,19 @@ class FeedStrategyDedupPropertyTestCase(HypothesisTestCase):
 			mocker.get(url, text=feed_xml)
 
 			# First scrape
-			result1, comparison1 = self.strategy.scrape(url, {}, {})
+			result1 = self.strategy.scrape(url, {}, {})
 			assert isinstance(result1, Ok), f"First scrape failed: {result1}"
-			assert len(result1.value) > 0, f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
+			assert len(result1.value.updates) > 0, f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
+			comparison1 = result1.value.comparison_state_update
 			assert comparison1 is not None
 
 			# Second scrape with comparison data from first
-			result2, comparison2 = self.strategy.scrape(url, {}, comparison1)
+			result2 = self.strategy.scrape(url, {}, comparison1)
 			assert isinstance(result2, Ok), f"Second scrape failed: {result2}"
-			assert len(result2.value) == 0, (
+			assert len(result2.value.updates) == 0, (
 				f"Dedup invariant violated: second scrape returned "
-				f"{len(result2.value)} entries. comparison1: {comparison1}"
+				f"{len(result2.value.updates)} entries. comparison1: {comparison1}"
 			)
-			assert comparison2 is None, f"Expected None comparison on dedup hit, got: {comparison2}"
+			assert result2.value.comparison_state_update is None, (
+				f"Expected None comparison on dedup hit, got: {result2.value.comparison_state_update}"
+			)

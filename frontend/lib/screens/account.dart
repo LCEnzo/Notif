@@ -315,8 +315,6 @@ class _AccountPageState extends State<AccountPage> {
                           _AccountTextField(
                             controller: _usernameController,
                             hint: 'your-username',
-                            tokens: tokens,
-                            text$: text$,
                           ),
                           const SizedBox(height: 16),
                           _FieldLabel(
@@ -328,8 +326,6 @@ class _AccountPageState extends State<AccountPage> {
                           _AccountTextField(
                             controller: _emailController,
                             hint: 'you@example.com',
-                            tokens: tokens,
-                            text$: text$,
                             keyboardType: TextInputType.emailAddress,
                           ),
                           const SizedBox(height: 16),
@@ -342,8 +338,6 @@ class _AccountPageState extends State<AccountPage> {
                           _AccountTextField(
                             controller: _nameController,
                             hint: 'Your Name',
-                            tokens: tokens,
-                            text$: text$,
                           ),
                           if (_profileError != null) ...[
                             const SizedBox(height: 12),
@@ -394,8 +388,6 @@ class _AccountPageState extends State<AccountPage> {
                           _AccountTextField(
                             controller: _currentPasswordController,
                             hint: 'Enter current password',
-                            tokens: tokens,
-                            text$: text$,
                             obscure: true,
                           ),
                           const SizedBox(height: 16),
@@ -408,8 +400,6 @@ class _AccountPageState extends State<AccountPage> {
                           _AccountTextField(
                             controller: _newPasswordController,
                             hint: 'Enter new password',
-                            tokens: tokens,
-                            text$: text$,
                             obscure: true,
                           ),
                           const SizedBox(height: 16),
@@ -422,8 +412,6 @@ class _AccountPageState extends State<AccountPage> {
                           _AccountTextField(
                             controller: _confirmPasswordController,
                             hint: 'Confirm new password',
-                            tokens: tokens,
-                            text$: text$,
                             obscure: true,
                           ),
                           if (_passwordError != null) ...[
@@ -526,46 +514,23 @@ class _FieldLabel extends StatelessWidget {
 class _AccountTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hint;
-  final NotifTokens tokens;
-  final NotifTextTheme text$;
   final bool obscure;
   final TextInputType? keyboardType;
 
   const _AccountTextField({
     required this.controller,
     required this.hint,
-    required this.tokens,
-    required this.text$,
     this.obscure = false,
     this.keyboardType,
   });
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return NotifTextField(
       controller: controller,
+      hint: hint,
       obscureText: obscure,
       keyboardType: keyboardType,
-      style: text$.code.copyWith(color: tokens.ink),
-      cursorColor: tokens.accent,
-      decoration: InputDecoration(
-        hintText: hint,
-        hintStyle: text$.code.copyWith(color: tokens.inkMute),
-        contentPadding: const EdgeInsets.symmetric(
-          vertical: 10,
-          horizontal: 12,
-        ),
-        filled: true,
-        fillColor: tokens.bg0,
-        enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: tokens.ruleStrong, width: 1),
-          borderRadius: BorderRadius.zero,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: tokens.accent, width: 1.5),
-          borderRadius: BorderRadius.zero,
-        ),
-      ),
     );
   }
 }

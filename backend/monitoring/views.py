@@ -77,7 +77,8 @@ class NotificationPagination(PageNumberPagination):
 		# is called; cast to satisfy mypy's nullable view of the attrs.
 		request = cast(Request, self.request)
 		page = cast(Page, self.page)
-		user = cast(User, request.user)
+		user = request.user
+		assert isinstance(user, User), "authenticated notification pagination requires an application User"
 		unread_count = Notification.objects.filter(
 			update__link__user=user,
 			status=Notification.Status.UNREAD,
@@ -102,7 +103,8 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 	ordering = ["-update__created_at", "-pk"]
 
 	def get_queryset(self) -> QuerySet[Notification]:
-		user = cast(User, self.request.user)
+		user = self.request.user
+		assert isinstance(user, User), "authenticated notification query requires an application User"
 		queryset = Notification.objects.filter(update__link__user=user)
 
 		status_filter = self.request.query_params.get("status")
@@ -138,7 +140,8 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def trigger_scrape(request: Request) -> Response:
-	user = cast(User, request.user)
+	user = request.user
+	assert isinstance(user, User), "authenticated scrape trigger requires an application User"
 	link_id = request.data.get("link_id")
 	if link_id:
 		try:

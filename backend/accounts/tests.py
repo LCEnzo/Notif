@@ -10,7 +10,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from accounts.models.password_reset import PasswordResetCode
+from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetCode
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
 
@@ -57,6 +57,17 @@ class UserViewSetTestCase(ViewSetMixin):
 
 	def test_update_user(self):
 		self._test_update_object()
+
+	def test_admin_password_update_for_another_user_fails_explicitly(self):
+		admin_client = login_client(APIClient(), self.superuser.get_username())
+		url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: self.regular_user.pk})
+
+		response = admin_client.patch(url, {"password": _ALTERNATE_VALID_TEST_PASSWORD})
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn("password", response.data)  # type: ignore[union-attr]
+		self.regular_user.refresh_from_db()
+		self.assertFalse(self.regular_user.check_password(_ALTERNATE_VALID_TEST_PASSWORD))
 
 	def test_delete_user(self):
 		# Users can only delete themselves (IsRequestingThemselves permission).
@@ -159,15 +170,19 @@ class PasswordResetTestCase(TestCase):
 		"""Requesting a reset for an existing user creates a code."""
 		self.assertEqual(PasswordResetCode.objects.count(), 0)
 
-		response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 		self.assertEqual(PasswordResetCode.objects.count(), 1)
 		code = PasswordResetCode.objects.first()
 		assert code is not None
 		self.assertEqual(code.user, self.user)
+		sent_code = mock_send.call_args.args[1]
+		self.assertEqual(len(sent_code), 6)
+		self.assertTrue(code.check_code(sent_code))
+		self.assertNotEqual(code.code_hash, sent_code)
 		self.assertEqual(len(code.code_hash), 64)
-		self.assertNotEqual(code.code_hash, "reset@example.com")
 
 	def test_request_matches_email_case_insensitively(self):
 		User.objects.create_user(
@@ -201,16 +216,18 @@ class PasswordResetTestCase(TestCase):
 
 	def test_request_replaces_existing_code(self):
 		"""New request invalidates any previous code for the same user."""
-		PasswordResetCode.create_for_user(user=self.user, code="111111")
+		old_code = PasswordResetCode.create_for_user(user=self.user, code="111111")
 
-		response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 		self.assertEqual(PasswordResetCode.objects.count(), 1)
-		self.assertNotEqual(
-			PasswordResetCode.objects.first().code_hash,  # type: ignore[union-attr]
-			PasswordResetCode.hash_code("111111"),
-		)
+		new_code = PasswordResetCode.objects.first()
+		assert new_code is not None
+		self.assertNotEqual(new_code.pk, old_code.pk)
+		self.assertFalse(PasswordResetCode.objects.filter(pk=old_code.pk).exists())
+		self.assertTrue(new_code.check_code(mock_send.call_args.args[1]))
 
 	def test_request_sends_email_for_known_user(self):
 		"""Reset request triggers email send for existing user."""
@@ -248,7 +265,7 @@ class PasswordResetTestCase(TestCase):
 
 	def test_confirm_with_invalid_code_fails(self):
 		"""Wrong code returns 400."""
-		PasswordResetCode.create_for_user(user=self.user, code="654321")
+		code = PasswordResetCode.create_for_user(user=self.user, code="654321")
 
 		response = self.client.post(
 			self.confirm_url,
@@ -260,6 +277,8 @@ class PasswordResetTestCase(TestCase):
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 		self.assertIn("error", response.data)  # type: ignore[union-attr]
+		code.refresh_from_db()
+		self.assertEqual(code.failed_attempts, 1)
 
 	def test_confirm_with_unknown_email_fails(self):
 		"""Unknown email returns 400 — same message as wrong code (no enumeration)."""
@@ -325,6 +344,37 @@ class PasswordResetTestCase(TestCase):
 		self.user.refresh_from_db()
 		self.assertTrue(self.user.check_password("oldpassword123!"))
 
+	def test_confirm_locks_code_after_too_many_failures(self):
+		"""Repeated wrong guesses lock the code even if the right code arrives later."""
+		code = PasswordResetCode.create_for_user(user=self.user, code="654321")
+
+		for _ in range(PASSWORD_RESET_CODE_MAX_ATTEMPTS):
+			response = self.client.post(
+				self.confirm_url,
+				{
+					"email": "reset@example.com",
+					"code": "000000",
+					"new_password": "NewSecurePass123!",
+				},
+			)
+			self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+		code.refresh_from_db()
+		self.assertTrue(code.is_locked)
+
+		response = self.client.post(
+			self.confirm_url,
+			{
+				"email": "reset@example.com",
+				"code": "654321",
+				"new_password": "NewSecurePass123!",
+			},
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password("oldpassword123!"))
+
 	# ── __str__ hygiene ──────────────────────────────────
 
 	def test_code_str_does_not_leak_plaintext(self):
@@ -338,5 +388,5 @@ class PasswordResetTestCase(TestCase):
 		code = PasswordResetCode.create_for_user(user=self.user, code="654321")
 
 		self.assertNotEqual(code.code_hash, "654321")
-		self.assertTrue(code.matches_code("654321"))
-		self.assertFalse(code.matches_code("000000"))
+		self.assertTrue(code.check_code("654321"))
+		self.assertFalse(code.check_code("000000"))

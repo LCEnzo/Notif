@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any, NewType
+from typing import Any, NamedTuple, NewType
 from urllib.parse import urlsplit, urlunsplit
 
 import feedparser
@@ -31,10 +31,31 @@ REQUEST_TIMEOUT_SECONDS = 30
 # Types
 # TODO: Think of moving them to a central location so that the whole app can use them
 URL = NewType("URL", str)
-type NotifData = list[tuple[str, str, URL]]
+
+
+class ScrapedUpdate(NamedTuple):
+	"""One normalized update emitted by a scraping strategy."""
+
+	title: str
+	description: str
+	item_url: URL
+
+
+# A scrape result payload: the normalized updates a strategy found for one source.
+type NotifData = list[ScrapedUpdate]
 type ComparisonState = dict[str, Any]
 type ComparisonStateUpdate = ComparisonState | None
-type ScrapeResult = Result[NotifData, str]
+
+
+@dataclass(frozen=True, slots=True)
+class ScrapeSuccess:
+	"""Successful scrape payload: updates plus optional comparison state to persist."""
+
+	updates: NotifData
+	comparison_state_update: ComparisonStateUpdate = None
+
+
+type ScrapeResult = Result[ScrapeSuccess, str]
 
 # Used for choices for the Strategy model
 STRATEGY_CHOICES: dict[str, type[BaseStrategy]] = {}
@@ -84,23 +105,18 @@ class BaseStrategy(ABC):
 		pass
 
 	@abstractmethod
-	def scrape(
-		self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs
-	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	def scrape(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
 		"""
 		This function is the basic functionality. It takes in the URL to be scraped, as well as JSON data/dict.
 		It should return whether there was new stuff found, and if so, what it is.
-		Returns Ok(list of (title, description, link)) on success, Err(str) on failure.
-		Also returns new comparison data if there is any.
+		Returns Ok(ScrapeSuccess) on success, Err(str) on failure.
 
-		ScrapeResult -> Ok[NotifData] | Err[str]
-		ComparisonStateUpdate -> None | { "attr name": data for comparison }
+		ScrapeSuccess.updates -> list[ScrapedUpdate]
+		ScrapeSuccess.comparison_state_update -> None | { "attr name": data for comparison }
 		"""
 		pass
 
-	def __call__(
-		self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs
-	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	def __call__(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
 		return self.scrape(url, config_data, comparison_data, *args, **kwargs)
 
 
@@ -117,7 +133,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 
 	def scrape(
 		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]], *args, **kwargs
-	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	) -> ScrapeResult:
 		selectors: list[str] = config_data["selectors"]
 		old_data: dict[str, list[int]] = {selector: comparison_data.get(str(selector), []) for selector in selectors}
 		updates: NotifData = []
@@ -125,7 +141,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 
 		html_content = _fetch_url_content(url)
 		if html_content is None:
-			return Err("Empty html_content"), None
+			return Err("Empty html_content")
 
 		comparison_state_update = {
 			selector: [hash(ret) for ret in _get_content_with_css_selector(html_content, selector)]
@@ -142,13 +158,19 @@ class GeneralSelectorStrategy(BaseStrategy):
 			if update:
 				split = urlsplit(url)
 				site_name = split.netloc.split(".")[0]
-				updates += [(f"{site_name} update", f"selector: {selector}", url)]
+				updates.append(
+					ScrapedUpdate(
+						title=f"{site_name} update",
+						description=f"selector: {selector}",
+						item_url=url,
+					)
+				)
 
 		# No need to save new info to the db if the new info is the same as the old info
 		if len(updates) == 0:
 			comparison_state_update = None
 
-		return Ok(updates), comparison_state_update
+		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_state_update))
 
 
 @dataclass
@@ -201,9 +223,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 	def can_scrape_url(self, url: URL) -> bool:
 		return ("forums.spacebattles.com/threads" in url) or ("forums.sufficientvelocity.com/threads" in url)
 
-	def scrape(
-		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str]
-	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str]) -> ScrapeResult:
 		last_alert_str = comparison_data.get("last_alert")
 
 		last_alert: datetime | None = (
@@ -217,14 +237,14 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		try:
 			response = requests.get(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
 		except requests.RequestException as exc:
-			return Err(f"Request failed: {exc}"), None
+			return Err(f"Request failed: {exc}")
 		marks = self._extract_threadmarks(response)
 
-		updates = [
-			(
-				mark.title if mark.title is not None else "Title not found",
-				f"New threadmark with {mark.word_count} words, since {mark.pub_date}",
-				mark.link if mark.link is not None else req_url,
+		updates: NotifData = [
+			ScrapedUpdate(
+				title=mark.title if mark.title is not None else "Title not found",
+				description=f"New threadmark with {mark.word_count} words, since {mark.pub_date}",
+				item_url=mark.link if mark.link is not None else req_url,
 			)
 			for mark in marks
 			if mark.pub_date is not None and (last_alert is None or mark.pub_date > last_alert)
@@ -239,7 +259,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			if latest_mark.pub_date is not None and (last_alert is None or latest_mark.pub_date > last_alert):
 				comparison_state_update["last_alert"] = latest_mark.pub_date.strftime(self.time_format)
 
-		return Ok(updates), comparison_state_update
+		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_state_update))
 
 	def _get_threadmarks_url(self, url: URL) -> URL:
 		"""
@@ -399,10 +419,10 @@ class QQAlertsStrategy(BaseStrategy):
 
 	def scrape(
 		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], *args, **kwargs
-	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	) -> ScrapeResult:
 		if not self.can_scrape_url(url):
-			return Err("Invalid URL"), None
-		updates: list[tuple[str, str, URL]] = []
+			return Err("Invalid URL")
+		updates: NotifData = []
 
 		username: str = config_data["username"]
 		password: str = config_data["password"]
@@ -417,7 +437,7 @@ class QQAlertsStrategy(BaseStrategy):
 		try:
 			resp = self._get_alerts_html(username, password)
 		except requests.RequestException as exc:
-			return Err(f"Request failed: {exc}"), None
+			return Err(f"Request failed: {exc}")
 		alerts = self._extract_alerts(resp.text)
 
 		# Fill updates with new alerts
@@ -434,7 +454,7 @@ class QQAlertsStrategy(BaseStrategy):
 					description = alert.alert_text if alert.alert_text is not None else "-/-"
 					link = URL(alert.post_link) if alert.post_link is not None else url
 
-					updates.append((title, description, link))
+					updates.append(ScrapedUpdate(title=title, description=description, item_url=link))
 
 		comparison_state_update = None
 		# search alerts for latest update (discarding those with None time)
@@ -446,7 +466,7 @@ class QQAlertsStrategy(BaseStrategy):
 					comparison_state_update = {"last_alert": alert_dt.strftime("%Y-%m-%d %H:%M:%S")}
 					break
 
-		return Ok(updates), comparison_state_update
+		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_state_update))
 
 	@staticmethod
 	def _extract_alerts(html: str) -> list[AlertInfo]:
@@ -494,6 +514,7 @@ class QQAlertsStrategy(BaseStrategy):
 
 		with requests.Session() as session:
 			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			get_response.raise_for_status()
 			session_cookie = get_response.cookies.get(session_cookie_name)
 			login_headers["Cookie"] = f"{session_cookie_name}={session_cookie}"
 
@@ -503,6 +524,7 @@ class QQAlertsStrategy(BaseStrategy):
 
 			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
 			response = session.post(QQAlertsStrategy.login_url, data=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+			response.raise_for_status()
 			session.close()
 
 		return response
@@ -651,10 +673,10 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 	def scrape(
 		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], *args, **kwargs
-	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	) -> ScrapeResult:
 		if not self.can_scrape_url(url):
-			return Err("Invalid URL"), None
-		updates: list[tuple[str, str, URL]] = []
+			return Err("Invalid URL")
+		updates: NotifData = []
 
 		username: str = config_data["username"]
 		password: str = config_data["password"]
@@ -667,7 +689,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		try:
 			resp = self._get_favourites_html(username, password)
 		except requests.RequestException as exc:
-			return Err(f"Request failed: {exc}"), None
+			return Err(f"Request failed: {exc}")
 		cards = self._extract_kemono_profile_cards(resp.text)
 
 		# Fill updates with new alerts
@@ -677,7 +699,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 				description = f"New posts by {card.name} on {card.service}, time {card.date_time}"
 				link = card.link if card.link is not None else url
 
-				updates.append((title, description, link))
+				updates.append(ScrapedUpdate(title=title, description=description, item_url=link))
 
 		comparison_state_update = None
 		# search alerts for latest update (discarding those with None time)
@@ -687,7 +709,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 				comparison_state_update = {"last_update": json_dt}
 				break
 
-		return Ok(updates), comparison_state_update
+		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_state_update))
 
 	def _extract_service(self, card_tag: Tag) -> str | None:
 		service = card_tag.select_one(".user-card__service")
@@ -736,10 +758,10 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			login_response = session.post(
 				KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS
 			)
-			assert login_response.status_code == requests.codes.ok
+			login_response.raise_for_status()
 
 			fav_response = session.get(KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS)
-			assert fav_response.status_code == requests.codes.ok
+			fav_response.raise_for_status()
 
 			session.close()
 
@@ -780,23 +802,24 @@ class FeedStrategy(BaseStrategy):
 		comparison_data: dict[str, Any],
 		*args,
 		**kwargs,
-	) -> tuple[ScrapeResult, ComparisonStateUpdate]:
+	) -> ScrapeResult:
 		try:
 			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
 			response.raise_for_status()
 		except requests.RequestException as exc:
-			return Err(f"Feed fetch failed: {exc}"), None
+			return Err(f"Feed fetch failed: {exc}")
 
 		feed = feedparser.parse(response.content)
 
 		if feed.bozo and not feed.entries:
 			bozo_msg = str(feed.bozo_exception) if feed.bozo_exception else "unknown parse error"
 			logger.warning("FeedStrategy: bozo error for %s: %s", url, bozo_msg)
-			return Err(f"Feed parse error: {bozo_msg}"), None
+			return Err(f"Feed parse error: {bozo_msg}")
 
 		entries = self._sorted_entries(feed.entries)
 		if not entries:
-			return Ok([]), None
+			empty_updates: NotifData = []
+			return Ok(ScrapeSuccess(updates=empty_updates))
 
 		last_entry_id: str | None = comparison_data.get("last_entry_id")
 		seen_entry_hashes = self._seen_entry_hashes(comparison_data)
@@ -826,7 +849,7 @@ class FeedStrategy(BaseStrategy):
 			description = entry.get("description") or entry.get("summary") or ""
 			link = URL(entry.get("link", url))
 
-			updates.append((title, description, link))
+			updates.append(ScrapedUpdate(title=title, description=description, item_url=link))
 
 		new_seen_entry_hashes = self._merge_seen_entry_hashes(current_entry_hashes, seen_entry_hashes)
 
@@ -837,7 +860,7 @@ class FeedStrategy(BaseStrategy):
 				"seen_entry_hashes": new_seen_entry_hashes,
 			}
 
-		return Ok(updates), comparison_update
+		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_update))
 
 	@classmethod
 	def _merge_seen_entry_hashes(cls, current_entry_hashes: list[str], previous_entry_hashes: list[str]) -> list[str]:

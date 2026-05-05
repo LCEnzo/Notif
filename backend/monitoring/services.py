@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import timedelta
+from json import JSONDecodeError
 
 from django.utils import timezone
 
@@ -10,6 +11,20 @@ from monitoring.rate_limiter import DomainRateLimiter
 from monitoring.strategies import STRATEGY_CHOICES, URL
 
 logger = logging.getLogger(__name__)
+
+
+def _comparison_data_for_link(link: Link) -> Result[dict, str]:
+	if not link.comparison_info:
+		return Ok({})
+	try:
+		data = json.loads(link.comparison_info)
+	except JSONDecodeError as exc:
+		logger.warning("Invalid comparison_info for link %d: %s", link.pk, exc)
+		return Err("Stored comparison data is invalid; clear the link state before scraping again.")
+	if not isinstance(data, dict):
+		logger.warning("Invalid comparison_info shape for link %d: %s", link.pk, type(data).__name__)
+		return Err("Stored comparison data is invalid; clear the link state before scraping again.")
+	return Ok(data)
 
 
 def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Result[int, str]:
@@ -25,18 +40,41 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 
 	strategy = strategy_cls()
 	config_data = link.strategy.data or {}
-	comparison_data = json.loads(link.comparison_info) if link.comparison_info else {}
+	comparison_result = _comparison_data_for_link(link)
+	match comparison_result:
+		case Err(error=msg):
+			return Err(msg)
+		case Ok(value=comparison_data):
+			pass
 
 	if rate_limiter is not None:
 		rate_limiter.wait_for_domain(link.url)
 
-	result, new_data = strategy.scrape(URL(link.url), config_data, comparison_data)
+	try:
+		result = strategy.scrape(URL(link.url), config_data, comparison_data)
+	except AssertionError:
+		raise
+	except Exception as exc:
+		logger.exception("Scrape crashed for link %d (%s)", link.pk, link.url)
+		return Err(f"Scrape failed unexpectedly: {exc}")
 
 	match result:
 		case Err(error=msg):
 			logger.warning("Scrape failed for link %d (%s): %s", link.pk, link.url, msg)
 			return Err(msg)
-		case Ok(value=updates):
+		case Ok(value=scrape):
+			updates = scrape.updates
+			new_data = scrape.comparison_state_update
+			if new_data is not None and not isinstance(new_data, dict):
+				logger.error(
+					"Strategy %s returned invalid comparison state type %s for link %d (%s)",
+					strategy_cls.__name__,
+					type(new_data).__name__,
+					link.pk,
+					link.url,
+				)
+				return Err("Strategy returned invalid comparison state.")
+
 			created_count = 0
 			cutoff = timezone.now() - timedelta(hours=24)
 			# First scrape backfills the source's existing items as already-read so
@@ -68,7 +106,14 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 
 			return Ok(created_count)
 
-	return Err("Unexpected scrape_link")
+	logger.error(
+		"Strategy %s returned unexpected scrape result type %s for link %d (%s)",
+		strategy_cls.__name__,
+		type(result).__name__,
+		link.pk,
+		link.url,
+	)
+	return Err("Unexpected scrape result")
 
 
 def scrape_all_links(

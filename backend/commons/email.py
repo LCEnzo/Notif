@@ -1,6 +1,6 @@
 """Email sending through Django's configured email backend.
 
-Single-responsibility module — only handles sending.
+Single-responsibility module - only handles sending.
 What to send and when is the caller's concern.
 """
 
