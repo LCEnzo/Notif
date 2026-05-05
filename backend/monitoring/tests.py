@@ -593,6 +593,20 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 		link.refresh_from_db()
 		assert link.comparison_info != ""
 
+	def test_scrape_link_invalid_comparison_info_returns_err(self):
+		link = self.links[0]
+		link.comparison_info = "not-json"
+		link.save(update_fields=["comparison_info"])
+
+		html = '<html><body><article class="post-card">Post</article></body></html>'
+		with requests_mock.Mocker() as mocker:
+			mocker.get(requests_mock.ANY, text=html)
+			result = scrape_link(link)
+
+		assert isinstance(result, Err)
+		assert "Stored comparison data is invalid" in result.error
+		assert not Update.objects.filter(link=link).exists()
+
 	def test_management_command_runs(self):
 		link = self.links[0]
 		html = '<html><body><article class="post-card">Post</article></body></html>'

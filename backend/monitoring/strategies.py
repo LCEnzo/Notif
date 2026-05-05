@@ -494,6 +494,7 @@ class QQAlertsStrategy(BaseStrategy):
 
 		with requests.Session() as session:
 			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			get_response.raise_for_status()
 			session_cookie = get_response.cookies.get(session_cookie_name)
 			login_headers["Cookie"] = f"{session_cookie_name}={session_cookie}"
 
@@ -503,6 +504,7 @@ class QQAlertsStrategy(BaseStrategy):
 
 			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
 			response = session.post(QQAlertsStrategy.login_url, data=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+			response.raise_for_status()
 			session.close()
 
 		return response
@@ -736,10 +738,10 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			login_response = session.post(
 				KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS
 			)
-			assert login_response.status_code == requests.codes.ok
+			login_response.raise_for_status()
 
 			fav_response = session.get(KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS)
-			assert fav_response.status_code == requests.codes.ok
+			fav_response.raise_for_status()
 
 			session.close()
 

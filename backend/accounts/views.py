@@ -1,6 +1,7 @@
 import logging
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
@@ -150,7 +151,7 @@ class UserViewSet(ModelViewSet):
 			from django.contrib.auth.password_validation import validate_password
 
 			validate_password(new_password, user)
-		except Exception as exc:
+		except DjangoValidationError as exc:
 			return Response(
 				{"error": str(exc)},
 				status=status.HTTP_400_BAD_REQUEST,
@@ -195,14 +196,10 @@ class PasswordResetRequestView(APIView):
 		user = User._base_manager.filter(email=email, is_active=True).first()
 
 		if user is not None:
-			# Invalidate any existing reset codes for this user
-			PasswordResetCode.objects.filter(user=user).delete()
-
 			import secrets
 
 			code = str(secrets.randbelow(1_000_000)).zfill(6)
-
-			PasswordResetCode.objects.create(user=user, code=code)
+			PasswordResetCode.issue_for_user(user=user, code=code)
 
 			try:
 				send_password_reset_email(email, code)
@@ -244,8 +241,14 @@ class PasswordResetConfirmView(APIView):
 				status=status.HTTP_400_BAD_REQUEST,
 			)
 
-		reset_code = PasswordResetCode.objects.filter(user=user, code=code).order_by("-created_at").first()
-		if reset_code is None or reset_code.is_expired:
+		reset_code = PasswordResetCode.objects.filter(user=user).order_by("-created_at").first()
+		if reset_code is None or reset_code.is_expired or reset_code.is_locked:
+			return Response(
+				{"error": "Invalid or expired reset code."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+		if not reset_code.check_code(code):
+			reset_code.record_failure()
 			return Response(
 				{"error": "Invalid or expired reset code."},
 				status=status.HTTP_400_BAD_REQUEST,
@@ -258,7 +261,7 @@ class PasswordResetConfirmView(APIView):
 			)
 
 			validate_password(new_password, user)
-		except Exception as exc:
+		except DjangoValidationError as exc:
 			return Response(
 				{"error": str(exc)},
 				status=status.HTTP_400_BAD_REQUEST,

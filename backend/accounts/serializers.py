@@ -31,10 +31,8 @@ class UserCreationSerializer(ModelSerializer):
 		password = validated_data.pop("password", None)
 		if password is not None:
 			if request is None or request.user != instance:
-				# Silently drop password update from other users
-				pass
-			else:
-				instance.set_password(password)
+				raise serializers.ValidationError({"password": "Only the account owner can change their password."})
+			instance.set_password(password)
 
 		return super().update(instance, validated_data)
 
@@ -85,4 +83,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 		return value.strip().lower()
 
 	def validate_code(self, value: str) -> str:
-		return value.strip()
+		code = value.strip()
+		if not code.isdecimal():
+			raise serializers.ValidationError("Code must contain 6 digits.")
+		return code

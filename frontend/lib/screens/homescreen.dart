@@ -2815,31 +2815,13 @@ InputDecoration _dialogInputDecoration({
   String? hint,
 }) {
   final tokens = NotifTokens.of(context);
-  final text$ = NotifTextTheme.of(context);
-
-  return InputDecoration(
-    labelText: label,
-    hintText: hint,
-    labelStyle: text$.body.copyWith(color: tokens.inkDim),
-    hintStyle: text$.body.copyWith(color: tokens.inkMute),
-    filled: true,
+  return notifInputDecoration(
+    context: context,
+    label: label,
+    hint: hint,
     fillColor: tokens.bg1,
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: tokens.rule),
-    ),
-    focusedBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: tokens.accent, width: 2),
-    ),
-    errorBorder: const OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: NotifFeedback.error),
-    ),
-    focusedErrorBorder: const OutlineInputBorder(
-      borderRadius: BorderRadius.zero,
-      borderSide: BorderSide(color: NotifFeedback.error, width: 2),
-    ),
+    enabledBorderColor: tokens.rule,
+    codeText: false,
   );
 }
 
