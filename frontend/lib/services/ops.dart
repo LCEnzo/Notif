@@ -38,13 +38,46 @@ class SystemEvent {
   }
 }
 
+class CaddyLogEntry {
+  final Map<String, dynamic> data;
+
+  const CaddyLogEntry({required this.data});
+
+  String get method {
+    final request = data['request'];
+    if (request is Map && request['method'] is String) {
+      return request['method'] as String;
+    }
+    return '';
+  }
+
+  String get uri {
+    final request = data['request'];
+    if (request is Map && request['uri'] is String) {
+      return request['uri'] as String;
+    }
+    return data['uri']?.toString() ?? '';
+  }
+
+  String get status => data['status']?.toString() ?? '';
+  String get remoteIp {
+    final request = data['request'];
+    if (request is Map && request['remote_ip'] is String) {
+      return request['remote_ip'] as String;
+    }
+    return '';
+  }
+}
+
 class OpsService extends ChangeNotifier {
   OpsService(this._authService);
 
   AuthService _authService;
   AppSettingsController? _settings;
   final List<SystemEvent> _events = [];
+  final List<CaddyLogEntry> _caddyLogs = [];
   bool _loading = false;
+  bool _caddyLogsLoading = false;
   bool _downloading = false;
   String? _error;
 
@@ -98,6 +131,37 @@ class OpsService extends ChangeNotifier {
     }
   }
 
+  Future<void> fetchCaddyLogs() async {
+    _caddyLogsLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      final response = await apiGet(
+        '/ops/logs/caddy/?limit=50',
+        settings: _settings,
+        headers: _authHeaders(),
+      );
+      final data = expectSuccessJson(response, 'Fetch Caddy logs');
+      final rawResults = data['results'];
+      if (rawResults is! List) {
+        throw Exception('Fetch Caddy logs failed: missing results list.');
+      }
+      _caddyLogs
+        ..clear()
+        ..addAll(
+          rawResults.whereType<Map>().map(
+            (item) => CaddyLogEntry(data: Map<String, dynamic>.from(item)),
+          ),
+        );
+    } catch (error) {
+      _error = error.toString();
+    } finally {
+      _caddyLogsLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> downloadSqliteBackup() async {
     _downloading = true;
     _error = null;
@@ -132,7 +196,9 @@ class OpsService extends ChangeNotifier {
   }
 
   List<SystemEvent> get events => List.unmodifiable(_events);
+  List<CaddyLogEntry> get caddyLogs => List.unmodifiable(_caddyLogs);
   bool get loading => _loading;
+  bool get caddyLogsLoading => _caddyLogsLoading;
   bool get downloading => _downloading;
   String? get error => _error;
 }

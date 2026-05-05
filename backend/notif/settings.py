@@ -160,6 +160,7 @@ STATIC_URL = "static/"
 # In development (runserver), Django serves from each app's ``static/`` dir directly.
 # In production, gunicorn/nginx/Caddy serves from this single directory.
 STATIC_ROOT = BASE_DIR / settings.STATIC_ROOT
+CADDY_ACCESS_LOG_PATH = settings.CADDY_ACCESS_LOG_PATH
 
 
 # Default primary key field type

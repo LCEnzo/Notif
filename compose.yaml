@@ -19,11 +19,13 @@ services:
       - DEBUG=false
       - NOTIF_ENV=production
       - SQLITE_PATH=/app/data/db.sqlite3
+      - CADDY_ACCESS_LOG_PATH=/app/caddy-logs/access.json
     expose:
       - "8000"
     volumes:
       - backend_data:/app/data
       - staticfiles:/app/staticfiles
+      - caddy_logs:/app/caddy-logs:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; req = urllib.request.Request('http://localhost:8000/api/v1/monitoring/health/', headers={'X-Forwarded-Proto': 'https'}); urllib.request.urlopen(req, timeout=5)"]
       interval: 30s
@@ -61,6 +63,7 @@ services:
       - FRONTEND_ROOT=/web-dist
       - BACKEND_UPSTREAM=backend
       - BACKEND_PORT=8000
+      - CADDY_ACCESS_LOG=/var/log/caddy/access.json
     ports:
       - "80:80"
       - "443:443"
@@ -70,6 +73,7 @@ services:
       - frontend_dist:/web-dist:ro
       - caddy_data:/data
       - caddy_config:/config
+      - caddy_logs:/var/log/caddy
     logging:
       driver: json-file
       options:
@@ -82,3 +86,4 @@ volumes:
   frontend_dist:
   caddy_data:
   caddy_config:
+  caddy_logs:

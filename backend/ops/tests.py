@@ -1,4 +1,8 @@
+import json
+from tempfile import TemporaryDirectory
+
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -30,6 +34,36 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["results"][0]["message"], "scrape warning")
 		self.assertEqual(response.data["results"][0]["details"], {"link_id": 1})
+
+	def test_caddy_logs_require_staff_user(self):
+		client = login_client(APIClient(), self.regular_user.get_username())
+
+		response = client.get(reverse("caddy-access-logs"))
+
+		self.assertEqual(response.status_code, 403)
+
+	def test_staff_can_read_caddy_logs(self):
+		with TemporaryDirectory() as tmp_dir:
+			log_path = f"{tmp_dir}/access.json"
+			with open(log_path, "w", encoding="utf-8") as log_file:
+				log_file.write(json.dumps({"ts": 1, "request": {"uri": "/old"}, "status": 200}) + "\n")
+				log_file.write(json.dumps({"ts": 2, "request": {"uri": "/new"}, "status": 404}) + "\n")
+
+			client = login_client(APIClient(), self.superuser.get_username())
+			with override_settings(CADDY_ACCESS_LOG_PATH=log_path):
+				response = client.get(reverse("caddy-access-logs"), {"limit": "1"})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(response.data["results"]), 1)
+		self.assertEqual(response.data["results"][0]["request"]["uri"], "/new")
+
+	def test_missing_caddy_log_returns_empty_results(self):
+		client = login_client(APIClient(), self.superuser.get_username())
+		with override_settings(CADDY_ACCESS_LOG_PATH="/tmp/notif-missing-caddy-access.json"):
+			response = client.get(reverse("caddy-access-logs"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["results"], [])
 
 	def test_sqlite_backup_requires_superuser(self):
 		client = login_client(APIClient(), self.regular_user.get_username())

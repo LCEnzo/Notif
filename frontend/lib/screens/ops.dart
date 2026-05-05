@@ -25,7 +25,9 @@ class _OpsPageState extends State<OpsPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = context.read<UserDataService>().userData;
       if (user?.isStaff == true || user?.isSuperuser == true) {
-        context.read<OpsService>().fetchEvents();
+        final ops = context.read<OpsService>();
+        ops.fetchEvents();
+        ops.fetchCaddyLogs();
       }
     });
   }
@@ -123,7 +125,12 @@ class _OpsBody extends StatelessWidget {
             NotifButton(
               label: ops.loading ? 'Refreshing' : 'Refresh events',
               icon: Icons.refresh,
-              onPressed: ops.loading ? null : ops.fetchEvents,
+              onPressed: ops.loading
+                  ? null
+                  : () {
+                      ops.fetchEvents();
+                      ops.fetchCaddyLogs();
+                    },
             ),
             NotifButton(
               label: ops.downloading ? 'Preparing backup' : 'Download DB',
@@ -161,6 +168,30 @@ class _OpsBody extends StatelessWidget {
         else
           Column(
             children: [for (final event in ops.events) _EventRow(event: event)],
+          ),
+        const SizedBox(height: 32),
+        const IndexRule(index: 2, title: 'Caddy access logs'),
+        if (ops.caddyLogsLoading && ops.caddyLogs.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'Loading Caddy logs...',
+              style: text$.body.copyWith(color: tokens.inkDim),
+            ),
+          )
+        else if (ops.caddyLogs.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Text(
+              'No Caddy access logs available.',
+              style: text$.body.copyWith(color: tokens.inkDim),
+            ),
+          )
+        else
+          Column(
+            children: [
+              for (final entry in ops.caddyLogs) _CaddyLogRow(entry: entry),
+            ],
           ),
       ],
     );
@@ -222,6 +253,59 @@ class _EventRow extends StatelessWidget {
               style: text$.code.copyWith(color: tokens.inkDim),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+class _CaddyLogRow extends StatelessWidget {
+  const _CaddyLogRow({required this.entry});
+
+  final CaddyLogEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final status = entry.status;
+    final statusColor = status.startsWith('5')
+        ? NotifFeedback.error
+        : status.startsWith('4')
+        ? NotifFeedback.warning
+        : tokens.accent;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.rule, width: 1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                entry.method,
+                style: text$.micro.copyWith(color: tokens.inkDim),
+              ),
+              Text(status, style: text$.micro.copyWith(color: statusColor)),
+              Text(
+                entry.remoteIp,
+                style: text$.micro.copyWith(color: tokens.inkMute),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(entry.uri, style: text$.body.copyWith(color: tokens.ink)),
+          const SizedBox(height: 8),
+          SelectableText(
+            const JsonEncoder.withIndent('  ').convert(entry.data),
+            style: text$.code.copyWith(color: tokens.inkDim),
+          ),
         ],
       ),
     );
