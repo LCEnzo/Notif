@@ -18,6 +18,11 @@ from ops.models import SystemEvent
 from ops.serializers import SystemEventSerializer
 
 
+class IsSuperUser(IsAdminUser):
+	def has_permission(self, request: Request, view) -> bool:
+		return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
+
+
 class SystemEventPagination(PageNumberPagination):
 	page_size = 50
 	page_size_query_param = "page_size"
@@ -51,7 +56,7 @@ class SystemEventViewSet(ReadOnlyModelViewSet):
 
 
 @api_view(["GET"])
-@permission_classes([IsAdminUser])
+@permission_classes([IsSuperUser])
 def download_sqlite_backup(request: Request) -> HttpResponse | Response:
 	db_config = settings.DATABASES["default"]
 	if db_config["ENGINE"] != "django.db.backends.sqlite3":

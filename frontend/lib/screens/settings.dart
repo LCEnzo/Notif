@@ -44,7 +44,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return Consumer<AppSettingsController>(
       builder: (context, settings, _) {
-        final userData = context.watch<UserDataService>().userData;
+        final userData = context.watch<UserDataService?>()?.userData;
         final hasOpsAccess =
             userData?.isStaff == true || userData?.isSuperuser == true;
 

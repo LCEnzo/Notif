@@ -31,14 +31,25 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.data["results"][0]["message"], "scrape warning")
 		self.assertEqual(response.data["results"][0]["details"], {"link_id": 1})
 
-	def test_sqlite_backup_requires_staff_user(self):
+	def test_sqlite_backup_requires_superuser(self):
 		client = login_client(APIClient(), self.regular_user.get_username())
 
 		response = client.get(reverse("download-sqlite-backup"))
 
 		self.assertEqual(response.status_code, 403)
 
-	def test_staff_can_download_sqlite_backup(self):
+	def test_staff_without_superuser_cannot_download_sqlite_backup(self):
+		staff_user = self.secondary_user
+		staff_user.is_staff = True
+		staff_user.is_superuser = False
+		staff_user.save(update_fields=["is_staff", "is_superuser"])
+		client = login_client(APIClient(), staff_user.get_username())
+
+		response = client.get(reverse("download-sqlite-backup"))
+
+		self.assertEqual(response.status_code, 403)
+
+	def test_superuser_can_download_sqlite_backup(self):
 		client = login_client(APIClient(), self.superuser.get_username())
 
 		response = client.get(reverse("download-sqlite-backup"))
