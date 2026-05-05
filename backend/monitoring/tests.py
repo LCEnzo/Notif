@@ -3,6 +3,7 @@ import logging
 import os
 import xml.sax.saxutils
 from pprint import pprint  # noqa: F401
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
@@ -31,6 +32,7 @@ from monitoring.strategies import (
 	GeneralSelectorStrategy,
 	SBSVThreadmarksStrategy,
 	ScrapeResult,
+	ScrapeSuccess,
 )
 
 logger = logging.getLogger(__name__)
@@ -633,6 +635,30 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 		assert isinstance(result, Err)
 		assert result.error == "Scrape failed unexpectedly: boom"
 		assert any("Scrape crashed for link" in message for message in logs.output)
+
+	def test_scrape_link_invalid_comparison_update_returns_logged_err(self):
+		class InvalidComparisonStateStrategy(BaseStrategy):
+			display_name = "Invalid comparison state"
+
+			def can_scrape_url(self, url: URL) -> bool:
+				return True
+
+			def scrape(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
+				return Ok(ScrapeSuccess(updates=[], comparison_state_update=cast(Any, [])))
+
+		link = self.links[0]
+		link.strategy = Strategy.objects.create(strat_cls="InvalidComparisonStateStrategy", data={})
+		link.save(update_fields=["strategy"])
+
+		with (
+			patch.dict(STRATEGY_CHOICES, {"InvalidComparisonStateStrategy": InvalidComparisonStateStrategy}),
+			self.assertLogs("monitoring.services", level="ERROR") as logs,
+		):
+			result = scrape_link(link)
+
+		assert isinstance(result, Err)
+		assert result.error == "Strategy returned invalid comparison state."
+		assert any("returned invalid comparison state type list" in message for message in logs.output)
 
 	def test_management_command_runs(self):
 		link = self.links[0]

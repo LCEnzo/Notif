@@ -65,7 +65,15 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 		case Ok(value=scrape):
 			updates = scrape.updates
 			new_data = scrape.comparison_state_update
-			assert new_data is None or isinstance(new_data, dict), "strategy comparison state updates must be dicts"
+			if new_data is not None and not isinstance(new_data, dict):
+				logger.error(
+					"Strategy %s returned invalid comparison state type %s for link %d (%s)",
+					strategy_cls.__name__,
+					type(new_data).__name__,
+					link.pk,
+					link.url,
+				)
+				return Err("Strategy returned invalid comparison state.")
 
 			created_count = 0
 			cutoff = timezone.now() - timedelta(hours=24)

@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import F
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare, salted_hmac
 
@@ -74,8 +75,10 @@ class PasswordResetCode(models.Model):
 	def record_failure(self) -> None:
 		if self.is_expired or self.is_locked:
 			return
-		self.failed_attempts += 1
-		self.save(update_fields=["failed_attempts"])
+		type(self).objects.filter(
+			pk=self.pk,
+			failed_attempts__lt=PASSWORD_RESET_CODE_MAX_ATTEMPTS,
+		).update(failed_attempts=F("failed_attempts") + 1)
 
 	@staticmethod
 	def _validate_code(code: str) -> None:
