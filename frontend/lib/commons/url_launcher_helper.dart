@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-Future<void> openUriSafely(BuildContext context, Uri uri) async {
+Future<void> openUriSafely(
+  BuildContext context,
+  Uri uri, {
+  bool newTab = false,
+}) async {
   final bool launched;
   try {
-    launched = await launchUrl(uri);
+    launched = await launchUrl(
+      uri,
+      webOnlyWindowName: newTab ? '_blank' : null,
+    );
   } catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

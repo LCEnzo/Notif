@@ -1,4 +1,5 @@
 from django.core.serializers.json import DjangoJSONEncoder
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from accounts.models import User
@@ -35,6 +36,14 @@ class Link(models.Model):
 	user = models.ForeignKey(User, on_delete=models.CASCADE)
 	strategy = models.ForeignKey(Strategy, default=None, null=True, on_delete=models.SET_NULL, related_name="link_set")
 	last_scraped = models.DateTimeField(null=True, blank=True, default=None)
+	scrape_interval_minutes = models.PositiveIntegerField(
+		default=15,
+		validators=[MinValueValidator(5), MaxValueValidator(24 * 60)],
+	)
+	next_scrape_at = models.DateTimeField(null=True, blank=True, default=None, db_index=True)
+	scrape_disabled = models.BooleanField(default=False)
+	scrape_failure_count = models.PositiveSmallIntegerField(default=0)
+	last_scrape_error = models.CharField(max_length=500, blank=True)
 	# Information with which to compare newly scraped data, to see whether a update has occurred
 	# Will probably add things like timestamps, html snippet hashes, etc
 	# I should consider what type of field to have. Previous scrape response or whatever

@@ -75,6 +75,30 @@ Future<Response<dynamic>> apiGet(
   required Map<String, String> headers,
 }) => _requestWithFallback('GET', path, settings: settings, headers: headers);
 
+Future<Response<List<int>>> apiGetBytes(
+  String path, {
+  required AppSettingsController? settings,
+  required Map<String, String> headers,
+}) async {
+  final response = await _requestWithFallback(
+    'GET',
+    path,
+    settings: settings,
+    headers: headers,
+    responseType: ResponseType.bytes,
+  );
+  return Response<List<int>>(
+    data: response.data is List<int> ? response.data as List<int> : null,
+    headers: response.headers,
+    requestOptions: response.requestOptions,
+    statusCode: response.statusCode,
+    statusMessage: response.statusMessage,
+    redirects: response.redirects,
+    extra: response.extra,
+    isRedirect: response.isRedirect,
+  );
+}
+
 Future<Response<dynamic>> apiPatch(
   String path, {
   required AppSettingsController? settings,
@@ -123,6 +147,7 @@ Future<Response<dynamic>> _requestWithFallback(
   required AppSettingsController? settings,
   required Map<String, String> headers,
   dynamic body,
+  ResponseType? responseType,
 }) async {
   final urls = resolveUrls(path, settings);
   if (urls.isEmpty) {
@@ -139,6 +164,7 @@ Future<Response<dynamic>> _requestWithFallback(
         path,
         headers: headers,
         body: body,
+        responseType: responseType,
       );
     } on DioException catch (error) {
       lastError = error;
@@ -176,6 +202,7 @@ Future<Response<dynamic>> _performRequest(
   required Map<String, String> headers,
   dynamic body,
   bool allowAuthRetry = true,
+  ResponseType? responseType,
 }) async {
   final requestUri = _buildRequestUri(baseUrl, path);
   final requestHeaders = _headersWithLatestAccessToken(headers);
@@ -184,7 +211,11 @@ Future<Response<dynamic>> _performRequest(
     return await _dio.requestUri<dynamic>(
       requestUri,
       data: body,
-      options: Options(method: method, headers: requestHeaders),
+      options: Options(
+        method: method,
+        headers: requestHeaders,
+        responseType: responseType,
+      ),
     );
   } on DioException catch (error) {
     if (allowAuthRetry && await _shouldRetryAfterUnauthorized(error, headers)) {
@@ -195,6 +226,7 @@ Future<Response<dynamic>> _performRequest(
         headers: headers,
         body: body,
         allowAuthRetry: false,
+        responseType: responseType,
       );
     }
     rethrow;

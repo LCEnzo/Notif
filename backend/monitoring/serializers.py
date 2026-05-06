@@ -21,10 +21,22 @@ class LinkSerializer(ModelSerializer):
 			"user",
 			"strategy",
 			"last_scraped",
+			"scrape_interval_minutes",
+			"next_scrape_at",
+			"scrape_disabled",
+			"scrape_failure_count",
+			"last_scrape_error",
 			"comparison_info",
 		]
 
-		read_only_fields = ["id", "comparison_info", "last_scraped"]
+		read_only_fields = [
+			"id",
+			"comparison_info",
+			"last_scraped",
+			"next_scrape_at",
+			"scrape_failure_count",
+			"last_scrape_error",
+		]
 
 		extra_kwargs = {
 			"name": {"required": True},

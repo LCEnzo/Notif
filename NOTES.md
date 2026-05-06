@@ -139,3 +139,125 @@ Continuous scroll (infinite scroll / "load more") was explicitly rejected for th
 Status filtering (`?status=unread`) and time-based filtering (`?since=<ISO datetime>`) are supported on the notifications endpoint. These filters scope the queryset before pagination, so page counts and unread counts reflect the filtered set.
 
 Adding more filter dimensions (by link/source, by strategy type, text search) would follow the same pattern: query param → `get_queryset().filter(...)` → paginated response. The `unread_count` field in the paginated envelope is computed independently of any `?status=` filter — it always represents the user's global unread total — so the FE badge stays accurate regardless of what page/filter the user is viewing.
+
+---
+
+## Product / Ops Backlog Discussion (added 2026-05-05)
+
+### Domains and deploy surface
+
+- Infra snapshot from 2026-05-05:
+  - App domain: `notif.lcenzo.com`.
+  - VPS: Hetzner CX33 in Helsinki.
+  - DNS: Cloudflare.
+  - Cloudflare mode for `notif.lcenzo.com`: grey-cloud / DNS-only.
+  - Public firewall intent: SSH, HTTP, HTTPS, and ICMP.
+  - Deployment shape from VPS inspection: Docker Compose-style containers, with `notif-caddy-1` publishing ports 80/443 and `notif-backend-1` internal on port 8000.
+  - Caddy certificate mode from VPS inspection: Let's Encrypt public certificate managed by Caddy under `/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/`.
+- Add a real `lcenzo.com` page even if it is tiny, so the apex domain does not resolve to an empty or parking-like destination.
+- Add a proper not-found / setup-not-available page for routes or hostnames that are not configured. This should make wildcard/CNAME state less confusing while DNS is still being cleaned up.
+- Keep this as deployment polish, not core app scope, unless DNS or routing blocks users from reaching the app.
+
+### Cloudflare orange-cloud decision
+
+- Orange-clouding `notif.lcenzo.com` is probably useful eventually for DDoS shielding, WAF/rules, hiding the origin IP, and edge caching of static frontend assets.
+- Prep needed before switching:
+  - Ensure Django has correct `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `SECURE_PROXY_SSL_HEADER`, and Caddy trusted proxy settings.
+  - Decide certificate path: temporary grey-cloud for Let's Encrypt issuance, Cloudflare Origin Certificate, or DNS-01 via a Caddy Cloudflare DNS module.
+  - Confirm Caddy logs real client IP from `CF-Connecting-IP` and Cloudflare IP ranges are current.
+  - Keep API paths uncached unless a specific endpoint is deliberately cacheable.
+  - Decide whether Cloudflare security rules can block admin/login abuse without breaking mobile/web clients.
+- Unknowns to confirm before changing DNS mode:
+  - Whether to keep using Let's Encrypt after orange-clouding, or switch to Cloudflare Origin Certificate / DNS-01.
+  - Exact Cloudflare cache/WAF rules for `/api/*`, login, password reset, and admin routes.
+  - Whether ICMP should remain publicly allowed for diagnostics.
+
+### VPS agent
+
+- Investigate a small "Hermes agent" on the VPS with intentionally narrow permissions.
+- Define the exact allowed operations before implementation: likely health checks, triggering safe maintenance commands, reading limited status, and reporting logs. Avoid broad shell access.
+- Any agent should have explicit timeouts, command allowlists, and audit logging.
+
+### Scraping scheduler
+
+- Prefer one general backend command/entrypoint that checks all due work rather than a cron job that directly scrapes every source.
+- Cron can run every 5 minutes and call the Django service/command; Django decides what is due:
+  - scheduled scrapes per link/source
+  - cleanup of expired password reset codes
+  - future maintenance tasks
+- Per-source schedules should be configurable. Some SV/SB/QQ threads can be checked daily; high-interest threads can be checked every 5 minutes.
+- XenForo threadmark monitoring should support selecting which tabs/categories to watch, such as Threadmarks, Sidestory, Apocrypha, Informational, etc.
+- The scheduler should be a good network citizen: per-domain rate limits, jitter, backoff on failures, user-agent/contact clarity where appropriate, and no repeated requests for unchanged work when cache validators or timestamps are available.
+- Keep CPU cost bounded: avoid browser automation unless a site requires it, prefer RSS/structured endpoints where available, and cap concurrent work.
+
+### Backend maintenance command design
+
+- First implementation should stay boring: a Django management command called by cron/systemd timer, not Celery/Redis.
+- Proposed command: `python manage.py run_due_tasks`.
+- Responsibilities:
+  - Acquire a lock so two runs cannot overlap.
+  - Clean expired/locked password reset codes.
+  - Select scrape jobs that are due.
+  - Run a bounded number of scrapes with per-domain rate limiting.
+  - Record enough output for cron logs and debugging.
+- Scheduling state should live in the database, not in cron:
+  - link-level interval, such as 5 minutes, hourly, daily
+  - `next_scrape_at`
+  - last success/failure timestamps
+  - consecutive failure count
+  - optional disabled/backoff state
+- Cron should only express cadence: run the maintenance command every 5 minutes. It should not know which links exist or which are due.
+- Keep the first version single-process and sequential unless runtime becomes a real problem. Concurrency adds correctness and anti-blocking complexity before the app needs it.
+- Add explicit limits from the start:
+  - max links per run
+  - max runtime
+  - per-domain delay
+  - failure backoff cap
+  - stale lock expiry
+- Testing should cover:
+  - due vs not-due link selection
+  - lock prevents overlap
+  - expired password reset code cleanup
+  - scrape success schedules the next run
+  - scrape failure backs off and does not loop forever
+  - command exits cleanly and prints a useful summary
+
+### X scraping
+
+- X/Twitter scraping still needs investigation. The goal is reliable monitoring without hitting everything every run.
+- First pass should identify available low-cost sources: official API feasibility, RSS-like mirrors, fxtwitter/vxtwitter-style structured endpoints, or browser automation only as a last resort.
+- Blocking risk should be treated as part of the design, not an afterthought: rate limits, backoff, source-specific cooldowns, and graceful degradation matter.
+
+### Email and account flows
+
+- A general email system is not required for the core app, but it enables a conventional forgot-password flow and account lifecycle emails.
+- Registration email is worth considering:
+  - Welcome/confirmation email if accounts are public-facing.
+  - Verification email only if account abuse or deliverability matters.
+  - No email if this stays single-user/private and account friction is undesirable.
+- Forgot password should avoid unnecessary screens. A better flow:
+  - Screen 1: request reset email.
+  - Screen 2: enter 6-digit code only.
+  - Screen 3: enter and confirm the new password.
+- Rationale: do not ask the user to spend attention typing a new password until the code is known to be valid.
+
+### Notification semantics and home screen
+
+- The `[t]` value on the home screen probably should not mean "time scraped" if a better user-facing timestamp exists.
+- Prefer published time when the source exposes it; fall back to scraped/discovered time when publication time is unavailable.
+- Imported historical notifications may need special handling or sorting so the home screen does not feel like a mass import dump.
+- Home screen sorting deserves a first-class design pass: newest published, newest discovered, unread first, source grouping, or source priority may all be useful.
+
+### Desktop notification interaction
+
+- On desktop web:
+  - Middle click on a notification should open the target/details page in a new tab, matching normal web expectations.
+  - Left click should expand the notification inline rather than immediately navigating.
+  - Expanded notifications should have a bounded height with an internal scrollbar if the content is long.
+- This implies notification rows/cards need separate interaction zones or event handling for primary click vs auxiliary click.
+
+### Home screen pagination polish
+
+- The page buttons on the home screen are visually inconsistent with the rest of the app.
+- They also sit too close to the bottom of the viewport while leaving too much gap above.
+- Fix spacing so the pager either has balanced vertical spacing or deliberately attaches closer to the table/list.

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/components/primitives.dart';
@@ -65,22 +67,35 @@ class _HomePageState extends State<HomePage> {
     _showMessage(message ?? linkService.error);
   }
 
-  Future<void> _openExternalUrl(String url) async {
+  Future<void> _openExternalUrl(String url, {bool newTab = false}) async {
     final uri = Uri.tryParse(url);
     if (uri == null) {
       _showMessage('That URL could not be opened.');
       return;
     }
-    await openUriSafely(context, uri);
+    await openUriSafely(context, uri, newTab: newTab);
   }
 
-  Future<void> _handleNotificationTap(NotificationItem notification) async {
+  Future<void> _handleNotificationOpen(
+    NotificationItem notification, {
+    bool newTab = false,
+  }) async {
     final notificationService = context.read<NotificationService>();
+    if (newTab) {
+      if (notification.itemUrl.isNotEmpty) {
+        unawaited(_openExternalUrl(notification.itemUrl, newTab: true));
+      }
+      if (notification.isUnread) {
+        unawaited(notificationService.markRead(notification.id));
+      }
+      return;
+    }
+
     if (notification.isUnread) {
       await notificationService.markRead(notification.id);
     }
     if (!mounted || notification.itemUrl.isEmpty) return;
-    await _openExternalUrl(notification.itemUrl);
+    await _openExternalUrl(notification.itemUrl, newTab: newTab);
   }
 
   Future<void> _handleNotificationToggleRead(int id) async {
@@ -138,7 +153,7 @@ class _HomePageState extends State<HomePage> {
               onRefresh: _refreshDashboard,
               onScrapeAll: linkService.scrapingAll ? null : _handleScrapeAll,
               onScrapeLink: _handleScrapeLink,
-              onNotificationTap: _handleNotificationTap,
+              onNotificationTap: _handleNotificationOpen,
               onNotificationToggleRead: _handleNotificationToggleRead,
               onGoToPage: _handleGoToPageNotif,
               onMarkAllRead:
@@ -458,7 +473,7 @@ class _PageNumbers extends StatelessWidget {
   final int totalPages;
   final Future<void> Function(int) onPageSelected;
 
-  static const _buttonSize = 32.0;
+  static const _buttonSize = 34.0;
 
   List<_PageItem> _buildPageList() {
     if (totalPages <= 7) {
@@ -510,67 +525,81 @@ class _PageNumbers extends StatelessWidget {
     final pages = _buildPageList();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Wrap(
-        alignment: WrapAlignment.center,
-        spacing: 2,
-        runSpacing: 4,
-        children: pages
-            .map((item) {
-              if (!item.isActive && item.page != null) {
-                return SizedBox(
-                  width: _buttonSize,
-                  height: _buttonSize,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      backgroundColor: tokens.bg2,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
+      child: Align(
+        alignment: Alignment.center,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: tokens.rule)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 6,
+              runSpacing: 6,
+              children: pages
+                  .map((item) {
+                    if (!item.isActive && item.page != null) {
+                      return SizedBox(
+                        width: _buttonSize,
+                        height: _buttonSize,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            backgroundColor: Colors.transparent,
+                            foregroundColor: tokens.inkDim,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                              side: BorderSide(color: tokens.ruleStrong),
+                            ),
+                          ),
+                          onPressed: () async =>
+                              await onPageSelected(item.page!),
+                          child: Text(
+                            item.label,
+                            style: text$.body.copyWith(color: tokens.inkMute),
+                          ),
+                        ),
+                      );
+                    }
+                    if (item.isActive) {
+                      return SizedBox(
+                        width: _buttonSize,
+                        height: _buttonSize,
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            backgroundColor: tokens.ink,
+                            shape: const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                          onPressed: null,
+                          child: Text(
+                            item.label,
+                            style: text$.body
+                                .copyWith(fontWeight: FontWeight.w600)
+                                .copyWith(color: tokens.bg1),
+                          ),
+                        ),
+                      );
+                    }
+                    return SizedBox(
+                      width: _buttonSize,
+                      height: _buttonSize,
+                      child: Center(
+                        child: Text(
+                          item.label,
+                          style: text$.body.copyWith(color: tokens.inkMute),
+                        ),
                       ),
-                    ),
-                    onPressed: () async => await onPageSelected(item.page!),
-                    child: Text(
-                      item.label,
-                      style: text$.body.copyWith(color: tokens.inkMute),
-                    ),
-                  ),
-                );
-              }
-              if (item.isActive) {
-                return SizedBox(
-                  width: _buttonSize,
-                  height: _buttonSize,
-                  child: TextButton(
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      backgroundColor: tokens.accent,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                    ),
-                    onPressed: null,
-                    child: Text(
-                      item.label,
-                      style: text$.body
-                          .copyWith(fontWeight: FontWeight.w600)
-                          .copyWith(color: tokens.ink),
-                    ),
-                  ),
-                );
-              }
-              return SizedBox(
-                width: _buttonSize,
-                height: _buttonSize,
-                child: Center(
-                  child: Text(
-                    item.label,
-                    style: text$.body.copyWith(color: tokens.inkMute),
-                  ),
-                ),
-              );
-            })
-            .toList(growable: false),
+                    );
+                  })
+                  .toList(growable: false),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -609,7 +638,11 @@ class _HomeConsole extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final VoidCallback? onScrapeAll;
   final Future<void> Function(Link link) onScrapeLink;
-  final Future<void> Function(NotificationItem notification) onNotificationTap;
+  final Future<void> Function(
+    NotificationItem notification, {
+    required bool newTab,
+  })
+  onNotificationTap;
   final Future<void> Function(int id) onNotificationToggleRead;
   final Future<void> Function(int page) onGoToPage;
   final VoidCallback? onMarkAllRead;
@@ -1575,7 +1608,11 @@ class _UpdateConsole extends StatelessWidget {
   final bool Function(int id) isMarkingRead;
   final Future<void> Function() onRefresh;
   final Future<void> Function(int page) onGoToPage;
-  final Future<void> Function(NotificationItem notification) onNotificationTap;
+  final Future<void> Function(
+    NotificationItem notification, {
+    required bool newTab,
+  })
+  onNotificationTap;
   final Future<void> Function(int id) onNotificationToggleRead;
   final VoidCallback? onMarkAllRead;
   final VoidCallback onSources;
@@ -1663,7 +1700,8 @@ class _UpdateConsole extends StatelessWidget {
                   index: index,
                   mobileTui: mobileTui,
                   busy: isMarkingRead(item.id),
-                  onTap: () => onNotificationTap(item),
+                  onOpen: ({required bool newTab}) =>
+                      onNotificationTap(item, newTab: newTab),
                   onChipTap: canToggle
                       ? () => onNotificationToggleRead(item.id)
                       : null,
@@ -1889,14 +1927,14 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
   }
 }
 
-class _ConsoleNotificationRow extends StatelessWidget {
+class _ConsoleNotificationRow extends StatefulWidget {
   const _ConsoleNotificationRow({
     required this.notification,
     required this.metrics,
     required this.index,
     required this.mobileTui,
     required this.busy,
-    required this.onTap,
+    required this.onOpen,
     this.onChipTap,
   });
 
@@ -1905,203 +1943,368 @@ class _ConsoleNotificationRow extends StatelessWidget {
   final int index;
   final bool mobileTui;
   final bool busy;
-  final VoidCallback onTap;
+  final Future<void> Function({required bool newTab}) onOpen;
   final VoidCallback? onChipTap;
+
+  @override
+  State<_ConsoleNotificationRow> createState() =>
+      _ConsoleNotificationRowState();
+}
+
+class _ConsoleNotificationRowState extends State<_ConsoleNotificationRow> {
+  bool _expanded = false;
+
+  void _toggleExpanded() {
+    if (widget.busy) return;
+    setState(() => _expanded = !_expanded);
+  }
+
+  Future<void> _open({required bool newTab}) async {
+    if (widget.notification.itemUrl.isEmpty) return;
+    await widget.onOpen(newTab: newTab);
+  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
+    final notification = widget.notification;
+    final metrics = widget.metrics;
+    final mobileTui = widget.mobileTui;
     final source = _notificationSource(notification);
 
-    return InkWell(
-      onTap: busy ? null : onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: index.isEven ? tokens.bg1.withValues(alpha: 0.42) : null,
-          border: Border(bottom: BorderSide(color: tokens.rule)),
-        ),
-        padding: EdgeInsets.symmetric(
-          horizontal: mobileTui ? 10 : 14,
-          vertical: mobileTui ? 4 : metrics.updateRowVPad,
-        ),
-        child: mobileTui
-            ? Row(
-                children: [
-                  _ReadPip(unread: notification.isUnread),
-                  const SizedBox(width: 7),
-                  SizedBox(
-                    width: 46,
-                    child: Text(
-                      _formatTimeAgo(notification.createdAt),
-                      style: text$.micro.copyWith(
-                        color: tokens.inkMute,
-                        letterSpacing: 0,
-                        fontSize: metrics.microSize,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Row(
+    return Listener(
+      onPointerDown: (event) {
+        if (event.kind == PointerDeviceKind.mouse &&
+            (event.buttons & kMiddleMouseButton) != 0) {
+          _open(newTab: true);
+        }
+      },
+      child: InkWell(
+        onTap: widget.busy ? null : _toggleExpanded,
+        child: Container(
+          decoration: BoxDecoration(
+            color: _expanded
+                ? tokens.bg2.withValues(alpha: 0.74)
+                : widget.index.isEven
+                ? tokens.bg1.withValues(alpha: 0.42)
+                : null,
+            border: Border(bottom: BorderSide(color: tokens.rule)),
+          ),
+          padding: EdgeInsets.symmetric(
+            horizontal: mobileTui ? 10 : 14,
+            vertical: mobileTui ? 4 : metrics.updateRowVPad,
+          ),
+          child: Column(
+            children: [
+              mobileTui
+                  ? Row(
                       children: [
-                        Text(
-                          _shortSource(source),
-                          style: text$.micro.copyWith(
-                            color: tokens.accent,
-                            letterSpacing: 0,
-                            fontSize: metrics.microSize,
+                        _ReadPip(unread: notification.isUnread),
+                        const SizedBox(width: 7),
+                        SizedBox(
+                          width: 46,
+                          child: Text(
+                            _formatTimeAgo(notification.createdAt),
+                            style: text$.micro.copyWith(
+                              color: tokens.inkMute,
+                              letterSpacing: 0,
+                              fontSize: metrics.microSize,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
-                            notification.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text$.body.copyWith(
-                              color: tokens.ink,
-                              fontSize: metrics.bodySize,
-                            ),
+                          child: Row(
+                            children: [
+                              Text(
+                                _shortSource(source),
+                                style: text$.micro.copyWith(
+                                  color: tokens.accent,
+                                  letterSpacing: 0,
+                                  fontSize: metrics.microSize,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  notification.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: text$.body.copyWith(
+                                    color: tokens.ink,
+                                    fontSize: metrics.bodySize,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  if (busy)
-                    SizedBox(
-                      width: 13,
-                      height: 13,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: tokens.accent,
-                      ),
-                    )
-                  else
-                    Icon(
-                      Icons.north_east_sharp,
-                      size: 12,
-                      color: tokens.inkMute,
-                    ),
-                ],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _ReadPip(unread: notification.isUnread),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 64,
-                    child: Text(
-                      _formatTimeAgo(notification.createdAt),
-                      style: text$.micro.copyWith(
-                        color: tokens.inkMute,
-                        letterSpacing: 0,
-                        fontSize: metrics.microSize,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 168,
-                    child: Text(
-                      _shortSource(source),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: text$.micro.copyWith(
-                        color: tokens.accent,
-                        letterSpacing: 0,
-                        fontSize: metrics.microSize,
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Flexible(
-                          flex: 3,
-                          child: Text(
-                            notification.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text$.body.copyWith(
-                              color: tokens.ink,
-                              fontSize: metrics.bodySize,
-                            ),
-                          ),
-                        ),
-                        if (notification.description.isNotEmpty) ...[
-                          const SizedBox(width: 8),
-                          Flexible(
-                            flex: 4,
-                            child: Text(
-                              '- ${notification.description}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: text$.micro.copyWith(
-                                color: tokens.inkMute,
-                                letterSpacing: 0,
-                                fontSize: metrics.microSize,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  SizedBox(
-                    width: 102,
-                    child: busy
-                        ? Align(
-                            alignment: Alignment.centerRight,
-                            child: SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.5,
-                                color: tokens.accent,
-                              ),
+                        if (widget.busy)
+                          SizedBox(
+                            width: 13,
+                            height: 13,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 1.5,
+                              color: tokens.accent,
                             ),
                           )
-                        : onChipTap == null
-                        ? const SizedBox.shrink()
-                        : Align(
-                            alignment: Alignment.centerRight,
-                            child: InkWell(
-                              onTap: onChipTap,
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: metrics.actionHPad,
-                                  vertical: metrics.actionVPad,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: notification.isUnread
-                                      ? tokens.bg1
-                                      : Colors.transparent,
-                                  border: Border.all(
-                                    color: notification.isUnread
-                                        ? tokens.ruleStrong
-                                        : tokens.rule,
-                                  ),
-                                ),
+                        else
+                          Icon(
+                            _expanded
+                                ? Icons.keyboard_arrow_up_sharp
+                                : Icons.keyboard_arrow_down_sharp,
+                            size: 12,
+                            color: tokens.inkMute,
+                          ),
+                      ],
+                    )
+                  : Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _ReadPip(unread: notification.isUnread),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 64,
+                          child: Text(
+                            _formatTimeAgo(notification.createdAt),
+                            style: text$.micro.copyWith(
+                              color: tokens.inkMute,
+                              letterSpacing: 0,
+                              fontSize: metrics.microSize,
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 168,
+                          child: Text(
+                            _shortSource(source),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text$.micro.copyWith(
+                              color: tokens.accent,
+                              letterSpacing: 0,
+                              fontSize: metrics.microSize,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Flexible(
+                                flex: 3,
                                 child: Text(
-                                  notification.isUnread ? 'READ' : 'UNREAD',
-                                  textAlign: TextAlign.right,
-                                  style: text$.micro.copyWith(
-                                    color: notification.isUnread
-                                        ? tokens.accent
-                                        : tokens.inkDim,
-                                    letterSpacing: 0,
-                                    fontSize: metrics.microSize,
+                                  notification.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: text$.body.copyWith(
+                                    color: tokens.ink,
+                                    fontSize: metrics.bodySize,
                                   ),
                                 ),
                               ),
-                            ),
+                              if (notification.description.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  flex: 4,
+                                  child: Text(
+                                    '- ${notification.description}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: text$.micro.copyWith(
+                                      color: tokens.inkMute,
+                                      letterSpacing: 0,
+                                      fontSize: metrics.microSize,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: 118,
+                          child: widget.busy
+                              ? Align(
+                                  alignment: Alignment.centerRight,
+                                  child: SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.5,
+                                      color: tokens.accent,
+                                    ),
+                                  ),
+                                )
+                              : widget.onChipTap == null
+                              ? const SizedBox.shrink()
+                              : Align(
+                                  alignment: Alignment.centerRight,
+                                  child: InkWell(
+                                    onTap: widget.onChipTap,
+                                    child: Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: metrics.actionHPad,
+                                        vertical: metrics.actionVPad,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: notification.isUnread
+                                            ? tokens.bg1
+                                            : Colors.transparent,
+                                        border: Border.all(
+                                          color: notification.isUnread
+                                              ? tokens.ruleStrong
+                                              : tokens.rule,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        notification.isUnread
+                                            ? 'READ'
+                                            : 'UNREAD',
+                                        textAlign: TextAlign.right,
+                                        style: text$.micro.copyWith(
+                                          color: notification.isUnread
+                                              ? tokens.accent
+                                              : tokens.inkDim,
+                                          letterSpacing: 0,
+                                          fontSize: metrics.microSize,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+              if (_expanded)
+                _ExpandedNotificationDetails(
+                  notification: notification,
+                  source: source,
+                  metrics: metrics,
+                  onOpen: notification.itemUrl.isEmpty
+                      ? null
+                      : () => _open(newTab: false),
+                  onOpenNewTab: notification.itemUrl.isEmpty
+                      ? null
+                      : () => _open(newTab: true),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ExpandedNotificationDetails extends StatelessWidget {
+  const _ExpandedNotificationDetails({
+    required this.notification,
+    required this.source,
+    required this.metrics,
+    required this.onOpen,
+    required this.onOpenNewTab,
+  });
+
+  final NotificationItem notification;
+  final String source;
+  final _HomeConsoleMetrics metrics;
+  final VoidCallback? onOpen;
+  final VoidCallback? onOpenNewTab;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final details = notification.description.trim().isEmpty
+        ? 'No description was captured for this update.'
+        : notification.description.trim();
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        metrics.actionHPad + 90,
+        0,
+        metrics.actionHPad + 118,
+        metrics.updateRowVPad + 8,
+      ),
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 220),
+        decoration: BoxDecoration(
+          color: tokens.bg0.withValues(alpha: 0.52),
+          border: Border.all(color: tokens.rule),
+        ),
+        child: Scrollbar(
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      source,
+                      style: text$.micro.copyWith(color: tokens.accent),
+                    ),
+                    Text(
+                      _formatTimeAgo(notification.createdAt),
+                      style: text$.micro.copyWith(color: tokens.inkMute),
+                    ),
+                    Text(
+                      notification.isUnread ? 'UNREAD' : 'READ',
+                      style: text$.micro.copyWith(
+                        color: notification.isUnread
+                            ? tokens.accent
+                            : tokens.inkMute,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SelectableText(
+                  notification.title,
+                  style: text$.heading.copyWith(color: tokens.ink),
+                ),
+                const SizedBox(height: 8),
+                SelectableText(
+                  details,
+                  style: text$.bodyLong.copyWith(color: tokens.inkDim),
+                ),
+                if (notification.itemUrl.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  SelectableText(
+                    notification.itemUrl,
+                    style: text$.code.copyWith(color: tokens.inkMute),
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      NotifButton(
+                        label: 'Open',
+                        icon: Icons.open_in_new_sharp,
+                        size: NotifButtonSize.sm,
+                        onPressed: onOpen,
+                      ),
+                      NotifButton(
+                        label: 'New tab',
+                        icon: Icons.add_to_photos_outlined,
+                        variant: NotifButtonVariant.ghost,
+                        size: NotifButtonSize.sm,
+                        onPressed: onOpenNewTab,
+                      ),
+                    ],
                   ),
                 ],
-              ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

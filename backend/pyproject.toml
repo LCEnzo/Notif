@@ -29,6 +29,7 @@ dev = [
 	"mypy>=1.11,<2.0",
 	"pytest>=9.0.3,<10.0",
 	"pytest-django>=4.11,<5.0",
+	"pytest-timeout>=2.3,<3.0",
 	"requests-mock>=1.11,<2.0",
 	"ruff>=0.15.9,<0.16.0",
 	"types-requests>=2.32.4.20260107,<3.0",

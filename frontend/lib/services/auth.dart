@@ -9,8 +9,16 @@ class UserData {
   String email;
   String username;
   String name;
+  bool isStaff;
+  bool isSuperuser;
 
-  UserData({required this.email, required this.username, required this.name});
+  UserData({
+    required this.email,
+    required this.username,
+    required this.name,
+    required this.isStaff,
+    required this.isSuperuser,
+  });
 }
 
 class JWT {
@@ -219,6 +227,8 @@ class UserDataService extends ChangeNotifier {
         email: data['email'] as String,
         username: data['username'] as String,
         name: data['name'] as String,
+        isStaff: data['is_staff'] == true,
+        isSuperuser: data['is_superuser'] == true,
       );
     } catch (error) {
       if (kDebugMode) {

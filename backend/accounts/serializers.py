@@ -51,7 +51,16 @@ class UserCreationSerializer(ModelSerializer):
 class UserFullReadSerializer(ModelSerializer):
 	class Meta:
 		model = User
-		fields = ["name", "email", "username", "date_created", "date_modified", "date_deleted"]
+		fields = [
+			"name",
+			"email",
+			"username",
+			"is_staff",
+			"is_superuser",
+			"date_created",
+			"date_modified",
+			"date_deleted",
+		]
 
 
 class UserMinimalReadSerializer(ModelSerializer):

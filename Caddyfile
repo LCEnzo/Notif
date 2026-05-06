@@ -24,6 +24,15 @@
 }
 
 {$NOTIF_DOMAIN:notif.example.com} {
+	log {
+		output file {$CADDY_ACCESS_LOG:/var/log/caddy/access.json} {
+			roll_size 10MiB
+			roll_keep 5
+			roll_keep_for 168h
+		}
+		format json
+	}
+
 	# API — reverse proxy to Django/gunicorn.
 	# Docker default: backend:8000
 	# Bare override:  BACKEND_UPSTREAM=localhost BACKEND_PORT=8000
@@ -53,5 +62,15 @@
 		root * {$FRONTEND_ROOT:/app/frontend}
 		try_files {path} /index.html
 		file_server
+	}
+}
+
+lcenzo.com, www.lcenzo.com, *.lcenzo.com {
+	tls {$FALLBACK_TLS_CERT:/etc/caddy/origin-certs/lcenzo.com.pem} {$FALLBACK_TLS_KEY:/etc/caddy/origin-certs/lcenzo.com.key}
+
+	root * {$FALLBACK_ROOT:/opt/notif/deploy/fallback}
+	rewrite * /not-found.html
+	file_server {
+		status 404
 	}
 }

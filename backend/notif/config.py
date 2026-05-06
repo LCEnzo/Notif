@@ -44,6 +44,7 @@ class Settings(BaseSettings):
 		description="URL prefix for the Django admin (must end with '/'). Override in production to reduce brute-force log noise.",
 	)
 	SQLITE_PATH: str = Field(default="db.sqlite3", min_length=1)
+	CADDY_ACCESS_LOG_PATH: str = Field(default="/app/caddy-logs/access.json", min_length=1)
 
 	# ── static files ───────────────────────────────────────
 	STATIC_ROOT: str = Field(default="staticfiles", min_length=1)

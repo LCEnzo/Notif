@@ -34,6 +34,7 @@ urlpatterns = [
 	path(_admin_url, admin.site.urls),
 	path("api/v1/accounts/", include("accounts.urls")),
 	path("api/v1/monitoring/", include("monitoring.urls")),
+	path("api/v1/ops/", include("ops.urls")),
 	# JWT config
 	path("api/v1/token/", DevBootstrapTokenObtainPairView.as_view(), name="token_obtain_pair"),  # type: ignore
 	path("api/v1/token/refresh/", ThrottledTokenRefreshView.as_view(), name="token_refresh"),  # type: ignore
