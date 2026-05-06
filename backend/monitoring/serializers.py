@@ -29,7 +29,14 @@ class LinkSerializer(ModelSerializer):
 			"comparison_info",
 		]
 
-		read_only_fields = ["id", "comparison_info", "last_scraped", "scrape_failure_count", "last_scrape_error"]
+		read_only_fields = [
+			"id",
+			"comparison_info",
+			"last_scraped",
+			"next_scrape_at",
+			"scrape_failure_count",
+			"last_scrape_error",
+		]
 
 		extra_kwargs = {
 			"name": {"required": True},

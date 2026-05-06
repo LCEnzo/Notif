@@ -19,17 +19,26 @@ class OpsPage extends StatefulWidget {
 }
 
 class _OpsPageState extends State<OpsPage> {
+  bool _didFetchInitialOpsData = false;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final user = context.read<UserDataService>().userData;
-      if (user?.isStaff == true || user?.isSuperuser == true) {
-        final ops = context.read<OpsService>();
-        ops.fetchEvents();
-        ops.fetchCaddyLogs();
-      }
-    });
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _fetchOpsDataIfAllowed(),
+    );
+  }
+
+  void _fetchOpsDataIfAllowed() {
+    if (!mounted || _didFetchInitialOpsData) return;
+    final user = context.read<UserDataService>().userData;
+    final hasOpsAccess = user?.isStaff == true || user?.isSuperuser == true;
+    if (!hasOpsAccess) return;
+
+    _didFetchInitialOpsData = true;
+    final ops = context.read<OpsService>();
+    ops.fetchEvents();
+    ops.fetchCaddyLogs();
   }
 
   @override
@@ -40,6 +49,11 @@ class _OpsPageState extends State<OpsPage> {
     final user = context.watch<UserDataService>().userData;
     final ops = context.watch<OpsService>();
     final hasOpsAccess = user?.isStaff == true || user?.isSuperuser == true;
+    if (hasOpsAccess && !_didFetchInitialOpsData) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _fetchOpsDataIfAllowed(),
+      );
+    }
 
     return Scaffold(
       backgroundColor: tokens.bg1,

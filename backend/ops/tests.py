@@ -1,4 +1,5 @@
 import json
+import sqlite3
 from datetime import timedelta
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -98,11 +99,17 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 403)
 
 	def test_superuser_can_download_sqlite_backup(self):
+		def fake_backup(_source, _db_name, tmp_path):
+			with open(tmp_path, "wb") as fh:
+				fh.write(b"SQLite format 3\x00" + b"\x00" * 100)
+
 		client = login_client(APIClient(), self.superuser.get_username())
 
-		response = client.get(reverse("download-sqlite-backup"))
+		with patch("ops.views._write_sqlite_backup", side_effect=fake_backup) as write_backup:
+			response = client.get(reverse("download-sqlite-backup"))
 
 		self.assertEqual(response.status_code, 200)
+		write_backup.assert_called_once()
 		self.assertEqual(response["Content-Type"], "application/vnd.sqlite3")
 		self.assertIn("attachment;", response["Content-Disposition"])
 		self.assertEqual(response["Cache-Control"], "no-store")
@@ -121,6 +128,29 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(prepared.details["size_bytes"], len(body))
 		self.assertEqual(completed.details["bytes_streamed"], len(body))
 		self.assertEqual(completed.details["size_bytes"], len(body))
+
+	def test_write_sqlite_backup_handles_memory_database(self):
+		from ops.views import _write_sqlite_backup
+
+		source = sqlite3.connect(":memory:")
+		try:
+			source.execute("create table example (value text)")
+			source.execute("insert into example values ('ok')")
+			source.commit()
+			with TemporaryDirectory() as tmp_dir:
+				backup_path = f"{tmp_dir}/backup.sqlite3"
+
+				_write_sqlite_backup(source, ":memory:", backup_path)
+
+				restored = sqlite3.connect(backup_path)
+				try:
+					rows = restored.execute("select value from example").fetchall()
+				finally:
+					restored.close()
+		finally:
+			source.close()
+
+		self.assertEqual(rows, [("ok",)])
 
 
 class RunDueTasksCommandTestCase(SetupMixin, TestCase):

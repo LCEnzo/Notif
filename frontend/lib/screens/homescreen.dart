@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
@@ -80,6 +81,16 @@ class _HomePageState extends State<HomePage> {
     bool newTab = false,
   }) async {
     final notificationService = context.read<NotificationService>();
+    if (newTab) {
+      if (notification.itemUrl.isNotEmpty) {
+        unawaited(_openExternalUrl(notification.itemUrl, newTab: true));
+      }
+      if (notification.isUnread) {
+        unawaited(notificationService.markRead(notification.id));
+      }
+      return;
+    }
+
     if (notification.isUnread) {
       await notificationService.markRead(notification.id);
     }
@@ -1963,9 +1974,9 @@ class _ConsoleNotificationRowState extends State<_ConsoleNotificationRow> {
     final source = _notificationSource(notification);
 
     return Listener(
-      onPointerUp: (event) {
+      onPointerDown: (event) {
         if (event.kind == PointerDeviceKind.mouse &&
-            event.buttons == kMiddleMouseButton) {
+            (event.buttons & kMiddleMouseButton) != 0) {
           _open(newTab: true);
         }
       },
