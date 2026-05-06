@@ -35,6 +35,47 @@ The orange cloud terminates TLS, which means **TLS-ALPN-01 cannot reach Caddy**.
 
 The `Caddyfile` is pre-configured with Cloudflare's IP ranges in `trusted_proxies`, so behind the orange cloud, Caddy logs the real client IP from the `CF-Connecting-IP` header instead of Cloudflare's proxy IPs. When CF publishes new ranges (rare, see https://www.cloudflare.com/ips/), update the list in `Caddyfile` and reload Caddy.
 
+### Fallback host Origin Certificate
+
+The fallback Caddy site for `lcenzo.com`, `www.lcenzo.com`, and `*.lcenzo.com`
+uses a Cloudflare Origin Certificate so wildcard fallback hosts can sit behind
+orange-cloud DNS without requiring a custom Caddy DNS-01 build.
+
+Before starting Caddy with the fallback host block enabled, create a Cloudflare
+Origin Certificate for both names:
+
+```text
+lcenzo.com
+*.lcenzo.com
+```
+
+Install the certificate and key on the VPS:
+
+```bash
+sudo mkdir -p /etc/caddy/origin-certs
+sudo chmod 700 /etc/caddy/origin-certs
+sudo install -m 644 lcenzo.com.pem /etc/caddy/origin-certs/lcenzo.com.pem
+sudo install -m 600 lcenzo.com.key /etc/caddy/origin-certs/lcenzo.com.key
+```
+
+The Docker Compose Caddy service mounts `/etc/caddy/origin-certs` read-only.
+By default, Caddy expects:
+
+```text
+/etc/caddy/origin-certs/lcenzo.com.pem
+/etc/caddy/origin-certs/lcenzo.com.key
+```
+
+If those filenames need to change, set these values in the project-level `.env`
+before running Compose:
+
+```dotenv
+FALLBACK_TLS_CERT=/etc/caddy/origin-certs/<cert-file>.pem
+FALLBACK_TLS_KEY=/etc/caddy/origin-certs/<key-file>.key
+```
+
+Caddy will fail to load if the configured files are missing or unreadable.
+
 ---
 
 ## Option A: Docker Compose

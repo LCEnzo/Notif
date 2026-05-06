@@ -40,7 +40,8 @@ class Command(BaseCommand):
 		delay = max(0.0, options["delay"])
 		lock_ttl_seconds = max(1, options["lock_ttl_seconds"])
 
-		if not _acquire_lock(lock_ttl_seconds):
+		lock_acquired_at = _acquire_lock(lock_ttl_seconds)
+		if lock_acquired_at is None:
 			self.stdout.write("Skipped: maintenance lock is already held.")
 			return
 
@@ -97,18 +98,22 @@ class Command(BaseCommand):
 				f"{summary['password_reset_codes_deleted']} reset code(s) deleted."
 			)
 		finally:
-			MaintenanceLock.objects.filter(key=_LOCK_KEY).delete()
+			_release_lock(lock_acquired_at)
 
 
-def _acquire_lock(lock_ttl_seconds: int) -> bool:
+def _acquire_lock(lock_ttl_seconds: int):
 	now = timezone.now()
 	stale_before = now - timedelta(seconds=lock_ttl_seconds)
 	with transaction.atomic():
 		lock = MaintenanceLock.objects.filter(key=_LOCK_KEY).first()
 		if lock is not None and lock.acquired_at > stale_before:
-			return False
+			return None
 		MaintenanceLock.objects.update_or_create(key=_LOCK_KEY, defaults={"acquired_at": now})
-		return True
+		return now
+
+
+def _release_lock(acquired_at) -> None:
+	MaintenanceLock.objects.filter(key=_LOCK_KEY, acquired_at=acquired_at).delete()
 
 
 def _cleanup_password_reset_codes(now) -> int:

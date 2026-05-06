@@ -147,6 +147,18 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 
 		scrape_link.assert_not_called()
 
+	def test_command_does_not_release_newer_stale_lock_takeover(self):
+		from ops.management.commands.run_due_tasks import _LOCK_KEY, _release_lock
+
+		first_acquired_at = timezone.now() - timedelta(hours=2)
+		second_acquired_at = timezone.now()
+		MaintenanceLock.objects.create(key=_LOCK_KEY, acquired_at=second_acquired_at)
+
+		_release_lock(first_acquired_at)
+
+		lock = MaintenanceLock.objects.get(key=_LOCK_KEY)
+		self.assertEqual(lock.acquired_at, second_acquired_at)
+
 	def test_command_scrapes_due_links_and_sets_next_scrape(self):
 		Link.objects.update(next_scrape_at=timezone.now() + timedelta(hours=1))
 		link = self.regular_user.link_set.first()
