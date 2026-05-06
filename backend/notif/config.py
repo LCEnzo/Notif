@@ -33,10 +33,10 @@ class Settings(BaseSettings):
 	DEBUG: bool = True
 	DJANGO_SECRET_KEY: str = Field(min_length=1)
 	ALLOWED_HOSTS: str = Field(default="localhost,127.0.0.1,[::1]", min_length=1)
-	CORS_ALLOWED_ORIGINS: str = Field(default="", description="Comma-separated origins, e.g. https://notif.example.com")
+	CORS_ALLOWED_ORIGINS: str = Field(default="", description="Comma-separated origins, e.g. https://notif.lcenzo.com")
 	CSRF_TRUSTED_ORIGINS: str = Field(
 		default="",
-		description="Comma-separated scheme+host origins that POSTs are accepted from, e.g. https://notif.example.com. Required behind an HTTPS reverse proxy.",
+		description="Comma-separated scheme+host origins that POSTs are accepted from, e.g. https://notif.lcenzo.com. Required behind an HTTPS reverse proxy.",
 	)
 	DJANGO_ADMIN_URL: str = Field(
 		default="admin/",

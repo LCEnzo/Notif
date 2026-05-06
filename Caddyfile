@@ -23,7 +23,7 @@
 	}
 }
 
-{$NOTIF_DOMAIN:notif.example.com} {
+{$NOTIF_DOMAIN:notif.lcenzo.com} {
 	log {
 		output file {$CADDY_ACCESS_LOG:/var/log/caddy/access.json} {
 			roll_size 10MiB
@@ -50,8 +50,8 @@
 
 	# Django admin — proxied to backend so it isn't swallowed by the SPA
 	# fallback below. The path is controlled by DJANGO_ADMIN_ROUTE
-	# (defaults to /supah-admin/*, matching the DJANGO_ADMIN_URL setting).
-	handle {$DJANGO_ADMIN_ROUTE} {
+	# (defaults to /admin/*, matching the DJANGO_ADMIN_URL setting).
+	handle {$DJANGO_ADMIN_ROUTE:/admin/*} {
 		reverse_proxy {$BACKEND_UPSTREAM:localhost}:{$BACKEND_PORT:8000}
 	}
 
