@@ -11,7 +11,7 @@ set -euo pipefail
 # Usage:
 #   bash deploy/write-prod-env.sh                       # write both .env files
 #   bash deploy/write-prod-env.sh --force               # overwrite, rotate secrets
-#   NOTIF_DOMAIN=notif.example.com bash deploy/write-prod-env.sh
+#   NOTIF_DOMAIN=notif.lcenzo.com bash deploy/write-prod-env.sh
 #
 # Requires: openssl, git (in repo root)
 

@@ -57,8 +57,8 @@ services:
       backend:
         condition: service_healthy
     environment:
-      - NOTIF_DOMAIN=${NOTIF_DOMAIN:-notif.example.com}
-      - DJANGO_ADMIN_ROUTE=${DJANGO_ADMIN_ROUTE:-/supah-admin/*}
+      - NOTIF_DOMAIN=${NOTIF_DOMAIN:-notif.lcenzo.com}
+      - DJANGO_ADMIN_ROUTE=${DJANGO_ADMIN_ROUTE:-/admin/*}
       - STATIC_ROOT=/app/staticfiles
       - FRONTEND_ROOT=/web-dist
       - BACKEND_UPSTREAM=backend

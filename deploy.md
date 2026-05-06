@@ -298,6 +298,7 @@ NOTIF_DOMAIN=notif.lcenzo.com
 STATIC_ROOT=/opt/notif/backend/staticfiles
 BACKEND_UPSTREAM=localhost
 BACKEND_PORT=8000
+DJANGO_ADMIN_ROUTE=/ops-<same-random-suffix-as-DJANGO_ADMIN_URL>/*
 ENV
 
 # Load the env file before Caddy starts.
