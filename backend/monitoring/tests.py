@@ -619,7 +619,9 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 			def can_scrape_url(self, url: URL) -> bool:
 				return True
 
-			def scrape(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
+			def scrape(
+				self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, Any], *args, **kwargs
+			) -> ScrapeResult:
 				raise RuntimeError("boom")
 
 		link = self.links[0]
@@ -643,7 +645,9 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 			def can_scrape_url(self, url: URL) -> bool:
 				return True
 
-			def scrape(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
+			def scrape(
+				self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, Any], *args, **kwargs
+			) -> ScrapeResult:
 				return Ok(ScrapeSuccess(updates=[], comparison_state_update=cast(Any, [])))
 
 		link = self.links[0]

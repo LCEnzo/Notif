@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from typing import Any
 
+from django.db.models.query import QuerySet
 from django.http import HttpRequest
 from rest_framework import permissions
 from rest_framework.permissions import BasePermission
@@ -68,7 +70,12 @@ class OwnerOrAdminQuerysetMixin:
 	for StrategyViewSet).
 	"""
 
-	def _scoped_queryset(self, base_queryset, *, user_filter=None):
+	def _scoped_queryset(
+		self,
+		base_queryset: QuerySet[Any],
+		*,
+		user_filter: Callable[[QuerySet[Any], Any], QuerySet[Any]] | None = None,
+	) -> QuerySet[Any]:
 		"""Return ``base_queryset`` scoped to the current user.
 
 		When *user_filter* is omitted, the default ownership check is

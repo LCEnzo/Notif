@@ -3,25 +3,26 @@ from typing import Any, cast
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
 from django.contrib.auth.validators import UnicodeUsernameValidator
 from django.db import models
+from django.db.models.query import QuerySet
 from django.utils import timezone
 
 
-class UserManager(BaseUserManager):
-	def create_user(self, email: str, username: str, password: str, **extra_fields) -> User:
+class UserManager(BaseUserManager["User"]):
+	def create_user(self, email: str, username: str, password: str, **extra_fields: Any) -> User:
 		if not email:
 			raise ValueError("Email is required")
 		email = self.normalize_email(email)
 		user = self.model(email=email, username=username, **extra_fields)
 		cast(AbstractBaseUser, user).set_password(password)
 		user.save(using=self._db)
-		return cast(User, user)
+		return user
 
-	def create_superuser(self, email: str, username: str, password: str, **extra_fields) -> User:
+	def create_superuser(self, email: str, username: str, password: str, **extra_fields: Any) -> User:
 		extra_fields["is_staff"] = True
 		extra_fields["is_superuser"] = True
 		return self.create_user(email, username, password, **extra_fields)
 
-	def get_queryset(self):
+	def get_queryset(self) -> QuerySet[User]:
 		return super().get_queryset().filter(date_deleted__isnull=True)
 
 

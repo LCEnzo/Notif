@@ -26,7 +26,7 @@ class Strategy(models.Model):
 		choices=choices_dict_to_tuple(),
 	)
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return f"Strategy {self.pk}: {self.strat_cls}"
 
 
@@ -49,7 +49,7 @@ class Link(models.Model):
 	# I should consider what type of field to have. Previous scrape response or whatever
 	comparison_info = models.CharField(max_length=16 * 16 * 1024, blank=True)
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return f"Link {self.pk} - {self.name}: {self.url}"
 
 
@@ -65,7 +65,7 @@ class Update(models.Model):
 	class Meta:
 		ordering = ["-created_at"]
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return f"Update {self.pk}: {self.title}"
 
 
@@ -81,5 +81,5 @@ class Notification(models.Model):
 	status = models.CharField(max_length=16, choices=Status.choices, default=Status.UNREAD)
 	read_at = models.DateTimeField(null=True, blank=True)
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return f"Notification {self.pk} ({self.status}): {self.update.title}"

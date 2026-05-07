@@ -12,6 +12,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import connection
+from django.db.models.query import QuerySet
 from django.http import HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -35,7 +36,7 @@ _BACKUP_STREAM_CHUNK = 64 * 1024
 
 
 class IsSuperUser(IsAdminUser):
-	def has_permission(self, request: Request, view) -> bool:
+	def has_permission(self, request: Request, view: Any) -> bool:
 		return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
 
 
@@ -45,7 +46,7 @@ class SystemEventPagination(PageNumberPagination):
 	max_page_size = 200
 
 
-class SystemEventViewSet(ReadOnlyModelViewSet):
+class SystemEventViewSet(ReadOnlyModelViewSet[SystemEvent]):
 	permission_classes = [IsAdminUser]
 	serializer_class = SystemEventSerializer
 	pagination_class = SystemEventPagination
@@ -53,7 +54,7 @@ class SystemEventViewSet(ReadOnlyModelViewSet):
 	ordering_fields = ["created_at", "id", "level", "source", "kind"]
 	ordering = ["-created_at", "-id"]
 
-	def get_queryset(self):
+	def get_queryset(self) -> QuerySet[SystemEvent]:
 		queryset = SystemEvent.objects.all()
 
 		level = self.request.query_params.get("level")

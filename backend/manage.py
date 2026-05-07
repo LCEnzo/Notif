@@ -5,7 +5,7 @@ import os
 import sys
 
 
-def main():
+def main() -> None:
 	"""Run administrative tasks."""
 	# Load typed config early — needed before Django settings import
 	from notif.config import settings

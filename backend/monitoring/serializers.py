@@ -4,13 +4,13 @@ from rest_framework.serializers import ModelSerializer
 from monitoring.models import Link, Notification, Strategy, Update
 
 
-class StrategySerializer(ModelSerializer):
+class StrategySerializer(ModelSerializer[Strategy]):
 	class Meta:
 		model = Strategy
 		fields = "__all__"
 
 
-class LinkSerializer(ModelSerializer):
+class LinkSerializer(ModelSerializer[Link]):
 	class Meta:
 		model = Link
 
@@ -46,14 +46,14 @@ class LinkSerializer(ModelSerializer):
 		}
 
 
-class UpdateSerializer(ModelSerializer):
+class UpdateSerializer(ModelSerializer[Update]):
 	class Meta:
 		model = Update
 		fields = ["id", "link", "title", "description", "item_url", "created_at"]
 		read_only_fields = fields
 
 
-class NotificationSerializer(ModelSerializer):
+class NotificationSerializer(ModelSerializer[Notification]):
 	update = UpdateSerializer(read_only=True)  # type: ignore[assignment]
 
 	class Meta:

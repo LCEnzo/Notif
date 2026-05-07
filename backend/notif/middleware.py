@@ -11,6 +11,8 @@ with zero overhead.  Only applies to paths starting with /api/.
 
 import random
 import time
+from collections.abc import Callable
+from typing import Any
 
 from notif.config import settings
 
@@ -18,14 +20,14 @@ from notif.config import settings
 class DevLatencyMiddleware:
 	"""Add artificial latency to /api/ requests for frontend testing."""
 
-	def __init__(self, get_response):
+	def __init__(self, get_response: Callable[[Any], Any]) -> None:
 		self.get_response = get_response
 
 	@property
 	def active(self) -> bool:
 		return settings.DEV_API_LATENCY_MS > 0 or settings.DEV_API_LATENCY_JITTER_MS > 0
 
-	def __call__(self, request):
+	def __call__(self, request: Any) -> Any:
 		if not self.active or not request.path.startswith("/api/"):
 			return self.get_response(request)
 

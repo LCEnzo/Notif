@@ -1,5 +1,6 @@
 import string
 from math import log2
+from typing import Any
 
 from django.core.exceptions import ValidationError
 
@@ -11,10 +12,10 @@ E_min = log2(time_in_seconds * attempts_per_second * efficiency_of_attack)
 
 
 class EntropyValidator:
-	def __init__(self, min_entropy=E_min):
+	def __init__(self, min_entropy: float = E_min) -> None:
 		self.min_entropy = min_entropy
 
-	def validate(self, password, user=None):
+	def validate(self, password: str, user: Any | None = None) -> None:
 		password_entropy = self.calculate_password_entropy(password)
 		if password_entropy < self.min_entropy:
 			raise ValidationError(
@@ -22,7 +23,7 @@ class EntropyValidator:
 				code="insufficient_entropy",
 			)
 
-	def get_help_text(self, password_entropy=None):
+	def get_help_text(self, password_entropy: float | None = None) -> str:
 		password_string = "" if password_entropy is None else f"Your password has {password_entropy} bits of entropy. "
 
 		return (

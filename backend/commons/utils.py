@@ -1,6 +1,8 @@
 import datetime
 import logging
 import random
+from collections.abc import Sequence
+from typing import Any
 
 from faker import Faker
 from faker.providers import bank, company, person
@@ -17,14 +19,14 @@ password: str = "password"
 # This class is created to step around the issue that multi locale and
 # multi provider use of the classes causes a NotImplementedException as of Faker 18.9.0
 class MultiLocaleFaker:
-	def __init__(self, locales):
+	def __init__(self, locales: Sequence[str]) -> None:
 		self._fakers = [Faker(locale) for locale in locales]
 		for faker in self._fakers:
 			faker.add_provider(company)
 			faker.add_provider(bank)
 			faker.add_provider(person)
 
-	def __getattr__(self, name):
+	def __getattr__(self, name: str) -> Any:
 		return getattr(random.choice(self._fakers), name)
 
 

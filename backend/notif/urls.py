@@ -36,15 +36,15 @@ urlpatterns = [
 	path("api/v1/monitoring/", include("monitoring.urls")),
 	path("api/v1/ops/", include("ops.urls")),
 	# JWT config
-	path("api/v1/token/", DevBootstrapTokenObtainPairView.as_view(), name="token_obtain_pair"),  # type: ignore
-	path("api/v1/token/refresh/", ThrottledTokenRefreshView.as_view(), name="token_refresh"),  # type: ignore
-	path("api/v1/token/verify/", ThrottledTokenVerifyView.as_view(), name="token_verify"),  # type: ignore
+	path("api/v1/token/", DevBootstrapTokenObtainPairView.as_view(), name="token_obtain_pair"),
+	path("api/v1/token/refresh/", ThrottledTokenRefreshView.as_view(), name="token_refresh"),
+	path("api/v1/token/verify/", ThrottledTokenVerifyView.as_view(), name="token_verify"),
 	# OpenAPI schema & docs (public — no auth so agents can discover the API)
-	path("api/v1/schema/", SpectacularAPIView.as_view(permission_classes=[AllowAny]), name="schema"),  # type: ignore[arg-type]
+	path("api/v1/schema/", SpectacularAPIView.as_view(permission_classes=[AllowAny]), name="schema"),
 	path(
 		"api/v1/docs/",
 		SpectacularSwaggerView.as_view(permission_classes=[AllowAny], url_name="schema"),
 		name="swagger-ui",
-	),  # type: ignore[arg-type]
-	path("api/v1/redoc/", SpectacularRedocView.as_view(permission_classes=[AllowAny], url_name="schema"), name="redoc"),  # type: ignore[arg-type]
+	),
+	path("api/v1/redoc/", SpectacularRedocView.as_view(permission_classes=[AllowAny], url_name="schema"), name="redoc"),
 ]

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from argparse import ArgumentParser
+from datetime import datetime, timedelta
 from time import monotonic
+from typing import Any
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -29,7 +31,7 @@ _MAX_FAILURE_BACKOFF_MINUTES = 24 * 60
 class Command(BaseCommand):
 	help = "Run bounded backend maintenance: cleanup, due scrapes, and future scheduled work."
 
-	def add_arguments(self, parser):
+	def add_arguments(self, parser: ArgumentParser) -> None:
 		parser.add_argument("--max-links", type=int, default=20, help="Maximum due links to scrape in one run")
 		parser.add_argument("--max-runtime-seconds", type=int, default=240, help="Maximum runtime before stopping")
 		parser.add_argument("--delay", type=float, default=2.0, help="Seconds between same-domain requests")
@@ -37,7 +39,7 @@ class Command(BaseCommand):
 			"--lock-ttl-seconds", type=int, default=30 * 60, help="Seconds before a stale lock is ignored"
 		)
 
-	def handle(self, *args, **options):
+	def handle(self, *args: Any, **options: Any) -> None:
 		max_links = max(0, options["max_links"])
 		max_runtime_seconds = max(1, options["max_runtime_seconds"])
 		delay = max(0.0, options["delay"])
@@ -113,7 +115,7 @@ class Command(BaseCommand):
 			_release_lock(lock_acquired_at)
 
 
-def _acquire_lock(lock_ttl_seconds: int):
+def _acquire_lock(lock_ttl_seconds: int) -> datetime | None:
 	now = timezone.now()
 	stale_before = now - timedelta(seconds=lock_ttl_seconds)
 	with transaction.atomic():
@@ -124,11 +126,11 @@ def _acquire_lock(lock_ttl_seconds: int):
 		return now
 
 
-def _release_lock(acquired_at) -> None:
+def _release_lock(acquired_at: datetime) -> None:
 	MaintenanceLock.objects.filter(key=_LOCK_KEY, acquired_at=acquired_at).delete()
 
 
-def _cleanup_password_reset_codes(now) -> int:
+def _cleanup_password_reset_codes(now: datetime) -> int:
 	expired_before = now - PASSWORD_RESET_CODE_TTL
 	deleted, _ = PasswordResetCode.objects.filter(
 		Q(created_at__lt=expired_before) | Q(failed_attempts__gte=PASSWORD_RESET_CODE_MAX_ATTEMPTS)
@@ -136,7 +138,7 @@ def _cleanup_password_reset_codes(now) -> int:
 	return deleted
 
 
-def _due_links(now, max_links: int) -> list[Link]:
+def _due_links(now: datetime, max_links: int) -> list[Link]:
 	if max_links <= 0:
 		return []
 	return list(

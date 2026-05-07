@@ -1,3 +1,6 @@
+from argparse import ArgumentParser
+from typing import Any
+
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
@@ -8,11 +11,11 @@ from accounts.models import User
 class Command(BaseCommand):
 	help = "Set a user's password from the command line (recovery for locked-out users)."
 
-	def add_arguments(self, parser):
+	def add_arguments(self, parser: ArgumentParser) -> None:
 		parser.add_argument("username", type=str, help="Username to reset password for")
 		parser.add_argument("--password", type=str, help="New password (omit for interactive prompt)")
 
-	def handle(self, *args, **options):
+	def handle(self, *args: Any, **options: Any) -> None:
 		username = options["username"]
 		try:
 			user = User._base_manager.get(username=username)

@@ -105,7 +105,14 @@ class BaseStrategy(ABC):
 		pass
 
 	@abstractmethod
-	def scrape(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
+	def scrape(
+		self,
+		url: URL,
+		config_data: dict[str, Any],
+		comparison_data: dict[str, Any],
+		*args: Any,
+		**kwargs: Any,
+	) -> ScrapeResult:
 		"""
 		This function is the basic functionality. It takes in the URL to be scraped, as well as JSON data/dict.
 		It should return whether there was new stuff found, and if so, what it is.
@@ -116,7 +123,14 @@ class BaseStrategy(ABC):
 		"""
 		pass
 
-	def __call__(self, url: URL, config_data: dict, comparison_data: dict, *args, **kwargs) -> ScrapeResult:
+	def __call__(
+		self,
+		url: URL,
+		config_data: dict[str, Any],
+		comparison_data: dict[str, Any],
+		*args: Any,
+		**kwargs: Any,
+	) -> ScrapeResult:
 		return self.scrape(url, config_data, comparison_data, *args, **kwargs)
 
 
@@ -132,7 +146,12 @@ class GeneralSelectorStrategy(BaseStrategy):
 		return True
 
 	def scrape(
-		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, list[int]], *args, **kwargs
+		self,
+		url: URL,
+		config_data: dict[str, Any],
+		comparison_data: dict[str, list[int]],
+		*args: Any,
+		**kwargs: Any,
 	) -> ScrapeResult:
 		selectors: list[str] = config_data["selectors"]
 		old_data: dict[str, list[int]] = {selector: comparison_data.get(str(selector), []) for selector in selectors}
@@ -197,7 +216,7 @@ class SThreadmarkInfo:
 			title=json_dict["title"], word_count=json_dict["word_count"], pub_date=pub_date, link=json_dict["link"]
 		)
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return (
 			f"SThreadmark Information:\n"
 			f"- Title: {self.title}\n"
@@ -381,7 +400,7 @@ class AlertInfo:
 			post_time=post_time,
 		)
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return (
 			f"Alert Information:\n"
 			f"- Author Name: {self.author_name}\n"
@@ -418,7 +437,12 @@ class QQAlertsStrategy(BaseStrategy):
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
 
 	def scrape(
-		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], *args, **kwargs
+		self,
+		url: URL,
+		config_data: dict[str, Any],
+		comparison_data: dict[str, str],
+		*args: Any,
+		**kwargs: Any,
 	) -> ScrapeResult:
 		if not self.can_scrape_url(url):
 			return Err("Invalid URL")
@@ -546,17 +570,17 @@ class QQAlertsStrategy(BaseStrategy):
 		author_tag = notif.find("a", class_="username subject")
 		if author_tag is not None:
 			author_name = author_tag.text.strip()
-			author_link = f"{url}/{author_tag['href']}"  # type: ignore
+			author_link = f"{url}/{author_tag['href']}"
 
 		# Extract author avatar image URL
 		avatar_img = notif.find("img")
 		if avatar_img is not None:
-			avatar_image_url = f"{url}/{avatar_img['src']}"  # type: ignore
+			avatar_image_url = f"{url}/{avatar_img['src']}"
 
 		# Extract post link
 		post_link_tag = notif.find("a", class_="PopupItemLink")
 		if post_link_tag is not None:
-			post_link = f"{url}/{post_link_tag['href']}"  # type: ignore
+			post_link = f"{url}/{post_link_tag['href']}"
 
 		time_tag = notif.find("span", class_="time")
 		if time_tag is not None:
@@ -640,7 +664,7 @@ class KemonoCardInfo:
 		date_time = None if json_dict["date_time"] is None else datetime.fromisoformat(json_dict["date_time"])
 		return cls(name=json_dict["name"], date_time=date_time, service=json_dict["service"], link=json_dict["link"])
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return (
 			f"Kemono Profile Information:\n"
 			f"- Service: {self.service}\n"
@@ -672,7 +696,12 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
 
 	def scrape(
-		self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str], *args, **kwargs
+		self,
+		url: URL,
+		config_data: dict[str, Any],
+		comparison_data: dict[str, str],
+		*args: Any,
+		**kwargs: Any,
 	) -> ScrapeResult:
 		if not self.can_scrape_url(url):
 			return Err("Invalid URL")
@@ -800,8 +829,8 @@ class FeedStrategy(BaseStrategy):
 		url: URL,
 		config_data: dict[str, Any],
 		comparison_data: dict[str, Any],
-		*args,
-		**kwargs,
+		*args: Any,
+		**kwargs: Any,
 	) -> ScrapeResult:
 		try:
 			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
