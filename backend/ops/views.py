@@ -107,7 +107,7 @@ def download_sqlite_backup(request: Request) -> HttpResponse | Response | Stream
 	os.close(fd)
 	try:
 		_write_sqlite_backup(source, str(db_config["NAME"]), tmp_path)
-		size_bytes = os.path.getsize(tmp_path)
+		size_bytes = Path(tmp_path).stat().st_size
 	except Exception:
 		_unlink_quiet(tmp_path)
 		raise
@@ -148,7 +148,7 @@ def _write_sqlite_backup(source: sqlite3.Connection, db_name: str, tmp_path: str
 	"""
 	if db_name == ":memory:" or db_name.startswith("file::memory:") or db_name.startswith("file:memdb"):
 		data = source.serialize()
-		with open(tmp_path, "wb") as fh:
+		with Path(tmp_path).open("wb") as fh:
 			fh.write(data)
 		return
 
@@ -164,7 +164,7 @@ def _stream_and_unlink(path: str, audit_context: dict[str, Any]) -> Iterator[byt
 	bytes_sent = 0
 	completed = False
 	try:
-		with open(path, "rb") as fh:
+		with Path(path).open("rb") as fh:
 			while True:
 				chunk = fh.read(_BACKUP_STREAM_CHUNK)
 				if not chunk:
@@ -201,7 +201,7 @@ def _record_stream_outcome(audit_context: dict[str, Any], bytes_sent: int, compl
 
 def _unlink_quiet(path: str) -> None:
 	with contextlib.suppress(OSError):
-		os.unlink(path)
+		Path(path).unlink()
 
 
 def _client_ip(request: Request) -> str:

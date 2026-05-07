@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from time import monotonic
 
@@ -18,6 +19,8 @@ from monitoring.models import Link
 from monitoring.rate_limiter import DomainRateLimiter
 from monitoring.services import scrape_link
 from ops.models import MaintenanceLock, SystemEvent
+
+logger = logging.getLogger(__name__)
 
 _LOCK_KEY = "run_due_tasks"
 _MAX_FAILURE_BACKOFF_MINUTES = 24 * 60
@@ -39,6 +42,15 @@ class Command(BaseCommand):
 		max_runtime_seconds = max(1, options["max_runtime_seconds"])
 		delay = max(0.0, options["delay"])
 		lock_ttl_seconds = max(1, options["lock_ttl_seconds"])
+
+		if lock_ttl_seconds < max_runtime_seconds:
+			logger.warning(
+				"lock-ttl-seconds (%d) < max-runtime-seconds (%d); raising lock TTL to %d",
+				lock_ttl_seconds,
+				max_runtime_seconds,
+				max_runtime_seconds,
+			)
+			lock_ttl_seconds = max_runtime_seconds
 
 		lock_acquired_at = _acquire_lock(lock_ttl_seconds)
 		if lock_acquired_at is None:

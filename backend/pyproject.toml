@@ -67,6 +67,8 @@ select = [
 	"DJ",    # flake8-django
 	"RET",   # flake8-return
 	"SIM",   # flake8-simplify
+	"T201",  # use of print, can leak secrets in logs
+	"PTH",
 	"RUF100",# unused-noqa
 ]
 ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118", "W191"]

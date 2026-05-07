@@ -1,7 +1,7 @@
 import hashlib
 import logging
-import os
 import xml.sax.saxutils
+from pathlib import Path
 from pprint import pprint  # noqa: F401
 from typing import Any, cast
 from unittest.mock import patch
@@ -207,8 +207,8 @@ class SBSVThreadmarksStrategyTestCase(TestCase):
 	@pytest.mark.slow
 	@pytest.mark.e2e
 	def test_scrape(self):
-		file_path = f"{os.path.dirname(__file__)}/tests/skkitterdoc-threadmarks.html"
-		with open(file_path) as html_file, requests_mock.Mocker() as mocker:
+		file_path = Path(__file__).parent / "tests" / "skkitterdoc-threadmarks.html"
+		with file_path.open() as html_file, requests_mock.Mocker() as mocker:
 			html_content = html_file.read()
 			mocker.get(self.url, text=html_content)
 
@@ -1104,8 +1104,8 @@ class FeedStrategyRealFeedTestCase(TestCase):
 		self.strategy = FeedStrategy()
 
 	def _load_feed(self, filename: str) -> str:
-		file_path = f"{os.path.dirname(__file__)}/tests/{filename}"
-		with open(file_path, encoding="utf-8") as f:
+		file_path = Path(__file__).parent / "tests" / filename
+		with file_path.open(encoding="utf-8") as f:
 			return f.read()
 
 	@pytest.mark.slow

@@ -1,6 +1,7 @@
 import json
 import sqlite3
 from datetime import timedelta
+from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -60,7 +61,7 @@ class OpsApiTestCase(SetupMixin, TestCase):
 	def test_staff_can_read_caddy_logs(self):
 		with TemporaryDirectory() as tmp_dir:
 			log_path = f"{tmp_dir}/access.json"
-			with open(log_path, "w", encoding="utf-8") as log_file:
+			with Path(log_path).open("w", encoding="utf-8") as log_file:
 				log_file.write(json.dumps({"ts": 1, "request": {"uri": "/old"}, "status": 200}) + "\n")
 				log_file.write(json.dumps({"ts": 2, "request": {"uri": "/new"}, "status": 404}) + "\n")
 
@@ -100,7 +101,7 @@ class OpsApiTestCase(SetupMixin, TestCase):
 
 	def test_superuser_can_download_sqlite_backup(self):
 		def fake_backup(_source, _db_name, tmp_path):
-			with open(tmp_path, "wb") as fh:
+			with Path(tmp_path).open("wb") as fh:
 				fh.write(b"SQLite format 3\x00" + b"\x00" * 100)
 
 		client = login_client(APIClient(), self.superuser.get_username())

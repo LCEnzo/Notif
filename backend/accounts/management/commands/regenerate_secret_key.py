@@ -10,7 +10,7 @@ class Command(BaseCommand):
 
 	def handle(self, *args, **kwargs):
 		# get the path to the .env file
-		env_path = Path(".") / ".env"
+		env_path = Path(".env")
 
 		# load the .env file
 		load_dotenv(dotenv_path=env_path)
