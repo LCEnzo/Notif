@@ -1830,7 +1830,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
   final VoidCallback? onMarkAllRead;
 
   @override
-  double get minExtent => mobileTui ? 25 : metrics.headerHeight;
+  double get minExtent => mobileTui ? 40 : metrics.headerHeight;
 
   @override
   double get maxExtent => minExtent;
@@ -1884,30 +1884,37 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
           ),
           InkWell(
             onTap: onMarkAllRead,
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: metrics.actionHPad,
-                vertical: metrics.actionVPad,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: mobileTui ? 78 : 0,
+                minHeight: mobileTui ? 30 : 0,
               ),
-              decoration: BoxDecoration(
-                color: unreadCount > 0
-                    ? tokens.bg1
-                    : tokens.rule.withValues(alpha: 0.12),
-                border: Border.all(
-                  color: unreadCount > 0 ? tokens.ruleStrong : tokens.rule,
+              child: Container(
+                alignment: Alignment.center,
+                padding: EdgeInsets.symmetric(
+                  horizontal: mobileTui ? 10 : metrics.actionHPad,
+                  vertical: mobileTui ? 6 : metrics.actionVPad,
                 ),
-              ),
-              child: Text(
-                markingAllRead
-                    ? 'WORKING'
-                    : unreadCount > 0
-                    ? 'READ ALL'
-                    : 'CLEAR',
-                textAlign: TextAlign.right,
-                style: text$.micro.copyWith(
-                  color: unreadCount > 0 ? tokens.accent : tokens.inkMute,
-                  fontSize: metrics.microSize,
-                  letterSpacing: 0,
+                decoration: BoxDecoration(
+                  color: unreadCount > 0
+                      ? tokens.bg1
+                      : tokens.rule.withValues(alpha: 0.12),
+                  border: Border.all(
+                    color: unreadCount > 0 ? tokens.ruleStrong : tokens.rule,
+                  ),
+                ),
+                child: Text(
+                  markingAllRead
+                      ? 'WORKING'
+                      : unreadCount > 0
+                      ? 'READ ALL'
+                      : 'CLEAR',
+                  textAlign: TextAlign.right,
+                  style: text$.micro.copyWith(
+                    color: unreadCount > 0 ? tokens.accent : tokens.inkMute,
+                    fontSize: metrics.microSize,
+                    letterSpacing: 0,
+                  ),
                 ),
               ),
             ),

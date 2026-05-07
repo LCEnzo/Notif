@@ -13,6 +13,8 @@
 
 FROM ghcr.io/cirruslabs/flutter:stable AS build
 
+ARG GIT_HASH=dev
+
 WORKDIR /app
 
 # Cache pub dependencies separately from source changes.
@@ -24,7 +26,8 @@ COPY . .
 # --dart-define injects the production API base URL.
 # canvaskit is the default web renderer since Flutter 3.22.
 RUN flutter build web --release \
-    --dart-define=API_URL=/api/v1
+    --dart-define=API_URL=/api/v1 \
+    --dart-define=GIT_HASH=$GIT_HASH
 
 # Export stage — minimal image. Assets stay in /image-dist.
 # The entrypoint copies them into the shared volume at runtime.

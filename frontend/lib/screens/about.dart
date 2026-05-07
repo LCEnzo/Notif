@@ -11,6 +11,11 @@ import 'package:notif/services/auth.dart' show AuthService;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
+const String _buildGitHash = String.fromEnvironment(
+  'GIT_HASH',
+  defaultValue: 'dev',
+);
+
 class AboutPage extends StatefulWidget {
   final Future<PackageInfo>? packageInfoFuture;
 
@@ -280,6 +285,7 @@ class _Hero extends StatelessWidget {
             packageInfo: packageInfo,
             isLoading: isLoading,
           ),
+          const KV(label: 'Commit', value: _BuildCommitText()),
           const KV(label: 'Colorway', value: _ActiveColorwayText()),
           const KV(
             label: 'Motion',
@@ -462,6 +468,20 @@ class _VersionText extends StatelessWidget {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
     return Text(text, style: text$.code.copyWith(color: tokens.accent));
+  }
+}
+
+class _BuildCommitText extends StatelessWidget {
+  const _BuildCommitText();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    return Text(
+      _buildGitHash,
+      style: text$.code.copyWith(color: tokens.accent),
+    );
   }
 }
 

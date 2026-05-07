@@ -7,9 +7,9 @@ void main() {
     test('binds current roles to the current font families', () {
       final theme = NotifTextTheme.forSet(NotifFontSet.current);
 
-      expect(theme.display.fontFamily, NotifFontFamilies.instrumentSerif);
-      expect(theme.title.fontFamily, NotifFontFamilies.instrumentSerif);
-      expect(theme.heading.fontFamily, NotifFontFamilies.instrumentSerif);
+      expect(theme.display.fontFamily, NotifFontFamilies.awesome);
+      expect(theme.title.fontFamily, NotifFontFamilies.awesome);
+      expect(theme.heading.fontFamily, NotifFontFamilies.awesome);
       expect(theme.eyebrow.fontFamily, NotifFontFamilies.skyling);
       expect(theme.body.fontFamily, NotifFontFamilies.skyling);
       expect(theme.bodyLong.fontFamily, NotifFontFamilies.skyling);

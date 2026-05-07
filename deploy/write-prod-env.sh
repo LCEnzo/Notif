@@ -57,11 +57,13 @@ cat > ".env" << EOF
 # No secrets here — secrets live in backend/.env
 NOTIF_DOMAIN=$DOMAIN
 DJANGO_ADMIN_ROUTE=$ADMIN_ROUTE
+GIT_HASH=$GIT_HASH
 EOF
 
 echo "✅  Wrote .env (root, Compose interpolation)"
 echo "    NOTIF_DOMAIN=$DOMAIN"
 echo "    DJANGO_ADMIN_ROUTE=$ADMIN_ROUTE"
+echo "    GIT_HASH=$GIT_HASH"
 
 # ── Write backend/.env (Django settings + secrets) ────────────────
 cat > "backend/.env" << EOF
