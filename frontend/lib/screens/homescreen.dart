@@ -982,6 +982,20 @@ class _ConsoleTopBar extends StatelessWidget {
 }
 
 class _HomeConsoleMetrics {
+  const _HomeConsoleMetrics({
+    required this.railWidth,
+    required this.brandSize,
+    required this.bodySize,
+    required this.microSize,
+    required this.actionFontSize,
+    required this.topBarVPad,
+    required this.actionHPad,
+    required this.actionVPad,
+    required this.railRowVPad,
+    required this.updateRowVPad,
+    required this.headerHeight,
+  });
+
   factory _HomeConsoleMetrics.forDensity(HomeDensity density) {
     switch (density) {
       case HomeDensity.comfortable:
@@ -1028,19 +1042,6 @@ class _HomeConsoleMetrics {
         );
     }
   }
-  const _HomeConsoleMetrics({
-    required this.railWidth,
-    required this.brandSize,
-    required this.bodySize,
-    required this.microSize,
-    required this.actionFontSize,
-    required this.topBarVPad,
-    required this.actionHPad,
-    required this.actionVPad,
-    required this.railRowVPad,
-    required this.updateRowVPad,
-    required this.headerHeight,
-  });
 
   final double railWidth;
   final double brandSize;
