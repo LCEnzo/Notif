@@ -9,7 +9,7 @@ dependencies = [
 	"django>=6.0,<6.1",
 	"drf-spectacular>=0.29.0,<0.30.0",
 	"feedparser>=6.0,<7.0",
-	"gunicorn>=23.0,<24.0",
+	"gunicorn>=26.0,<27.0",
 	"django-cors-headers>=4.9,<5.0",
 	"djangorestframework>=3.17,<3.18",
 	"djangorestframework-simplejwt>=5.5,<5.6",
@@ -28,8 +28,11 @@ dev = [
 	"ipython>=9.2,<10.0",
 	"mypy>=1.11,<2.0",
 	"pytest>=9.0.3,<10.0",
+	"pytest-cov>=7.0,<8.0",
 	"pytest-django>=4.11,<5.0",
+	"pytest-randomly>=4.0,<5.0",
 	"pytest-timeout>=2.3,<3.0",
+	"pytest-xdist>=3.8,<4.0",
 	"requests-mock>=1.11,<2.0",
 	"ruff>=0.15.9,<0.16.0",
 	"types-requests>=2.32.4.20260107,<3.0",
@@ -67,6 +70,8 @@ select = [
 	"DJ",    # flake8-django
 	"RET",   # flake8-return
 	"SIM",   # flake8-simplify
+	"T201",  # use of print, can leak secrets in logs
+	"PTH",
 	"RUF100",# unused-noqa
 ]
 ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118", "W191"]
@@ -82,9 +87,16 @@ plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main", "pydantic.mypy"]
 exclude = ["migrations", "\\.venv", "venv"]
 mypy_path = "stubs"
 check_untyped_defs = true
+disallow_any_generics = true
+disallow_untyped_defs = true
 warn_unused_configs = true
+warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_reexport = true
+
+[[tool.mypy.overrides]]
+module = ["*.tests", "*.tests.*"]
+disallow_untyped_defs = false
 
 [tool.pydantic-mypy]
 init_typed = true
@@ -98,6 +110,17 @@ django_settings_module = "notif.settings"
 DJANGO_SETTINGS_MODULE = "notif.settings"
 pythonpath = ["."]
 python_files = ["tests.py", "test_*.py", "*_test.py"]
+addopts = [
+	"-ra",
+	"--strict-markers",
+	"--strict-config",
+	"--tb=short",
+	"--reuse-db",
+	"--nomigrations",
+	"--timeout=30",
+	"-n",
+	"4",
+]
 markers = [
     "slow: marks tests that use real downloaded fixtures (deselect with -m 'not slow')",
     "feed: marks tests specific to FeedStrategy",

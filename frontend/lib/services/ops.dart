@@ -119,7 +119,7 @@ class OpsService extends ChangeNotifier {
       _events
         ..clear()
         ..addAll(
-          rawResults.whereType<Map>().map(
+          rawResults.whereType<Map<String, dynamic>>().map(
             (item) => SystemEvent.fromJson(Map<String, dynamic>.from(item)),
           ),
         );
@@ -150,7 +150,7 @@ class OpsService extends ChangeNotifier {
       _caddyLogs
         ..clear()
         ..addAll(
-          rawResults.whereType<Map>().map(
+          rawResults.whereType<Map<String, dynamic>>().map(
             (item) => CaddyLogEntry(data: Map<String, dynamic>.from(item)),
           ),
         );

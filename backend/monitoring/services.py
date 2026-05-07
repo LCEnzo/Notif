@@ -13,7 +13,7 @@ from monitoring.strategies import STRATEGY_CHOICES, URL
 logger = logging.getLogger(__name__)
 
 
-def _comparison_data_for_link(link: Link) -> Result[dict, str]:
+def _comparison_data_for_link(link: Link) -> Result[dict[str, object], str]:
 	if not link.comparison_info:
 		return Ok({})
 	try:
@@ -81,7 +81,7 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 			# the user isn't flooded with a backlog they never asked about. Only
 			# items found on subsequent scrapes count as actual notifications.
 			is_first_scrape = link.last_scraped is None
-			notif_kwargs: dict = (
+			notif_kwargs: dict[str, object] = (
 				{"status": Notification.Status.READ, "read_at": timezone.now()} if is_first_scrape else {}
 			)
 

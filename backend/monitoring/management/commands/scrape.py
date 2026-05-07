@@ -1,3 +1,6 @@
+from argparse import ArgumentParser
+from typing import Any
+
 from django.core.management.base import BaseCommand
 
 from commons.result import Err, Ok
@@ -9,12 +12,12 @@ from monitoring.services import scrape_all_links, scrape_link
 class Command(BaseCommand):
 	help = "Scrape all monitored links for updates."
 
-	def add_arguments(self, parser):
+	def add_arguments(self, parser: ArgumentParser) -> None:
 		parser.add_argument("--user", type=int, help="Only scrape links for this user ID")
 		parser.add_argument("--link", type=int, help="Only scrape this specific link ID")
 		parser.add_argument("--delay", type=float, default=2.0, help="Seconds between same-domain requests")
 
-	def handle(self, *args, **options):
+	def handle(self, *args: Any, **options: Any) -> None:
 		if options["link"]:
 			try:
 				link = Link.objects.select_related("strategy").get(pk=options["link"])

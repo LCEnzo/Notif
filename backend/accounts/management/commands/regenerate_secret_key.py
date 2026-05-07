@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from django.core.management.base import BaseCommand
 from django.core.management.utils import get_random_secret_key
@@ -8,9 +9,9 @@ from dotenv import load_dotenv, set_key
 class Command(BaseCommand):
 	help = "Regenerates the DJANGO_SECRET_KEY in the .env file."
 
-	def handle(self, *args, **kwargs):
+	def handle(self, *args: Any, **kwargs: Any) -> None:
 		# get the path to the .env file
-		env_path = Path(".") / ".env"
+		env_path = Path(".env")
 
 		# load the .env file
 		load_dotenv(dotenv_path=env_path)

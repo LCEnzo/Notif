@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import requests
 
 feeds = {
@@ -11,6 +13,6 @@ feeds = {
 for name, url in feeds.items():
 	response = requests.get(url, timeout=15)
 	response.raise_for_status()
-	with open(f"{name}.xml", "xb") as f:
+	with Path(f"{name}.xml").open("xb") as f:
 		f.write(response.content)
-	print(f"{name}.xml — {len(response.content)} bytes, {response.status_code}")
+	print(f"{name}.xml — {len(response.content)} bytes, {response.status_code}")  # noqa: T201

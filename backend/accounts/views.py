@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Sequence
+from typing import Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -24,11 +26,11 @@ from commons.permissions import IsRequestingThemselves, ReadOnly
 
 
 class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
-	def validate(self, attrs):
+	def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
 		self._ensure_dev_user(attrs)
 		return super().validate(attrs)
 
-	def _ensure_dev_user(self, attrs: dict) -> None:
+	def _ensure_dev_user(self, attrs: dict[str, Any]) -> None:
 		if not settings.DEV_BOOTSTRAP_LOGIN_ENABLED:
 			return
 
@@ -83,7 +85,7 @@ class ThrottledTokenVerifyView(TokenThrottleMixin, TokenVerifyView):
 	throttle_scope = "token_verify"
 
 
-class UserViewSet(ModelViewSet):
+class UserViewSet(ModelViewSet[User]):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
 
@@ -94,7 +96,7 @@ class UserViewSet(ModelViewSet):
 			return [*super().get_throttles(), ScopedRateThrottle()]
 		return super().get_throttles()
 
-	def get_serializer_class(self) -> type[BaseSerializer]:
+	def get_serializer_class(self) -> type[BaseSerializer[User]]:
 		requester_pk = self.request.user.pk if not self.request.user.is_anonymous else None
 		wanted_pk = self.kwargs.get("pk", None)
 
@@ -109,7 +111,7 @@ class UserViewSet(ModelViewSet):
 		# For mypy
 		return UserMinimalReadSerializer
 
-	def get_permissions(self):
+	def get_permissions(self) -> Sequence[Any]:
 		# Account creation, ie. registration, needs to work for visitors without an account
 		if self.request.method == "POST":
 			return []

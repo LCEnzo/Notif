@@ -17,15 +17,10 @@ Flutter packages to look into:
 
 
 What next:
-	Create the UI for Link CRUD, and state management.
-	Create a notification model, figure out storage
-	Figure out how to send notifications
-	Dockerize backend, try creating a docker compose setup for the server. ✓ (PR #24)
-	Try deploying:
-		Django has a production checklist ✓
-		IDK about Flutter, just flags for builds?
-		nginx? ✓ (Caddy instead of nginx — see Caddyfile + deploy.md)
-	Figure out scraping on a schedule. Celery, cron jobs, or whatever. ✓ (manage.py scrape + cron)
+	Most original "what next" items have shipped — see `docs/CHANGELOG.md`. Still open:
+	- External notification delivery (FCM/APNs, Telegram, Discord) — see "Push notifications" below.
+	- APK build for personal use.
+	- Investigate why `run_due_tasks --max-links 1` reported 0 considered on a freshly cron-updated VPS (Link count vs `scrape_disabled` state).
 Push notifications:
 	Notification model currently tracks in-app read/dismiss state only.
 	When adding push (e.g. FCM), separate delivery tracking from read state —
@@ -71,15 +66,12 @@ Push notifications:
 	success rate tracking.
 
 Backend scraping direction:
-	Keep scheduling simple at first: management command + OS cron / scheduled task.
-	If per-link schedules or in-process scheduling become necessary, prefer APScheduler
-	before jumping to Celery/Beat/Redis complexity.
+	Resolved: cron + `manage.py run_due_tasks` with per-link DB scheduling — no APScheduler, no Celery. Details in `docs/architecture/run_due_tasks.md`.
 
 Current scraper limitations worth remembering:
 	GeneralSelectorStrategy hash comparison is still fragile for dynamic content.
-	Requests are still sequential and there is no retry/backoff layer yet.
-	Rate limiting now exists, but it only spaces top-level link scrapes; strategies
-	with multiple internal requests still need their own throttling discipline.
+	Requests are still sequential within a single `run_due_tasks` invocation. Concurrency would be a real change, not a small one.
+	Per-link rate limiting and exponential backoff exist now (DomainRateLimiter + scrape_failure_count). Strategies with multiple internal requests still need their own throttling discipline — the per-domain limiter only paces the top-level fetch.
 
 
 ---
@@ -117,28 +109,9 @@ Current scraper limitations worth remembering:
 
 ---
 
-## Pagination & Filtering (added 2026-05-04)
+## Pagination & Filtering — shipped
 
-### Architecture
-
-- **Notifications** use page-based navigation (page numbers at bottom when `totalPages > 1`). Each page fetch replaces the list entirely — no infinite scroll / "load more" append model. `NotificationPagination` page_size=50, max_page_size=200.
-- **Links** use the same page-based model. `LinkPagination` page_size=100, max_page_size=500.
-- Sorting is delegated to the backend via DRF's `OrderingFilter`; the FE sends `?ordering=<field>` and the server returns correctly ordered pages. Sort enums (`LinkSort`, `NotifSort`) include tiebreaker fields (`-pk`) to keep page boundaries deterministic.
-
-### Why not continuous scroll?
-
-Continuous scroll (infinite scroll / "load more") was explicitly rejected for this app. Reasons:
-
-1. **Dedup complexity** — pages shift when new items land (a new notification on page 1 pushes the old page 1's last item to page 2). Load-more-then-dedup creates visual glitches where items appear, disappear, or reorder.
-2. **Navigation loss** — you can't link to or return to "page 3 of notifications." With page numbers, the current position is explicit and recoverable.
-3. **Unread count accuracy** — the server reports a global `unread_count` independent of the current page filter. Continuous scroll would make the relationship between visible items and unread count confusing ("UNREAD 0" with unread items on unloaded pages).
-4. **Power-user ergonomics** — for an app meant to handle hundreds of sources and thousands of notifications, scanning by page is faster than endless scrolling.
-
-### Filtering
-
-Status filtering (`?status=unread`) and time-based filtering (`?since=<ISO datetime>`) are supported on the notifications endpoint. These filters scope the queryset before pagination, so page counts and unread counts reflect the filtered set.
-
-Adding more filter dimensions (by link/source, by strategy type, text search) would follow the same pattern: query param → `get_queryset().filter(...)` → paginated response. The `unread_count` field in the paginated envelope is computed independently of any `?status=` filter — it always represents the user's global unread total — so the FE badge stays accurate regardless of what page/filter the user is viewing.
+Documented in `docs/architecture/pagination.md`. Page-based on Links and Notifications, `?status=` / `?since=` filters, OrderingFilter with `-pk` tiebreaker, global `unread_count` in the paginated envelope.
 
 ---
 
@@ -146,81 +119,28 @@ Adding more filter dimensions (by link/source, by strategy type, text search) wo
 
 ### Domains and deploy surface
 
-- Infra snapshot from 2026-05-05:
-  - App domain: `notif.lcenzo.com`.
-  - VPS: Hetzner CX33 in Helsinki.
-  - DNS: Cloudflare.
-  - Cloudflare mode for `notif.lcenzo.com`: grey-cloud / DNS-only.
-  - Public firewall intent: SSH, HTTP, HTTPS, and ICMP.
-  - Deployment shape from VPS inspection: Docker Compose-style containers, with `notif-caddy-1` publishing ports 80/443 and `notif-backend-1` internal on port 8000.
-  - Caddy certificate mode from VPS inspection: Let's Encrypt public certificate managed by Caddy under `/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/`.
-- Add a real `lcenzo.com` page even if it is tiny, so the apex domain does not resolve to an empty or parking-like destination.
-- Add a proper not-found / setup-not-available page for routes or hostnames that are not configured. This should make wildcard/CNAME state less confusing while DNS is still being cleaned up.
-- Keep this as deployment polish, not core app scope, unless DNS or routing blocks users from reaching the app.
+- Current shape: `notif.lcenzo.com` on Hetzner CX33 (Helsinki), Docker Compose (`notif-caddy-1` publishes 80/443, `notif-backend-1` internal 8000), Caddy + Let's Encrypt (DNS-01 via Cloudflare now that the host is Proxied). Cloudflare DNS, orange-cloud on `notif`. Not expected to change much — single-user-ish app, no growth pressure.
+- Apex `lcenzo.com` + `www.lcenzo.com` repointed to the VPS, landing page + Caddy split prepared (pending merge — see `docs/CHANGELOG.md`). Wildcard `*.lcenzo.com` 404 was already wired and working.
 
-### Cloudflare orange-cloud decision
+### Cloudflare orange-cloud — migrated
 
-- Orange-clouding `notif.lcenzo.com` is probably useful eventually for DDoS shielding, WAF/rules, hiding the origin IP, and edge caching of static frontend assets.
-- Prep needed before switching:
-  - Ensure Django has correct `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `SECURE_PROXY_SSL_HEADER`, and Caddy trusted proxy settings.
-  - Decide certificate path: temporary grey-cloud for Let's Encrypt issuance, Cloudflare Origin Certificate, or DNS-01 via a Caddy Cloudflare DNS module.
-  - Confirm Caddy logs real client IP from `CF-Connecting-IP` and Cloudflare IP ranges are current.
-  - Keep API paths uncached unless a specific endpoint is deliberately cacheable.
-  - Decide whether Cloudflare security rules can block admin/login abuse without breaking mobile/web clients.
-- Unknowns to confirm before changing DNS mode:
-  - Whether to keep using Let's Encrypt after orange-clouding, or switch to Cloudflare Origin Certificate / DNS-01.
-  - Exact Cloudflare cache/WAF rules for `/api/*`, login, password reset, and admin routes.
-  - Whether ICMP should remain publicly allowed for diagnostics.
+Done. `notif.lcenzo.com` is Proxied. Caddyfile carries the CF IP allow-list with `trusted_proxies_strict` and `client_ip_headers CF-Connecting-IP`; Django side has `ALLOWED_HOSTS`, `CSRF_TRUSTED_ORIGINS`, `SECURE_PROXY_SSL_HEADER` set in production env. Possibly worth a follow-up:
+- Decide whether `/api/*`, login, and password-reset routes should sit behind any CF rules / rate limits.
+- Confirm cert renewal path is genuinely DNS-01 and not relying on a transient grey-cloud window.
 
 ### VPS agent
 
-- Investigate a small "Hermes agent" on the VPS with intentionally narrow permissions.
-- Define the exact allowed operations before implementation: likely health checks, triggering safe maintenance commands, reading limited status, and reporting logs. Avoid broad shell access.
-- Any agent should have explicit timeouts, command allowlists, and audit logging.
+Subsumed by the "Agent harness integration" section at the bottom of this file. The narrow-perms ops agent is one of three job-shapes there (`ops`).
 
-### Scraping scheduler
+### Scraping scheduler — mostly shipped, residual work
 
-- Prefer one general backend command/entrypoint that checks all due work rather than a cron job that directly scrapes every source.
-- Cron can run every 5 minutes and call the Django service/command; Django decides what is due:
-  - scheduled scrapes per link/source
-  - cleanup of expired password reset codes
-  - future maintenance tasks
-- Per-source schedules should be configurable. Some SV/SB/QQ threads can be checked daily; high-interest threads can be checked every 5 minutes.
-- XenForo threadmark monitoring should support selecting which tabs/categories to watch, such as Threadmarks, Sidestory, Apocrypha, Informational, etc.
-- The scheduler should be a good network citizen: per-domain rate limits, jitter, backoff on failures, user-agent/contact clarity where appropriate, and no repeated requests for unchanged work when cache validators or timestamps are available.
-- Keep CPU cost bounded: avoid browser automation unless a site requires it, prefer RSS/structured endpoints where available, and cap concurrent work.
+Core (cron-driven `run_due_tasks` with per-link DB scheduling, per-domain rate limit, exponential backoff) is built and now wired in production (cron on `notif` updated 2026-05-07). Architecture details in `docs/architecture/run_due_tasks.md`. Still open:
 
-### Backend maintenance command design
-
-- First implementation should stay boring: a Django management command called by cron/systemd timer, not Celery/Redis.
-- Proposed command: `python manage.py run_due_tasks`.
-- Responsibilities:
-  - Acquire a lock so two runs cannot overlap.
-  - Clean expired/locked password reset codes.
-  - Select scrape jobs that are due.
-  - Run a bounded number of scrapes with per-domain rate limiting.
-  - Record enough output for cron logs and debugging.
-- Scheduling state should live in the database, not in cron:
-  - link-level interval, such as 5 minutes, hourly, daily
-  - `next_scrape_at`
-  - last success/failure timestamps
-  - consecutive failure count
-  - optional disabled/backoff state
-- Cron should only express cadence: run the maintenance command every 5 minutes. It should not know which links exist or which are due.
-- Keep the first version single-process and sequential unless runtime becomes a real problem. Concurrency adds correctness and anti-blocking complexity before the app needs it.
-- Add explicit limits from the start:
-  - max links per run
-  - max runtime
-  - per-domain delay
-  - failure backoff cap
-  - stale lock expiry
-- Testing should cover:
-  - due vs not-due link selection
-  - lock prevents overlap
-  - expired password reset code cleanup
-  - scrape success schedules the next run
-  - scrape failure backs off and does not loop forever
-  - command exits cleanly and prints a useful summary
+- `run_due_tasks` first manual run on the VPS reported 0 due Links — investigate Link inventory / `scrape_disabled` state to confirm scrapes actually fire.
+- XenForo threadmark monitoring: support selecting which tabs to watch (Threadmarks / Sidestory / Apocrypha / Informational).
+- Jitter on `next_scrape_at` to avoid herd timing across many Links with the same interval.
+- Conditional fetch via `If-Modified-Since` / `ETag` where the source supports it — avoid re-pulling unchanged content.
+- Per-strategy throttling for strategies that issue multiple internal requests (the per-domain limiter only paces top-level fetches).
 
 ### X scraping
 
@@ -261,3 +181,58 @@ Adding more filter dimensions (by link/source, by strategy type, text search) wo
 - The page buttons on the home screen are visually inconsistent with the rest of the app.
 - They also sit too close to the bottom of the viewport while leaving too much gap above.
 - Fix spacing so the pager either has balanced vertical spacing or deliberately attaches closer to the table/list.
+
+---
+
+## Agent harness integration — design sketch (added 2026-05-07)
+
+### Goal
+
+Run an agent harness alongside the Notif backend on the VPS. First milestone: take one or more Notifications plus a free-text question, produce a written discussion / summary that the user can read in the FE and reference later. Later milestones: filter (per-Link salience deciding deliver/skip), investigate (multi-step research with web fetch), and ops (narrow-perms VPS babysitter — line 175–179 above is now subsumed by this section).
+
+### Constraints
+
+- **No Claude Code Max sub credentials inside the harness.** Harness env carries only console-issued keys: DeepSeek, OpenRouter, an OpenAI-side sub through its own harness if applicable. Anthropic-API key only if separately purchased and only for the harness, not the BE.
+- The harness is **invoke-per-task**, not a long-running service. "Running alongside Notif" means co-located on the VPS, not co-resident in the same process.
+- Notif BE remains source of truth for Links, Updates, Notifications. Agent **never writes** those tables. Agent output goes to a knowledge base, not the operational DB.
+
+### Recommended shape — co-located worker (Shape A)
+
+**New `agents/` Django app:**
+- `AgentJob` model: `kind` (`filter` | `investigate` | `ops`), `payload` (JSONB — what the user asked, which Notifications/Links are in scope), `status` (`pending` | `running` | `ok` | `error`), `created_at`, `started_at`, `finished_at`, `output_ref` (KB git commit hash + path), `error_text`.
+- DRF endpoints: `POST /api/v1/agent-jobs/` to enqueue, `GET /api/v1/agent-jobs/<id>/` to poll. FE buttons enqueue jobs ("ask agent about this notification", "summarize last week of <Link>", etc.).
+
+**Worker (separate systemd unit `notif-agent-worker.service`):**
+1. Polls/claims a `pending` AgentJob row (SELECT ... FOR UPDATE SKIP LOCKED, or a simple status-flip in a transaction).
+2. Builds an **explicit briefing JSON** from the DB — only the fields the agent should see, never the raw schema. Drops it at `/var/lib/notif-agent/jobs/<id>/in.json`.
+3. Invokes the harness CLI with the job dir as cwd. Non-Anthropic API keys passed via env. CPU/memory caps via `systemd-run`.
+4. Harness writes Markdown output into the job dir; on success, also commits to a job-specific branch in the KB git repo.
+5. Worker fast-forwards the branch into `main` of the KB repo, records the resulting commit hash + paths into `AgentJob.output_ref`, marks job done. On harness non-zero exit, marks `error` with stderr stored.
+
+**Knowledge base:**
+- Plain bare git repo at `/var/lib/notif-kb/`. Layout `kb/<topic>/<slug>.md`. Versioning is just git history — `git log` for an audit trail, `git show <hash>:<path>` to render a specific version.
+- BE exposes a read-only endpoint, e.g. `GET /api/v1/kb/?path=<...>&ref=<hash>`, that shells `git show` against the bare repo and returns the Markdown body + commit metadata. FE renders with a "version" dropdown bound to recent commits touching that path.
+
+**Sandboxing & access control:**
+- Each job runs in its own scratch dir; harness can be wrapped in `firejail` / `bwrap` / a per-job Docker container with the job dir + KB repo as the only writable mounts.
+- Harness has **no direct DB access**. The briefing JSON is its world. If a job needs richer data mid-run, the worker exposes a thin internal HTTP endpoint with a per-job service token; the harness calls it via a tool. This keeps the agent's view explicit and replayable — every job's `in.json` is the auditable input.
+
+### Alternative shapes considered
+
+- **Shape B — sidecar HTTP service wrapping the harness.** Tiny FastAPI service on the VPS, BE calls it for sync-ish work (filter), enqueues for async (investigate). Adds a service to deploy/monitor for no clear win at this scale — the AgentJob DB row already gives BE→worker decoupling. Revisit if filter-style sync calls become hot.
+- **Shape C — BE invokes harness inline via subprocess from a request handler.** Simplest deploy, but tight coupling, no audit trail, harness latency starves gunicorn workers, no clean place to put per-job sandboxing. Reject.
+
+### First milestone (build order)
+
+1. `agents/` app with `AgentJob` model + create/poll endpoints. **No worker yet.**
+2. Worker stub that flips jobs to `ok` with a hard-coded "Lorem ipsum" summary so the FE plumbing (button → enqueue → poll → render KB doc) can be built and demoed end-to-end.
+3. Wire in the actual harness CLI. Start with one `kind` (probably `investigate` against a single Notification) before adding `filter` and `ops`.
+4. Add KB read endpoint + version dropdown in FE.
+
+### Open questions
+
+- Which non-Anthropic harness lands first? OpenAI Codex through its own harness is one option, a generic harness over OpenRouter is another. Short bake-off after milestone 1.
+- External fetching from inside the agent: same hygiene as the scraper. Prefer fxtwitter/RSS/structured endpoints; ad-hoc fetch only when no structured source exists.
+- Rate-limit budget: probably **separate** buckets for scraper vs agent. Different workloads, different blast radii.
+- KB visibility: global for v1 (Notif is single-user today). Add per-user scoping when/if that changes.
+- Concurrency: how many worker processes? Start with one. Concurrency adds correctness questions (locking, KB merge conflicts) before the workload demands it.

@@ -12,6 +12,7 @@ from typing import Any
 
 from django.conf import settings
 from django.db import connection
+from django.db.models.query import QuerySet
 from django.http import HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -35,7 +36,7 @@ _BACKUP_STREAM_CHUNK = 64 * 1024
 
 
 class IsSuperUser(IsAdminUser):
-	def has_permission(self, request: Request, view) -> bool:
+	def has_permission(self, request: Request, view: Any) -> bool:
 		return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
 
 
@@ -45,7 +46,7 @@ class SystemEventPagination(PageNumberPagination):
 	max_page_size = 200
 
 
-class SystemEventViewSet(ReadOnlyModelViewSet):
+class SystemEventViewSet(ReadOnlyModelViewSet[SystemEvent]):
 	permission_classes = [IsAdminUser]
 	serializer_class = SystemEventSerializer
 	pagination_class = SystemEventPagination
@@ -53,7 +54,7 @@ class SystemEventViewSet(ReadOnlyModelViewSet):
 	ordering_fields = ["created_at", "id", "level", "source", "kind"]
 	ordering = ["-created_at", "-id"]
 
-	def get_queryset(self):
+	def get_queryset(self) -> QuerySet[SystemEvent]:
 		queryset = SystemEvent.objects.all()
 
 		level = self.request.query_params.get("level")
@@ -107,7 +108,7 @@ def download_sqlite_backup(request: Request) -> HttpResponse | Response | Stream
 	os.close(fd)
 	try:
 		_write_sqlite_backup(source, str(db_config["NAME"]), tmp_path)
-		size_bytes = os.path.getsize(tmp_path)
+		size_bytes = Path(tmp_path).stat().st_size
 	except Exception:
 		_unlink_quiet(tmp_path)
 		raise
@@ -148,7 +149,7 @@ def _write_sqlite_backup(source: sqlite3.Connection, db_name: str, tmp_path: str
 	"""
 	if db_name == ":memory:" or db_name.startswith("file::memory:") or db_name.startswith("file:memdb"):
 		data = source.serialize()
-		with open(tmp_path, "wb") as fh:
+		with Path(tmp_path).open("wb") as fh:
 			fh.write(data)
 		return
 
@@ -164,7 +165,7 @@ def _stream_and_unlink(path: str, audit_context: dict[str, Any]) -> Iterator[byt
 	bytes_sent = 0
 	completed = False
 	try:
-		with open(path, "rb") as fh:
+		with Path(path).open("rb") as fh:
 			while True:
 				chunk = fh.read(_BACKUP_STREAM_CHUNK)
 				if not chunk:
@@ -201,7 +202,7 @@ def _record_stream_outcome(audit_context: dict[str, Any], bytes_sent: int, compl
 
 def _unlink_quiet(path: str) -> None:
 	with contextlib.suppress(OSError):
-		os.unlink(path)
+		Path(path).unlink()
 
 
 def _client_ip(request: Request) -> str:

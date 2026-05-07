@@ -65,7 +65,7 @@ class UserViewSetTestCase(ViewSetMixin):
 		response = admin_client.patch(url, {"password": _ALTERNATE_VALID_TEST_PASSWORD})
 
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("password", response.data)  # type: ignore[union-attr]
+		self.assertIn("password", response.data)
 		self.regular_user.refresh_from_db()
 		self.assertFalse(self.regular_user.check_password(_ALTERNATE_VALID_TEST_PASSWORD))
 
@@ -102,8 +102,8 @@ class UserViewSetTestCase(ViewSetMixin):
 		permissions = {"list": True, "retrieve": True, "create": True}
 
 		self._test_permissions(
-			user=self.regular_user,  # type: ignore
-			obj_pk=self.secondary_user.pk,  # type: ignore
+			user=self.regular_user,
+			obj_pk=self.secondary_user.pk,
 			fields=fields,
 			update_fields=update_fields,
 			permissions=permissions,
@@ -212,7 +212,7 @@ class PasswordResetTestCase(TestCase):
 			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
 		# Must still be 200 — a 500 would leak that the email exists.
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertEqual(response.data, {"status": "ok"})  # type: ignore[union-attr]
+		self.assertEqual(response.data, {"status": "ok"})
 
 	def test_request_replaces_existing_code(self):
 		"""New request invalidates any previous code for the same user."""
@@ -276,7 +276,7 @@ class PasswordResetTestCase(TestCase):
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("error", response.data)  # type: ignore[union-attr]
+		self.assertIn("error", response.data)
 		code.refresh_from_db()
 		self.assertEqual(code.failed_attempts, 1)
 
@@ -291,7 +291,7 @@ class PasswordResetTestCase(TestCase):
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("error", response.data)  # type: ignore[union-attr]
+		self.assertIn("error", response.data)
 
 	def test_confirm_with_expired_code_fails(self):
 		"""A code older than 30 minutes is rejected."""
@@ -309,7 +309,7 @@ class PasswordResetTestCase(TestCase):
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("error", response.data)  # type: ignore[union-attr]
+		self.assertIn("error", response.data)
 
 	def test_confirm_deletes_code_after_use(self):
 		"""Successful reset deletes the code — single-use."""
@@ -338,7 +338,7 @@ class PasswordResetTestCase(TestCase):
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-		self.assertIn("error", response.data)  # type: ignore[union-attr]
+		self.assertIn("error", response.data)
 
 		# Password was NOT changed
 		self.user.refresh_from_db()

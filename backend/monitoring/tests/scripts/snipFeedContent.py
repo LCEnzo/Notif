@@ -140,13 +140,13 @@ def main() -> int:
 	action = "snipped" if args.write else "would snip"
 
 	for item in stats:
-		print(
+		print(  # noqa: T201
 			f"{item.path}: {item.blocks_snipped}/{item.blocks_seen} content blocks {action}; "
 			f"{item.original_bytes} -> {item.snipped_bytes} bytes "
 			f"({item.bytes_saved} saved)"
 		)
 
-	print(f"Total: {total_snipped} content blocks {action}; {total_saved} bytes saved")
+	print(f"Total: {total_snipped} content blocks {action}; {total_saved} bytes saved")  # noqa: T201
 	return 0
 
 

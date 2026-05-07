@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Any, cast
 
 from django.core.paginator import Page
 from django.db.models import Q
@@ -12,6 +12,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from accounts.models import User
@@ -32,7 +33,7 @@ class LinkPagination(PageNumberPagination):
 	max_page_size = 500
 
 
-class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
+class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet[Link]):
 	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = LinkSerializer
 	pagination_class = LinkPagination
@@ -45,7 +46,7 @@ class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
 		return self._scoped_queryset(Link.objects.all())
 
 
-class StrategyViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet):
+class StrategyViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet[Strategy]):
 	permission_classes = [IsAuthenticated]
 	serializer_class = StrategySerializer
 
@@ -69,14 +70,14 @@ class NotificationPagination(PageNumberPagination):
 	page_size_query_param = "page_size"
 	max_page_size = 200
 
-	def get_paginated_response(self, data):
+	def get_paginated_response(self, data: list[dict[str, Any]]) -> Response:
 		# unread_count is the user's *global* unread total, not the count within
 		# the current filter. The FE needs it to render the badge / enable
 		# "mark all read" correctly even when the visible page is all read.
 		# self.request and self.page are set by paginate_queryset before this
 		# is called; cast to satisfy mypy's nullable view of the attrs.
 		request = cast(Request, self.request)
-		page = cast(Page, self.page)
+		page = cast(Page[Notification], self.page)
 		user = request.user
 		assert isinstance(user, User), "authenticated notification pagination requires an application User"
 		unread_count = Notification.objects.filter(
@@ -94,7 +95,7 @@ class NotificationPagination(PageNumberPagination):
 		)
 
 
-class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet):
+class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet[Notification]):
 	permission_classes = [IsAuthenticated]
 	serializer_class = NotificationSerializer
 	pagination_class = NotificationPagination
@@ -118,7 +119,7 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		# OrderingFilter applies ordering on top; select_related avoids N+1.
 		return queryset.select_related("update")
 
-	def perform_update(self, serializer):
+	def perform_update(self, serializer: BaseSerializer[Notification]) -> None:
 		new_status = serializer.validated_data.get("status")
 		if new_status == Notification.Status.READ:
 			serializer.save(read_at=timezone.now())

@@ -1,3 +1,5 @@
+from typing import Any
+
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
@@ -6,13 +8,13 @@ from rest_framework.serializers import ModelSerializer
 from accounts.models import User
 
 
-class UserCreationSerializer(ModelSerializer):
+class UserCreationSerializer(ModelSerializer[User]):
 	class Meta:
 		model = User
 		fields = ["username", "email", "name", "password"]
 
 	@transaction.atomic
-	def create(self, validated_data: dict) -> User:
+	def create(self, validated_data: dict[str, Any]) -> User:
 		password = validated_data.pop("password")
 
 		if "username" not in validated_data:
@@ -25,7 +27,7 @@ class UserCreationSerializer(ModelSerializer):
 		return instance
 
 	@transaction.atomic
-	def update(self, instance: User, validated_data: dict):
+	def update(self, instance: User, validated_data: dict[str, Any]) -> User:
 		# Ensure a user can only update their own password.
 		request = self.context.get("request")
 		password = validated_data.pop("password", None)
@@ -36,9 +38,9 @@ class UserCreationSerializer(ModelSerializer):
 
 		return super().update(instance, validated_data)
 
-	def validate(self, attrs):
+	def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
 		# This will only validate password during creation and not during update.
-		password = attrs.get("password", None)
+		password = attrs.get("password")
 		if self.instance is None and password is None:
 			raise serializers.ValidationError({"password": "Password is required."})
 
@@ -48,7 +50,7 @@ class UserCreationSerializer(ModelSerializer):
 		return attrs
 
 
-class UserFullReadSerializer(ModelSerializer):
+class UserFullReadSerializer(ModelSerializer[User]):
 	class Meta:
 		model = User
 		fields = [
@@ -63,7 +65,7 @@ class UserFullReadSerializer(ModelSerializer):
 		]
 
 
-class UserMinimalReadSerializer(ModelSerializer):
+class UserMinimalReadSerializer(ModelSerializer[User]):
 	class Meta:
 		model = User
 		fields = ["username", "date_created"]
@@ -72,7 +74,7 @@ class UserMinimalReadSerializer(ModelSerializer):
 # ── password reset ───────────────────────────────────────────
 
 
-class PasswordResetRequestSerializer(serializers.Serializer):
+class PasswordResetRequestSerializer(serializers.Serializer[Any]):
 	"""Accepts an email address for password reset."""
 
 	email = serializers.EmailField()
@@ -81,7 +83,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
 		return value.strip().lower()
 
 
-class PasswordResetConfirmSerializer(serializers.Serializer):
+class PasswordResetConfirmSerializer(serializers.Serializer[Any]):
 	"""Accepts email, code, and new password to complete reset."""
 
 	email = serializers.EmailField()

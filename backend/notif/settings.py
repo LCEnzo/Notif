@@ -15,7 +15,11 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import django_stubs_ext
+
 from notif.config import settings
+
+django_stubs_ext.monkeypatch()
 
 # Disable throttling during test runs — rate limits would break the test suite.
 TESTING = "test" in sys.argv or "pytest" in sys.modules
@@ -38,7 +42,7 @@ DEV_BOOTSTRAP_PASSWORD = settings.DEV_BOOTSTRAP_PASSWORD
 DEV_BOOTSTRAP_EMAIL = settings.DEV_BOOTSTRAP_EMAIL
 DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 
-ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]  # type: ignore
+ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]
 CORS_ALLOW_ALL_ORIGINS = settings.DEBUG
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in settings.CSRF_TRUSTED_ORIGINS.split(",") if origin.strip()]
