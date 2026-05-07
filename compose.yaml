@@ -9,6 +9,8 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        GIT_HASH: ${GIT_HASH:-dev}
     image: notif-backend:latest
     restart: unless-stopped
     env_file:
@@ -44,6 +46,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        GIT_HASH: ${GIT_HASH:-dev}
     image: notif-frontend:latest
     restart: "no"
     volumes:

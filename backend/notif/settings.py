@@ -15,11 +15,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
-import django_stubs_ext
-
 from notif.config import settings
-
-django_stubs_ext.monkeypatch()
 
 # Disable throttling during test runs — rate limits would break the test suite.
 TESTING = "test" in sys.argv or "pytest" in sys.modules

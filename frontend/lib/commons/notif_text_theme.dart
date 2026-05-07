@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// Three typography "sets" defined in `style-guide-todo.md` §6.3. The user
 /// picks one in Settings; the theme rebuilds on change.
 ///
-/// - [current]    — existing 6-role scale (Instrument Serif / Skyling / Suisse
+/// - [current]    — existing 6-role scale (Awesome / Skyling / Suisse
 ///                  Mono / Zalando Sans). Ships today.
 /// - [experiment] — 8-role scale using Newsreader, JetBrains Mono, and
 ///                  Inter Tight.
@@ -25,7 +25,7 @@ extension NotifFontSetMeta on NotifFontSet {
   String get description {
     switch (this) {
       case NotifFontSet.current:
-        return 'Instrument Serif · Skyling · Suisse Mono. '
+        return 'Awesome · Skyling · Suisse Mono. '
             'Six-role scale, ships today.';
       case NotifFontSet.experiment:
         return 'Eight-role scale with Newsreader, JetBrains Mono, and '
@@ -40,6 +40,7 @@ extension NotifFontSetMeta on NotifFontSet {
 /// Canonical family identifiers. Matches `pubspec.yaml` entries.
 class NotifFontFamilies {
   const NotifFontFamilies._();
+  static const String awesome = 'Awesome';
   static const String instrumentSerif = 'InstrumentSerif';
   static const String interTight = 'InterTight';
   static const String jetBrainsMono = 'JetBrainsMono';
@@ -231,7 +232,7 @@ TextStyle _sans({
 NotifTextTheme _buildCurrent() {
   // Existing style values from about.dart / settings.dart pre-refactor. §6.2
   // picks 22 as the canonical title size (resolving the 20/26 drift).
-  const serif = NotifFontFamilies.instrumentSerif;
+  const serif = NotifFontFamilies.awesome;
   const sans = NotifFontFamilies.skyling;
   const mono = NotifFontFamilies.suisseMono;
 

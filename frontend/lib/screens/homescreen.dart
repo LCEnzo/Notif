@@ -388,19 +388,11 @@ class _SourcesPageState extends State<SourcesPage> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
+                      const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Eyebrow('Registry', tone: EyebrowTone.accent),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Sources are managed here, not in the feed.',
-                              style: text$.title.copyWith(
-                                color: tokens.ink,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
+                            Eyebrow('Registry', tone: EyebrowTone.accent),
                           ],
                         ),
                       ),
@@ -1621,6 +1613,7 @@ class _UpdateConsole extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
     final items = notifications;
 
     return RefreshIndicator(
@@ -1650,6 +1643,7 @@ class _UpdateConsole extends StatelessWidget {
               unreadCount: unreadCount,
               markingAllRead: markingAllRead,
               onMarkAllRead: onMarkAllRead,
+              themeSignature: '${tokens.colorway.name}:${text$.fontSet.name}',
             ),
           ),
           if (loading && items.isEmpty)
@@ -1821,6 +1815,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
     required this.unreadCount,
     required this.markingAllRead,
     required this.onMarkAllRead,
+    required this.themeSignature,
   });
 
   final _HomeConsoleMetrics metrics;
@@ -1828,9 +1823,10 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
   final int unreadCount;
   final bool markingAllRead;
   final VoidCallback? onMarkAllRead;
+  final String themeSignature;
 
   @override
-  double get minExtent => mobileTui ? 25 : metrics.headerHeight;
+  double get minExtent => mobileTui ? 40 : metrics.headerHeight;
 
   @override
   double get maxExtent => minExtent;
@@ -1884,30 +1880,37 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
           ),
           InkWell(
             onTap: onMarkAllRead,
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: metrics.actionHPad,
-                vertical: metrics.actionVPad,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                minWidth: mobileTui ? 58 : 0,
+                minHeight: mobileTui ? 28 : 0,
               ),
-              decoration: BoxDecoration(
-                color: unreadCount > 0
-                    ? tokens.bg1
-                    : tokens.rule.withValues(alpha: 0.12),
-                border: Border.all(
-                  color: unreadCount > 0 ? tokens.ruleStrong : tokens.rule,
+              child: Container(
+                alignment: Alignment.center,
+                padding: EdgeInsets.symmetric(
+                  horizontal: mobileTui ? 4 : metrics.actionHPad,
+                  vertical: mobileTui ? 5 : metrics.actionVPad,
                 ),
-              ),
-              child: Text(
-                markingAllRead
-                    ? 'WORKING'
-                    : unreadCount > 0
-                    ? 'READ ALL'
-                    : 'CLEAR',
-                textAlign: TextAlign.right,
-                style: text$.micro.copyWith(
-                  color: unreadCount > 0 ? tokens.accent : tokens.inkMute,
-                  fontSize: metrics.microSize,
-                  letterSpacing: 0,
+                decoration: BoxDecoration(
+                  color: unreadCount > 0
+                      ? tokens.bg1
+                      : tokens.rule.withValues(alpha: 0.12),
+                  border: Border.all(
+                    color: unreadCount > 0 ? tokens.ruleStrong : tokens.rule,
+                  ),
+                ),
+                child: Text(
+                  markingAllRead
+                      ? 'WORKING'
+                      : unreadCount > 0
+                      ? 'READ ALL'
+                      : 'CLEAR',
+                  textAlign: TextAlign.right,
+                  style: text$.micro.copyWith(
+                    color: unreadCount > 0 ? tokens.accent : tokens.inkMute,
+                    fontSize: metrics.microSize,
+                    letterSpacing: 0,
+                  ),
                 ),
               ),
             ),
@@ -1923,6 +1926,7 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
         metrics != oldDelegate.metrics ||
         unreadCount != oldDelegate.unreadCount ||
         markingAllRead != oldDelegate.markingAllRead ||
+        themeSignature != oldDelegate.themeSignature ||
         onMarkAllRead != oldDelegate.onMarkAllRead;
   }
 }
@@ -1991,198 +1995,201 @@ class _ConsoleNotificationRowState extends State<_ConsoleNotificationRow> {
                 : null,
             border: Border(bottom: BorderSide(color: tokens.rule)),
           ),
-          padding: EdgeInsets.symmetric(
-            horizontal: mobileTui ? 10 : 14,
-            vertical: mobileTui ? 4 : metrics.updateRowVPad,
-          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              mobileTui
-                  ? Row(
-                      children: [
-                        _ReadPip(unread: notification.isUnread),
-                        const SizedBox(width: 7),
-                        SizedBox(
-                          width: 46,
-                          child: Text(
-                            _formatTimeAgo(notification.createdAt),
-                            style: text$.micro.copyWith(
-                              color: tokens.inkMute,
-                              letterSpacing: 0,
-                              fontSize: metrics.microSize,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Text(
-                                _shortSource(source),
-                                style: text$.micro.copyWith(
-                                  color: tokens.accent,
-                                  letterSpacing: 0,
-                                  fontSize: metrics.microSize,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  notification.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: text$.body.copyWith(
-                                    color: tokens.ink,
-                                    fontSize: metrics.bodySize,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (widget.busy)
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: mobileTui ? 10 : 14,
+                  vertical: mobileTui ? 4 : metrics.updateRowVPad,
+                ),
+                child: mobileTui
+                    ? Row(
+                        children: [
+                          _ReadPip(unread: notification.isUnread),
+                          const SizedBox(width: 7),
                           SizedBox(
-                            width: 13,
-                            height: 13,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 1.5,
-                              color: tokens.accent,
-                            ),
-                          )
-                        else
-                          Icon(
-                            _expanded
-                                ? Icons.keyboard_arrow_up_sharp
-                                : Icons.keyboard_arrow_down_sharp,
-                            size: 12,
-                            color: tokens.inkMute,
-                          ),
-                      ],
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _ReadPip(unread: notification.isUnread),
-                        const SizedBox(width: 10),
-                        SizedBox(
-                          width: 64,
-                          child: Text(
-                            _formatTimeAgo(notification.createdAt),
-                            style: text$.micro.copyWith(
-                              color: tokens.inkMute,
-                              letterSpacing: 0,
-                              fontSize: metrics.microSize,
+                            width: 46,
+                            child: Text(
+                              _formatTimeAgo(notification.createdAt),
+                              style: text$.micro.copyWith(
+                                color: tokens.inkMute,
+                                letterSpacing: 0,
+                                fontSize: metrics.microSize,
+                              ),
                             ),
                           ),
-                        ),
-                        SizedBox(
-                          width: 168,
-                          child: Text(
-                            _shortSource(source),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text$.micro.copyWith(
-                              color: tokens.accent,
-                              letterSpacing: 0,
-                              fontSize: metrics.microSize,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              Flexible(
-                                flex: 3,
-                                child: Text(
-                                  notification.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: text$.body.copyWith(
-                                    color: tokens.ink,
-                                    fontSize: metrics.bodySize,
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Text(
+                                  _shortSource(source),
+                                  style: text$.micro.copyWith(
+                                    color: tokens.accent,
+                                    letterSpacing: 0,
+                                    fontSize: metrics.microSize,
                                   ),
                                 ),
-                              ),
-                              if (notification.description.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  flex: 4,
+                                const SizedBox(width: 6),
+                                Expanded(
                                   child: Text(
-                                    '- ${notification.description}',
+                                    notification.title,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: text$.micro.copyWith(
-                                      color: tokens.inkMute,
-                                      letterSpacing: 0,
-                                      fontSize: metrics.microSize,
+                                    style: text$.body.copyWith(
+                                      color: tokens.ink,
+                                      fontSize: metrics.bodySize,
                                     ),
                                   ),
                                 ),
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        SizedBox(
-                          width: 118,
-                          child: widget.busy
-                              ? Align(
-                                  alignment: Alignment.centerRight,
-                                  child: SizedBox(
-                                    width: 14,
-                                    height: 14,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.5,
-                                      color: tokens.accent,
-                                    ),
-                                  ),
-                                )
-                              : widget.onChipTap == null
-                              ? const SizedBox.shrink()
-                              : Align(
-                                  alignment: Alignment.centerRight,
-                                  child: InkWell(
-                                    onTap: widget.onChipTap,
-                                    child: Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: metrics.actionHPad,
-                                        vertical: metrics.actionVPad,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: notification.isUnread
-                                            ? tokens.bg1
-                                            : Colors.transparent,
-                                        border: Border.all(
-                                          color: notification.isUnread
-                                              ? tokens.ruleStrong
-                                              : tokens.rule,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        notification.isUnread
-                                            ? 'READ'
-                                            : 'UNREAD',
-                                        textAlign: TextAlign.right,
-                                        style: text$.micro.copyWith(
-                                          color: notification.isUnread
-                                              ? tokens.accent
-                                              : tokens.inkDim,
-                                          letterSpacing: 0,
-                                          fontSize: metrics.microSize,
-                                        ),
-                                      ),
+                          if (widget.busy)
+                            SizedBox(
+                              width: 13,
+                              height: 13,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 1.5,
+                                color: tokens.accent,
+                              ),
+                            )
+                          else
+                            Icon(
+                              _expanded
+                                  ? Icons.keyboard_arrow_up_sharp
+                                  : Icons.keyboard_arrow_down_sharp,
+                              size: 12,
+                              color: tokens.inkMute,
+                            ),
+                        ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _ReadPip(unread: notification.isUnread),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 64,
+                            child: Text(
+                              _formatTimeAgo(notification.createdAt),
+                              style: text$.micro.copyWith(
+                                color: tokens.inkMute,
+                                letterSpacing: 0,
+                                fontSize: metrics.microSize,
+                              ),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 168,
+                            child: Text(
+                              _shortSource(source),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text$.micro.copyWith(
+                                color: tokens.accent,
+                                letterSpacing: 0,
+                                fontSize: metrics.microSize,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.baseline,
+                              textBaseline: TextBaseline.alphabetic,
+                              children: [
+                                Flexible(
+                                  flex: 3,
+                                  child: Text(
+                                    notification.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: text$.body.copyWith(
+                                      color: tokens.ink,
+                                      fontSize: metrics.bodySize,
                                     ),
                                   ),
                                 ),
-                        ),
-                      ],
-                    ),
+                                if (notification.description.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    flex: 4,
+                                    child: Text(
+                                      '- ${notification.description}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: text$.micro.copyWith(
+                                        color: tokens.inkMute,
+                                        letterSpacing: 0,
+                                        fontSize: metrics.microSize,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          SizedBox(
+                            width: 118,
+                            child: widget.busy
+                                ? Align(
+                                    alignment: Alignment.centerRight,
+                                    child: SizedBox(
+                                      width: 14,
+                                      height: 14,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 1.5,
+                                        color: tokens.accent,
+                                      ),
+                                    ),
+                                  )
+                                : widget.onChipTap == null
+                                ? const SizedBox.shrink()
+                                : Align(
+                                    alignment: Alignment.centerRight,
+                                    child: InkWell(
+                                      onTap: widget.onChipTap,
+                                      child: Container(
+                                        padding: EdgeInsets.symmetric(
+                                          horizontal: metrics.actionHPad,
+                                          vertical: metrics.actionVPad,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: notification.isUnread
+                                              ? tokens.bg1
+                                              : Colors.transparent,
+                                          border: Border.all(
+                                            color: notification.isUnread
+                                                ? tokens.ruleStrong
+                                                : tokens.rule,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          notification.isUnread
+                                              ? 'READ'
+                                              : 'UNREAD',
+                                          textAlign: TextAlign.right,
+                                          style: text$.micro.copyWith(
+                                            color: notification.isUnread
+                                                ? tokens.accent
+                                                : tokens.inkDim,
+                                            letterSpacing: 0,
+                                            fontSize: metrics.microSize,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+              ),
               if (_expanded)
                 _ExpandedNotificationDetails(
                   notification: notification,
-                  source: source,
                   metrics: metrics,
+                  mobileTui: mobileTui,
                   onOpen: notification.itemUrl.isEmpty
                       ? null
                       : () => _open(newTab: false),
@@ -2201,15 +2208,15 @@ class _ConsoleNotificationRowState extends State<_ConsoleNotificationRow> {
 class _ExpandedNotificationDetails extends StatelessWidget {
   const _ExpandedNotificationDetails({
     required this.notification,
-    required this.source,
     required this.metrics,
+    required this.mobileTui,
     required this.onOpen,
     required this.onOpenNewTab,
   });
 
   final NotificationItem notification;
-  final String source;
   final _HomeConsoleMetrics metrics;
+  final bool mobileTui;
   final VoidCallback? onOpen;
   final VoidCallback? onOpenNewTab;
 
@@ -2220,89 +2227,93 @@ class _ExpandedNotificationDetails extends StatelessWidget {
     final details = notification.description.trim().isEmpty
         ? 'No description was captured for this update.'
         : notification.description.trim();
+    final hasLink = notification.itemUrl.isNotEmpty;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        metrics.actionHPad + 90,
-        0,
-        metrics.actionHPad + 118,
-        metrics.updateRowVPad + 8,
-      ),
-      child: Container(
-        constraints: const BoxConstraints(maxHeight: 220),
-        decoration: BoxDecoration(
-          color: tokens.bg0.withValues(alpha: 0.52),
-          border: Border.all(color: tokens.rule),
-        ),
-        child: Scrollbar(
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      source,
-                      style: text$.micro.copyWith(color: tokens.accent),
-                    ),
-                    Text(
-                      _formatTimeAgo(notification.createdAt),
-                      style: text$.micro.copyWith(color: tokens.inkMute),
-                    ),
-                    Text(
-                      notification.isUnread ? 'UNREAD' : 'READ',
-                      style: text$.micro.copyWith(
-                        color: notification.isUnread
-                            ? tokens.accent
-                            : tokens.inkMute,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                SelectableText(
-                  notification.title,
-                  style: text$.heading.copyWith(color: tokens.ink),
-                ),
-                const SizedBox(height: 8),
-                SelectableText(
+    return Container(
+      width: double.infinity,
+      constraints: BoxConstraints(maxHeight: mobileTui ? 150 : 180),
+      decoration: BoxDecoration(color: tokens.bg0.withValues(alpha: 0.46)),
+      child: Scrollbar(
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            mobileTui ? 22 : 264,
+            mobileTui ? 8 : metrics.updateRowVPad,
+            mobileTui ? 10 : 14,
+            metrics.updateRowVPad,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: SelectableText(
                   details,
-                  style: text$.bodyLong.copyWith(color: tokens.inkDim),
-                ),
-                if (notification.itemUrl.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  SelectableText(
-                    notification.itemUrl,
-                    style: text$.code.copyWith(color: tokens.inkMute),
+                  style: text$.bodyLong.copyWith(
+                    color: tokens.inkDim,
+                    fontSize: metrics.bodySize,
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+                ),
+              ),
+              if (hasLink) ...[
+                const SizedBox(width: 12),
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      NotifButton(
-                        label: 'Open',
+                      _InlineIconAction(
                         icon: Icons.open_in_new_sharp,
-                        size: NotifButtonSize.sm,
-                        onPressed: onOpen,
+                        tooltip: 'Open',
+                        onTap: onOpen,
                       ),
-                      NotifButton(
-                        label: 'New tab',
-                        icon: Icons.add_to_photos_outlined,
-                        variant: NotifButtonVariant.ghost,
-                        size: NotifButtonSize.sm,
-                        onPressed: onOpenNewTab,
+                      const SizedBox(width: 6),
+                      _InlineIconAction(
+                        icon: Icons.tab_sharp,
+                        tooltip: 'Open in new tab',
+                        onTap: onOpenNewTab,
                       ),
                     ],
                   ),
-                ],
+                ),
               ],
-            ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _InlineIconAction extends StatelessWidget {
+  const _InlineIconAction({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: 28,
+          height: 28,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: tokens.bg1.withValues(alpha: 0.72),
+            border: Border.all(color: tokens.rule),
+          ),
+          child: Icon(
+            icon,
+            size: 15,
+            color: onTap == null ? tokens.inkMute : tokens.inkDim,
           ),
         ),
       ),
@@ -3095,9 +3106,13 @@ String _shortSource(String source) {
 String _formatTimeAgo(DateTime? dateTime) {
   if (dateTime == null) return 'never';
   final diff = DateTime.now().difference(dateTime);
-  if (diff.inMinutes < 1) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inSeconds < 60) return '${diff.inSeconds}s';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+  if (diff.inHours < 24) {
+    final minutes = diff.inMinutes.remainder(60);
+    if (minutes == 0) return '${diff.inHours}h';
+    return '${diff.inHours}h ${minutes}m';
+  }
   if (diff.inDays < 7) return '${diff.inDays}d ago';
   return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
 }

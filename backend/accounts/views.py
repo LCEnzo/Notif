@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -23,6 +23,11 @@ from accounts.serializers import (
 	UserMinimalReadSerializer,
 )
 from commons.permissions import IsRequestingThemselves, ReadOnly
+
+if TYPE_CHECKING:
+	_UserModelViewSet = ModelViewSet[User]
+else:
+	_UserModelViewSet = ModelViewSet
 
 
 class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -85,7 +90,7 @@ class ThrottledTokenVerifyView(TokenThrottleMixin, TokenVerifyView):
 	throttle_scope = "token_verify"
 
 
-class UserViewSet(ModelViewSet[User]):
+class UserViewSet(_UserModelViewSet):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
 

@@ -49,6 +49,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('COMMIT'), findsOneWidget);
+    expect(find.text('dev'), findsOneWidget);
+
     final pageNotes = tester.getTopLeft(
       find.byKey(const ValueKey('aboutSectionPageNotes')),
     );

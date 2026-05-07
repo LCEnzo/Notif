@@ -8,7 +8,7 @@ import tempfile
 from collections import deque
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.conf import settings
 from django.db import connection
@@ -25,6 +25,11 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from ops.models import SystemEvent
 from ops.serializers import SystemEventSerializer
+
+if TYPE_CHECKING:
+	_SystemEventReadOnlyModelViewSet = ReadOnlyModelViewSet[SystemEvent]
+else:
+	_SystemEventReadOnlyModelViewSet = ReadOnlyModelViewSet
 
 _CADDY_LOG_MAX_LINES = 200
 _CADDY_LOG_DEFAULT_LINES = 50
@@ -46,7 +51,7 @@ class SystemEventPagination(PageNumberPagination):
 	max_page_size = 200
 
 
-class SystemEventViewSet(ReadOnlyModelViewSet[SystemEvent]):
+class SystemEventViewSet(_SystemEventReadOnlyModelViewSet):
 	permission_classes = [IsAdminUser]
 	serializer_class = SystemEventSerializer
 	pagination_class = SystemEventPagination

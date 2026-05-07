@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
 from django.contrib.auth.validators import UnicodeUsernameValidator
@@ -6,8 +6,13 @@ from django.db import models
 from django.db.models.query import QuerySet
 from django.utils import timezone
 
+if TYPE_CHECKING:
+	_UserManagerBase = BaseUserManager["User"]
+else:
+	_UserManagerBase = BaseUserManager
 
-class UserManager(BaseUserManager["User"]):
+
+class UserManager(_UserManagerBase):
 	def create_user(self, email: str, username: str, password: str, **extra_fields: Any) -> User:
 		if not email:
 			raise ValueError("Email is required")
