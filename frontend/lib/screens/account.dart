@@ -111,7 +111,7 @@ class _AccountPageState extends State<AccountPage> {
       setState(() {
         _profileSaved = true;
       });
-    } catch (error) {
+    } on Exception catch (error) {
       setState(() {
         _profileError = error.toString();
       });
@@ -163,7 +163,7 @@ class _AccountPageState extends State<AccountPage> {
       setState(() {
         _passwordSaved = true;
       });
-    } catch (error) {
+    } on Exception catch (error) {
       setState(() {
         _passwordError = error.toString();
       });
@@ -235,7 +235,7 @@ class _AccountPageState extends State<AccountPage> {
         auth.logout();
         context.go('/login');
       }
-    } catch (error) {
+    } on Exception catch (error) {
       if (mounted) {
         setState(() {
           _deleteLoading = false;
@@ -495,15 +495,14 @@ class _AccountPageState extends State<AccountPage> {
 }
 
 class _FieldLabel extends StatelessWidget {
-  final NotifTextTheme text$;
-  final NotifTokens tokens;
-  final String label;
-
   const _FieldLabel({
     required this.text$,
     required this.tokens,
     required this.label,
   });
+  final NotifTextTheme text$;
+  final NotifTokens tokens;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -515,17 +514,16 @@ class _FieldLabel extends StatelessWidget {
 }
 
 class _AccountTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final bool obscure;
-  final TextInputType? keyboardType;
-
   const _AccountTextField({
     required this.controller,
     required this.hint,
     this.obscure = false,
     this.keyboardType,
   });
+  final TextEditingController controller;
+  final String hint;
+  final bool obscure;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {

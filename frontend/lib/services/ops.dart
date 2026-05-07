@@ -5,14 +5,6 @@ import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 
 class SystemEvent {
-  final int id;
-  final DateTime createdAt;
-  final String level;
-  final String source;
-  final String kind;
-  final String message;
-  final Map<String, dynamic> details;
-
   const SystemEvent({
     required this.id,
     required this.createdAt,
@@ -36,12 +28,18 @@ class SystemEvent {
           : const {},
     );
   }
+  final int id;
+  final DateTime createdAt;
+  final String level;
+  final String source;
+  final String kind;
+  final String message;
+  final Map<String, dynamic> details;
 }
 
 class CaddyLogEntry {
-  final Map<String, dynamic> data;
-
   const CaddyLogEntry({required this.data});
+  final Map<String, dynamic> data;
 
   String get method {
     final request = data['request'];
@@ -69,6 +67,15 @@ class CaddyLogEntry {
   }
 }
 
+class OpsException implements Exception {
+  const OpsException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class OpsService extends ChangeNotifier {
   OpsService(this._authService);
 
@@ -92,7 +99,9 @@ class OpsService extends ChangeNotifier {
   Map<String, String> _authHeaders() {
     final jwt = _authService.jwt;
     if (jwt == null) {
-      throw StateError('You need to sign in before viewing operations data.');
+      throw const OpsException(
+        'You need to sign in before viewing operations data.',
+      );
     }
     return {
       'Content-Type': 'application/json',
@@ -123,7 +132,7 @@ class OpsService extends ChangeNotifier {
             (item) => SystemEvent.fromJson(Map<String, dynamic>.from(item)),
           ),
         );
-    } catch (error) {
+    } on Exception catch (error) {
       _error = error.toString();
     } finally {
       _loading = false;
@@ -154,7 +163,7 @@ class OpsService extends ChangeNotifier {
             (item) => CaddyLogEntry(data: Map<String, dynamic>.from(item)),
           ),
         );
-    } catch (error) {
+    } on Exception catch (error) {
       _error = error.toString();
     } finally {
       _caddyLogsLoading = false;
@@ -187,7 +196,7 @@ class OpsService extends ChangeNotifier {
         filename: 'notif-db-$timestamp.sqlite3',
         mimeType: 'application/vnd.sqlite3',
       );
-    } catch (error) {
+    } on Exception catch (error) {
       _error = error.toString();
     } finally {
       _downloading = false;

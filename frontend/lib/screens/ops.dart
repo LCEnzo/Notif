@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -37,8 +38,8 @@ class _OpsPageState extends State<OpsPage> {
 
     _didFetchInitialOpsData = true;
     final ops = context.read<OpsService>();
-    ops.fetchEvents();
-    ops.fetchCaddyLogs();
+    unawaited(ops.fetchEvents());
+    unawaited(ops.fetchCaddyLogs());
   }
 
   @override
@@ -142,8 +143,8 @@ class _OpsBody extends StatelessWidget {
               onPressed: ops.loading
                   ? null
                   : () {
-                      ops.fetchEvents();
-                      ops.fetchCaddyLogs();
+                      unawaited(ops.fetchEvents());
+                      unawaited(ops.fetchCaddyLogs());
                     },
             ),
             NotifButton(

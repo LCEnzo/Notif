@@ -82,7 +82,7 @@ void main() {
       tester,
     ) async {
       final handle = tester.ensureSemantics();
-      int taps = 0;
+      const int taps = 0;
 
       await tester.pumpWidget(
         _wrapApp(

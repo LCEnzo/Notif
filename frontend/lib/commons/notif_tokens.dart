@@ -159,6 +159,19 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
     required this.authBackdrop,
   });
 
+  /// Build the tokens for a given colorway. Each colorway owns its own
+  /// brightness, so there is no separate scheme selection to resolve.
+  factory NotifTokens.build(NotifColorway colorway) {
+    final build = _NotifColorwayRegistry.tokens[colorway];
+    if (build == null) {
+      throw StateError(
+        'Missing registry entry for ${colorway.name}. All enum values must '
+        'be registered in _NotifColorwayRegistry.tokens.',
+      );
+    }
+    return build();
+  }
+
   final NotifColorway colorway;
 
   // Structural
@@ -199,19 +212,6 @@ class NotifTokens extends ThemeExtension<NotifTokens> {
   final AuthBackdropColors authBackdrop;
 
   Brightness get brightness => colorway.brightness;
-
-  /// Build the tokens for a given colorway. Each colorway owns its own
-  /// brightness, so there is no separate scheme selection to resolve.
-  factory NotifTokens.build(NotifColorway colorway) {
-    final build = _NotifColorwayRegistry.tokens[colorway];
-    if (build == null) {
-      throw StateError(
-        'Missing registry entry for ${colorway.name}. All enum values must '
-        'be registered in _NotifColorwayRegistry.tokens.',
-      );
-    }
-    return build();
-  }
 
   @override
   NotifTokens copyWith({

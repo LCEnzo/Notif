@@ -6,12 +6,6 @@ import 'package:notif/services/app_settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class UserData {
-  String email;
-  String username;
-  String name;
-  bool isStaff;
-  bool isSuperuser;
-
   UserData({
     required this.email,
     required this.username,
@@ -19,13 +13,17 @@ class UserData {
     required this.isStaff,
     required this.isSuperuser,
   });
+  String email;
+  String username;
+  String name;
+  bool isStaff;
+  bool isSuperuser;
 }
 
 class JWT {
+  JWT({required this.access, required this.refresh});
   String access;
   String refresh;
-
-  JWT({required this.access, required this.refresh});
 
   int? get userId => _decodeJwtUserId(access);
 }
@@ -81,7 +79,7 @@ class AuthService extends ChangeNotifier {
       _jwt = JWT(access: accessToken, refresh: refreshToken);
       notifyListeners();
       return accessToken;
-    } catch (error) {
+    } on Exception catch (error) {
       if (kDebugMode) {
         debugPrint('AuthService._refreshAccessToken: $error');
       }
@@ -131,7 +129,7 @@ class AuthService extends ChangeNotifier {
     }
 
     if (autoLogIn) {
-      return await login(username, password);
+      return login(username, password);
     }
   }
 
@@ -185,19 +183,18 @@ class AuthService extends ChangeNotifier {
 }
 
 class UserDataService extends ChangeNotifier {
-  UserData? _userData;
-  final AuthService _authService;
-  AppSettingsController? _settings;
-
   UserDataService(this._authService) {
     _authService.addListener(_handleAuthChange);
   }
+  UserData? _userData;
+  final AuthService _authService;
+  AppSettingsController? _settings;
 
   void updateSettings(AppSettingsController? settings) {
     _settings = settings;
   }
 
-  void _handleAuthChange() async {
+  Future<void> _handleAuthChange() async {
     final jwt = _authService.jwt;
     if (jwt != null) {
       await getUserInfo(notifyOnComplete: false);
@@ -230,7 +227,7 @@ class UserDataService extends ChangeNotifier {
         isStaff: data['is_staff'] == true,
         isSuperuser: data['is_superuser'] == true,
       );
-    } catch (error) {
+    } on Exception catch (error) {
       if (kDebugMode) {
         debugPrint('UserDataService.getUserInfo: $error');
       }
@@ -274,7 +271,7 @@ int? _decodeJwtUserId(String token) {
     if (rawUserId is String) {
       return int.tryParse(rawUserId);
     }
-  } catch (error) {
+  } on Exception catch (error) {
     if (kDebugMode) {
       debugPrint('AuthService._decodeJwtUserId: $error');
     }

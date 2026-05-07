@@ -97,9 +97,6 @@ InputDecoration _buildAuthInputDecoration({
 }
 
 class AuthPanelHeader extends StatelessWidget {
-  final String title;
-  final String eyebrow;
-  final String? description;
 
   const AuthPanelHeader({
     super.key,
@@ -107,6 +104,9 @@ class AuthPanelHeader extends StatelessWidget {
     required this.eyebrow,
     this.description,
   });
+  final String title;
+  final String eyebrow;
+  final String? description;
 
   @override
   Widget build(BuildContext context) {
@@ -159,14 +159,14 @@ class AuthPanelHeader extends StatelessWidget {
 }
 
 class AuthInlineAction extends StatelessWidget {
-  final String label;
-  final VoidCallback onPressed;
 
   const AuthInlineAction({
     super.key,
     required this.label,
     required this.onPressed,
   });
+  final String label;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -205,9 +205,9 @@ class AuthInlineAction extends StatelessWidget {
 }
 
 class AuthRuleDivider extends StatelessWidget {
-  final String label;
 
   const AuthRuleDivider({super.key, this.label = 'or'});
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -244,10 +244,10 @@ class AuthRuleDivider extends StatelessWidget {
 }
 
 class Logo extends StatelessWidget {
-  final String title;
-  final Color? textColor;
 
   const Logo({super.key, required this.title, this.textColor});
+  final String title;
+  final Color? textColor;
 
   @override
   Widget build(BuildContext context) {
@@ -277,20 +277,6 @@ class Logo extends StatelessWidget {
 }
 
 class AppTextField extends StatelessWidget {
-  final String labelText;
-  final String hintText;
-  final TextEditingController controller;
-  final IconData prefixIcon;
-  final String? Function(String?)? validator;
-  final bool obscureText;
-  final Widget? suffixIcon;
-  final Iterable<String>? autofillHints;
-  final TextInputAction? textInputAction;
-  final TextInputType? keyboardType;
-  final ValueChanged<String>? onFieldSubmitted;
-  final bool enableSuggestions;
-  final bool autocorrect;
-  final bool enabled;
 
   const AppTextField({
     super.key,
@@ -309,6 +295,20 @@ class AppTextField extends StatelessWidget {
     this.autocorrect = true,
     this.enabled = true,
   });
+  final String labelText;
+  final String hintText;
+  final TextEditingController controller;
+  final IconData prefixIcon;
+  final String? Function(String?)? validator;
+  final bool obscureText;
+  final Widget? suffixIcon;
+  final Iterable<String>? autofillHints;
+  final TextInputAction? textInputAction;
+  final TextInputType? keyboardType;
+  final ValueChanged<String>? onFieldSubmitted;
+  final bool enableSuggestions;
+  final bool autocorrect;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -337,14 +337,6 @@ class AppTextField extends StatelessWidget {
 }
 
 class PasswordTextField extends StatefulWidget {
-  final String labelText;
-  final String hintText;
-  final String? Function(String?)? validator;
-  final TextEditingController controller;
-  final Iterable<String>? autofillHints;
-  final TextInputAction? textInputAction;
-  final ValueChanged<String>? onFieldSubmitted;
-  final bool enabled;
 
   const PasswordTextField({
     super.key,
@@ -357,6 +349,14 @@ class PasswordTextField extends StatefulWidget {
     this.onFieldSubmitted,
     this.enabled = true,
   });
+  final String labelText;
+  final String hintText;
+  final String? Function(String?)? validator;
+  final TextEditingController controller;
+  final Iterable<String>? autofillHints;
+  final TextInputAction? textInputAction;
+  final ValueChanged<String>? onFieldSubmitted;
+  final bool enabled;
 
   @override
   State<PasswordTextField> createState() => _PasswordTextFieldState();
@@ -394,11 +394,6 @@ Color _cursorColor(BuildContext context) {
 }
 
 class CustomButton extends StatelessWidget {
-  final String buttonText;
-  final VoidCallback onPressed;
-  final Color? buttonColor;
-  final Widget? trailingIcon;
-  final bool isLoading;
 
   const CustomButton({
     super.key,
@@ -408,6 +403,11 @@ class CustomButton extends StatelessWidget {
     this.trailingIcon,
     this.isLoading = false,
   });
+  final String buttonText;
+  final VoidCallback onPressed;
+  final Color? buttonColor;
+  final Widget? trailingIcon;
+  final bool isLoading;
 
   static const _submitDuration = Duration(milliseconds: 110);
 
@@ -486,8 +486,8 @@ class CustomButton extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: radius,
-              boxShadow: [
-                const BoxShadow(
+              boxShadow: const [
+                BoxShadow(
                   color: AuthPalette.buttonShadow,
                   blurRadius: 16,
                   offset: Offset(0, 10),

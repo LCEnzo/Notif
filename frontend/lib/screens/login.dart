@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -44,7 +46,7 @@ class _FormContentState extends State<_FormContent> {
   @override
   void initState() {
     super.initState();
-    _loadUsername();
+    unawaited(_loadUsername());
   }
 
   @override
@@ -238,14 +240,16 @@ class _FormContentState extends State<_FormContent> {
           passwordController.text,
         );
         return true;
-      } catch (e) {
+      } on Exception catch (e) {
         if (context.mounted) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!context.mounted) return;
-            showAuthFailureDialog(
-              context,
-              title: 'Login failed',
-              message: describeDataError(e),
+            unawaited(
+              showAuthFailureDialog(
+                context,
+                title: 'Login failed',
+                message: describeDataError(e),
+              ),
             );
           });
         }

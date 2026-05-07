@@ -90,7 +90,8 @@ enum NotificationStatus {
   unread,
   read,
   dismissed,
-  unknown;
+  unknown
+  ;
 
   static NotificationStatus fromWire(String? raw) {
     switch (raw) {
@@ -173,7 +174,8 @@ enum LinkSort {
   newest('-pk', 'Newest'),
   oldest('pk', 'Oldest'),
   recentlyScraped('-last_scraped,-pk', 'Recently scraped'),
-  leastRecentlyScraped('last_scraped,pk', 'Least recently scraped');
+  leastRecentlyScraped('last_scraped,pk', 'Least recently scraped')
+  ;
 
   const LinkSort(this.apiValue, this.label);
   final String apiValue;
@@ -293,7 +295,7 @@ class LinkService extends ChangeNotifier {
       _currentPage = 1;
       _hasMore = body['next'] != null;
       _totalCount = (body['count'] as int?) ?? links.length;
-    } catch (error) {
+    } on Exception catch (error) {
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
         return;
       }
@@ -354,7 +356,7 @@ class LinkService extends ChangeNotifier {
       _currentPage = page;
       _hasMore = body['next'] != null;
       _totalCount = (body['count'] as int?) ?? links.length;
-    } catch (error) {
+    } on Exception catch (error) {
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
         return;
       }
@@ -416,7 +418,7 @@ class LinkService extends ChangeNotifier {
       linkCreated = true;
       await fetchLinks();
       return true;
-    } catch (error) {
+    } on Exception catch (error) {
       _error = describeDataError(error);
       if (!linkCreated && strategyResolution?.created == true) {
         await _deleteStrategyIfUnused(jwt, strategyResolution!.id);
@@ -451,9 +453,9 @@ class LinkService extends ChangeNotifier {
 
     try {
       var strategyId = link.strategyId;
-      final selectorsChanged = strategyClass == generalSelectorStrategy
-          ? !listEquals(normalizeSelectors(selectorsText), link.selectors)
-          : false;
+      final selectorsChanged =
+          strategyClass == generalSelectorStrategy &&
+          !listEquals(normalizeSelectors(selectorsText), link.selectors);
 
       if (strategyId == null ||
           strategyClass != link.strategyClass ||
@@ -482,7 +484,7 @@ class LinkService extends ChangeNotifier {
 
       await fetchLinks();
       return true;
-    } catch (error) {
+    } on Exception catch (error) {
       _error = describeDataError(error);
       if (!linkUpdated && strategyResolution?.created == true) {
         await _deleteStrategyIfUnused(jwt, strategyResolution!.id);
@@ -524,7 +526,7 @@ class LinkService extends ChangeNotifier {
           : _currentPage;
       await goToPage(targetPage);
       return true;
-    } catch (error) {
+    } on Exception catch (error) {
       _error = describeDataError(error);
       return false;
     } finally {
@@ -560,7 +562,7 @@ class LinkService extends ChangeNotifier {
       final data = expectSuccessJson(response, 'Trigger scrape');
       await fetchLinks();
       return _formatScrapeResult(data, linkId: linkId);
-    } catch (error) {
+    } on Exception catch (error) {
       _error = describeDataError(error);
       return null;
     } finally {
@@ -673,7 +675,7 @@ class LinkService extends ChangeNotifier {
       _strategies = Map<int, StrategyRecord>.from(_strategies)
         ..remove(strategyId);
       _strategiesFetchedAt = DateTime.now();
-    } catch (error) {
+    } on Exception catch (error) {
       if (kDebugMode) {
         debugPrint('LinkService._deleteStrategyIfUnused($strategyId): $error');
       }
@@ -780,7 +782,7 @@ class LinkService extends ChangeNotifier {
           ? defaultStrategyChoices
           : List<String>.from(choices);
       _strategyChoicesLoaded = true;
-    } catch (error) {
+    } on Exception catch (error) {
       if (!_isCurrentState(stateEpoch)) {
         return;
       }
@@ -856,7 +858,8 @@ class LinkService extends ChangeNotifier {
 
 enum NotifSort {
   newest('-update__created_at,-pk', 'Newest'),
-  oldest('update__created_at,pk', 'Oldest');
+  oldest('update__created_at,pk', 'Oldest')
+  ;
 
   const NotifSort(this.apiValue, this.label);
   final String apiValue;
@@ -953,7 +956,7 @@ class NotificationService extends ChangeNotifier {
       _hasMore = body['next'] != null;
       _totalCount = (body['count'] as int?) ?? 0;
       _totalUnreadCount = (body['unread_count'] as int?) ?? 0;
-    } catch (error) {
+    } on Exception catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
       }
@@ -1012,7 +1015,7 @@ class NotificationService extends ChangeNotifier {
       _hasMore = body['next'] != null;
       _totalCount = (body['count'] as int?) ?? 0;
       _totalUnreadCount = (body['unread_count'] as int?) ?? _totalUnreadCount;
-    } catch (error) {
+    } on Exception catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
       }
@@ -1081,7 +1084,7 @@ class NotificationService extends ChangeNotifier {
         1 << 30,
       );
       return true;
-    } catch (error) {
+    } on Exception catch (error) {
       _error = describeDataError(error);
       return false;
     } finally {
@@ -1132,7 +1135,7 @@ class NotificationService extends ChangeNotifier {
       // Server clears all unread for the user, including pages we haven't
       // loaded; reflect that locally rather than counting visible items.
       _totalUnreadCount = 0;
-    } catch (error) {
+    } on Exception catch (error) {
       _error = describeDataError(error);
     } finally {
       _markingAllRead = false;

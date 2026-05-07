@@ -5,7 +5,7 @@
 # IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
 # invoked from the command line by running `flutter analyze`.
 
-include: package:flutter_lints/flutter.yaml
+include: package:very_good_analysis/analysis_options.yaml
 
 analyzer:
   language:
@@ -15,6 +15,8 @@ analyzer:
 
 linter:
   rules:
+    # Trial very_good_analysis with existing low-noise project rules first.
+    # Re-enable the disabled rules incrementally when the current churn is paid down.
     always_declare_return_types: true
     avoid_dynamic_calls: true
     avoid_print: true
@@ -25,3 +27,31 @@ linter:
     no_self_assignments: true
     prefer_const_constructors: true
     unawaited_futures: true
+
+    # Still-noisy style/doc rules that don't fit this app yet
+    always_put_required_named_parameters_first: false
+    avoid_escaping_inner_quotes: false
+    avoid_positional_boolean_parameters: false
+    avoid_private_typedef_functions: false
+    avoid_redundant_argument_values: false
+    avoid_types_on_closure_parameters: false
+    cascade_invocations: false
+    comment_references: false
+    document_ignores: false
+    lines_longer_than_80_chars: false
+    omit_local_variable_types: false
+    one_member_abstracts: false
+    parameter_assignments: false
+    prefer_const_declarations: true
+    prefer_const_literals_to_create_immutables: true
+    prefer_constructors_over_static_methods: true
+    prefer_final_locals: true
+    prefer_int_literals: false
+    prefer_single_quotes: false
+    public_member_api_docs: false
+    specify_nonobvious_property_types: false
+    unnecessary_breaks: false
+    unnecessary_ignore: false
+    unnecessary_raw_strings: false
+    use_colored_box: false
+    use_setters_to_change_properties: false

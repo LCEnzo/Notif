@@ -10,27 +10,6 @@ import 'package:notif/commons/notif_tokens.dart';
 
 @immutable
 class AuthTextureSettings {
-  final double grainSpacing;
-  final double grainLimitYFactor;
-  final double grainNoiseThreshold;
-  final double grainOpacityScale;
-  final double grainMinRadius;
-  final double grainMaxRadiusDelta;
-  final double grainColorLerpScale;
-  final double grainFadeCenterX;
-  final double grainFadeCenterY;
-  final double grainFadeRadius;
-  final double halftoneSpacing;
-  final double halftoneStartYFactor;
-  final double halftoneBaseRadius;
-  final double halftoneRadiusGrowth;
-  final double halftoneOpacityBase;
-  final double halftoneOpacityGrowth;
-  final double halftoneColorLerpScale;
-  final double halftoneConvexCurveDepthFactor;
-  final double halftoneLandscapeCurveBoost;
-  final double halftoneCurveExponent;
-  final double halftoneLandscapeExponentPull;
 
   const AuthTextureSettings({
     required this.grainSpacing,
@@ -55,6 +34,27 @@ class AuthTextureSettings {
     required this.halftoneCurveExponent,
     required this.halftoneLandscapeExponentPull,
   });
+  final double grainSpacing;
+  final double grainLimitYFactor;
+  final double grainNoiseThreshold;
+  final double grainOpacityScale;
+  final double grainMinRadius;
+  final double grainMaxRadiusDelta;
+  final double grainColorLerpScale;
+  final double grainFadeCenterX;
+  final double grainFadeCenterY;
+  final double grainFadeRadius;
+  final double halftoneSpacing;
+  final double halftoneStartYFactor;
+  final double halftoneBaseRadius;
+  final double halftoneRadiusGrowth;
+  final double halftoneOpacityBase;
+  final double halftoneOpacityGrowth;
+  final double halftoneColorLerpScale;
+  final double halftoneConvexCurveDepthFactor;
+  final double halftoneLandscapeCurveBoost;
+  final double halftoneCurveExponent;
+  final double halftoneLandscapeExponentPull;
 
   static const AuthTextureSettings defaults = AuthTextureSettings(
     grainSpacing: 4.0,
@@ -227,18 +227,6 @@ class AuthTextureSettings {
 
 @immutable
 class _AuthBackdropPalette {
-  final List<Color> baseGradientColors;
-  final List<double> baseGradientStops;
-  final List<Color> bloomColors;
-  final List<double> bloomStops;
-  final List<Color> transitionColors;
-  final List<double> transitionStops;
-  final List<Color> floorFadeColors;
-  final List<double> floorFadeStops;
-  final Color grainFrom;
-  final Color grainTo;
-  final Color halftoneTop;
-  final Color halftoneBottom;
 
   const _AuthBackdropPalette({
     required this.baseGradientColors,
@@ -273,6 +261,18 @@ class _AuthBackdropPalette {
       halftoneBottom: colors.halftoneBottom,
     );
   }
+  final List<Color> baseGradientColors;
+  final List<double> baseGradientStops;
+  final List<Color> bloomColors;
+  final List<double> bloomStops;
+  final List<Color> transitionColors;
+  final List<double> transitionStops;
+  final List<Color> floorFadeColors;
+  final List<double> floorFadeStops;
+  final Color grainFrom;
+  final Color grainTo;
+  final Color halftoneTop;
+  final Color halftoneBottom;
 
   @override
   bool operator ==(Object other) {
@@ -316,6 +316,8 @@ class _AuthBackdropPalette {
 // ---------------------------------------------------------------------------
 
 class PageBackground extends StatelessWidget {
+
+  const PageBackground({super.key, required this.child});
   /// Set by the debug tuner to receive live settings changes.
   /// Null in release builds — the texture layer uses [AuthTextureSettings.defaults].
   static ValueNotifier<AuthTextureSettings>? debugSettingsNotifier;
@@ -325,8 +327,6 @@ class PageBackground extends StatelessWidget {
   static WidgetBuilder? debugOverlayBuilder;
 
   final Widget child;
-
-  const PageBackground({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -395,13 +395,13 @@ class PageBackground extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _PosterTextureLayer extends StatelessWidget {
+
+  const _PosterTextureLayer({required this.settings, required this.palette});
   static final Future<ui.FragmentProgram> _programFuture =
       ui.FragmentProgram.fromAsset('shaders/auth_texture.frag');
 
   final AuthTextureSettings settings;
   final _AuthBackdropPalette palette;
-
-  const _PosterTextureLayer({required this.settings, required this.palette});
 
   @override
   Widget build(BuildContext context) {
@@ -428,10 +428,6 @@ class _PosterTextureLayer extends StatelessWidget {
 }
 
 class _PosterTexturePaint extends StatefulWidget {
-  final ui.FragmentProgram program;
-  final AuthTextureSettings settings;
-  final _AuthBackdropPalette palette;
-  final double dpr;
 
   const _PosterTexturePaint({
     required this.program,
@@ -439,6 +435,10 @@ class _PosterTexturePaint extends StatefulWidget {
     required this.palette,
     required this.dpr,
   });
+  final ui.FragmentProgram program;
+  final AuthTextureSettings settings;
+  final _AuthBackdropPalette palette;
+  final double dpr;
 
   @override
   State<_PosterTexturePaint> createState() => _PosterTexturePaintState();
@@ -487,9 +487,9 @@ class _PosterTexturePaintState extends State<_PosterTexturePaint> {
 // ---------------------------------------------------------------------------
 
 class _PosterBackgroundPainter extends CustomPainter {
-  final List<_BackgroundOp> operations;
 
   const _PosterBackgroundPainter(this.operations);
+  final List<_BackgroundOp> operations;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -505,11 +505,6 @@ class _PosterBackgroundPainter extends CustomPainter {
 }
 
 class _PosterTexturePainter extends CustomPainter {
-  final ui.FragmentProgram program;
-  final ui.FragmentShader shader;
-  final AuthTextureSettings settings;
-  final _AuthBackdropPalette palette;
-  final double dpr;
 
   const _PosterTexturePainter({
     required this.program,
@@ -518,6 +513,11 @@ class _PosterTexturePainter extends CustomPainter {
     required this.palette,
     required this.dpr,
   });
+  final ui.FragmentProgram program;
+  final ui.FragmentShader shader;
+  final AuthTextureSettings settings;
+  final _AuthBackdropPalette palette;
+  final double dpr;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -599,11 +599,8 @@ abstract class _BackgroundOp {
 
 enum _BackgroundShape { rect, oval }
 
+@immutable
 class _RelativeRect {
-  final double leftFactor;
-  final double topFactor;
-  final double widthFactor;
-  final double heightFactor;
 
   const _RelativeRect({
     required this.leftFactor,
@@ -617,6 +614,10 @@ class _RelativeRect {
       topFactor = 0,
       widthFactor = 1,
       heightFactor = 1;
+  final double leftFactor;
+  final double topFactor;
+  final double widthFactor;
+  final double heightFactor;
 
   Rect resolve(Size size) {
     return Rect.fromLTWH(
@@ -642,13 +643,8 @@ class _RelativeRect {
       Object.hash(leftFactor, topFactor, widthFactor, heightFactor);
 }
 
+@immutable
 class _LinearGradientOp extends _BackgroundOp {
-  final Alignment begin;
-  final Alignment end;
-  final List<Color> colors;
-  final List<double>? stops;
-  final _RelativeRect rect;
-  final _BackgroundShape shape;
 
   const _LinearGradientOp({
     required this.begin,
@@ -658,6 +654,12 @@ class _LinearGradientOp extends _BackgroundOp {
     this.rect = const _RelativeRect.full(),
     this.shape = _BackgroundShape.rect,
   });
+  final Alignment begin;
+  final Alignment end;
+  final List<Color> colors;
+  final List<double>? stops;
+  final _RelativeRect rect;
+  final _BackgroundShape shape;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -696,11 +698,8 @@ class _LinearGradientOp extends _BackgroundOp {
   );
 }
 
+@immutable
 class _CircularGradientOp extends _BackgroundOp {
-  final double centerYFactor;
-  final double diameterFactor;
-  final List<Color> colors;
-  final List<double>? stops;
 
   const _CircularGradientOp({
     required this.centerYFactor,
@@ -708,6 +707,10 @@ class _CircularGradientOp extends _BackgroundOp {
     required this.colors,
     this.stops,
   });
+  final double centerYFactor;
+  final double diameterFactor;
+  final List<Color> colors;
+  final List<double>? stops;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -744,17 +747,6 @@ class _CircularGradientOp extends _BackgroundOp {
 }
 
 class _GrainOp {
-  final double spacing;
-  final double limitYFactor;
-  final double noiseThreshold;
-  final double opacityScale;
-  final double minRadius;
-  final double maxRadiusDelta;
-  final Color fromColor;
-  final Color toColor;
-  final double colorLerpScale;
-  final Alignment fadeCenter;
-  final double fadeRadius;
 
   const _GrainOp({
     required this.spacing,
@@ -769,22 +761,20 @@ class _GrainOp {
     required this.fadeCenter,
     required this.fadeRadius,
   });
+  final double spacing;
+  final double limitYFactor;
+  final double noiseThreshold;
+  final double opacityScale;
+  final double minRadius;
+  final double maxRadiusDelta;
+  final Color fromColor;
+  final Color toColor;
+  final double colorLerpScale;
+  final Alignment fadeCenter;
+  final double fadeRadius;
 }
 
 class _HalftoneOp {
-  final double spacing;
-  final double startYFactor;
-  final double baseRadius;
-  final double radiusGrowth;
-  final double opacityBase;
-  final double opacityGrowth;
-  final Color topColor;
-  final Color bottomColor;
-  final double colorLerpScale;
-  final double convexCurveDepthFactor;
-  final double landscapeCurveBoost;
-  final double curveExponent;
-  final double landscapeExponentPull;
 
   const _HalftoneOp({
     required this.spacing,
@@ -801,6 +791,19 @@ class _HalftoneOp {
     this.curveExponent = 2,
     this.landscapeExponentPull = 0,
   });
+  final double spacing;
+  final double startYFactor;
+  final double baseRadius;
+  final double radiusGrowth;
+  final double opacityBase;
+  final double opacityGrowth;
+  final Color topColor;
+  final Color bottomColor;
+  final double colorLerpScale;
+  final double convexCurveDepthFactor;
+  final double landscapeCurveBoost;
+  final double curveExponent;
+  final double landscapeExponentPull;
 }
 
 void _drawShape(Canvas canvas, Rect rect, Paint paint, _BackgroundShape shape) {

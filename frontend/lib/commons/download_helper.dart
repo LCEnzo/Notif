@@ -1,5 +1,5 @@
-import 'download_helper_stub.dart'
-    if (dart.library.js_interop) 'download_helper_web.dart';
+import 'package:notif/commons/download_helper_stub.dart'
+    if (dart.library.js_interop) 'package:notif/commons/download_helper_web.dart';
 
 void saveBytesAsFile({
   required List<int> bytes,

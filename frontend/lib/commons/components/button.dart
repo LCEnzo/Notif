@@ -7,12 +7,6 @@ enum NotifButtonVariant { primary, ghost, link }
 enum NotifButtonSize { sm, md, lg }
 
 class NotifButton extends StatelessWidget {
-  final String label;
-  final IconData? icon;
-  final VoidCallback? onPressed;
-  final NotifButtonVariant variant;
-  final NotifButtonSize size;
-  final bool expand;
 
   const NotifButton({
     required this.label,
@@ -23,6 +17,12 @@ class NotifButton extends StatelessWidget {
     this.expand = false,
     super.key,
   });
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+  final NotifButtonVariant variant;
+  final NotifButtonSize size;
+  final bool expand;
 
   double get _height {
     switch (size) {
@@ -74,13 +74,6 @@ class NotifButton extends StatelessWidget {
 }
 
 class _FramedButton extends StatefulWidget {
-  final String label;
-  final IconData? icon;
-  final VoidCallback? onPressed;
-  final NotifButtonVariant variant;
-  final double height;
-  final bool expand;
-  final TextStyle labelStyle;
 
   const _FramedButton({
     required this.label,
@@ -91,6 +84,13 @@ class _FramedButton extends StatefulWidget {
     required this.expand,
     required this.labelStyle,
   });
+  final String label;
+  final IconData? icon;
+  final VoidCallback? onPressed;
+  final NotifButtonVariant variant;
+  final double height;
+  final bool expand;
+  final TextStyle labelStyle;
 
   @override
   State<_FramedButton> createState() => _FramedButtonState();
@@ -268,9 +268,9 @@ class _FramedButtonState extends State<_FramedButton> {
 }
 
 class _ButtonColors {
+
+  _ButtonColors({required this.bg, required this.fg, required this.border});
   final Color bg;
   final Color fg;
   final Color border;
-
-  _ButtonColors({required this.bg, required this.fg, required this.border});
 }

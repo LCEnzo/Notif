@@ -12,7 +12,7 @@ Future<void> openUriSafely(
       uri,
       webOnlyWindowName: newTab ? '_blank' : null,
     );
-  } catch (e) {
+  } on Exception catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

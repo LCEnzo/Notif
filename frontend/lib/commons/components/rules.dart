@@ -5,10 +5,10 @@ import 'package:notif/commons/notif_tokens.dart';
 enum RuleStrength { faint, strong }
 
 class Rule extends StatelessWidget {
-  final RuleStrength strength;
-  final EdgeInsetsGeometry? margin;
 
   const Rule({this.strength = RuleStrength.faint, this.margin, super.key});
+  final RuleStrength strength;
+  final EdgeInsetsGeometry? margin;
 
   @override
   Widget build(BuildContext context) {
@@ -21,9 +21,6 @@ class Rule extends StatelessWidget {
 }
 
 class IndexRule extends StatelessWidget {
-  final int index;
-  final String title;
-  final String? meta;
 
   const IndexRule({
     required this.index,
@@ -31,6 +28,9 @@ class IndexRule extends StatelessWidget {
     this.meta,
     super.key,
   });
+  final int index;
+  final String title;
+  final String? meta;
 
   @override
   Widget build(BuildContext context) {

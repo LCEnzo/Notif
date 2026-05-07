@@ -3,10 +3,6 @@ import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
 
 class KV extends StatelessWidget {
-  final String label;
-  final Widget value;
-  final String? meta;
-  final double minLabelWidth;
 
   const KV({
     required this.label,
@@ -31,6 +27,10 @@ class KV extends StatelessWidget {
       value: _KVText(value: value),
     );
   }
+  final String label;
+  final Widget value;
+  final String? meta;
+  final double minLabelWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -81,21 +81,21 @@ class KV extends StatelessWidget {
 }
 
 class _KVText extends StatelessWidget {
-  final String value;
 
   const _KVText({required this.value});
+  final String value;
 
   @override
   Widget build(BuildContext context) => Text(value);
 }
 
 class _DashedRulePainter extends CustomPainter {
+
+  _DashedRulePainter({required this.color});
   static const double _dashWidth = 4;
   static const double _gap = 3;
 
   final Color color;
-
-  _DashedRulePainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {

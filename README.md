@@ -77,7 +77,7 @@ The following will change the Django secret key in `.env`.
 python manage.py regenerate_secret_key
 ```
 
-## Current status (v0.2.0)
+## Current status (v0.3.0)
 
 **Backend** — Django REST API with JWT auth, 5 scraping strategies, in-app notifications, OpenAPI docs, rate limiting, and production Docker + compose setup. 73 tests passing.
 

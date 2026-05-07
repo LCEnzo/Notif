@@ -69,6 +69,17 @@ class NotifTextTheme extends ThemeExtension<NotifTextTheme> {
     required this.code,
   });
 
+  factory NotifTextTheme.forSet(NotifFontSet set) {
+    switch (set) {
+      case NotifFontSet.current:
+        return _buildCurrent();
+      case NotifFontSet.experiment:
+        return _buildExperiment();
+      case NotifFontSet.hybrid:
+        return _buildHybrid();
+    }
+  }
+
   final NotifFontSet fontSet;
 
   final TextStyle display;
@@ -112,17 +123,6 @@ class NotifTextTheme extends ThemeExtension<NotifTextTheme> {
       labelMedium: eyebrow,
       labelSmall: micro,
     );
-  }
-
-  factory NotifTextTheme.forSet(NotifFontSet set) {
-    switch (set) {
-      case NotifFontSet.current:
-        return _buildCurrent();
-      case NotifFontSet.experiment:
-        return _buildExperiment();
-      case NotifFontSet.hybrid:
-        return _buildHybrid();
-    }
   }
 
   @override
@@ -263,7 +263,7 @@ NotifTextTheme _buildCurrent() {
 
   // Current set has no long-read serif. bodyLong falls back to body; for this
   // set, §6.4 forbids faking it with italic. Hybrid deliberately differs.
-  final bodyLong = body;
+  const bodyLong = body;
 
   const code = TextStyle(fontFamily: mono, fontSize: 14, height: 20 / 14);
 

@@ -1,20 +1,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/commons/auth_texture_tuner.dart';
+import 'package:notif/main.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:notif/main.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  tearDown(() {
-    disableAuthTextureTuner();
-  });
+  tearDown(disableAuthTextureTuner);
 
   testWidgets('App shows the framed login screen by default', (
     WidgetTester tester,

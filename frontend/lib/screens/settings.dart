@@ -220,17 +220,23 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   Future<void> _setCustomBackendUrl(String value) async {
-    try {
-      await _settings.setCustomBackendUrl(value);
-      if (_backendUrlError != null && mounted) {
+    final trimmed = value.trim();
+    if (trimmed.isNotEmpty) {
+      final parsed = Uri.tryParse(trimmed);
+      if (parsed == null ||
+          !parsed.hasScheme ||
+          (parsed.scheme != 'http' && parsed.scheme != 'https')) {
+        if (!mounted) return;
         setState(() {
-          _backendUrlError = null;
+          _backendUrlError = 'Custom backend URL must be http(s) or empty';
         });
+        return;
       }
-    } on ArgumentError catch (error) {
-      if (!mounted) return;
+    }
+    await _settings.setCustomBackendUrl(value);
+    if (_backendUrlError != null && mounted) {
       setState(() {
-        _backendUrlError = error.message?.toString() ?? 'Invalid URL.';
+        _backendUrlError = null;
       });
     }
   }
@@ -241,10 +247,10 @@ class _SettingsPageState extends State<SettingsPage> {
 // ═══════════════════════════════════════════════════════════════
 
 class _ColorwayPicker extends StatelessWidget {
-  final NotifColorway selected;
-  final ValueChanged<NotifColorway> onChanged;
 
   const _ColorwayPicker({required this.selected, required this.onChanged});
+  final NotifColorway selected;
+  final ValueChanged<NotifColorway> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -272,15 +278,15 @@ class _ColorwayPicker extends StatelessWidget {
 }
 
 class _ColorwayCard extends StatelessWidget {
-  final NotifColorway colorway;
-  final bool selected;
-  final VoidCallback onTap;
 
   const _ColorwayCard({
     required this.colorway,
     required this.selected,
     required this.onTap,
   });
+  final NotifColorway colorway;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -386,8 +392,8 @@ class _ColorwayCard extends StatelessWidget {
 }
 
 class _Swatches extends StatelessWidget {
-  final NotifTokens preview;
   const _Swatches({required this.preview});
+  final NotifTokens preview;
 
   @override
   Widget build(BuildContext context) {
@@ -419,9 +425,9 @@ class _Swatches extends StatelessWidget {
 }
 
 class _HalftoneStripPainter extends CustomPainter {
-  final Color color;
 
   const _HalftoneStripPainter({required this.color});
+  final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -450,10 +456,10 @@ class _HalftoneStripPainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════
 
 class _FontSetPicker extends StatelessWidget {
-  final NotifFontSet selected;
-  final ValueChanged<NotifFontSet> onChanged;
 
   const _FontSetPicker({required this.selected, required this.onChanged});
+  final NotifFontSet selected;
+  final ValueChanged<NotifFontSet> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -472,15 +478,15 @@ class _FontSetPicker extends StatelessWidget {
 }
 
 class _FontSetTile extends StatelessWidget {
-  final NotifFontSet set;
-  final bool selected;
-  final VoidCallback onTap;
 
   const _FontSetTile({
     required this.set,
     required this.selected,
     required this.onTap,
   });
+  final NotifFontSet set;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -587,8 +593,8 @@ String _friendlyFontFamilyName(String? family) {
 }
 
 class _RadioDot extends StatelessWidget {
-  final bool selected;
   const _RadioDot({required this.selected});
+  final bool selected;
 
   @override
   Widget build(BuildContext context) {
@@ -732,10 +738,6 @@ class _HomeDensityTile extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _LabeledSwitch extends StatelessWidget {
-  final String title;
-  final String description;
-  final bool value;
-  final ValueChanged<bool> onChanged;
 
   const _LabeledSwitch({
     required this.title,
@@ -743,6 +745,10 @@ class _LabeledSwitch extends StatelessWidget {
     required this.value,
     required this.onChanged,
   });
+  final String title;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -784,10 +790,10 @@ class _LabeledSwitch extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _BackendUrlModeSelector extends StatelessWidget {
-  final BackendUrlMode value;
-  final ValueChanged<BackendUrlMode> onChanged;
 
   const _BackendUrlModeSelector({required this.value, required this.onChanged});
+  final BackendUrlMode value;
+  final ValueChanged<BackendUrlMode> onChanged;
 
   static const _modeLabels = {
     BackendUrlMode.builtin: 'Built-in URL only',
@@ -856,10 +862,6 @@ class _BackendUrlModeSelector extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _UnderlineInput extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final String? errorText;
-  final ValueChanged<String> onChanged;
 
   const _UnderlineInput({
     required this.controller,
@@ -867,6 +869,10 @@ class _UnderlineInput extends StatelessWidget {
     this.errorText,
     required this.onChanged,
   });
+  final TextEditingController controller;
+  final String hint;
+  final String? errorText;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -895,8 +901,8 @@ class _UnderlineInput extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _PersistenceBanner extends StatelessWidget {
-  final AppSettingsPersistenceException error;
   const _PersistenceBanner({required this.error});
+  final AppSettingsPersistenceException error;
 
   @override
   Widget build(BuildContext context) {

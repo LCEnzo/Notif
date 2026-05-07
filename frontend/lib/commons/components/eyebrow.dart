@@ -7,9 +7,6 @@ enum EyebrowSize { regular, micro }
 enum EyebrowTone { mute, dim, accent }
 
 class Eyebrow extends StatelessWidget {
-  final String text;
-  final EyebrowSize size;
-  final EyebrowTone tone;
 
   const Eyebrow(
     this.text, {
@@ -17,6 +14,9 @@ class Eyebrow extends StatelessWidget {
     this.tone = EyebrowTone.mute,
     super.key,
   });
+  final String text;
+  final EyebrowSize size;
+  final EyebrowTone tone;
 
   @override
   Widget build(BuildContext context) {

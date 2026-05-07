@@ -9,9 +9,8 @@ import 'package:notif/services/data.dart';
 import 'package:provider/provider.dart';
 
 class ResetPasswordPage extends StatelessWidget {
-  final String? email;
-
   const ResetPasswordPage({super.key, this.email});
+  final String? email;
 
   @override
   Widget build(BuildContext context) {
@@ -20,9 +19,8 @@ class ResetPasswordPage extends StatelessWidget {
 }
 
 class _ResetPasswordCard extends StatefulWidget {
-  final String? email;
-
   const _ResetPasswordCard({this.email});
+  final String? email;
 
   @override
   State<_ResetPasswordCard> createState() => _ResetPasswordCardState();
@@ -207,7 +205,7 @@ class _ResetPasswordCardState extends State<_ResetPasswordCard> {
         _passwordController.text,
       );
       if (mounted) setState(() => _done = true);
-    } catch (e) {
+    } on Exception catch (e) {
       if (mounted) {
         setState(() => _error = describeDataError(e));
       }

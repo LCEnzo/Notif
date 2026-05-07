@@ -25,9 +25,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      _refreshDashboard();
+      await _refreshDashboard();
     });
   }
 
@@ -184,9 +184,9 @@ class _SourcesPageState extends State<SourcesPage> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      context.read<LinkService>().fetchLinks();
+      await context.read<LinkService>().fetchLinks();
     });
   }
 
@@ -546,8 +546,7 @@ class _PageNumbers extends StatelessWidget {
                               side: BorderSide(color: tokens.ruleStrong),
                             ),
                           ),
-                          onPressed: () async =>
-                              await onPageSelected(item.page!),
+                          onPressed: () => onPageSelected(item.page!),
                           child: Text(
                             item.label,
                             style: text$.body.copyWith(color: tokens.inkMute),
@@ -983,33 +982,8 @@ class _ConsoleTopBar extends StatelessWidget {
 }
 
 class _HomeConsoleMetrics {
-  const _HomeConsoleMetrics({
-    required this.railWidth,
-    required this.brandSize,
-    required this.bodySize,
-    required this.microSize,
-    required this.actionFontSize,
-    required this.topBarVPad,
-    required this.actionHPad,
-    required this.actionVPad,
-    required this.railRowVPad,
-    required this.updateRowVPad,
-    required this.headerHeight,
-  });
 
-  final double railWidth;
-  final double brandSize;
-  final double bodySize;
-  final double microSize;
-  final double actionFontSize;
-  final double topBarVPad;
-  final double actionHPad;
-  final double actionVPad;
-  final double railRowVPad;
-  final double updateRowVPad;
-  final double headerHeight;
-
-  static _HomeConsoleMetrics forDensity(HomeDensity density) {
+  factory _HomeConsoleMetrics.forDensity(HomeDensity density) {
     switch (density) {
       case HomeDensity.comfortable:
         return const _HomeConsoleMetrics(
@@ -1055,6 +1029,31 @@ class _HomeConsoleMetrics {
         );
     }
   }
+  const _HomeConsoleMetrics({
+    required this.railWidth,
+    required this.brandSize,
+    required this.bodySize,
+    required this.microSize,
+    required this.actionFontSize,
+    required this.topBarVPad,
+    required this.actionHPad,
+    required this.actionVPad,
+    required this.railRowVPad,
+    required this.updateRowVPad,
+    required this.headerHeight,
+  });
+
+  final double railWidth;
+  final double brandSize;
+  final double bodySize;
+  final double microSize;
+  final double actionFontSize;
+  final double topBarVPad;
+  final double actionHPad;
+  final double actionVPad;
+  final double railRowVPad;
+  final double updateRowVPad;
+  final double headerHeight;
 }
 
 class _MiniStat extends StatelessWidget {
@@ -1615,6 +1614,8 @@ class _UpdateConsole extends StatelessWidget {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
     final items = notifications;
+    final consoleStyleSignature =
+        '${tokens.colorway.name}:${text$.fontSet.name}';
 
     return RefreshIndicator(
       color: tokens.accent,
@@ -1636,6 +1637,7 @@ class _UpdateConsole extends StatelessWidget {
               ),
             ),
           SliverPersistentHeader(
+            key: ValueKey('updates-console-header:$consoleStyleSignature'),
             pinned: true,
             delegate: _ConsoleHeaderDelegate(
               metrics: metrics,
@@ -1643,7 +1645,7 @@ class _UpdateConsole extends StatelessWidget {
               unreadCount: unreadCount,
               markingAllRead: markingAllRead,
               onMarkAllRead: onMarkAllRead,
-              themeSignature: '${tokens.colorway.name}:${text$.fontSet.name}',
+              themeSignature: consoleStyleSignature,
             ),
           ),
           if (loading && items.isEmpty)
@@ -1678,7 +1680,7 @@ class _UpdateConsole extends StatelessWidget {
                     return _PageNumbers(
                       currentPage: currentPage,
                       totalPages: totalPages,
-                      onPageSelected: (page) => onGoToPage(page),
+                      onPageSelected: onGoToPage,
                     );
                   }
                   return const SizedBox.shrink();
@@ -1840,82 +1842,84 @@ class _ConsoleHeaderDelegate extends SliverPersistentHeaderDelegate {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
 
-    return Container(
-      color: tokens.bg0.withValues(alpha: 0.97),
-      padding: EdgeInsets.symmetric(
-        horizontal: mobileTui ? 10 : 14,
-        vertical: mobileTui ? 4 : metrics.actionVPad,
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: mobileTui ? 60 : 82,
-            child: Text(
-              '[t]',
-              style: text$.micro.copyWith(
-                color: tokens.inkMute,
-                fontSize: metrics.microSize,
-              ),
-            ),
-          ),
-          if (!mobileTui)
+    return DecoratedBox(
+      decoration: _consoleBarDecoration(tokens),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: mobileTui ? 10 : 14,
+          vertical: mobileTui ? 4 : metrics.actionVPad,
+        ),
+        child: Row(
+          children: [
             SizedBox(
-              width: 168,
+              width: mobileTui ? 60 : 82,
               child: Text(
-                '[source]',
+                '[t]',
                 style: text$.micro.copyWith(
                   color: tokens.inkMute,
                   fontSize: metrics.microSize,
                 ),
               ),
             ),
-          Expanded(
-            child: Text(
-              mobileTui ? '[signal - source]' : '[signal]',
-              style: text$.micro.copyWith(
-                color: tokens.inkMute,
-                fontSize: metrics.microSize,
-              ),
-            ),
-          ),
-          InkWell(
-            onTap: onMarkAllRead,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: mobileTui ? 58 : 0,
-                minHeight: mobileTui ? 28 : 0,
-              ),
-              child: Container(
-                alignment: Alignment.center,
-                padding: EdgeInsets.symmetric(
-                  horizontal: mobileTui ? 4 : metrics.actionHPad,
-                  vertical: mobileTui ? 5 : metrics.actionVPad,
-                ),
-                decoration: BoxDecoration(
-                  color: unreadCount > 0
-                      ? tokens.bg1
-                      : tokens.rule.withValues(alpha: 0.12),
-                  border: Border.all(
-                    color: unreadCount > 0 ? tokens.ruleStrong : tokens.rule,
-                  ),
-                ),
+            if (!mobileTui)
+              SizedBox(
+                width: 168,
                 child: Text(
-                  markingAllRead
-                      ? 'WORKING'
-                      : unreadCount > 0
-                      ? 'READ ALL'
-                      : 'CLEAR',
-                  textAlign: TextAlign.right,
+                  '[source]',
                   style: text$.micro.copyWith(
-                    color: unreadCount > 0 ? tokens.accent : tokens.inkMute,
+                    color: tokens.inkMute,
                     fontSize: metrics.microSize,
-                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            Expanded(
+              child: Text(
+                mobileTui ? '[signal - source]' : '[signal]',
+                style: text$.micro.copyWith(
+                  color: tokens.inkMute,
+                  fontSize: metrics.microSize,
+                ),
+              ),
+            ),
+            InkWell(
+              onTap: onMarkAllRead,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minWidth: mobileTui ? 58 : 0,
+                  minHeight: mobileTui ? 28 : 0,
+                ),
+                child: Container(
+                  alignment: Alignment.center,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: mobileTui ? 4 : metrics.actionHPad,
+                    vertical: mobileTui ? 5 : metrics.actionVPad,
+                  ),
+                  decoration: BoxDecoration(
+                    color: unreadCount > 0
+                        ? tokens.bg1
+                        : tokens.rule.withValues(alpha: 0.12),
+                    border: Border.all(
+                      color: unreadCount > 0 ? tokens.ruleStrong : tokens.rule,
+                    ),
+                  ),
+                  child: Text(
+                    markingAllRead
+                        ? 'WORKING'
+                        : unreadCount > 0
+                        ? 'READ ALL'
+                        : 'CLEAR',
+                    textAlign: TextAlign.right,
+                    style: text$.micro.copyWith(
+                      color: unreadCount > 0 ? tokens.accent : tokens.inkMute,
+                      fontSize: metrics.microSize,
+                      letterSpacing: 0,
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1981,7 +1985,7 @@ class _ConsoleNotificationRowState extends State<_ConsoleNotificationRow> {
       onPointerDown: (event) {
         if (event.kind == PointerDeviceKind.mouse &&
             (event.buttons & kMiddleMouseButton) != 0) {
-          _open(newTab: true);
+          unawaited(_open(newTab: true));
         }
       },
       child: InkWell(
@@ -2205,7 +2209,7 @@ class _ConsoleNotificationRowState extends State<_ConsoleNotificationRow> {
   }
 }
 
-class _ExpandedNotificationDetails extends StatelessWidget {
+class _ExpandedNotificationDetails extends StatefulWidget {
   const _ExpandedNotificationDetails({
     required this.notification,
     required this.metrics,
@@ -2221,66 +2225,96 @@ class _ExpandedNotificationDetails extends StatelessWidget {
   final VoidCallback? onOpenNewTab;
 
   @override
+  State<_ExpandedNotificationDetails> createState() =>
+      _ExpandedNotificationDetailsState();
+}
+
+class _ExpandedNotificationDetailsState
+    extends State<_ExpandedNotificationDetails> {
+  late final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tokens = NotifTokens.of(context);
     final text$ = NotifTextTheme.of(context);
+    final notification = widget.notification;
+    final metrics = widget.metrics;
+    final mobileTui = widget.mobileTui;
     final details = notification.description.trim().isEmpty
         ? 'No description was captured for this update.'
         : notification.description.trim();
     final hasLink = notification.itemUrl.isNotEmpty;
 
-    return Container(
-      width: double.infinity,
-      constraints: BoxConstraints(maxHeight: mobileTui ? 150 : 180),
-      decoration: BoxDecoration(color: tokens.bg0.withValues(alpha: 0.46)),
-      child: Scrollbar(
-        child: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            mobileTui ? 22 : 264,
-            mobileTui ? 8 : metrics.updateRowVPad,
-            mobileTui ? 10 : 14,
-            metrics.updateRowVPad,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: SelectableText(
-                  details,
-                  style: text$.bodyLong.copyWith(
-                    color: tokens.inkDim,
-                    fontSize: metrics.bodySize,
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: mobileTui ? 195 : 234),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          mobileTui ? 22 : 264,
+          mobileTui ? 8 : metrics.updateRowVPad,
+          mobileTui ? 10 : 14,
+          metrics.updateRowVPad,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Scrollbar(
+                controller: _scrollController,
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.only(right: 12),
+                  child: SelectableText(
+                    details,
+                    style: text$.bodyLong.copyWith(
+                      color: tokens.inkDim,
+                      fontSize: metrics.bodySize,
+                    ),
                   ),
                 ),
               ),
-              if (hasLink) ...[
-                const SizedBox(width: 12),
-                Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _InlineIconAction(
-                        icon: Icons.open_in_new_sharp,
-                        tooltip: 'Open',
-                        onTap: onOpen,
-                      ),
-                      const SizedBox(width: 6),
-                      _InlineIconAction(
-                        icon: Icons.tab_sharp,
-                        tooltip: 'Open in new tab',
-                        onTap: onOpenNewTab,
-                      ),
-                    ],
-                  ),
+            ),
+            if (hasLink) ...[
+              const SizedBox(width: 12),
+              Padding(
+                padding: const EdgeInsets.only(top: 1),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _InlineIconAction(
+                      icon: Icons.open_in_new_sharp,
+                      tooltip: 'Open',
+                      onTap: widget.onOpen,
+                    ),
+                    const SizedBox(width: 6),
+                    _InlineIconAction(
+                      icon: Icons.tab_sharp,
+                      tooltip: 'Open in new tab',
+                      onTap: widget.onOpenNewTab,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );
   }
+}
+
+BoxDecoration _consoleBarDecoration(NotifTokens tokens) {
+  return BoxDecoration(
+    color: tokens.bg1.withValues(alpha: 0.94),
+    border: Border(bottom: BorderSide(color: tokens.rule)),
+  );
 }
 
 class _InlineIconAction extends StatelessWidget {
@@ -2580,7 +2614,7 @@ class _LinkCard extends StatelessWidget {
                         Tag(
                           link.lastScraped == null
                               ? 'Never scraped'
-                              : 'Last scrape ${_formatTimeAgo(link.lastScraped!)}',
+                              : 'Last scrape ${_formatTimeAgo(link.lastScraped)}',
                           tone: TagTone.muted,
                         ),
                       ],

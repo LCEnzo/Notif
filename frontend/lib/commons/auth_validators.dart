@@ -28,7 +28,7 @@ class EntropyValidator {
       return "Password cannot be empty";
     }
 
-    double passwordEntropy = calculatePasswordEntropy(password);
+    final double passwordEntropy = calculatePasswordEntropy(password);
     if (passwordEntropy < minEntropy) {
       return getHelpText(passwordEntropy: passwordEntropy);
     }
@@ -48,8 +48,8 @@ class EntropyValidator {
     final hasPunct = password.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'));
     final hasOther = password.contains(RegExp(r'[^\w\s]'));
 
-    List<bool> categories = [hasDigit, hasLower, hasUpper, hasPunct, hasOther];
-    List<int> lengths = [10, 26, 26, 32, 40];
+    final List<bool> categories = [hasDigit, hasLower, hasUpper, hasPunct, hasOther];
+    final List<int> lengths = [10, 26, 26, 32, 40];
     int charSet = 0;
 
     for (var index = 0; index < categories.length; index++) {

@@ -67,10 +67,6 @@ class _DitherShaderLayer extends StatelessWidget {
 }
 
 class _DitherShaderPaint extends StatefulWidget {
-  final ui.FragmentProgram program;
-  final double dpr;
-  final Color neutralColor;
-  final Color accentColor;
 
   const _DitherShaderPaint({
     required this.program,
@@ -78,6 +74,10 @@ class _DitherShaderPaint extends StatefulWidget {
     required this.neutralColor,
     required this.accentColor,
   });
+  final ui.FragmentProgram program;
+  final double dpr;
+  final Color neutralColor;
+  final Color accentColor;
 
   @override
   State<_DitherShaderPaint> createState() => _DitherShaderPaintState();
@@ -143,6 +143,14 @@ class _DitherShaderPaintState extends State<_DitherShaderPaint> {
 // ---------------------------------------------------------------------------
 
 class _DitherShaderPainter extends CustomPainter {
+
+  const _DitherShaderPainter({
+    required this.program,
+    required this.shader,
+    required this.dpr,
+    required this.neutralColor,
+    required this.accentColor,
+  });
   /// Grid cell size in logical pixels (matches the original CustomPainter).
   static const double _stepLogical = 5.0;
   static const double _neutralAlpha = 0.018;
@@ -154,14 +162,6 @@ class _DitherShaderPainter extends CustomPainter {
   final double dpr;
   final Color neutralColor;
   final Color accentColor;
-
-  const _DitherShaderPainter({
-    required this.program,
-    required this.shader,
-    required this.dpr,
-    required this.neutralColor,
-    required this.accentColor,
-  });
 
   @override
   void paint(Canvas canvas, Size size) {

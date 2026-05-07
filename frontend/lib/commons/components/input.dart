@@ -54,14 +54,6 @@ InputDecoration notifInputDecoration({
 }
 
 class NotifTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String? label;
-  final String? hint;
-  final String? errorText;
-  final ValueChanged<String>? onChanged;
-  final bool obscureText;
-  final TextInputType? keyboardType;
-  final NotifInputVariant variant;
 
   const NotifTextField({
     required this.controller,
@@ -74,6 +66,14 @@ class NotifTextField extends StatelessWidget {
     this.variant = NotifInputVariant.boxed,
     super.key,
   });
+  final TextEditingController controller;
+  final String? label;
+  final String? hint;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+  final bool obscureText;
+  final TextInputType? keyboardType;
+  final NotifInputVariant variant;
 
   @override
   Widget build(BuildContext context) {

@@ -16,7 +16,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('About loading state is baseline-safe', (tester) async {
+  testWidgets('About renders a static build version while loading', (
+    tester,
+  ) async {
     _setSurfaceSize(tester, const Size(800, 1400));
 
     final controller = AppSettingsController();
@@ -32,7 +34,9 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('VERSION'), findsOneWidget);
+    _expectSingleDevBuildVersion();
   });
 
   testWidgets('About keeps a 2x2 section grid on wide screens', (tester) async {
@@ -49,8 +53,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('COMMIT'), findsOneWidget);
-    expect(find.text('dev'), findsOneWidget);
+    expect(find.text('COMMIT'), findsNothing);
+    _expectSingleDevBuildVersion();
 
     final pageNotes = tester.getTopLeft(
       find.byKey(const ValueKey('aboutSectionPageNotes')),
@@ -124,6 +128,18 @@ void main() {
     expect(heroDiscord.dy, moreOrLessEquals(heroGitHub.dy, epsilon: 1));
     expect(heroContact.dy, moreOrLessEquals(heroGitHub.dy, epsilon: 1));
   });
+}
+
+void _expectSingleDevBuildVersion() {
+  expect(
+    find.byWidgetPredicate(
+      (widget) =>
+          widget is Text &&
+          widget.data != null &&
+          RegExp(r'^[^+]+\+dev$').hasMatch(widget.data!),
+    ),
+    findsOneWidget,
+  );
 }
 
 Widget _buildAboutApp({

@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/auth_background.dart';
 import 'package:notif/commons/auth_texture_tuner.dart';
-import 'package:notif/commons/notif_theme.dart';
 import 'package:notif/commons/notif_text_theme.dart';
+import 'package:notif/commons/notif_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/screens/login.dart';
 import 'package:notif/screens/register.dart';
@@ -18,9 +18,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  tearDown(() {
-    disableAuthTextureTuner();
-  });
+  tearDown(disableAuthTextureTuner);
 
   test(
     'AuthTextureTunerController updates fields, notifies listeners, and resets',

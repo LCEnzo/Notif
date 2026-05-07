@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -15,11 +17,14 @@ const String _buildGitHash = String.fromEnvironment(
   'GIT_HASH',
   defaultValue: 'dev',
 );
+const String _buildVersionFallback = String.fromEnvironment(
+  'APP_VERSION',
+  defaultValue: '0.3.0',
+);
 
 class AboutPage extends StatefulWidget {
-  final Future<PackageInfo>? packageInfoFuture;
-
   const AboutPage({super.key, this.packageInfoFuture});
+  final Future<PackageInfo>? packageInfoFuture;
 
   @override
   State<AboutPage> createState() => _AboutPageState();
@@ -74,7 +79,7 @@ class _AboutPageState extends State<AboutPage> {
             IconButton(
               tooltip: 'Settings',
               onPressed: () {
-                context.push('/settings');
+                unawaited(context.push('/settings'));
               },
               icon: Icon(Icons.settings_sharp, color: tokens.inkDim),
             ),
@@ -90,12 +95,7 @@ class _AboutPageState extends State<AboutPage> {
           FutureBuilder<PackageInfo>(
             future: _packageInfoFuture,
             builder: (context, snapshot) {
-              final packageInfo = snapshot.data;
-              final isLoading =
-                  snapshot.connectionState == ConnectionState.waiting;
-              if (snapshot.hasError) {
-                return _ErrorSlab(error: snapshot.error!);
-              }
+              final packageInfo = snapshot.data ?? _fallbackPackageInfo();
               return TweenAnimationBuilder<double>(
                 duration: const Duration(milliseconds: 180),
                 curve: Curves.easeOutCubic,
@@ -119,16 +119,20 @@ class _AboutPageState extends State<AboutPage> {
                           builder: (context, constraints) {
                             final isWide = constraints.maxWidth >= 900;
                             void onGitHub() {
-                              _openUri(
-                                Uri.parse('https://github.com/LCEnzo/Notif'),
+                              unawaited(
+                                _openUri(
+                                  Uri.parse('https://github.com/LCEnzo/Notif'),
+                                ),
                               );
                             }
 
                             void onContact() {
-                              _openUri(
-                                Uri(
-                                  scheme: 'mailto',
-                                  path: 'lcenzo@protonmail.ch',
+                              unawaited(
+                                _openUri(
+                                  Uri(
+                                    scheme: 'mailto',
+                                    path: 'lcenzo@protonmail.ch',
+                                  ),
                                 ),
                               );
                             }
@@ -181,7 +185,6 @@ class _AboutPageState extends State<AboutPage> {
                               children: [
                                 _Hero(
                                   packageInfo: packageInfo,
-                                  isLoading: isLoading,
                                   isWide: isWide,
                                   onGitHub: onGitHub,
                                   onContact: onContact,
@@ -213,19 +216,16 @@ class _AboutPageState extends State<AboutPage> {
 // ═══════════════════════════════════════════════════════════════
 
 class _Hero extends StatelessWidget {
-  final PackageInfo? packageInfo;
-  final bool isLoading;
-  final bool isWide;
-  final VoidCallback onGitHub;
-  final VoidCallback onContact;
-
   const _Hero({
     required this.packageInfo,
-    required this.isLoading,
     required this.isWide,
     required this.onGitHub,
     required this.onContact,
   });
+  final PackageInfo packageInfo;
+  final bool isWide;
+  final VoidCallback onGitHub;
+  final VoidCallback onContact;
 
   @override
   Widget build(BuildContext context) {
@@ -283,9 +283,7 @@ class _Hero extends StatelessWidget {
           _VersionRow(
             label: 'Version',
             packageInfo: packageInfo,
-            isLoading: isLoading,
           ),
-          const KV(label: 'Commit', value: _BuildCommitText()),
           const KV(label: 'Colorway', value: _ActiveColorwayText()),
           const KV(
             label: 'Motion',
@@ -328,10 +326,9 @@ class _Hero extends StatelessWidget {
 }
 
 class _AboutSections extends StatelessWidget {
+  const _AboutSections({required this.isWide, required this.sections});
   final bool isWide;
   final List<Widget> sections;
-
-  const _AboutSections({required this.isWide, required this.sections});
 
   @override
   Widget build(BuildContext context) {
@@ -370,16 +367,15 @@ class _AboutSections extends StatelessWidget {
 }
 
 class _AboutSection extends StatelessWidget {
-  final bool isWide;
-  final Widget header;
-  final Widget child;
-
   const _AboutSection({
     required this.isWide,
     required this.header,
     required this.child,
     super.key,
   });
+  final bool isWide;
+  final Widget header;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -394,74 +390,25 @@ class _AboutSection extends StatelessWidget {
 }
 
 class _VersionRow extends StatelessWidget {
-  final String label;
-  final PackageInfo? packageInfo;
-  final bool isLoading;
-
   const _VersionRow({
     required this.label,
     required this.packageInfo,
-    required this.isLoading,
   });
+  final String label;
+  final PackageInfo packageInfo;
 
   @override
   Widget build(BuildContext context) {
-    final versionText = packageInfo == null
-        ? 'Unavailable'
-        : '${packageInfo!.version}+${packageInfo!.buildNumber}';
-
     return KV(
       label: label,
-      value: isLoading && packageInfo == null
-          ? _LoadingVersionText(color: NotifTokens.of(context).accent)
-          : _VersionText(text: versionText),
-    );
-  }
-}
-
-class _InlineSpinner extends StatelessWidget {
-  final Color color;
-  const _InlineSpinner({required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 14,
-      height: 14,
-      child: CircularProgressIndicator(strokeWidth: 1.5, color: color),
-    );
-  }
-}
-
-class _LoadingVersionText extends StatelessWidget {
-  final Color color;
-
-  const _LoadingVersionText({required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final text$ = NotifTextTheme.of(context);
-    return Text.rich(
-      TextSpan(
-        children: [
-          WidgetSpan(
-            alignment: PlaceholderAlignment.middle,
-            child: Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _InlineSpinner(color: color),
-            ),
-          ),
-          const TextSpan(text: 'Loading…'),
-        ],
-      ),
-      style: text$.code.copyWith(color: color),
+      value: _VersionText(text: _displayVersion(packageInfo)),
     );
   }
 }
 
 class _VersionText extends StatelessWidget {
-  final String text;
   const _VersionText({required this.text});
+  final String text;
 
   @override
   Widget build(BuildContext context) {
@@ -471,26 +418,30 @@ class _VersionText extends StatelessWidget {
   }
 }
 
-class _BuildCommitText extends StatelessWidget {
-  const _BuildCommitText();
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-    return Text(
-      _buildGitHash,
-      style: text$.code.copyWith(color: tokens.accent),
-    );
-  }
-}
-
 class _StaticText extends StatelessWidget {
-  final String text;
   const _StaticText(this.text);
+  final String text;
 
   @override
   Widget build(BuildContext context) => Text(text);
+}
+
+PackageInfo _fallbackPackageInfo() {
+  return PackageInfo(
+    appName: 'Notif',
+    packageName: 'notif',
+    version: _buildVersionFallback,
+    buildNumber: '',
+    buildSignature: '',
+  );
+}
+
+String _displayVersion(PackageInfo packageInfo) {
+  final version = packageInfo.version.trim().isEmpty
+      ? _buildVersionFallback
+      : packageInfo.version.trim();
+  final gitHash = _buildGitHash.trim().isEmpty ? 'dev' : _buildGitHash.trim();
+  return '$version+$gitHash';
 }
 
 class _ActiveColorwayText extends StatelessWidget {
@@ -595,9 +546,9 @@ class _SystemGrid extends StatelessWidget {
 }
 
 class _SignalRow extends StatelessWidget {
+  const _SignalRow({required this.label, required this.value});
   final String label;
   final String value;
-  const _SignalRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) {
@@ -664,15 +615,14 @@ class _TypefaceCard extends StatelessWidget {
 }
 
 class _ContactRow extends StatelessWidget {
-  final bool isWide;
-  final VoidCallback onGitHub;
-  final VoidCallback onContact;
-
   const _ContactRow({
     required this.isWide,
     required this.onGitHub,
     required this.onContact,
   });
+  final bool isWide;
+  final VoidCallback onGitHub;
+  final VoidCallback onContact;
 
   @override
   Widget build(BuildContext context) {
@@ -778,15 +728,14 @@ class _ContactRow extends StatelessWidget {
 }
 
 class _HeroActionGrid extends StatelessWidget {
-  final bool isWide;
-  final VoidCallback onGitHub;
-  final VoidCallback onContact;
-
   const _HeroActionGrid({
     required this.isWide,
     required this.onGitHub,
     required this.onContact,
   });
+  final bool isWide;
+  final VoidCallback onGitHub;
+  final VoidCallback onContact;
 
   List<Widget> _buildChildren(BuildContext context) {
     return <Widget>[
@@ -835,7 +784,7 @@ class _HeroActionGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = 2;
+        const columns = 2;
         final itemWidth = (constraints.maxWidth - (columns - 1) * 12) / columns;
         return Wrap(
           spacing: 12,
@@ -866,10 +815,9 @@ class _HeroActionPlaceholder extends StatelessWidget {
 }
 
 class _CardLead extends StatelessWidget {
+  const _CardLead({required this.icon, required this.label});
   final IconData icon;
   final String label;
-
-  const _CardLead({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -892,7 +840,7 @@ class _CardLead extends StatelessWidget {
 Future<void> _copyDiscordHandle(BuildContext context) async {
   try {
     await Clipboard.setData(const ClipboardData(text: 'lcenzo'));
-  } catch (e) {
+  } on Exception catch (e) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -909,41 +857,4 @@ Future<void> _copyDiscordHandle(BuildContext context) async {
       behavior: SnackBarBehavior.floating,
     ),
   );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// Error slab — replaces the body when PackageInfo fails outright.
-// ═══════════════════════════════════════════════════════════════
-
-class _ErrorSlab extends StatelessWidget {
-  final Object error;
-  const _ErrorSlab({required this.error});
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = NotifTokens.of(context);
-    final text$ = NotifTextTheme.of(context);
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Eyebrow('Error', tone: EyebrowTone.accent),
-              const SizedBox(height: 8),
-              Text(
-                'Could not load build info.',
-                style: text$.heading.copyWith(color: tokens.ink),
-              ),
-              const SizedBox(height: 8),
-              Text('$error', style: text$.code.copyWith(color: tokens.inkDim)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

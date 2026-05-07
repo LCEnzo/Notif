@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -224,14 +226,16 @@ class _FormContentState extends State<_FormContent> {
       if (mounted) {
         TextInput.finishAutofillContext(shouldSave: true);
       }
-    } catch (e) {
+    } on Exception catch (e) {
       if (context.mounted) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!context.mounted) return;
-          showAuthFailureDialog(
-            context,
-            title: 'Register failed',
-            message: describeDataError(e),
+          unawaited(
+            showAuthFailureDialog(
+              context,
+              title: 'Register failed',
+              message: describeDataError(e),
+            ),
           );
         });
       }

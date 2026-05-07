@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -415,9 +416,9 @@ extension AuthTextureSettingsSnippet on AuthTextureSettings {
 // ---------------------------------------------------------------------------
 
 class AuthTextureTunerOverlay extends StatefulWidget {
-  final AuthTextureTunerController controller;
 
   const AuthTextureTunerOverlay({super.key, required this.controller});
+  final AuthTextureTunerController controller;
 
   @override
   State<AuthTextureTunerOverlay> createState() =>
@@ -597,9 +598,9 @@ class _AuthTextureTunerOverlayState extends State<AuthTextureTunerOverlay> {
 }
 
 class _AuthCardStyleSection extends StatelessWidget {
-  final AppSettingsController appSettings;
 
   const _AuthCardStyleSection({required this.appSettings});
+  final AppSettingsController appSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -630,14 +631,14 @@ class _AuthCardStyleSection extends StatelessWidget {
               label: 'Glass',
               selected: selectedStyle == AuthCardStyle.glass,
               onSelected: () {
-                appSettings.setAuthCardStyle(AuthCardStyle.glass);
+                unawaited(appSettings.setAuthCardStyle(AuthCardStyle.glass));
               },
             ),
             _AuthCardStyleChip(
               label: 'Framed',
               selected: selectedStyle == AuthCardStyle.framed,
               onSelected: () {
-                appSettings.setAuthCardStyle(AuthCardStyle.framed);
+                unawaited(appSettings.setAuthCardStyle(AuthCardStyle.framed));
               },
             ),
           ],
@@ -648,15 +649,15 @@ class _AuthCardStyleSection extends StatelessWidget {
 }
 
 class _AuthCardStyleChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onSelected;
 
   const _AuthCardStyleChip({
     required this.label,
     required this.selected,
     required this.onSelected,
   });
+  final String label;
+  final bool selected;
+  final VoidCallback onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -683,10 +684,6 @@ class _AuthCardStyleChip extends StatelessWidget {
 }
 
 class _TextureFieldSection extends StatelessWidget {
-  final String title;
-  final List<AuthTextureField> fields;
-  final AuthTextureSettings settings;
-  final AuthTextureTunerController controller;
 
   const _TextureFieldSection({
     required this.title,
@@ -694,6 +691,10 @@ class _TextureFieldSection extends StatelessWidget {
     required this.settings,
     required this.controller,
   });
+  final String title;
+  final List<AuthTextureField> fields;
+  final AuthTextureSettings settings;
+  final AuthTextureTunerController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -723,15 +724,15 @@ class _TextureFieldSection extends StatelessWidget {
 }
 
 class _TextureFieldSlider extends StatelessWidget {
-  final AuthTextureField field;
-  final AuthTextureSettings settings;
-  final AuthTextureTunerController controller;
 
   const _TextureFieldSlider({
     required this.field,
     required this.settings,
     required this.controller,
   });
+  final AuthTextureField field;
+  final AuthTextureSettings settings;
+  final AuthTextureTunerController controller;
 
   @override
   Widget build(BuildContext context) {
@@ -774,9 +775,9 @@ class _TextureFieldSlider extends StatelessWidget {
 }
 
 class _DebugGlassContainer extends StatelessWidget {
-  final Widget child;
 
   const _DebugGlassContainer({required this.child});
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {

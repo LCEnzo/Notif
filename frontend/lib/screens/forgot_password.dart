@@ -165,7 +165,7 @@ class _ForgotPasswordCardState extends State<_ForgotPasswordCard> {
     try {
       await authService.requestPasswordReset(_emailController.text);
       if (mounted) setState(() => _sent = true);
-    } catch (e) {
+    } on Exception catch (e) {
       if (mounted) {
         setState(() => _error = describeDataError(e));
       }

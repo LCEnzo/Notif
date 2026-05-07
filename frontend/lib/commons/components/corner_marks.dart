@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:notif/commons/notif_tokens.dart';
 
 class CornerMarks extends StatelessWidget {
-  final Widget child;
-  final double inset;
-  final double length;
-  final Color? color;
 
   const CornerMarks({
     required this.child,
@@ -14,6 +10,10 @@ class CornerMarks extends StatelessWidget {
     this.color,
     super.key,
   });
+  final Widget child;
+  final double inset;
+  final double length;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -55,11 +55,11 @@ class CornerMarks extends StatelessWidget {
 }
 
 class _HBar extends StatelessWidget {
+
+  const _HBar(this.length, this.color, this.thickness);
   final double length;
   final Color color;
   final double thickness;
-
-  const _HBar(this.length, this.color, this.thickness);
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -70,11 +70,11 @@ class _HBar extends StatelessWidget {
 }
 
 class _VBar extends StatelessWidget {
+
+  const _VBar(this.length, this.color, this.thickness);
   final double length;
   final Color color;
   final double thickness;
-
-  const _VBar(this.length, this.color, this.thickness);
 
   @override
   Widget build(BuildContext context) => SizedBox(

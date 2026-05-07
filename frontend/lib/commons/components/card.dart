@@ -3,11 +3,6 @@ import 'package:notif/commons/components/corner_marks.dart';
 import 'package:notif/commons/notif_tokens.dart';
 
 class NotifCard extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry padding;
-  final bool bordered;
-  final bool cornerMarks;
-  final VoidCallback? onTap;
 
   const NotifCard({
     required this.child,
@@ -17,6 +12,11 @@ class NotifCard extends StatelessWidget {
     this.onTap,
     super.key,
   });
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final bool bordered;
+  final bool cornerMarks;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {

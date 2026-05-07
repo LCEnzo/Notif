@@ -32,6 +32,15 @@ typedef RefreshTokenReader = String? Function();
 typedef RefreshAccessToken = Future<String?> Function(String refreshToken);
 typedef AuthExpiredHandler = Future<void> Function();
 
+class ApiClientException implements Exception {
+  const ApiClientException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 AccessTokenReader? _accessTokenReader;
 RefreshTokenReader? _refreshTokenReader;
 RefreshAccessToken? _refreshAccessToken;
@@ -151,7 +160,9 @@ Future<Response<dynamic>> _requestWithFallback(
 }) async {
   final urls = resolveUrls(path, settings);
   if (urls.isEmpty) {
-    throw StateError('$method $path failed: no backend URL configured');
+    throw ApiClientException(
+      '$method $path failed: no backend URL configured',
+    );
   }
 
   Object? lastError;
@@ -190,7 +201,7 @@ Future<Response<dynamic>> _requestWithFallback(
     }
   }
 
-  throw StateError(
+  throw ApiClientException(
     '$method $path failed: ${lastError ?? 'all URLs exhausted'}',
   );
 }
@@ -282,7 +293,7 @@ Future<String?> _refreshAccessTokenIfNeeded() async {
   final refresh = () async {
     try {
       return await _refreshAccessToken?.call(refreshToken);
-    } catch (error) {
+    } on Exception catch (error) {
       if (kDebugMode) {
         debugPrint('api_client._refreshAccessTokenIfNeeded: $error');
       }

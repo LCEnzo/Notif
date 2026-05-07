@@ -22,17 +22,19 @@ enum BackendUrlMode {
 /// failures via [AppSettingsController.persistenceError] so UI can show a
 /// diagnostic rather than silently losing user changes.
 class AppSettingsPersistenceException implements Exception {
+  AppSettingsPersistenceException(this.operation, this.cause, this.stackTrace);
   final String operation;
   final Object cause;
   final StackTrace stackTrace;
-
-  AppSettingsPersistenceException(this.operation, this.cause, this.stackTrace);
 
   @override
   String toString() => 'AppSettingsPersistenceException($operation): $cause';
 }
 
 class AppSettingsController extends ChangeNotifier {
+  AppSettingsController() {
+    initialized = _load();
+  }
   static const String _ditheringKey = 'designDitheringEnabled';
   static const String _authCardStyleKey = 'debugAuthCardStyle';
   static const String _backendUrlModeKey = 'backendUrlMode';
@@ -59,10 +61,6 @@ class AppSettingsController extends ChangeNotifier {
 
   late final Future<void> initialized;
 
-  AppSettingsController() {
-    initialized = _load();
-  }
-
   bool get designDitheringEnabled => _designDitheringEnabled;
   AuthCardStyle get authCardStyle => _authCardStyle;
   BackendUrlMode get backendUrlMode => _backendUrlMode;
@@ -82,7 +80,7 @@ class AppSettingsController extends ChangeNotifier {
     ) {
       try {
         return reader(key);
-      } catch (e, st) {
+      } on Exception catch (e, st) {
         loadError ??= StateError('Could not read "$key": $e');
         loadStackTrace ??= st;
         if (kDebugMode) debugPrint('AppSettings._load failed for $key: $e');
@@ -130,7 +128,7 @@ class AppSettingsController extends ChangeNotifier {
       _fontSet = fontSet;
       _homeDensity = homeDensity;
       _customBackendUrl = customBackendUrl;
-    } catch (e, st) {
+    } on Exception catch (e, st) {
       loadError ??= e;
       loadStackTrace ??= st;
       if (kDebugMode) debugPrint('AppSettings._load failed: $e');
@@ -159,13 +157,13 @@ class AppSettingsController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final ok = await writer(prefs);
       if (!ok) {
-        throw StateError('SharedPreferences refused the write');
+        throw Exception('SharedPreferences refused the write');
       }
       if (_persistenceError != null) {
         _persistenceError = null;
         notifyListeners();
       }
-    } catch (e, st) {
+    } on Exception catch (e, st) {
       _persistenceError = AppSettingsPersistenceException(operation, e, st);
       if (kDebugMode) debugPrint('AppSettings.$operation failed: $e');
       notifyListeners();

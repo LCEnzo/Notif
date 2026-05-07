@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -21,9 +22,9 @@ class AuthPanelWidth {
 }
 
 class AuthScaffold extends StatefulWidget {
-  final Widget child;
 
   const AuthScaffold({super.key, required this.child});
+  final Widget child;
 
   @override
   State<AuthScaffold> createState() => _AuthScaffoldState();
@@ -37,10 +38,10 @@ class _AuthScaffoldState extends State<AuthScaffold> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final shortestSide = MediaQuery.of(context).size.shortestSide;
       if (shortestSide < 600) {
-        SystemChrome.setPreferredOrientations([
+        unawaited(SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,
           DeviceOrientation.portraitDown,
-        ]);
+        ]));
       }
     });
   }
@@ -48,7 +49,7 @@ class _AuthScaffoldState extends State<AuthScaffold> {
   @override
   void dispose() {
     // Restore all orientations when leaving auth screens.
-    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    unawaited(SystemChrome.setPreferredOrientations(DeviceOrientation.values));
     super.dispose();
   }
 
@@ -76,7 +77,7 @@ class _AuthScaffoldState extends State<AuthScaffold> {
       ),
       floatingActionButton: GlassHelpButton(
         onPressed: () {
-          context.push('/about');
+          unawaited(context.push('/about'));
         },
         tooltip: 'About',
         child: const Icon(Icons.question_mark_rounded),
@@ -86,9 +87,6 @@ class _AuthScaffoldState extends State<AuthScaffold> {
 }
 
 class GlassHelpButton extends StatelessWidget {
-  final VoidCallback onPressed;
-  final String tooltip;
-  final Widget child;
 
   const GlassHelpButton({
     super.key,
@@ -96,6 +94,9 @@ class GlassHelpButton extends StatelessWidget {
     required this.tooltip,
     required this.child,
   });
+  final VoidCallback onPressed;
+  final String tooltip;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -139,9 +140,9 @@ class GlassHelpButton extends StatelessWidget {
 }
 
 class AuthPanel extends StatelessWidget {
-  final Widget child;
 
   const AuthPanel({super.key, required this.child});
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -179,10 +180,10 @@ class AuthPanel extends StatelessWidget {
 }
 
 class _AuthFramedSurface extends StatelessWidget {
-  final Widget child;
-  final EdgeInsetsGeometry? padding;
 
   const _AuthFramedSurface({required this.child, this.padding});
+  final Widget child;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
@@ -199,15 +200,15 @@ class _AuthFramedSurface extends StatelessWidget {
 }
 
 class _AuthGlassSurface extends StatelessWidget {
-  final Widget child;
-  final BorderRadius borderRadius;
-  final EdgeInsetsGeometry? padding;
 
   const _AuthGlassSurface({
     required this.child,
     required this.borderRadius,
     this.padding,
   });
+  final Widget child;
+  final BorderRadius borderRadius;
+  final EdgeInsetsGeometry? padding;
 
   @override
   Widget build(BuildContext context) {
