@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from django.core.paginator import Page
 from django.db.models import Q
@@ -24,6 +24,15 @@ from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
 from notif.config import settings
 
+if TYPE_CHECKING:
+	_LinkModelViewSet = ModelViewSet[Link]
+	_StrategyModelViewSet = ModelViewSet[Strategy]
+	_NotificationGenericViewSet = GenericViewSet[Notification]
+else:
+	_LinkModelViewSet = ModelViewSet
+	_StrategyModelViewSet = ModelViewSet
+	_NotificationGenericViewSet = GenericViewSet
+
 
 class LinkPagination(PageNumberPagination):
 	# Most users will fit under page_size and never see the paginated envelope's
@@ -33,7 +42,7 @@ class LinkPagination(PageNumberPagination):
 	max_page_size = 500
 
 
-class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet[Link]):
+class LinkViewSet(OwnerOrAdminQuerysetMixin, _LinkModelViewSet):
 	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = LinkSerializer
 	pagination_class = LinkPagination
@@ -46,7 +55,7 @@ class LinkViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet[Link]):
 		return self._scoped_queryset(Link.objects.all())
 
 
-class StrategyViewSet(OwnerOrAdminQuerysetMixin, ModelViewSet[Strategy]):
+class StrategyViewSet(OwnerOrAdminQuerysetMixin, _StrategyModelViewSet):
 	permission_classes = [IsAuthenticated]
 	serializer_class = StrategySerializer
 
@@ -95,7 +104,7 @@ class NotificationPagination(PageNumberPagination):
 		)
 
 
-class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, GenericViewSet[Notification]):
+class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, _NotificationGenericViewSet):
 	permission_classes = [IsAuthenticated]
 	serializer_class = NotificationSerializer
 	pagination_class = NotificationPagination

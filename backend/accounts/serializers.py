@@ -1,4 +1,4 @@
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
@@ -7,8 +7,15 @@ from rest_framework.serializers import ModelSerializer
 
 from accounts.models import User
 
+if TYPE_CHECKING:
+	_UserModelSerializer = ModelSerializer[User]
+	_AnySerializer = serializers.Serializer[Any]
+else:
+	_UserModelSerializer = ModelSerializer
+	_AnySerializer = serializers.Serializer
 
-class UserCreationSerializer(ModelSerializer[User]):
+
+class UserCreationSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = ["username", "email", "name", "password"]
@@ -50,7 +57,7 @@ class UserCreationSerializer(ModelSerializer[User]):
 		return attrs
 
 
-class UserFullReadSerializer(ModelSerializer[User]):
+class UserFullReadSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = [
@@ -65,7 +72,7 @@ class UserFullReadSerializer(ModelSerializer[User]):
 		]
 
 
-class UserMinimalReadSerializer(ModelSerializer[User]):
+class UserMinimalReadSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = ["username", "date_created"]
@@ -74,7 +81,7 @@ class UserMinimalReadSerializer(ModelSerializer[User]):
 # ── password reset ───────────────────────────────────────────
 
 
-class PasswordResetRequestSerializer(serializers.Serializer[Any]):
+class PasswordResetRequestSerializer(_AnySerializer):
 	"""Accepts an email address for password reset."""
 
 	email = serializers.EmailField()
@@ -83,7 +90,7 @@ class PasswordResetRequestSerializer(serializers.Serializer[Any]):
 		return value.strip().lower()
 
 
-class PasswordResetConfirmSerializer(serializers.Serializer[Any]):
+class PasswordResetConfirmSerializer(_AnySerializer):
 	"""Accepts email, code, and new password to complete reset."""
 
 	email = serializers.EmailField()

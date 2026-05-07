@@ -1,16 +1,29 @@
+from typing import TYPE_CHECKING
+
 from rest_framework import serializers  # noqa: F401
 from rest_framework.serializers import ModelSerializer
 
 from monitoring.models import Link, Notification, Strategy, Update
 
+if TYPE_CHECKING:
+	_StrategyModelSerializer = ModelSerializer[Strategy]
+	_LinkModelSerializer = ModelSerializer[Link]
+	_UpdateModelSerializer = ModelSerializer[Update]
+	_NotificationModelSerializer = ModelSerializer[Notification]
+else:
+	_StrategyModelSerializer = ModelSerializer
+	_LinkModelSerializer = ModelSerializer
+	_UpdateModelSerializer = ModelSerializer
+	_NotificationModelSerializer = ModelSerializer
 
-class StrategySerializer(ModelSerializer[Strategy]):
+
+class StrategySerializer(_StrategyModelSerializer):
 	class Meta:
 		model = Strategy
 		fields = "__all__"
 
 
-class LinkSerializer(ModelSerializer[Link]):
+class LinkSerializer(_LinkModelSerializer):
 	class Meta:
 		model = Link
 
@@ -46,14 +59,14 @@ class LinkSerializer(ModelSerializer[Link]):
 		}
 
 
-class UpdateSerializer(ModelSerializer[Update]):
+class UpdateSerializer(_UpdateModelSerializer):
 	class Meta:
 		model = Update
 		fields = ["id", "link", "title", "description", "item_url", "created_at"]
 		read_only_fields = fields
 
 
-class NotificationSerializer(ModelSerializer[Notification]):
+class NotificationSerializer(_NotificationModelSerializer):
 	update = UpdateSerializer(read_only=True)  # type: ignore[assignment]
 
 	class Meta:
