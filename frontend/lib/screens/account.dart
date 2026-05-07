@@ -102,7 +102,10 @@ class _AccountPageState extends State<AccountPage> {
 
       // Refresh cached user data so the top bar shows updated info.
       if (mounted) {
-        context.read<UserDataService>().getUserInfo();
+        await context.read<UserDataService>().getUserInfo();
+      }
+      if (!mounted) {
+        return;
       }
 
       setState(() {
