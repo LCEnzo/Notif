@@ -44,15 +44,13 @@ dependencies:
   # cupertino_icons: ^1.0.2
 
 dev_dependencies:
+  flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter
   shared_preferences_platform_interface: ^2.4.2
 
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
+  # very_good_analysis is the active analyzer preset. flutter_lints stays
+  # available so Flutter's recommended preset is not removed from the toolchain.
   very_good_analysis: ^10.2.0
 
 # Config for the one-off flutter_launcher_icons generator.
