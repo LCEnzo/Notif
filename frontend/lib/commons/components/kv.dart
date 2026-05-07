@@ -3,7 +3,6 @@ import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
 
 class KV extends StatelessWidget {
-
   const KV({
     required this.label,
     required this.value,
@@ -81,7 +80,6 @@ class KV extends StatelessWidget {
 }
 
 class _KVText extends StatelessWidget {
-
   const _KVText({required this.value});
   final String value;
 
@@ -90,7 +88,6 @@ class _KVText extends StatelessWidget {
 }
 
 class _DashedRulePainter extends CustomPainter {
-
   _DashedRulePainter({required this.color});
   static const double _dashWidth = 4;
   static const double _gap = 3;

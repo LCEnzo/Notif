@@ -7,7 +7,6 @@ enum EyebrowSize { regular, micro }
 enum EyebrowTone { mute, dim, accent }
 
 class Eyebrow extends StatelessWidget {
-
   const Eyebrow(
     this.text, {
     this.size = EyebrowSize.regular,

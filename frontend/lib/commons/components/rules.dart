@@ -5,7 +5,6 @@ import 'package:notif/commons/notif_tokens.dart';
 enum RuleStrength { faint, strong }
 
 class Rule extends StatelessWidget {
-
   const Rule({this.strength = RuleStrength.faint, this.margin, super.key});
   final RuleStrength strength;
   final EdgeInsetsGeometry? margin;
@@ -21,7 +20,6 @@ class Rule extends StatelessWidget {
 }
 
 class IndexRule extends StatelessWidget {
-
   const IndexRule({
     required this.index,
     required this.title,

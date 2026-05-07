@@ -48,7 +48,13 @@ class EntropyValidator {
     final hasPunct = password.contains(RegExp(r'[!@#\$%^&*(),.?":{}|<>]'));
     final hasOther = password.contains(RegExp(r'[^\w\s]'));
 
-    final List<bool> categories = [hasDigit, hasLower, hasUpper, hasPunct, hasOther];
+    final List<bool> categories = [
+      hasDigit,
+      hasLower,
+      hasUpper,
+      hasPunct,
+      hasOther,
+    ];
     final List<int> lengths = [10, 26, 26, 32, 40];
     int charSet = 0;
 

@@ -5,7 +5,6 @@ import 'package:notif/commons/notif_tokens.dart';
 enum TagTone { defaultTone, accent, muted }
 
 class Tag extends StatelessWidget {
-
   const Tag(this.label, {this.tone = TagTone.defaultTone, super.key});
   final String label;
   final TagTone tone;

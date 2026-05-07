@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:notif/commons/notif_tokens.dart';
 
 class CornerMarks extends StatelessWidget {
-
   const CornerMarks({
     required this.child,
     this.inset = 6,
@@ -55,7 +54,6 @@ class CornerMarks extends StatelessWidget {
 }
 
 class _HBar extends StatelessWidget {
-
   const _HBar(this.length, this.color, this.thickness);
   final double length;
   final Color color;
@@ -70,7 +68,6 @@ class _HBar extends StatelessWidget {
 }
 
 class _VBar extends StatelessWidget {
-
   const _VBar(this.length, this.color, this.thickness);
   final double length;
   final Color color;

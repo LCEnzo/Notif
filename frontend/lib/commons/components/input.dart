@@ -54,7 +54,6 @@ InputDecoration notifInputDecoration({
 }
 
 class NotifTextField extends StatelessWidget {
-
   const NotifTextField({
     required this.controller,
     this.label,

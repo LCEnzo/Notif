@@ -7,7 +7,6 @@ enum NotifButtonVariant { primary, ghost, link }
 enum NotifButtonSize { sm, md, lg }
 
 class NotifButton extends StatelessWidget {
-
   const NotifButton({
     required this.label,
     required this.onPressed,
@@ -74,7 +73,6 @@ class NotifButton extends StatelessWidget {
 }
 
 class _FramedButton extends StatefulWidget {
-
   const _FramedButton({
     required this.label,
     required this.icon,
@@ -268,7 +266,6 @@ class _FramedButtonState extends State<_FramedButton> {
 }
 
 class _ButtonColors {
-
   _ButtonColors({required this.bg, required this.fg, required this.border});
   final Color bg;
   final Color fg;

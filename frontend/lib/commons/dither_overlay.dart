@@ -67,7 +67,6 @@ class _DitherShaderLayer extends StatelessWidget {
 }
 
 class _DitherShaderPaint extends StatefulWidget {
-
   const _DitherShaderPaint({
     required this.program,
     required this.dpr,
@@ -143,7 +142,6 @@ class _DitherShaderPaintState extends State<_DitherShaderPaint> {
 // ---------------------------------------------------------------------------
 
 class _DitherShaderPainter extends CustomPainter {
-
   const _DitherShaderPainter({
     required this.program,
     required this.shader,
@@ -151,6 +149,7 @@ class _DitherShaderPainter extends CustomPainter {
     required this.neutralColor,
     required this.accentColor,
   });
+
   /// Grid cell size in logical pixels (matches the original CustomPainter).
   static const double _stepLogical = 5.0;
   static const double _neutralAlpha = 0.018;

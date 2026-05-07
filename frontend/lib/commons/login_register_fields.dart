@@ -97,7 +97,6 @@ InputDecoration _buildAuthInputDecoration({
 }
 
 class AuthPanelHeader extends StatelessWidget {
-
   const AuthPanelHeader({
     super.key,
     required this.title,
@@ -159,7 +158,6 @@ class AuthPanelHeader extends StatelessWidget {
 }
 
 class AuthInlineAction extends StatelessWidget {
-
   const AuthInlineAction({
     super.key,
     required this.label,
@@ -205,7 +203,6 @@ class AuthInlineAction extends StatelessWidget {
 }
 
 class AuthRuleDivider extends StatelessWidget {
-
   const AuthRuleDivider({super.key, this.label = 'or'});
   final String label;
 
@@ -244,7 +241,6 @@ class AuthRuleDivider extends StatelessWidget {
 }
 
 class Logo extends StatelessWidget {
-
   const Logo({super.key, required this.title, this.textColor});
   final String title;
   final Color? textColor;
@@ -277,7 +273,6 @@ class Logo extends StatelessWidget {
 }
 
 class AppTextField extends StatelessWidget {
-
   const AppTextField({
     super.key,
     required this.labelText,
@@ -337,7 +332,6 @@ class AppTextField extends StatelessWidget {
 }
 
 class PasswordTextField extends StatefulWidget {
-
   const PasswordTextField({
     super.key,
     required this.labelText,
@@ -394,7 +388,6 @@ Color _cursorColor(BuildContext context) {
 }
 
 class CustomButton extends StatelessWidget {
-
   const CustomButton({
     super.key,
     required this.buttonText,

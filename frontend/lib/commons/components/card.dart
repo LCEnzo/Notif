@@ -3,7 +3,6 @@ import 'package:notif/commons/components/corner_marks.dart';
 import 'package:notif/commons/notif_tokens.dart';
 
 class NotifCard extends StatelessWidget {
-
   const NotifCard({
     required this.child,
     this.padding = const EdgeInsets.all(24),

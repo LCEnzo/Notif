@@ -247,7 +247,6 @@ class _SettingsPageState extends State<SettingsPage> {
 // ═══════════════════════════════════════════════════════════════
 
 class _ColorwayPicker extends StatelessWidget {
-
   const _ColorwayPicker({required this.selected, required this.onChanged});
   final NotifColorway selected;
   final ValueChanged<NotifColorway> onChanged;
@@ -278,7 +277,6 @@ class _ColorwayPicker extends StatelessWidget {
 }
 
 class _ColorwayCard extends StatelessWidget {
-
   const _ColorwayCard({
     required this.colorway,
     required this.selected,
@@ -425,7 +423,6 @@ class _Swatches extends StatelessWidget {
 }
 
 class _HalftoneStripPainter extends CustomPainter {
-
   const _HalftoneStripPainter({required this.color});
   final Color color;
 
@@ -456,7 +453,6 @@ class _HalftoneStripPainter extends CustomPainter {
 // ═══════════════════════════════════════════════════════════════
 
 class _FontSetPicker extends StatelessWidget {
-
   const _FontSetPicker({required this.selected, required this.onChanged});
   final NotifFontSet selected;
   final ValueChanged<NotifFontSet> onChanged;
@@ -478,7 +474,6 @@ class _FontSetPicker extends StatelessWidget {
 }
 
 class _FontSetTile extends StatelessWidget {
-
   const _FontSetTile({
     required this.set,
     required this.selected,
@@ -738,7 +733,6 @@ class _HomeDensityTile extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _LabeledSwitch extends StatelessWidget {
-
   const _LabeledSwitch({
     required this.title,
     required this.description,
@@ -790,7 +784,6 @@ class _LabeledSwitch extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _BackendUrlModeSelector extends StatelessWidget {
-
   const _BackendUrlModeSelector({required this.value, required this.onChanged});
   final BackendUrlMode value;
   final ValueChanged<BackendUrlMode> onChanged;
@@ -862,7 +855,6 @@ class _BackendUrlModeSelector extends StatelessWidget {
 // ═══════════════════════════════════════════════════════════════
 
 class _UnderlineInput extends StatelessWidget {
-
   const _UnderlineInput({
     required this.controller,
     required this.hint,

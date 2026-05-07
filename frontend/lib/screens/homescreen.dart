@@ -982,7 +982,6 @@ class _ConsoleTopBar extends StatelessWidget {
 }
 
 class _HomeConsoleMetrics {
-
   factory _HomeConsoleMetrics.forDensity(HomeDensity density) {
     switch (density) {
       case HomeDensity.comfortable:

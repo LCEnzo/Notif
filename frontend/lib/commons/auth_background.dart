@@ -10,7 +10,6 @@ import 'package:notif/commons/notif_tokens.dart';
 
 @immutable
 class AuthTextureSettings {
-
   const AuthTextureSettings({
     required this.grainSpacing,
     required this.grainLimitYFactor,
@@ -227,7 +226,6 @@ class AuthTextureSettings {
 
 @immutable
 class _AuthBackdropPalette {
-
   const _AuthBackdropPalette({
     required this.baseGradientColors,
     required this.baseGradientStops,
@@ -316,8 +314,8 @@ class _AuthBackdropPalette {
 // ---------------------------------------------------------------------------
 
 class PageBackground extends StatelessWidget {
-
   const PageBackground({super.key, required this.child});
+
   /// Set by the debug tuner to receive live settings changes.
   /// Null in release builds — the texture layer uses [AuthTextureSettings.defaults].
   static ValueNotifier<AuthTextureSettings>? debugSettingsNotifier;
@@ -395,7 +393,6 @@ class PageBackground extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _PosterTextureLayer extends StatelessWidget {
-
   const _PosterTextureLayer({required this.settings, required this.palette});
   static final Future<ui.FragmentProgram> _programFuture =
       ui.FragmentProgram.fromAsset('shaders/auth_texture.frag');
@@ -428,7 +425,6 @@ class _PosterTextureLayer extends StatelessWidget {
 }
 
 class _PosterTexturePaint extends StatefulWidget {
-
   const _PosterTexturePaint({
     required this.program,
     required this.settings,
@@ -487,7 +483,6 @@ class _PosterTexturePaintState extends State<_PosterTexturePaint> {
 // ---------------------------------------------------------------------------
 
 class _PosterBackgroundPainter extends CustomPainter {
-
   const _PosterBackgroundPainter(this.operations);
   final List<_BackgroundOp> operations;
 
@@ -505,7 +500,6 @@ class _PosterBackgroundPainter extends CustomPainter {
 }
 
 class _PosterTexturePainter extends CustomPainter {
-
   const _PosterTexturePainter({
     required this.program,
     required this.shader,
@@ -601,7 +595,6 @@ enum _BackgroundShape { rect, oval }
 
 @immutable
 class _RelativeRect {
-
   const _RelativeRect({
     required this.leftFactor,
     required this.topFactor,
@@ -645,7 +638,6 @@ class _RelativeRect {
 
 @immutable
 class _LinearGradientOp extends _BackgroundOp {
-
   const _LinearGradientOp({
     required this.begin,
     required this.end,
@@ -700,7 +692,6 @@ class _LinearGradientOp extends _BackgroundOp {
 
 @immutable
 class _CircularGradientOp extends _BackgroundOp {
-
   const _CircularGradientOp({
     required this.centerYFactor,
     required this.diameterFactor,
@@ -747,7 +738,6 @@ class _CircularGradientOp extends _BackgroundOp {
 }
 
 class _GrainOp {
-
   const _GrainOp({
     required this.spacing,
     required this.limitYFactor,
@@ -775,7 +765,6 @@ class _GrainOp {
 }
 
 class _HalftoneOp {
-
   const _HalftoneOp({
     required this.spacing,
     required this.startYFactor,

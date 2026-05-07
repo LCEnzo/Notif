@@ -5,7 +5,6 @@ import 'package:notif/commons/notif_tokens.dart';
 enum StatusDotState { live, synced, idle, warning, error }
 
 class StatusDot extends StatelessWidget {
-
   const StatusDot({this.state = StatusDotState.idle, this.label, super.key});
   final StatusDotState state;
   final String? label;

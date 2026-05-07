@@ -22,7 +22,6 @@ class AuthPanelWidth {
 }
 
 class AuthScaffold extends StatefulWidget {
-
   const AuthScaffold({super.key, required this.child});
   final Widget child;
 
@@ -38,10 +37,12 @@ class _AuthScaffoldState extends State<AuthScaffold> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final shortestSide = MediaQuery.of(context).size.shortestSide;
       if (shortestSide < 600) {
-        unawaited(SystemChrome.setPreferredOrientations([
-          DeviceOrientation.portraitUp,
-          DeviceOrientation.portraitDown,
-        ]));
+        unawaited(
+          SystemChrome.setPreferredOrientations([
+            DeviceOrientation.portraitUp,
+            DeviceOrientation.portraitDown,
+          ]),
+        );
       }
     });
   }
@@ -87,7 +88,6 @@ class _AuthScaffoldState extends State<AuthScaffold> {
 }
 
 class GlassHelpButton extends StatelessWidget {
-
   const GlassHelpButton({
     super.key,
     required this.onPressed,
@@ -140,7 +140,6 @@ class GlassHelpButton extends StatelessWidget {
 }
 
 class AuthPanel extends StatelessWidget {
-
   const AuthPanel({super.key, required this.child});
   final Widget child;
 
@@ -180,7 +179,6 @@ class AuthPanel extends StatelessWidget {
 }
 
 class _AuthFramedSurface extends StatelessWidget {
-
   const _AuthFramedSurface({required this.child, this.padding});
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -200,7 +198,6 @@ class _AuthFramedSurface extends StatelessWidget {
 }
 
 class _AuthGlassSurface extends StatelessWidget {
-
   const _AuthGlassSurface({
     required this.child,
     required this.borderRadius,

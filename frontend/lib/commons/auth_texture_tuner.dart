@@ -416,7 +416,6 @@ extension AuthTextureSettingsSnippet on AuthTextureSettings {
 // ---------------------------------------------------------------------------
 
 class AuthTextureTunerOverlay extends StatefulWidget {
-
   const AuthTextureTunerOverlay({super.key, required this.controller});
   final AuthTextureTunerController controller;
 
@@ -598,7 +597,6 @@ class _AuthTextureTunerOverlayState extends State<AuthTextureTunerOverlay> {
 }
 
 class _AuthCardStyleSection extends StatelessWidget {
-
   const _AuthCardStyleSection({required this.appSettings});
   final AppSettingsController appSettings;
 
@@ -649,7 +647,6 @@ class _AuthCardStyleSection extends StatelessWidget {
 }
 
 class _AuthCardStyleChip extends StatelessWidget {
-
   const _AuthCardStyleChip({
     required this.label,
     required this.selected,
@@ -684,7 +681,6 @@ class _AuthCardStyleChip extends StatelessWidget {
 }
 
 class _TextureFieldSection extends StatelessWidget {
-
   const _TextureFieldSection({
     required this.title,
     required this.fields,
@@ -724,7 +720,6 @@ class _TextureFieldSection extends StatelessWidget {
 }
 
 class _TextureFieldSlider extends StatelessWidget {
-
   const _TextureFieldSlider({
     required this.field,
     required this.settings,
@@ -775,7 +770,6 @@ class _TextureFieldSlider extends StatelessWidget {
 }
 
 class _DebugGlassContainer extends StatelessWidget {
-
   const _DebugGlassContainer({required this.child});
   final Widget child;
 
