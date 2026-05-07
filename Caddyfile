@@ -65,7 +65,29 @@
 	}
 }
 
-lcenzo.com, www.lcenzo.com, *.lcenzo.com {
+# Apex + www — landing page. Anything other than the root path falls
+# through to the styled 404 (so the apex doesn't 200 every random URL).
+lcenzo.com, www.lcenzo.com {
+	tls {$FALLBACK_TLS_CERT:/etc/caddy/origin-certs/lcenzo.com.pem} {$FALLBACK_TLS_KEY:/etc/caddy/origin-certs/lcenzo.com.key}
+
+	root * {$FALLBACK_ROOT:/opt/notif/deploy/fallback}
+
+	handle / {
+		rewrite * /index.html
+		file_server
+	}
+
+	handle {
+		rewrite * /not-found.html
+		file_server {
+			status 404
+		}
+	}
+}
+
+# Wildcard catch-all for any other lcenzo.com hostname that isn't
+# notif.lcenzo.com (which has its own block above). Always 404.
+*.lcenzo.com {
 	tls {$FALLBACK_TLS_CERT:/etc/caddy/origin-certs/lcenzo.com.pem} {$FALLBACK_TLS_KEY:/etc/caddy/origin-certs/lcenzo.com.key}
 
 	root * {$FALLBACK_ROOT:/opt/notif/deploy/fallback}
