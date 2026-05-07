@@ -21,6 +21,7 @@ from accounts.models.password_reset import (
 from commons.result import Err, Ok
 from commons.test_utils import SetupMixin, login_client
 from monitoring.models import Link
+from monitoring.rss_content_backfill import RssContentBackfillSummary
 from ops.models import MaintenanceLock, SystemEvent
 
 pytestmark = pytest.mark.timeout(30)
@@ -231,3 +232,34 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 			call_command("run_due_tasks", "--delay", "0")
 
 		scrape_link.assert_not_called()
+
+	def test_command_records_pending_rss_content_backfill_progress(self):
+		summary = RssContentBackfillSummary(
+			links_considered=1,
+			links_processed=1,
+			updates_checked=3,
+			updates_updated=2,
+			last_link_pk=42,
+			completed=False,
+		)
+
+		with patch("ops.management.commands.run_due_tasks.backfill_rss_update_content", return_value=summary):
+			call_command("run_due_tasks", "--max-links", "0", "--delay", "0")
+
+		event = SystemEvent.objects.get(kind="rss-content-backfill-progress")
+		self.assertEqual(event.source, "monitoring.backfill_rss_update_content")
+		self.assertEqual(event.details["last_link_pk"], 42)
+		self.assertEqual(event.details["updates_updated"], 2)
+
+	def test_command_skips_rss_content_backfill_after_completion_marker(self):
+		SystemEvent.objects.create(
+			level=SystemEvent.Level.INFO,
+			source="monitoring.backfill_rss_update_content",
+			kind="rss-content-backfill-completed",
+			message="RSS content backfill completed.",
+		)
+
+		with patch("ops.management.commands.run_due_tasks.backfill_rss_update_content") as backfill:
+			call_command("run_due_tasks", "--max-links", "0", "--delay", "0")
+
+		backfill.assert_not_called()

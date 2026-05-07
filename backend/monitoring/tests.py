@@ -23,6 +23,7 @@ from commons import Err, Ok
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client
 from commons.utils import create_notification
 from monitoring.models import Link, Notification, Strategy, Update
+from monitoring.rss_content_backfill import backfill_rss_update_content
 from monitoring.services import scrape_link
 from monitoring.strategies import (
 	STRATEGY_CHOICES,
@@ -1058,22 +1059,35 @@ class FeedStrategyTestCase(TestCase):
 		assert comparison is not None
 		assert comparison["last_entry_id"] == "https://example.com/post/rss1"
 
-	def test_entry_uses_description_with_summary_fallback(self):
-		"""Description field is preferred; summary used as fallback."""
+	def test_entry_prefers_full_content_with_description_fallback(self):
+		"""Full feed content is preferred; description and summary are fallbacks."""
 		feed = """\
 <?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0">
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
     <title>Desc Feed</title>
     <link>https://example.com</link>
     <item>
-      <title>Has Description</title>
+      <title>Has Full Content</title>
       <link>https://example.com/1</link>
+      <description>Short summary.</description>
+      <content:encoded><![CDATA[
+        <article>
+          <h1>Full post heading</h1>
+          <p>First paragraph with <a href="https://example.com">a link</a>.</p>
+          <script>alert("nope")</script>
+          <p>Second paragraph.</p>
+        </article>
+      ]]></content:encoded>
+    </item>
+    <item>
+      <title>Has Description</title>
+      <link>https://example.com/2</link>
       <description>Explicit description.</description>
     </item>
     <item>
       <title>No Description</title>
-      <link>https://example.com/2</link>
+      <link>https://example.com/3</link>
     </item>
   </channel>
 </rss>"""
@@ -1083,8 +1097,13 @@ class FeedStrategyTestCase(TestCase):
 			result = self.strategy.scrape(self.feed_url, {}, {})
 
 		assert isinstance(result, Ok)
-		assert result.value.updates[0][1] == "Explicit description."
-		assert result.value.updates[1][1] == ""
+		assert "Full post heading" in result.value.updates[0][1]
+		assert "First paragraph with a link." in result.value.updates[0][1]
+		assert "Second paragraph." in result.value.updates[0][1]
+		assert "Short summary." not in result.value.updates[0][1]
+		assert "alert" not in result.value.updates[0][1]
+		assert result.value.updates[1][1] == "Explicit description."
+		assert result.value.updates[2][1] == ""
 
 
 # ── Real Feed Fixture Tests ——————————————————————————————————————————————
@@ -1176,6 +1195,54 @@ class FeedStrategyRealFeedTestCase(TestCase):
 		assert len(result.value.updates) >= 20, f"Expected >=20, got {len(result.value.updates)}"
 		comparison = result.value.comparison_state_update
 		assert comparison is not None
+
+
+class RssContentBackfillTestCase(SetupMixin, TestCase):
+	def test_backfill_updates_existing_rss_update_from_full_content(self):
+		strategy = Strategy.objects.create(strat_cls="FeedStrategy", data={})
+		link = Link.objects.create(
+			name="RSS source",
+			url="https://example.com/feed",
+			user=self.regular_user,
+			strategy=strategy,
+		)
+		update = Update.objects.create(
+			link=link,
+			title="Post One",
+			description="Short summary.",
+			item_url="https://example.com/post-one",
+		)
+		feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Example Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Post One</title>
+      <link>https://example.com/post-one</link>
+      <description>Short summary.</description>
+      <content:encoded><![CDATA[
+        <article>
+          <p>Full body paragraph.</p>
+          <p>Another useful paragraph.</p>
+        </article>
+      ]]></content:encoded>
+    </item>
+  </channel>
+</rss>"""
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get("https://example.com/feed", text=feed)
+			summary = backfill_rss_update_content(max_links=10, max_updates=10, delay=0)
+
+		update.refresh_from_db()
+		self.assertEqual(summary.links_processed, 1)
+		self.assertEqual(summary.updates_checked, 1)
+		self.assertEqual(summary.updates_updated, 1)
+		self.assertIn("Full body paragraph.", update.description)
+		self.assertIn("Another useful paragraph.", update.description)
+		self.assertNotEqual(update.description, "Short summary.")
 
 
 # ── Property-Based Tests ————————————————————————————————————————————————

@@ -27,6 +27,45 @@ from commons.result import Err, Ok, Result
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 30
+MAX_UPDATE_DESCRIPTION_CHARS = 12000
+
+_BLOCK_TEXT_TAGS = {
+	"article",
+	"aside",
+	"blockquote",
+	"br",
+	"dd",
+	"div",
+	"dl",
+	"dt",
+	"figcaption",
+	"figure",
+	"h1",
+	"h2",
+	"h3",
+	"h4",
+	"h5",
+	"h6",
+	"header",
+	"hr",
+	"li",
+	"main",
+	"nav",
+	"ol",
+	"p",
+	"pre",
+	"section",
+	"table",
+	"tbody",
+	"td",
+	"tfoot",
+	"th",
+	"thead",
+	"tr",
+	"ul",
+}
+
+_NON_CONTENT_TAGS = {"button", "form", "iframe", "noscript", "script", "style", "svg"}
 
 # Types
 # TODO: Think of moving them to a central location so that the whole app can use them
@@ -91,6 +130,32 @@ def _get_content_with_css_selector(html_content: str, css_selector: str) -> Resu
 	soup = BeautifulSoup(html_content, "html.parser")
 	elements = soup.select(css_selector)
 	return elements
+
+
+def _html_to_readable_text(html_content: str) -> str:
+	"""Convert feed HTML into bounded readable text for notification bodies."""
+	soup = BeautifulSoup(html_content, "html.parser")
+
+	for tag in soup(_NON_CONTENT_TAGS):
+		tag.decompose()
+
+	for tag in soup.find_all(_BLOCK_TEXT_TAGS):
+		if tag.name == "br":
+			tag.replace_with("\n")
+			continue
+		tag.insert_before("\n")
+		tag.append("\n")
+
+	raw_text = soup.get_text(separator="", strip=False).replace("\xa0", " ")
+	lines = [re.sub(r"[ \t\f\v]+", " ", line).strip() for line in raw_text.splitlines()]
+	text = "\n".join(line for line in lines if line)
+	text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+	text = re.sub(r"\n{3,}", "\n\n", text).strip()
+
+	if len(text) <= MAX_UPDATE_DESCRIPTION_CHARS:
+		return text
+
+	return text[:MAX_UPDATE_DESCRIPTION_CHARS].rstrip() + "..."
 
 
 class BaseStrategy(ABC):
@@ -875,7 +940,7 @@ class FeedStrategy(BaseStrategy):
 				continue
 
 			title = entry.get("title", "Untitled")
-			description = entry.get("description") or entry.get("summary") or ""
+			description = self._entry_description(entry)
 			link = URL(entry.get("link", url))
 
 			updates.append(ScrapedUpdate(title=title, description=description, item_url=link))
@@ -890,6 +955,33 @@ class FeedStrategy(BaseStrategy):
 			}
 
 		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_update))
+
+	@classmethod
+	def _entry_description(cls, entry: dict[str, Any]) -> str:
+		for value in cls._entry_content_values(entry):
+			text = _html_to_readable_text(value)
+			if text:
+				return text
+		return ""
+
+	@staticmethod
+	def _entry_content_values(entry: dict[str, Any]) -> list[str]:
+		values: list[str] = []
+
+		content = entry.get("content")
+		if isinstance(content, list):
+			for item in content:
+				if isinstance(item, dict):
+					value = item.get("value")
+					if isinstance(value, str) and value.strip():
+						values.append(value)
+
+		for key in ("content_encoded", "description", "summary"):
+			value = entry.get(key)
+			if isinstance(value, str) and value.strip():
+				values.append(value)
+
+		return values
 
 	@classmethod
 	def _merge_seen_entry_hashes(cls, current_entry_hashes: list[str], previous_entry_hashes: list[str]) -> list[str]:

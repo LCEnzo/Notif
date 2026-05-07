@@ -3106,9 +3106,13 @@ String _shortSource(String source) {
 String _formatTimeAgo(DateTime? dateTime) {
   if (dateTime == null) return 'never';
   final diff = DateTime.now().difference(dateTime);
-  if (diff.inMinutes < 1) return 'just now';
-  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  if (diff.inSeconds < 60) return '${diff.inSeconds}s';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+  if (diff.inHours < 24) {
+    final minutes = diff.inMinutes.remainder(60);
+    if (minutes == 0) return '${diff.inHours}h';
+    return '${diff.inHours}h ${minutes}m';
+  }
   if (diff.inDays < 7) return '${diff.inDays}d ago';
   return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
 }
