@@ -73,53 +73,60 @@ class AppSettingsController extends ChangeNotifier {
     Object? loadError;
     StackTrace? loadStackTrace;
 
-    T? readPref<T>(
-      SharedPreferences prefs,
-      String key,
-      T? Function(String key) reader,
-    ) {
-      try {
-        return reader(key);
-      } on Exception catch (e, st) {
-        loadError ??= StateError('Could not read "$key": $e');
-        loadStackTrace ??= st;
-        if (kDebugMode) debugPrint('AppSettings._load failed for $key: $e');
+    T? readPref<T>(SharedPreferences prefs, String key) {
+      final value = prefs.get(key);
+      if (value == null) {
         return null;
       }
+      if (value is T) {
+        return value as T;
+      }
+
+      loadError ??= StateError(
+        'Could not read "$key": expected $T but found ${value.runtimeType}',
+      );
+      loadStackTrace ??= StackTrace.current;
+      if (kDebugMode) {
+        debugPrint(
+          'AppSettings._load failed for $key: expected $T but found '
+          '${value.runtimeType}',
+        );
+      }
+      return null;
     }
 
     try {
       final prefs = await SharedPreferences.getInstance();
 
       final designDitheringEnabled =
-          readPref<bool>(prefs, _ditheringKey, prefs.getBool) ?? true;
+          readPref<bool>(prefs, _ditheringKey) ?? true;
       final authCardStyle = _parseEnum(
-        readPref<String>(prefs, _authCardStyleKey, prefs.getString),
+        readPref<String>(prefs, _authCardStyleKey),
         AuthCardStyle.values,
         AuthCardStyle.framed,
       );
       final backendUrlMode = _parseEnum(
-        readPref<String>(prefs, _backendUrlModeKey, prefs.getString),
+        readPref<String>(prefs, _backendUrlModeKey),
         BackendUrlMode.values,
         BackendUrlMode.builtin,
       );
       final colorway = _parseEnum(
-        readPref<String>(prefs, _colorwayKey, prefs.getString),
+        readPref<String>(prefs, _colorwayKey),
         NotifColorway.values,
         NotifColorway.dusk1,
       );
       final fontSet = _parseEnum(
-        readPref<String>(prefs, _fontSetKey, prefs.getString),
+        readPref<String>(prefs, _fontSetKey),
         NotifFontSet.values,
         NotifFontSet.current,
       );
       final homeDensity = _parseEnum(
-        readPref<String>(prefs, _homeDensityKey, prefs.getString),
+        readPref<String>(prefs, _homeDensityKey),
         HomeDensity.values,
         HomeDensity.compact,
       );
       final customBackendUrl =
-          readPref<String>(prefs, _customBackendUrlKey, prefs.getString) ?? '';
+          readPref<String>(prefs, _customBackendUrlKey) ?? '';
 
       _designDitheringEnabled = designDitheringEnabled;
       _authCardStyle = authCardStyle;

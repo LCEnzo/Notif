@@ -92,7 +92,7 @@ void main() {
           body: '{}',
         ),
         throwsA(
-          isA<StateError>().having(
+          isA<ApiClientException>().having(
             (error) => error.message,
             'message',
             contains('POST /token/ failed: no backend URL configured'),
