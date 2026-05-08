@@ -92,7 +92,7 @@ DEV_API_LATENCY_MS=0
 DEV_API_LATENCY_JITTER_MS=0
 
 # ── build info ────────────────────────────────────────
-VERSION=0.2.0
+VERSION=0.3.0
 GIT_HASH=$GIT_HASH
 EOF
 

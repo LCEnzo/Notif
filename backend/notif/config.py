@@ -79,7 +79,7 @@ class Settings(BaseSettings):
 	DEV_API_LATENCY_JITTER_MS: int = Field(default=0, ge=0, le=_MAX_DEV_API_LATENCY_MS)
 
 	# ── build info (exposed via status endpoint) ──────────
-	VERSION: str = "0.2.0"
+	VERSION: str = "0.3.0"
 	GIT_HASH: str = "dev"
 
 	@model_validator(mode="after")
