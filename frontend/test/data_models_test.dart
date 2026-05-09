@@ -1,6 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/services/data.dart';
+import 'package:notif/services/json_contracts.dart';
+
+JsonCursor cursor(Object? value) {
+  return JsonCursor.root(endpoint: 'test', value: value);
+}
 
 void main() {
   group('NotificationStatus.fromWire', () {
@@ -40,7 +45,7 @@ void main() {
         },
       };
 
-      final item = NotificationItem.fromJson(json);
+      final item = NotificationItem.fromJson(cursor(json));
 
       expect(item.id, 1);
       expect(item.title, 'New chapter');
@@ -64,20 +69,25 @@ void main() {
         },
       };
 
-      final item = NotificationItem.fromJson(json);
+      final item = NotificationItem.fromJson(cursor(json));
 
       expect(item.isUnread, isFalse);
       expect(item.readAt, isNotNull);
     });
 
-    test('fromJson handles missing update gracefully', () {
+    test('fromJson reports exact path for malformed payload', () {
       final json = <String, dynamic>{'id': 3, 'status': 'unread'};
 
-      final item = NotificationItem.fromJson(json);
-
-      expect(item.title, 'Untitled update');
-      expect(item.description, isEmpty);
-      expect(item.itemUrl, isEmpty);
+      expect(
+        () => NotificationItem.fromJson(cursor(json)),
+        throwsA(
+          isA<ContractViolation>().having(
+            (error) => error.path,
+            'path',
+            r'$',
+          ),
+        ),
+      );
     });
 
     test('copyWith returns new instance with updated fields', () {
@@ -133,7 +143,7 @@ void main() {
         },
       };
 
-      final record = StrategyRecord.fromJson(json);
+      final record = StrategyRecord.fromJson(cursor(json));
 
       expect(record.id, 42);
       expect(record.className, 'GeneralSelectorStrategy');
@@ -143,7 +153,7 @@ void main() {
     test('fromJson defaults missing strat_cls to GeneralSelectorStrategy', () {
       final json = <String, dynamic>{'id': 1, 'data': <String, dynamic>{}};
 
-      final record = StrategyRecord.fromJson(json);
+      final record = StrategyRecord.fromJson(cursor(json));
 
       expect(record.className, generalSelectorStrategy);
     });
@@ -196,7 +206,7 @@ void main() {
         'last_scraped': '2026-04-01T12:00:00Z',
       };
 
-      final link = Link.fromJson(json, strategies);
+      final link = Link.fromJson(cursor(json), strategies);
 
       expect(link.id, 10);
       expect(link.name, 'My Blog');
@@ -215,7 +225,7 @@ void main() {
         'strategy': 999,
       };
 
-      final link = Link.fromJson(json, const {});
+      final link = Link.fromJson(cursor(json), const {});
 
       expect(link.strategyClass, 'UnknownStrategy');
       expect(link.selectors, isEmpty);
@@ -228,7 +238,7 @@ void main() {
         'url': 'https://example.com',
       };
 
-      final link = Link.fromJson(json, const {});
+      final link = Link.fromJson(cursor(json), const {});
 
       expect(link.strategyId, isNull);
       expect(link.strategyClass, 'UnknownStrategy');
@@ -285,7 +295,7 @@ void main() {
     test('returns status code when body has no extractable message', () {
       expect(
         describeDataError(dioError(500, '')),
-        'Request failed with status 500.',
+        'The server failed while handling the request.',
       );
     });
 

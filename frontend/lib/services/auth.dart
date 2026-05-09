@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:notif/services/json_contracts.dart';
+import 'package:notif/services/persistence.dart';
 
 class UserData {
   UserData({
@@ -13,6 +15,17 @@ class UserData {
     required this.isStaff,
     required this.isSuperuser,
   });
+
+  factory UserData.fromJson(JsonCursor json) {
+    return UserData(
+      email: json.field('email').string(),
+      username: json.field('username').string(allowEmpty: false),
+      name: json.field('name').string(),
+      isStaff: json.field('is_staff').boolean(),
+      isSuperuser: json.field('is_superuser').boolean(),
+    );
+  }
+
   String email;
   String username;
   String name;
@@ -21,91 +34,183 @@ class UserData {
 }
 
 class JWT {
-  JWT({required this.access, required this.refresh});
+  JWT({required this.access});
   String access;
-  String refresh;
 
   int? get userId => _decodeJwtUserId(access);
 }
 
 const _jsonHeaders = {'Content-Type': 'application/json'};
+const _refreshHeaders = {
+  'Content-Type': 'application/json',
+  'X-Refresh-Request': '1',
+};
 const _lastSuccessfulUsernameKey = 'lastSuccessfulUsername';
 
+sealed class AuthState {
+  const AuthState();
+}
+
+final class AuthAnonymous extends AuthState {
+  const AuthAnonymous();
+}
+
+final class AuthRestoring extends AuthState {
+  const AuthRestoring();
+}
+
+final class AuthAuthenticated extends AuthState {
+  const AuthAuthenticated(this.jwt);
+
+  final JWT jwt;
+}
+
+final class AuthRefreshing extends AuthState {
+  const AuthRefreshing(this.previous);
+
+  final JWT previous;
+}
+
+final class AuthExpired extends AuthState {
+  const AuthExpired();
+}
+
+final class AuthLoggingOut extends AuthState {
+  const AuthLoggingOut();
+}
+
 class AuthService extends ChangeNotifier {
-  AuthService() {
+  AuthService({bool restoreSessionOnStart = false})
+    : _restoreSessionOnStart = restoreSessionOnStart {
     _configureApiAuth();
   }
 
-  JWT? _jwt;
+  AuthState _state = const AuthAnonymous();
   AppSettingsController? _settings;
+  final bool _restoreSessionOnStart;
+  Future<void>? _restoreSessionFuture;
+  Future<String?>? _refreshInFlight;
+  int _authEpoch = 0;
+  bool _restoreAttempted = false;
 
   void updateSettings(AppSettingsController? settings) {
     _settings = settings;
     _configureApiAuth();
+    if (_restoreSessionOnStart && !_restoreAttempted) {
+      _restoreAttempted = true;
+      unawaited(restoreRememberedSession());
+    }
   }
 
   void _configureApiAuth() {
     configureApiAuth(
-      accessTokenReader: () => _jwt?.access,
-      refreshTokenReader: () => _jwt?.refresh,
+      accessTokenReader: () => jwt?.access,
       refreshAccessToken: _refreshAccessToken,
       authExpiredHandler: _handleAuthExpired,
     );
   }
 
   Future<void> _handleAuthExpired() async {
-    if (_jwt == null) {
+    if (jwt == null) {
       return;
     }
 
-    _jwt = null;
-    notifyListeners();
+    _setState(const AuthExpired());
   }
 
-  Future<String?> _refreshAccessToken(String refreshToken) async {
+  Future<String?> _refreshAccessToken() async {
+    final existing = _refreshInFlight;
+    if (existing != null) {
+      return existing;
+    }
+
+    final epoch = _authEpoch;
+    final previous = jwt;
+    if (previous != null && _state is! AuthRestoring) {
+      _setState(AuthRefreshing(previous));
+    }
+
+    final refresh = _performRefresh(epoch);
+    _refreshInFlight = refresh;
+    try {
+      return await refresh;
+    } finally {
+      if (identical(_refreshInFlight, refresh)) {
+        _refreshInFlight = null;
+      }
+    }
+  }
+
+  Future<String?> _performRefresh(int epoch) async {
     try {
       final response = await apiPost(
         "/token/refresh/",
         settings: _settings,
-        headers: _jsonHeaders,
-        body: {"refresh": refreshToken},
+        headers: _refreshHeaders,
+        body: const <String, Object?>{},
       );
-      final data = expectSuccessJson(response, "Token refresh");
-      final accessToken = (data["access"] as String?)?.trim();
-      if (accessToken == null || accessToken.isEmpty) {
+      final data = expectSuccessObject(response, "Token refresh");
+      final accessToken = data.field("access").string(allowEmpty: false);
+      if (epoch != _authEpoch) {
         return null;
       }
 
-      _jwt = JWT(access: accessToken, refresh: refreshToken);
-      notifyListeners();
+      _setState(AuthAuthenticated(JWT(access: accessToken)));
       return accessToken;
     } on Exception catch (error) {
       if (kDebugMode) {
         debugPrint('AuthService._refreshAccessToken: $error');
+      }
+      if (epoch == _authEpoch) {
+        _setState(const AuthExpired());
       }
       return null;
     }
   }
 
   Future<void> login(String username, String password) async {
+    await loginWithRememberMe(username, password, rememberMe: true);
+  }
+
+  Future<void> loginWithRememberMe(
+    String username,
+    String password, {
+    required bool rememberMe,
+  }) async {
     final response = await apiPost(
       '/token/',
       settings: _settings,
       headers: _jsonHeaders,
-      body: {'username': username, 'password': password},
+      body: {
+        'username': username,
+        'password': password,
+        'remember_me': rememberMe,
+      },
     );
-    final data = expectSuccessJson(response, 'Login');
-    _jwt = JWT(
-      access: data['access'] as String,
-      refresh: data['refresh'] as String,
-    );
+    final data = expectSuccessObject(response, 'Login');
+    final access = data.field('access').string(allowEmpty: false);
+    _authEpoch += 1;
+    _setState(AuthAuthenticated(JWT(access: access)));
     await persistLastSuccessfulUsername(username);
-    notifyListeners();
   }
 
-  void logout() {
-    _jwt = null;
-    notifyListeners();
+  Future<void> logout() async {
+    _authEpoch += 1;
+    _setState(const AuthLoggingOut());
+    try {
+      await apiPost(
+        '/token/logout/',
+        settings: _settings,
+        headers: _jsonHeaders,
+        body: const <String, Object?>{},
+      );
+    } on Exception catch (error) {
+      if (kDebugMode) {
+        debugPrint('AuthService.logout: $error');
+      }
+    } finally {
+      _setState(const AuthAnonymous());
+    }
   }
 
   Future<void> register(
@@ -133,8 +238,8 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<void> refreshToken(String refreshToken) async {
-    final accessToken = await _refreshAccessToken(refreshToken);
+  Future<void> refreshToken([String? _]) async {
+    final accessToken = await _refreshAccessToken();
     if (accessToken == null) {
       throw Exception('Token refresh failed.');
     }
@@ -157,7 +262,7 @@ class AuthService extends ChangeNotifier {
       headers: _jsonHeaders,
       body: {'email': email.trim().toLowerCase()},
     );
-    expectSuccessJson(response, 'Password reset request');
+    expectSuccessObject(response, 'Password reset request');
   }
 
   Future<void> confirmPasswordReset(
@@ -175,11 +280,49 @@ class AuthService extends ChangeNotifier {
         'new_password': newPassword,
       },
     );
-    expectSuccessJson(response, 'Password reset confirm');
+    expectSuccessObject(response, 'Password reset confirm');
   }
 
-  JWT? get jwt => _jwt;
-  int? get currentUserId => _jwt?.userId;
+  AuthState get state => _state;
+  JWT? get jwt {
+    return switch (_state) {
+      AuthAuthenticated(:final jwt) => jwt,
+      AuthRefreshing(:final previous) => previous,
+      _ => null,
+    };
+  }
+
+  int? get currentUserId => jwt?.userId;
+  bool get isRestoringSession => _state is AuthRestoring;
+
+  Future<void> restoreRememberedSession() {
+    final existing = _restoreSessionFuture;
+    if (existing != null) {
+      return existing;
+    }
+
+    final future = _restoreRememberedSession();
+    _restoreSessionFuture = future;
+    return future;
+  }
+
+  Future<void> _restoreRememberedSession() async {
+    _setState(const AuthRestoring());
+    try {
+      await _settings?.initialized;
+      await _refreshAccessToken();
+    } finally {
+      _restoreSessionFuture = null;
+      if (_state is AuthRestoring) {
+        _setState(const AuthAnonymous());
+      }
+    }
+  }
+
+  void _setState(AuthState state) {
+    _state = state;
+    notifyListeners();
+  }
 }
 
 class UserDataService extends ChangeNotifier {
@@ -219,14 +362,8 @@ class UserDataService extends ChangeNotifier {
         settings: _settings,
         headers: {..._jsonHeaders, 'Authorization': 'Bearer ${jwt.access}'},
       );
-      final data = expectSuccessJson(response, 'Fetch user info');
-      _userData = UserData(
-        email: data['email'] as String,
-        username: data['username'] as String,
-        name: data['name'] as String,
-        isStaff: data['is_staff'] == true,
-        isSuperuser: data['is_superuser'] == true,
-      );
+      final data = expectSuccessObject(response, 'Fetch user info');
+      _userData = UserData.fromJson(data);
     } on Exception catch (error) {
       if (kDebugMode) {
         debugPrint('UserDataService.getUserInfo: $error');
@@ -258,12 +395,11 @@ int? _decodeJwtUserId(String token) {
       base64Url.decode(base64Url.normalize(parts[1])),
     );
     final payload = jsonDecode(payloadJson);
-    if (payload is! Map<String, dynamic>) {
+    if (payload is! Map<Object?, Object?>) {
       return null;
     }
 
-    final dynamic rawUserId =
-        payload['user_id'] ?? payload['userId'] ?? payload['sub'];
+    final rawUserId = payload['user_id'] ?? payload['userId'] ?? payload['sub'];
 
     if (rawUserId is int) {
       return rawUserId;
@@ -286,22 +422,22 @@ Future<void> persistLastSuccessfulUsername(String username) async {
     return;
   }
 
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString(_lastSuccessfulUsernameKey, normalized);
+  final store = await PreferenceStore.load();
+  await store.writeString(_lastSuccessfulUsernameKey, normalized);
 }
 
 Future<String?> loadLastSuccessfulUsername() async {
-  final prefs = await SharedPreferences.getInstance();
-  final current = prefs.getString(_lastSuccessfulUsernameKey);
+  final store = await PreferenceStore.load();
+  final current = store.read<String>(_lastSuccessfulUsernameKey);
   if (current != null && current.trim().isNotEmpty) {
     return current.trim();
   }
 
-  final legacy = prefs.getString('username');
+  final legacy = store.read<String>('username');
   if (legacy != null && legacy.trim().isNotEmpty) {
     final normalized = legacy.trim();
-    await prefs.setString(_lastSuccessfulUsernameKey, normalized);
-    await prefs.remove('username');
+    await store.writeString(_lastSuccessfulUsernameKey, normalized);
+    await store.remove('username');
     return normalized;
   }
 

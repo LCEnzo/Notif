@@ -118,7 +118,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _logout() {
-    context.read<AuthService>().logout();
+    unawaited(context.read<AuthService>().logout());
     context.go('/login');
   }
 

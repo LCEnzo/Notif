@@ -22,7 +22,7 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AppSettingsController()),
         ChangeNotifierProxyProvider<AppSettingsController, AuthService>(
-          create: (_) => AuthService(),
+          create: (_) => AuthService(restoreSessionOnStart: true),
           update: (_, settings, auth) => auth!..updateSettings(settings),
         ),
         ChangeNotifierProxyProvider2<

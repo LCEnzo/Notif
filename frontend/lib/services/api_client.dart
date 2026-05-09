@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:notif/services/app_settings.dart';
+import 'package:notif/services/json_contracts.dart';
 
 const String builtinApiUrl = String.fromEnvironment(
   'API_URL',
@@ -28,8 +29,7 @@ final Dio _dio =
       ]);
 
 typedef AccessTokenReader = String? Function();
-typedef RefreshTokenReader = String? Function();
-typedef RefreshAccessToken = Future<String?> Function(String refreshToken);
+typedef RefreshAccessToken = Future<String?> Function();
 typedef AuthExpiredHandler = Future<void> Function();
 
 class ApiClientException implements Exception {
@@ -42,19 +42,15 @@ class ApiClientException implements Exception {
 }
 
 AccessTokenReader? _accessTokenReader;
-RefreshTokenReader? _refreshTokenReader;
 RefreshAccessToken? _refreshAccessToken;
 AuthExpiredHandler? _authExpiredHandler;
-Future<String?>? _refreshInFlight;
 
 void configureApiAuth({
   required AccessTokenReader accessTokenReader,
-  required RefreshTokenReader refreshTokenReader,
   required RefreshAccessToken refreshAccessToken,
   required AuthExpiredHandler authExpiredHandler,
 }) {
   _accessTokenReader = accessTokenReader;
-  _refreshTokenReader = refreshTokenReader;
   _refreshAccessToken = refreshAccessToken;
   _authExpiredHandler = authExpiredHandler;
 }
@@ -226,6 +222,7 @@ Future<Response<dynamic>> _performRequest(
         method: method,
         headers: requestHeaders,
         responseType: responseType,
+        extra: const {'withCredentials': true},
       ),
     );
   } on DioException catch (error) {
@@ -279,32 +276,15 @@ Future<bool> _shouldRetryAfterUnauthorized(
 }
 
 Future<String?> _refreshAccessTokenIfNeeded() async {
-  final inFlight = _refreshInFlight;
-  if (inFlight != null) {
-    return inFlight;
-  }
-
-  final refreshToken = _refreshTokenReader?.call();
-  if (refreshToken == null || refreshToken.isEmpty) {
-    await _authExpiredHandler?.call();
-    return null;
-  }
-
-  final refresh = () async {
-    try {
-      return await _refreshAccessToken?.call(refreshToken);
-    } on Exception catch (error) {
-      if (kDebugMode) {
-        debugPrint('api_client._refreshAccessTokenIfNeeded: $error');
-      }
-      return null;
-    } finally {
-      _refreshInFlight = null;
+  String? refreshedToken;
+  try {
+    refreshedToken = await _refreshAccessToken?.call();
+  } on Exception catch (error) {
+    if (kDebugMode) {
+      debugPrint('api_client._refreshAccessTokenIfNeeded: $error');
     }
-  }();
+  }
 
-  _refreshInFlight = refresh;
-  final refreshedToken = await refresh;
   if (refreshedToken == null || refreshedToken.isEmpty) {
     await _authExpiredHandler?.call();
     return null;
@@ -330,31 +310,37 @@ bool _isFallbackableNetworkError(DioException error) {
 
 /// Validates [response] is 200 and returns decoded JSON as `Map<String, dynamic>`.
 /// Throws a descriptive [Exception] on any non-200 status.
-Map<String, dynamic> expectSuccessJson(
+Map<String, Object?> expectSuccessJson(
   Response<dynamic> response,
   String context,
 ) {
-  expectSuccessStatus(response, context, successCodes: const {200});
-  if (response.data is Map) {
-    return Map<String, dynamic>.from(response.data as Map);
-  }
-
-  throw Exception(
-    "$context failed: expected a JSON object but got "
-    "${_describeResponseShape(response.data)}.",
-  );
+  return expectSuccessObject(response, context).object();
 }
 
-List<dynamic> expectSuccessList(Response<dynamic> response, String context) {
-  expectSuccessStatus(response, context, successCodes: const {200});
-  if (response.data is List) {
-    return List<dynamic>.from(response.data as List);
-  }
+JsonCursor expectSuccessObject(
+  Response<dynamic> response,
+  String context, {
+  Set<int> successCodes = const {200},
+}) {
+  expectSuccessStatus(response, context, successCodes: successCodes);
+  final cursor = JsonCursor.root(endpoint: context, value: response.data);
+  cursor.object();
+  return cursor;
+}
 
-  throw Exception(
-    "$context failed: expected a JSON array but got "
-    "${_describeResponseShape(response.data)}.",
-  );
+List<Object?> expectSuccessList(Response<dynamic> response, String context) {
+  return expectSuccessArray(response, context).array();
+}
+
+JsonCursor expectSuccessArray(
+  Response<dynamic> response,
+  String context, {
+  Set<int> successCodes = const {200},
+}) {
+  expectSuccessStatus(response, context, successCodes: successCodes);
+  final cursor = JsonCursor.root(endpoint: context, value: response.data);
+  cursor.array();
+  return cursor;
 }
 
 void expectSuccessStatus(
@@ -370,21 +356,7 @@ void expectSuccessStatus(
     return;
   }
 
-  throw Exception(
-    "$context failed: (${response.statusCode}) "
-    "${response.data}",
+  throw ApiClientException(
+    "$context failed: (${response.statusCode}) ${response.data}",
   );
-}
-
-String _describeResponseShape(dynamic value) {
-  if (value == null) {
-    return "no body";
-  }
-  if (value is Map) {
-    return "a JSON object";
-  }
-  if (value is List) {
-    return "a JSON array";
-  }
-  return value.runtimeType.toString();
 }
