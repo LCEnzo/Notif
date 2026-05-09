@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/components/primitives.dart';
@@ -232,7 +234,7 @@ class _AccountPageState extends State<AccountPage> {
       );
       expectSuccessStatus(response, 'Delete account');
       if (mounted) {
-        auth.logout();
+        unawaited(auth.logout());
         context.go('/login');
       }
     } on Exception catch (error) {

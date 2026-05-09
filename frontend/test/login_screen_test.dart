@@ -48,10 +48,13 @@ void main() {
     final passwordEditable = tester.widget<EditableText>(
       find.byType(EditableText).at(1),
     );
+    final rememberMe = tester.widget<Checkbox>(find.byType(Checkbox));
 
     expect(usernameField.controller?.text, 'LCEnzo');
     expect(usernameEditable.autofillHints, contains(AutofillHints.username));
     expect(passwordEditable.autofillHints, contains(AutofillHints.password));
+    expect(find.text('Remember me'), findsOneWidget);
+    expect(rememberMe.value, isTrue);
 
     if (kDebugMode) {
       expect(find.text('Debug login'), findsOneWidget);

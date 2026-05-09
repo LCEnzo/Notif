@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:notif/commons/download_helper.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/client_events.dart';
+import 'package:notif/services/json_contracts.dart';
 
 class SystemEvent {
   const SystemEvent({
@@ -15,17 +19,15 @@ class SystemEvent {
     required this.details,
   });
 
-  factory SystemEvent.fromJson(Map<String, dynamic> json) {
+  factory SystemEvent.fromJson(JsonCursor json) {
     return SystemEvent(
-      id: json['id'] as int,
-      createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
-      level: json['level'] as String,
-      source: json['source'] as String,
-      kind: json['kind'] as String,
-      message: json['message'] as String,
-      details: json['details'] is Map
-          ? Map<String, dynamic>.from(json['details'] as Map)
-          : const {},
+      id: json.field('id').integer(),
+      createdAt: json.field('created_at').dateTime(),
+      level: json.field('level').string(allowEmpty: false),
+      source: json.field('source').string(allowEmpty: false),
+      kind: json.field('kind').string(allowEmpty: false),
+      message: json.field('message').string(),
+      details: json.optionalField('details')?.object() ?? const {},
     );
   }
   final int id;
@@ -34,25 +36,31 @@ class SystemEvent {
   final String source;
   final String kind;
   final String message;
-  final Map<String, dynamic> details;
+  final Map<String, Object?> details;
 }
 
 class CaddyLogEntry {
   const CaddyLogEntry({required this.data});
-  final Map<String, dynamic> data;
+  final Map<String, Object?> data;
 
   String get method {
     final request = data['request'];
-    if (request is Map && request['method'] is String) {
-      return request['method'] as String;
+    if (request is Map<Object?, Object?>) {
+      final method = request['method'];
+      if (method is String) {
+        return method.trim();
+      }
     }
     return '';
   }
 
   String get uri {
     final request = data['request'];
-    if (request is Map && request['uri'] is String) {
-      return request['uri'] as String;
+    if (request is Map<Object?, Object?>) {
+      final uri = request['uri'];
+      if (uri is String) {
+        return uri.trim();
+      }
     }
     return data['uri']?.toString() ?? '';
   }
@@ -60,8 +68,11 @@ class CaddyLogEntry {
   String get status => data['status']?.toString() ?? '';
   String get remoteIp {
     final request = data['request'];
-    if (request is Map && request['remote_ip'] is String) {
-      return request['remote_ip'] as String;
+    if (request is Map<Object?, Object?>) {
+      final remoteIp = request['remote_ip'];
+      if (remoteIp is String) {
+        return remoteIp.trim();
+      }
     }
     return '';
   }
@@ -120,19 +131,12 @@ class OpsService extends ChangeNotifier {
         settings: _settings,
         headers: _authHeaders(),
       );
-      final data = expectSuccessJson(response, 'Fetch system events');
-      final rawResults = data['results'];
-      if (rawResults is! List) {
-        throw Exception('Fetch system events failed: missing results list.');
-      }
+      final data = expectSuccessObject(response, 'Fetch system events');
       _events
         ..clear()
-        ..addAll(
-          rawResults.whereType<Map<String, dynamic>>().map(
-            (item) => SystemEvent.fromJson(Map<String, dynamic>.from(item)),
-          ),
-        );
+        ..addAll(data.field('results').items().map(SystemEvent.fromJson));
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/events/');
       _error = error.toString();
     } finally {
       _loading = false;
@@ -151,19 +155,17 @@ class OpsService extends ChangeNotifier {
         settings: _settings,
         headers: _authHeaders(),
       );
-      final data = expectSuccessJson(response, 'Fetch Caddy logs');
-      final rawResults = data['results'];
-      if (rawResults is! List) {
-        throw Exception('Fetch Caddy logs failed: missing results list.');
-      }
+      final data = expectSuccessObject(response, 'Fetch Caddy logs');
       _caddyLogs
         ..clear()
         ..addAll(
-          rawResults.whereType<Map<String, dynamic>>().map(
-            (item) => CaddyLogEntry(data: Map<String, dynamic>.from(item)),
-          ),
+          data
+              .field('results')
+              .items()
+              .map((item) => CaddyLogEntry(data: item.object())),
         );
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/logs/caddy/');
       _error = error.toString();
     } finally {
       _caddyLogsLoading = false;
@@ -197,6 +199,7 @@ class OpsService extends ChangeNotifier {
         mimeType: 'application/vnd.sqlite3',
       );
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/backup/sqlite/');
       _error = error.toString();
     } finally {
       _downloading = false;
@@ -210,4 +213,14 @@ class OpsService extends ChangeNotifier {
   bool get caddyLogsLoading => _caddyLogsLoading;
   bool get downloading => _downloading;
   String? get error => _error;
+
+  void _recordFailure(Object error, {required String endpoint}) {
+    unawaited(
+      reportClientFailure(
+        settings: _settings,
+        error: error,
+        endpoint: endpoint,
+      ),
+    );
+  }
 }

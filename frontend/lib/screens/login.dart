@@ -42,6 +42,7 @@ class _FormContentState extends State<_FormContent> {
   final TextEditingController passwordController = TextEditingController();
   final formKey = GlobalKey<FormState>();
   bool _isSubmitting = false;
+  bool _rememberMe = true;
 
   @override
   void initState() {
@@ -102,15 +103,7 @@ class _FormContentState extends State<_FormContent> {
           enabled: !_isSubmitting,
         ),
         const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: AuthInlineAction(
-            label: 'Forgot password?',
-            onPressed: _isSubmitting
-                ? () {}
-                : () => context.go('/forgot-password'),
-          ),
-        ),
+        _buildRememberMeAndRecoveryLink(isFramed: true),
         const SizedBox(height: 18),
         CustomButton(
           buttonText: 'Log in',
@@ -169,15 +162,7 @@ class _FormContentState extends State<_FormContent> {
           enabled: !_isSubmitting,
         ),
         const SizedBox(height: 10),
-        Align(
-          alignment: Alignment.centerRight,
-          child: AuthInlineAction(
-            label: 'Forgot password?',
-            onPressed: _isSubmitting
-                ? () {}
-                : () => context.go('/forgot-password'),
-          ),
-        ),
+        _buildRememberMeAndRecoveryLink(isFramed: false),
         const SizedBox(height: 16),
         CustomButton(
           buttonText: 'Log in',
@@ -235,9 +220,10 @@ class _FormContentState extends State<_FormContent> {
       }
       setState(() => _isSubmitting = true);
       try {
-        await authService.login(
+        await authService.loginWithRememberMe(
           usernameController.text.trim(),
           passwordController.text,
+          rememberMe: _rememberMe,
         );
         return true;
       } on Exception catch (e) {
@@ -259,6 +245,48 @@ class _FormContentState extends State<_FormContent> {
     }
 
     return false;
+  }
+
+  Widget _buildRememberMeAndRecoveryLink({required bool isFramed}) {
+    final text$ = Theme.of(context).textTheme;
+    final labelStyle = (text$.bodyMedium ?? const TextStyle()).copyWith(
+      color: isFramed ? null : Colors.white70,
+    );
+
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            onTap: _isSubmitting
+                ? null
+                : () => setState(() => _rememberMe = !_rememberMe),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: _rememberMe,
+                  onChanged: _isSubmitting
+                      ? null
+                      : (value) => setState(() {
+                          _rememberMe = value ?? true;
+                        }),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+                const SizedBox(width: 4),
+                Flexible(child: Text('Remember me', style: labelStyle)),
+              ],
+            ),
+          ),
+        ),
+        AuthInlineAction(
+          label: 'Forgot password?',
+          onPressed: _isSubmitting
+              ? () {}
+              : () => context.go('/forgot-password'),
+        ),
+      ],
+    );
   }
 
   Future<void> _loadUsername() async {

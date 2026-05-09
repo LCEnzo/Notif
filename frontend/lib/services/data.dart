@@ -1,8 +1,12 @@
-import 'package:dio/dio.dart';
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/client_events.dart';
+import 'package:notif/services/failures.dart';
+import 'package:notif/services/json_contracts.dart';
 
 const String _jsonContentType = 'application/json';
 const String generalSelectorStrategy = 'GeneralSelectorStrategy';
@@ -18,23 +22,23 @@ class StrategyRecord {
     required this.data,
   });
 
-  factory StrategyRecord.fromJson(Map<String, dynamic> json) {
+  factory StrategyRecord.fromJson(JsonCursor json) {
     return StrategyRecord(
-      id: _asInt(json['id']) ?? 0,
-      className: (json['strat_cls'] as String?)?.trim().isNotEmpty == true
-          ? json['strat_cls'] as String
-          : generalSelectorStrategy,
-      data: Map<String, dynamic>.from((json['data'] as Map?) ?? const {}),
+      id: json.field('id').integer(),
+      className:
+          json.optionalField('strat_cls')?.string(allowEmpty: false) ??
+          generalSelectorStrategy,
+      data: json.optionalField('data')?.object() ?? const {},
     );
   }
 
   final int id;
   final String className;
-  final Map<String, dynamic> data;
+  final Map<String, Object?> data;
 
   List<String> get selectors {
     final raw = data['selectors'];
-    if (raw is! List) {
+    if (raw is! List<Object?>) {
       return const [];
     }
 
@@ -58,17 +62,17 @@ class Link {
   });
 
   factory Link.fromJson(
-    Map<String, dynamic> json,
+    JsonCursor json,
     Map<int, StrategyRecord> strategies,
   ) {
-    final strategyId = _asInt(json['strategy']);
+    final strategyId = json.optionalField('strategy')?.nullableInteger();
     final strategy = strategyId != null ? strategies[strategyId] : null;
 
     return Link(
-      id: _asInt(json['id']) ?? 0,
-      name: (json['name'] as String?)?.trim() ?? '',
-      url: (json['url'] as String?)?.trim() ?? '',
-      lastScraped: _parseDateTime(json['last_scraped']),
+      id: json.field('id').integer(),
+      name: json.field('name').string(),
+      url: json.field('url').string(),
+      lastScraped: json.optionalField('last_scraped')?.nullableDateTime(),
       strategyId: strategyId,
       strategyClass: strategy?.className ?? 'UnknownStrategy',
       selectors: strategy?.selectors ?? const [],
@@ -119,19 +123,18 @@ class NotificationItem {
     this.readAt,
   });
 
-  factory NotificationItem.fromJson(Map<String, dynamic> json) {
-    final update = Map<String, dynamic>.from(
-      (json['update'] as Map?) ?? const {},
-    );
-
+  factory NotificationItem.fromJson(JsonCursor json) {
+    final update = json.field('update');
     return NotificationItem(
-      id: _asInt(json['id']) ?? 0,
-      title: (update['title'] as String?)?.trim() ?? 'Untitled update',
-      description: (update['description'] as String?)?.trim() ?? '',
-      itemUrl: (update['item_url'] as String?)?.trim() ?? '',
-      status: NotificationStatus.fromWire((json['status'] as String?)?.trim()),
-      createdAt: _parseDateTime(update['created_at']) ?? DateTime.now(),
-      readAt: _parseDateTime(json['read_at']),
+      id: json.field('id').integer(),
+      title: update.field('title').string(allowEmpty: false),
+      description: update.field('description').string(),
+      itemUrl: update.field('item_url').string(),
+      status: NotificationStatus.fromWire(
+        json.field('status').string(allowEmpty: false),
+      ),
+      createdAt: update.field('created_at').dateTime(),
+      readAt: json.optionalField('read_at')?.nullableDateTime(),
     );
   }
 
@@ -277,15 +280,11 @@ class LinkService extends ChangeNotifier {
         headers: _authHeaders(jwt),
       );
 
-      final body = expectSuccessJson(response, 'Fetch links');
-      final results = (body['results'] as List?) ?? const [];
-      final links = results
-          .map(
-            (item) => Link.fromJson(
-              Map<String, dynamic>.from(item as Map),
-              strategies,
-            ),
-          )
+      final body = expectSuccessObject(response, 'Fetch links');
+      final links = body
+          .field('results')
+          .items()
+          .map((item) => Link.fromJson(item, strategies))
           .toList(growable: false);
 
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
@@ -293,12 +292,13 @@ class LinkService extends ChangeNotifier {
       }
       _links = links;
       _currentPage = 1;
-      _hasMore = body['next'] != null;
-      _totalCount = (body['count'] as int?) ?? links.length;
+      _hasMore = body.hasNonNullField('next');
+      _totalCount = body.field('count').integer();
     } on Exception catch (error) {
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
         return;
       }
+      _recordFailure(error, endpoint: 'GET /monitoring/links/');
       _error = describeDataError(error);
     } finally {
       if (_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
@@ -338,15 +338,11 @@ class LinkService extends ChangeNotifier {
         headers: _authHeaders(jwt),
       );
 
-      final body = expectSuccessJson(response, 'Fetch links page $page');
-      final results = (body['results'] as List?) ?? const [];
-      final links = results
-          .map(
-            (item) => Link.fromJson(
-              Map<String, dynamic>.from(item as Map),
-              strategies,
-            ),
-          )
+      final body = expectSuccessObject(response, 'Fetch links page $page');
+      final links = body
+          .field('results')
+          .items()
+          .map((item) => Link.fromJson(item, strategies))
           .toList(growable: false);
 
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
@@ -354,12 +350,13 @@ class LinkService extends ChangeNotifier {
       }
       _links = links;
       _currentPage = page;
-      _hasMore = body['next'] != null;
-      _totalCount = (body['count'] as int?) ?? links.length;
+      _hasMore = body.hasNonNullField('next');
+      _totalCount = body.field('count').integer();
     } on Exception catch (error) {
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
         return;
       }
+      _recordFailure(error, endpoint: 'GET /monitoring/links/');
       _error = describeDataError(error);
     } finally {
       if (_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
@@ -420,6 +417,7 @@ class LinkService extends ChangeNotifier {
       return true;
     } on Exception catch (error) {
       _error = describeDataError(error);
+      _recordFailure(error, endpoint: 'POST /monitoring/links/');
       if (!linkCreated && strategyResolution?.created == true) {
         await _deleteStrategyIfUnused(jwt, strategyResolution!.id);
       }
@@ -486,6 +484,7 @@ class LinkService extends ChangeNotifier {
       return true;
     } on Exception catch (error) {
       _error = describeDataError(error);
+      _recordFailure(error, endpoint: 'PATCH /monitoring/links/{id}/');
       if (!linkUpdated && strategyResolution?.created == true) {
         await _deleteStrategyIfUnused(jwt, strategyResolution!.id);
       }
@@ -528,6 +527,7 @@ class LinkService extends ChangeNotifier {
       return true;
     } on Exception catch (error) {
       _error = describeDataError(error);
+      _recordFailure(error, endpoint: 'DELETE /monitoring/links/{id}/');
       return false;
     } finally {
       _deletingIds.remove(link.id);
@@ -556,14 +556,15 @@ class LinkService extends ChangeNotifier {
         '/monitoring/trigger-scrape/',
         settings: _settings,
         headers: _authHeaders(jwt),
-        body: linkId == null ? const <String, dynamic>{} : {'link_id': linkId},
+        body: linkId == null ? const <String, Object?>{} : {'link_id': linkId},
       );
 
-      final data = expectSuccessJson(response, 'Trigger scrape');
+      final data = expectSuccessObject(response, 'Trigger scrape');
       await fetchLinks();
       return _formatScrapeResult(data, linkId: linkId);
     } on Exception catch (error) {
       _error = describeDataError(error);
+      _recordFailure(error, endpoint: 'POST /monitoring/trigger-scrape/');
       return null;
     } finally {
       _scrapingAll = false;
@@ -597,8 +598,13 @@ class LinkService extends ChangeNotifier {
       'Create strategy',
       successCodes: const {200, 201},
     );
-    final json = Map<String, dynamic>.from(response.data as Map);
-    final strategy = StrategyRecord.fromJson(json);
+    final strategy = StrategyRecord.fromJson(
+      expectSuccessObject(
+        response,
+        'Create strategy',
+        successCodes: const {200, 201},
+      ),
+    );
     _strategies = Map<int, StrategyRecord>.from(_strategies)
       ..[strategy.id] = strategy;
     _strategiesFetchedAt = DateTime.now();
@@ -634,7 +640,7 @@ class LinkService extends ChangeNotifier {
 
   StrategyRecord? _findMatchingStrategy({
     required String strategyClass,
-    required Map<String, dynamic> strategyData,
+    required Map<String, Object?> strategyData,
   }) {
     for (final strategy in _strategies.values) {
       if (strategy.className != strategyClass) {
@@ -718,12 +724,10 @@ class LinkService extends ChangeNotifier {
       headers: _authHeaders(jwt),
     );
 
-    final strategies = expectSuccessList(response, 'Fetch strategies')
-        .map(
-          (item) =>
-              StrategyRecord.fromJson(Map<String, dynamic>.from(item as Map)),
-        )
-        .toList(growable: false);
+    final strategies = expectSuccessArray(
+      response,
+      'Fetch strategies',
+    ).items().map(StrategyRecord.fromJson).toList(growable: false);
 
     final nextStrategies = <int, StrategyRecord>{
       for (final strategy in strategies) strategy.id: strategy,
@@ -770,8 +774,9 @@ class LinkService extends ChangeNotifier {
         headers: _authHeaders(jwt),
       );
 
-      final choices = expectSuccessList(response, 'Fetch strategy choices')
-          .map((value) => value.toString().trim())
+      final choices = expectSuccessArray(response, 'Fetch strategy choices')
+          .items()
+          .map((value) => value.string(allowEmpty: false))
           .where((value) => value.isNotEmpty)
           .toList(growable: false);
 
@@ -853,6 +858,16 @@ class LinkService extends ChangeNotifier {
     _updatingIds.clear();
     _deletingIds.clear();
     notifyListeners();
+  }
+
+  void _recordFailure(Object error, {required String endpoint}) {
+    unawaited(
+      reportClientFailure(
+        settings: _settings,
+        error: error,
+        endpoint: endpoint,
+      ),
+    );
   }
 }
 
@@ -938,14 +953,11 @@ class NotificationService extends ChangeNotifier {
         headers: _authHeaders(jwt),
       );
 
-      final body = expectSuccessJson(response, 'Fetch notifications');
-      final results = (body['results'] as List?) ?? const [];
-      final notifications = results
-          .map(
-            (item) => NotificationItem.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            ),
-          )
+      final body = expectSuccessObject(response, 'Fetch notifications');
+      final notifications = body
+          .field('results')
+          .items()
+          .map(NotificationItem.fromJson)
           .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
@@ -953,13 +965,14 @@ class NotificationService extends ChangeNotifier {
       }
       _notifications = notifications;
       _currentPage = 1;
-      _hasMore = body['next'] != null;
-      _totalCount = (body['count'] as int?) ?? 0;
-      _totalUnreadCount = (body['unread_count'] as int?) ?? 0;
+      _hasMore = body.hasNonNullField('next');
+      _totalCount = body.field('count').integer();
+      _totalUnreadCount = body.field('unread_count').integer();
     } on Exception catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
       }
+      _recordFailure(error, endpoint: 'GET /monitoring/notifications/');
       _error = describeDataError(error);
     } finally {
       if (_fetchEpoch == fetchEpoch) {
@@ -994,17 +1007,14 @@ class NotificationService extends ChangeNotifier {
         headers: _authHeaders(jwt),
       );
 
-      final body = expectSuccessJson(
+      final body = expectSuccessObject(
         response,
         'Fetch notifications page $page',
       );
-      final results = (body['results'] as List?) ?? const [];
-      final notifications = results
-          .map(
-            (item) => NotificationItem.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            ),
-          )
+      final notifications = body
+          .field('results')
+          .items()
+          .map(NotificationItem.fromJson)
           .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
@@ -1012,13 +1022,15 @@ class NotificationService extends ChangeNotifier {
       }
       _notifications = notifications;
       _currentPage = page;
-      _hasMore = body['next'] != null;
-      _totalCount = (body['count'] as int?) ?? 0;
-      _totalUnreadCount = (body['unread_count'] as int?) ?? _totalUnreadCount;
+      _hasMore = body.hasNonNullField('next');
+      _totalCount = body.field('count').integer();
+      _totalUnreadCount =
+          body.optionalField('unread_count')?.integer() ?? _totalUnreadCount;
     } on Exception catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
       }
+      _recordFailure(error, endpoint: 'GET /monitoring/notifications/');
       _error = describeDataError(error);
     } finally {
       if (_fetchEpoch == fetchEpoch) {
@@ -1086,6 +1098,7 @@ class NotificationService extends ChangeNotifier {
       return true;
     } on Exception catch (error) {
       _error = describeDataError(error);
+      _recordFailure(error, endpoint: 'PATCH /monitoring/notifications/{id}/');
       return false;
     } finally {
       _markingReadIds.remove(id);
@@ -1119,7 +1132,7 @@ class NotificationService extends ChangeNotifier {
         '/monitoring/notifications/mark_all_read/',
         settings: _settings,
         headers: _authHeaders(jwt),
-        body: const <String, dynamic>{},
+        body: const <String, Object?>{},
       );
 
       expectSuccessStatus(response, 'Mark all notifications as read');
@@ -1137,6 +1150,10 @@ class NotificationService extends ChangeNotifier {
       _totalUnreadCount = 0;
     } on Exception catch (error) {
       _error = describeDataError(error);
+      _recordFailure(
+        error,
+        endpoint: 'POST /monitoring/notifications/mark_all_read/',
+      );
     } finally {
       _markingAllRead = false;
       notifyListeners();
@@ -1171,17 +1188,27 @@ class NotificationService extends ChangeNotifier {
     _markingReadIds.clear();
     notifyListeners();
   }
+
+  void _recordFailure(Object error, {required String endpoint}) {
+    unawaited(
+      reportClientFailure(
+        settings: _settings,
+        error: error,
+        endpoint: endpoint,
+      ),
+    );
+  }
 }
 
-Map<String, dynamic> buildStrategyData({
+Map<String, Object?> buildStrategyData({
   required String strategyClass,
   required String selectorsText,
 }) {
   if (strategyClass == generalSelectorStrategy) {
-    return <String, dynamic>{'selectors': normalizeSelectors(selectorsText)};
+    return <String, Object?>{'selectors': normalizeSelectors(selectorsText)};
   }
 
-  return <String, dynamic>{};
+  return <String, Object?>{};
 }
 
 List<String> normalizeSelectors(String selectorsText) {
@@ -1218,22 +1245,7 @@ String formatStrategyClassName(String raw) {
 }
 
 String describeDataError(Object error) {
-  if (error is DioException) {
-    final response = error.response;
-    final extracted = _extractErrorMessage(response?.data);
-    if (extracted != null && extracted.isNotEmpty) {
-      return extracted;
-    }
-
-    if (response?.statusCode != null) {
-      return 'Request failed with status ${response!.statusCode}.';
-    }
-
-    return error.message ?? 'The request could not be completed.';
-  }
-
-  final text = error.toString();
-  return text.startsWith('Exception: ') ? text.substring(11) : text;
+  return AppFailure.from(error).userMessage;
 }
 
 Map<String, String> _authHeaders(JWT jwt) {
@@ -1243,13 +1255,6 @@ Map<String, String> _authHeaders(JWT jwt) {
   };
 }
 
-DateTime? _parseDateTime(dynamic value) {
-  if (value is! String || value.trim().isEmpty) {
-    return null;
-  }
-  return DateTime.tryParse(value)?.toLocal();
-}
-
 int _compareNotifications(NotificationItem left, NotificationItem right) {
   if (left.isUnread != right.isUnread) {
     return left.isUnread ? -1 : 1;
@@ -1257,86 +1262,29 @@ int _compareNotifications(NotificationItem left, NotificationItem right) {
   return right.createdAt.compareTo(left.createdAt);
 }
 
-int? _asInt(dynamic value) {
-  if (value is int) {
-    return value;
-  }
-  if (value is String) {
-    return int.tryParse(value);
-  }
-  return null;
-}
-
-String? _extractErrorMessage(dynamic value) {
-  if (value == null) {
-    return null;
-  }
-
-  if (value is String) {
-    final trimmed = value.trim();
-    return trimmed.isEmpty ? null : trimmed;
-  }
-
-  if (value is List) {
-    final parts = value
-        .map(_extractErrorMessage)
-        .whereType<String>()
-        .where((item) => item.isNotEmpty)
-        .toList(growable: false);
-    if (parts.isEmpty) {
-      return null;
-    }
-    return parts.join('\n');
-  }
-
-  if (value is Map) {
-    final detail = value['detail'] ?? value['message'] ?? value['error'];
-    final direct = _extractErrorMessage(detail);
-    if (direct != null && direct.isNotEmpty) {
-      return direct;
-    }
-
-    final parts = <String>[];
-    for (final entry in value.entries) {
-      final message = _extractErrorMessage(entry.value);
-      if (message != null && message.isNotEmpty) {
-        parts.add('${entry.key}: $message');
-      }
-    }
-    if (parts.isEmpty) {
-      return null;
-    }
-    return parts.join('\n');
-  }
-
-  return null;
-}
-
-String _formatScrapeResult(Map<String, dynamic> data, {required int? linkId}) {
+String _formatScrapeResult(JsonCursor data, {required int? linkId}) {
   if (linkId != null) {
-    final status = data['status'] as String?;
+    final status = data.field('status').string(allowEmpty: false);
     if (status == 'ok') {
-      final updatesFound = _asInt(data['updates_found']) ?? 0;
+      final updatesFound = data.optionalField('updates_found')?.integer() ?? 0;
       return updatesFound == 0
           ? 'Scrape finished. No new updates were found.'
           : 'Scrape finished. Found $updatesFound new '
                 '${updatesFound == 1 ? 'update' : 'updates'}.';
     }
-    return _extractErrorMessage(data) ?? 'Scrape failed.';
+    return extractErrorMessage(data.object()) ?? 'Scrape failed.';
   }
 
   var okCount = 0;
   var totalUpdates = 0;
   var failedCount = 0;
 
-  for (final value in data.values) {
-    if (value is! Map) {
-      continue;
-    }
-    final status = value['status'] as String?;
+  for (final key in data.object().keys) {
+    final value = data.field(key);
+    final status = value.optionalField('status')?.string() ?? '';
     if (status == 'ok') {
       okCount += 1;
-      totalUpdates += _asInt(value['count']) ?? 0;
+      totalUpdates += value.optionalField('count')?.integer() ?? 0;
     } else {
       failedCount += 1;
     }
