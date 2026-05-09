@@ -263,3 +263,107 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 			call_command("run_due_tasks", "--max-links", "0", "--delay", "0")
 
 		backfill.assert_not_called()
+
+
+class SystemEventHandlerTestCase(TestCase):
+	def test_emit_creates_system_event(self):
+		from ops.logging import SystemEventHandler
+		import logging
+
+		handler = SystemEventHandler()
+		record = logging.LogRecord(
+			name="test.logger",
+			level=logging.WARNING,
+			pathname="/app/test.py",
+			lineno=42,
+			msg="disk running low: 92%%",
+			args=(),
+			exc_info=None,
+		)
+		handler.emit(record)
+
+		event = SystemEvent.objects.get(kind="log")
+		self.assertEqual(event.level, "warning")
+		self.assertEqual(event.source, "test.logger")
+		self.assertIn("disk running low", event.message)
+		self.assertEqual(event.details["pathname"], "/app/test.py")
+		self.assertEqual(event.details["lineno"], 42)
+
+	def test_emit_truncates_long_source(self):
+		from ops.logging import SystemEventHandler
+		import logging
+
+		handler = SystemEventHandler()
+		record = logging.LogRecord(
+			name="x" * 200,
+			level=logging.ERROR,
+			pathname="/app/test.py",
+			lineno=1,
+			msg="test",
+			args=(),
+			exc_info=None,
+		)
+		handler.emit(record)
+
+		event = SystemEvent.objects.get(kind="log")
+		self.assertEqual(len(event.source), 120)
+
+	def test_emit_truncates_long_message(self):
+		from ops.logging import SystemEventHandler
+		import logging
+
+		handler = SystemEventHandler()
+		record = logging.LogRecord(
+			name="test",
+			level=logging.INFO,
+			pathname="/app/test.py",
+			lineno=1,
+			msg="x" * 2000,
+			args=(),
+			exc_info=None,
+		)
+		handler.emit(record)
+
+		event = SystemEvent.objects.get(kind="log")
+		self.assertEqual(len(event.message), 1000)
+
+	def test_emit_survives_db_error(self):
+		from ops.logging import SystemEventHandler
+		import logging
+		from django.db import OperationalError
+
+		handler = SystemEventHandler()
+		record = logging.LogRecord(
+			name="test",
+			level=logging.WARNING,
+			pathname="/app/test.py",
+			lineno=1,
+			msg="test",
+			args=(),
+			exc_info=None,
+		)
+
+		with patch("ops.models.SystemEvent.objects.create") as mock_create:
+			mock_create.side_effect = OperationalError("table missing")
+			# Should not raise
+			handler.emit(record)
+
+	def test_emit_survives_generic_exception(self):
+		from ops.logging import SystemEventHandler
+		import logging
+
+		handler = SystemEventHandler()
+		record = logging.LogRecord(
+			name="test",
+			level=logging.WARNING,
+			pathname="/app/test.py",
+			lineno=1,
+			msg="test",
+			args=(),
+			exc_info=None,
+		)
+
+		with patch("ops.models.SystemEvent.objects.create") as mock_create:
+			mock_create.side_effect = RuntimeError("something broke")
+			# Should not raise — calls handleError internally
+			handler.emit(record)
