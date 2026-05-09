@@ -1606,6 +1606,17 @@
             "post": {
                 "operationId": "token_refresh_create",
                 "description": "Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.\n\nSubclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-Refresh-Request",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Must be set to 1 for refresh requests.",
+                        "required": true
+                    }
+                ],
                 "tags": [
                     "token"
                 ],

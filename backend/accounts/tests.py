@@ -183,7 +183,7 @@ class TokenCookieViewTestCase(TestCase):
 		self.assertEqual(cookie["path"], settings.JWT_REFRESH_COOKIE_PATH)
 		self.assertEqual(cookie["samesite"], settings.JWT_REFRESH_COOKIE_SAMESITE)
 		self.assertEqual(cookie["httponly"], True)
-		self.assertGreater(int(cookie["max-age"]), 0)
+		self.assertEqual(int(cookie["max-age"]), 72 * 60 * 60)
 		self.assertEqual(response["Cache-Control"], "no-store")
 
 	def test_login_without_remember_me_clears_existing_refresh_cookie(self):
@@ -269,6 +269,12 @@ class TokenCookieViewTestCase(TestCase):
 	def test_refresh_session_cleanup_deletes_expired_and_revoked_families(self):
 		refresh_lifetime = cast(timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
 		active = RefreshSessionFamily.objects.create(user=self.user)
+		active_old_used = RefreshTokenRecord.objects.create(
+			family=active,
+			jti="active-old-used",
+			used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
+		)
+		active_current = RefreshTokenRecord.objects.create(family=active, jti="active-current")
 		expired = RefreshSessionFamily.objects.create(
 			user=self.user,
 			last_used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
@@ -278,16 +284,18 @@ class TokenCookieViewTestCase(TestCase):
 			revoked_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
 			revoked_reason=RefreshSessionFamily.RevokeReason.LOGOUT,
 		)
-		RefreshTokenRecord.objects.create(family=active, jti="active")
 		RefreshTokenRecord.objects.create(family=expired, jti="expired")
 		RefreshTokenRecord.objects.create(family=revoked, jti="revoked")
 
 		deleted = cleanup_refresh_sessions()
 
-		self.assertEqual(deleted, 2)
+		self.assertEqual(deleted.families_deleted, 2)
+		self.assertEqual(deleted.token_records_deleted, 1)
 		self.assertTrue(RefreshSessionFamily.objects.filter(pk=active.pk).exists())
 		self.assertFalse(RefreshSessionFamily.objects.filter(pk=expired.pk).exists())
 		self.assertFalse(RefreshSessionFamily.objects.filter(pk=revoked.pk).exists())
+		self.assertFalse(RefreshTokenRecord.objects.filter(pk=active_old_used.pk).exists())
+		self.assertTrue(RefreshTokenRecord.objects.filter(pk=active_current.pk).exists())
 
 
 class PasswordResetTestCase(TestCase):

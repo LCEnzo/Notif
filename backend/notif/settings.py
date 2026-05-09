@@ -292,7 +292,7 @@ if not DEBUG:
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
 SIMPLE_JWT = {
 	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20 if not DEBUG else 48 * 60),
-	"REFRESH_TOKEN_LIFETIME": timedelta(hours=30 if not DEBUG else 7 * 24),
+	"REFRESH_TOKEN_LIFETIME": timedelta(hours=72),
 	"LEEWAY": 0,
 	"AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
 	"AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",

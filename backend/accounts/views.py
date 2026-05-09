@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -179,6 +179,15 @@ class ThrottledTokenRefreshView(TokenThrottleMixin, APIView):
 	throttle_scope = "token_refresh"
 
 	@extend_schema(
+		parameters=[
+			OpenApiParameter(
+				name="X-Refresh-Request",
+				type=str,
+				location=OpenApiParameter.HEADER,
+				required=True,
+				description="Must be set to 1 for refresh requests.",
+			)
+		],
 		request=TokenRefreshRequestSerializer,
 		responses={status.HTTP_200_OK: TokenAccessResponseSerializer},
 	)

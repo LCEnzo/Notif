@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/json_contracts.dart';
+import 'package:notif/services/refresh_cookie_store.dart';
 
 const String builtinApiUrl = String.fromEnvironment(
   'API_URL',
@@ -212,10 +213,14 @@ Future<Response<dynamic>> _performRequest(
   ResponseType? responseType,
 }) async {
   final requestUri = _buildRequestUri(baseUrl, path);
-  final requestHeaders = _headersWithLatestAccessToken(headers);
+  final requestHeaders = await _headersWithLatestAccessToken(
+    headers,
+    requestUri: requestUri,
+    path: path,
+  );
 
   try {
-    return await _dio.requestUri<dynamic>(
+    final response = await _dio.requestUri<dynamic>(
       requestUri,
       data: body,
       options: Options(
@@ -225,7 +230,10 @@ Future<Response<dynamic>> _performRequest(
         extra: const {'withCredentials': true},
       ),
     );
+    await _rememberNativeRefreshCookieFromResponse(requestUri, response);
+    return response;
   } on DioException catch (error) {
+    await _rememberNativeRefreshCookieFromResponse(requestUri, error.response);
     if (allowAuthRetry && await _shouldRetryAfterUnauthorized(error, headers)) {
       return _performRequest(
         method,
@@ -241,22 +249,38 @@ Future<Response<dynamic>> _performRequest(
   }
 }
 
-Map<String, String> _headersWithLatestAccessToken(Map<String, String> headers) {
+Future<void> _rememberNativeRefreshCookieFromResponse(
+  Uri responseUri,
+  Response<dynamic>? response,
+) async {
+  await rememberNativeRefreshCookie(
+    responseUri,
+    response?.headers.map['set-cookie'] ??
+        response?.headers.map['Set-Cookie'] ??
+        const [],
+  );
+}
+
+Future<Map<String, String>> _headersWithLatestAccessToken(
+  Map<String, String> headers, {
+  required Uri requestUri,
+  required String path,
+}) async {
+  final updated = Map<String, String>.from(headers);
   final currentAuthorization = headers['Authorization'];
-  if (currentAuthorization == null ||
-      !currentAuthorization.startsWith('Bearer ')) {
-    return headers;
+  if (currentAuthorization != null &&
+      currentAuthorization.startsWith('Bearer ')) {
+    final latestAccessToken = _accessTokenReader?.call();
+    if (latestAccessToken != null && latestAccessToken.isNotEmpty) {
+      updated['Authorization'] = 'Bearer $latestAccessToken';
+    }
   }
 
-  final latestAccessToken = _accessTokenReader?.call();
-  if (latestAccessToken == null || latestAccessToken.isEmpty) {
-    return headers;
+  final refreshCookie = await nativeRefreshCookieHeader(requestUri, path);
+  if (refreshCookie != null && refreshCookie.isNotEmpty) {
+    updated['Cookie'] = refreshCookie;
   }
-
-  return <String, String>{
-    ...headers,
-    'Authorization': 'Bearer $latestAccessToken',
-  };
+  return updated;
 }
 
 Future<bool> _shouldRetryAfterUnauthorized(

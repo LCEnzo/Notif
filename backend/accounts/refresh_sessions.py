@@ -32,6 +32,12 @@ class RotatedRefreshTokens:
 	refresh: str
 
 
+@dataclass(frozen=True)
+class RefreshSessionCleanupResult:
+	families_deleted: int
+	token_records_deleted: int
+
+
 class RefreshSessionError(Exception):
 	"""The refresh token cannot be used for an authenticated session."""
 
@@ -93,12 +99,11 @@ def rotate_refresh_token(raw_refresh_token: str) -> RotatedRefreshTokens:
 			rejection = RefreshSessionError("Refresh token is not part of this session family.")
 			rejection.__cause__ = exc
 		else:
-			if record.used_at is not None:
+			updated = RefreshTokenRecord.objects.filter(pk=record.pk, used_at__isnull=True).update(used_at=now)
+			if updated == 0:
 				family.revoke(RefreshSessionFamily.RevokeReason.REUSE)
 				rejection = RefreshTokenReuseError("Refresh token has already been used.")
 			else:
-				record.used_at = now
-				record.save(update_fields=["used_at"])
 				family.last_used_at = now
 				family.save(update_fields=["last_used_at"])
 
@@ -134,15 +139,22 @@ def revoke_refresh_family_for_token(raw_refresh_token: str, *, reason: str) -> b
 	return True
 
 
-def cleanup_refresh_sessions(*, now: datetime | None = None) -> int:
+def cleanup_refresh_sessions(*, now: datetime | None = None) -> RefreshSessionCleanupResult:
 	now = now or timezone.now()
 	cutoff = now - _refresh_token_lifetime()
-	queryset = RefreshSessionFamily.objects.filter(
+	expired_families = RefreshSessionFamily.objects.filter(
 		Q(revoked_at__isnull=False, revoked_at__lt=cutoff) | Q(revoked_at__isnull=True, last_used_at__lt=cutoff)
 	)
-	count = queryset.count()
-	queryset.delete()
-	return count
+	families_deleted = expired_families.count()
+	expired_families.delete()
+	token_records_deleted, _ = RefreshTokenRecord.objects.filter(
+		used_at__isnull=False,
+		used_at__lt=cutoff,
+	).delete()
+	return RefreshSessionCleanupResult(
+		families_deleted=families_deleted,
+		token_records_deleted=token_records_deleted,
+	)
 
 
 def refresh_lifetime_seconds() -> int:
