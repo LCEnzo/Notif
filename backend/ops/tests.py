@@ -3,9 +3,12 @@ import sqlite3
 from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
+from django.core.cache import cache
 from django.core.management import call_command
 from django.http import StreamingHttpResponse
 from django.test import TestCase
@@ -13,7 +16,9 @@ from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
+from rest_framework.throttling import ScopedRateThrottle
 
+from accounts.models import RefreshSessionFamily
 from accounts.models.password_reset import (
 	PASSWORD_RESET_CODE_MAX_ATTEMPTS,
 	PasswordResetCode,
@@ -28,6 +33,10 @@ pytestmark = pytest.mark.timeout(30)
 
 
 class OpsApiTestCase(SetupMixin, TestCase):
+	def setUp(self):
+		super().setUp()
+		cache.clear()
+
 	def test_events_require_staff_user(self):
 		SystemEvent.objects.create(level=SystemEvent.Level.INFO, source="test", kind="log", message="visible")
 		client = login_client(APIClient(), self.regular_user.get_username())
@@ -51,6 +60,13 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["results"][0]["message"], "scrape warning")
 		self.assertEqual(response.data["results"][0]["details"], {"link_id": 1})
+
+	def test_openapi_schema_generates(self):
+		response = APIClient().get(reverse("schema"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("openapi", response.data)
+		self.assertIn("/api/v1/client-events/", response.data["paths"])
 
 	def test_caddy_logs_require_staff_user(self):
 		client = login_client(APIClient(), self.regular_user.get_username())
@@ -154,6 +170,49 @@ class OpsApiTestCase(SetupMixin, TestCase):
 
 		self.assertEqual(rows, [("ok",)])
 
+	def test_client_event_endpoint_records_scrubbed_frontend_event(self):
+		response = APIClient().post(
+			reverse("client-events"),
+			{
+				"category": "contract_violation",
+				"route": "/home?token=secret",
+				"endpoint": "GET /monitoring/links/",
+				"contract_path": "$.results[0].id",
+				"expected": "integer",
+				"actual": "string",
+				"message": "Bearer abc.def user@example.com notif_refresh=secret",
+				"stack": "password=hunter2",
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 202)
+		event = SystemEvent.objects.get(source="frontend")
+		self.assertEqual(event.kind, "client-contract_violation")
+		self.assertNotIn("abc.def", event.message)
+		self.assertNotIn("user@example.com", event.message)
+		self.assertNotIn("secret", event.message)
+		self.assertEqual(event.details["contract_path"], "$.results[0].id")
+
+	def test_client_event_endpoint_rejects_unknown_category(self):
+		response = APIClient().post(
+			reverse("client-events"),
+			{"category": "bogus", "message": "bad"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
+
+	def test_client_event_endpoint_is_throttled(self):
+		client = APIClient()
+		payload = {"category": "unexpected_failure", "message": "one"}
+
+		with patch.object(ScopedRateThrottle, "THROTTLE_RATES", {"client_events": "2/min"}):
+			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 202)
+			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 202)
+			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 429)
+
 
 class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 	def test_command_cleans_expired_and_locked_password_reset_codes(self):
@@ -170,6 +229,19 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 
 		self.assertEqual(PasswordResetCode.objects.count(), 0)
 		self.assertTrue(SystemEvent.objects.filter(kind="maintenance").exists())
+
+	def test_command_cleans_expired_refresh_sessions(self):
+		refresh_lifetime = cast(timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
+		expired = RefreshSessionFamily.objects.create(
+			user=self.regular_user,
+			last_used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
+		)
+
+		call_command("run_due_tasks", "--max-links", "0")
+
+		self.assertFalse(RefreshSessionFamily.objects.filter(pk=expired.pk).exists())
+		event = SystemEvent.objects.filter(kind="maintenance").latest("id")
+		self.assertEqual(event.details["refresh_session_families_deleted"], 1)
 
 	def test_command_skips_when_lock_is_held(self):
 		MaintenanceLock.objects.create(key="run_due_tasks", acquired_at=timezone.now())

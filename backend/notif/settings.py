@@ -41,6 +41,7 @@ DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]
 CORS_ALLOW_ALL_ORIGINS = settings.DEBUG
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
+CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in settings.CSRF_TRUSTED_ORIGINS.split(",") if origin.strip()]
 
 
@@ -56,6 +57,7 @@ INSTALLED_APPS = [
 	"corsheaders",
 	"rest_framework",
 	"rest_framework_simplejwt",
+	"drf_spectacular",
 	"accounts",
 	"monitoring",
 	"ops",
@@ -176,6 +178,8 @@ _REST_THROTTLE_RATES = {
 	"register": "3/min",
 	"token_refresh": "10/min",
 	"token_verify": "20/min",
+	"token_logout": "20/min",
+	"client_events": "30/min",
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
 }
@@ -298,6 +302,11 @@ SIMPLE_JWT = {
 	"SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
 	"SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
 }
+
+JWT_REFRESH_COOKIE_NAME = "notif_refresh"
+JWT_REFRESH_COOKIE_PATH = "/api/v1/token/"
+JWT_REFRESH_COOKIE_SAMESITE = "Lax"
+JWT_REFRESH_COOKIE_SECURE = not DEBUG
 
 # Email
 EMAIL_BACKEND = settings.EMAIL_BACKEND or (

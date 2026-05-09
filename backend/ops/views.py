@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import sqlite3
 import tempfile
 from collections import deque
@@ -15,16 +16,25 @@ from django.db import connection
 from django.db.models.query import QuerySet
 from django.http import HttpResponse, StreamingHttpResponse
 from django.utils import timezone
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from ops.models import SystemEvent
-from ops.serializers import SystemEventSerializer
+from ops.serializers import (
+	CaddyAccessLogResponseSerializer,
+	ClientEventAcceptedSerializer,
+	ClientEventSerializer,
+	SystemEventSerializer,
+)
 
 if TYPE_CHECKING:
 	_SystemEventReadOnlyModelViewSet = ReadOnlyModelViewSet[SystemEvent]
@@ -38,6 +48,13 @@ _CADDY_LOG_DEFAULT_LINES = 50
 # memory stays bounded by the deque(maxlen=limit), not by this window.
 _CADDY_LOG_MAX_BYTES = 32 * 1024 * 1024
 _BACKUP_STREAM_CHUNK = 64 * 1024
+_CLIENT_EVENT_SOURCE = "frontend"
+_SECRET_PATTERNS = [
+	re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+	re.compile(r"(notif_refresh=)[^;\s]+", re.IGNORECASE),
+	re.compile(r"([?&](?:access|refresh|token|password)=)[^&\s]+", re.IGNORECASE),
+	re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
+]
 
 
 class IsSuperUser(IsAdminUser):
@@ -77,6 +94,48 @@ class SystemEventViewSet(_SystemEventReadOnlyModelViewSet):
 		return queryset
 
 
+class ClientEventView(APIView):
+	permission_classes = [AllowAny]
+	throttle_classes = [ScopedRateThrottle]
+	throttle_scope = "client_events"
+
+	@extend_schema(
+		request=ClientEventSerializer,
+		responses={202: ClientEventAcceptedSerializer},
+	)
+	def post(self, request: Request) -> Response:
+		serializer = ClientEventSerializer(data=request.data)
+		serializer.is_valid(raise_exception=True)
+		event = serializer.validated_data
+		category = str(event["category"])
+		message = _scrub_client_text(str(event.get("message", "")), max_length=500)
+		if not message:
+			message = f"Frontend reported {category}."
+
+		SystemEvent.objects.create(
+			level=SystemEvent.Level.WARNING,
+			source=_CLIENT_EVENT_SOURCE,
+			kind=f"client-{category}"[:80],
+			message=message,
+			details={
+				"category": category,
+				"route": _scrub_client_text(str(event.get("route", "")), max_length=200),
+				"endpoint": _scrub_client_text(str(event.get("endpoint", "")), max_length=200),
+				"request_id": _scrub_client_text(str(event.get("request_id", "")), max_length=120),
+				"contract_path": _scrub_client_text(str(event.get("contract_path", "")), max_length=200),
+				"expected": _scrub_client_text(str(event.get("expected", "")), max_length=500),
+				"actual": _scrub_client_text(str(event.get("actual", "")), max_length=500),
+				"app_version": _scrub_client_text(str(event.get("app_version", "")), max_length=60),
+				"git_hash": _scrub_client_text(str(event.get("git_hash", "")), max_length=80),
+				"browser": _scrub_client_text(str(event.get("browser", "")), max_length=200),
+				"stack": _scrub_client_text(str(event.get("stack", "")), max_length=2000),
+				"remote_ip": _client_ip(request),
+			},
+		)
+		return Response({"status": "accepted"}, status=202)
+
+
+@extend_schema(responses={200: CaddyAccessLogResponseSerializer})
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def caddy_access_logs(request: Request) -> Response:
@@ -97,6 +156,7 @@ def caddy_access_logs(request: Request) -> Response:
 	return Response({"configured_path": str(log_path), "results": entries})
 
 
+@extend_schema(responses={200: OpenApiResponse(response=OpenApiTypes.BINARY, description="SQLite backup file")})
 @api_view(["GET"])
 @permission_classes([IsSuperUser])
 def download_sqlite_backup(request: Request) -> HttpResponse | Response | StreamingHttpResponse:
@@ -215,6 +275,13 @@ def _client_ip(request: Request) -> str:
 	if forwarded:
 		return forwarded.split(",")[0].strip()
 	return request.META.get("REMOTE_ADDR", "")
+
+
+def _scrub_client_text(value: str, *, max_length: int) -> str:
+	text = value.strip()
+	for pattern in _SECRET_PATTERNS:
+		text = pattern.sub(lambda match: f"{match.group(1)}[redacted]" if match.lastindex else "[redacted]", text)
+	return text[:max_length]
 
 
 def _read_caddy_log_tail(log_path: Path, limit: int) -> list[dict[str, Any]]:

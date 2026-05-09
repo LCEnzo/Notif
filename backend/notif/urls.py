@@ -21,10 +21,12 @@ from rest_framework.permissions import AllowAny
 
 from accounts.views import (
 	DevBootstrapTokenObtainPairView,
+	ThrottledTokenLogoutView,
 	ThrottledTokenRefreshView,
 	ThrottledTokenVerifyView,
 )
 from notif.config import settings as app_settings
+from ops.views import ClientEventView
 
 _admin_url = app_settings.DJANGO_ADMIN_URL.lstrip("/")
 if not _admin_url.endswith("/"):
@@ -35,9 +37,11 @@ urlpatterns = [
 	path("api/v1/accounts/", include("accounts.urls")),
 	path("api/v1/monitoring/", include("monitoring.urls")),
 	path("api/v1/ops/", include("ops.urls")),
+	path("api/v1/client-events/", ClientEventView.as_view(), name="client-events"),
 	# JWT config
 	path("api/v1/token/", DevBootstrapTokenObtainPairView.as_view(), name="token_obtain_pair"),
 	path("api/v1/token/refresh/", ThrottledTokenRefreshView.as_view(), name="token_refresh"),
+	path("api/v1/token/logout/", ThrottledTokenLogoutView.as_view(), name="token_logout"),
 	path("api/v1/token/verify/", ThrottledTokenVerifyView.as_view(), name="token_verify"),
 	# OpenAPI schema & docs (public — no auth so agents can discover the API)
 	path("api/v1/schema/", SpectacularAPIView.as_view(permission_classes=[AllowAny]), name="schema"),

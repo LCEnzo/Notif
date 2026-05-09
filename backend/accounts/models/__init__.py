@@ -107,4 +107,6 @@ class User(AbstractBaseUser, PermissionsMixin):
 		return super().delete(using=using, keep_parents=keep_parents)
 
 
-from accounts.models.password_reset import PasswordResetCode  # noqa: E402
+from accounts.models.password_reset import PasswordResetCode as PasswordResetCode  # noqa: E402
+from accounts.models.refresh_session import RefreshSessionFamily as RefreshSessionFamily  # noqa: E402
+from accounts.models.refresh_session import RefreshTokenRecord as RefreshTokenRecord  # noqa: E402

@@ -78,6 +78,28 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 		fields = ["username", "date_created"]
 
 
+# ── token auth ───────────────────────────────────────────────
+
+
+class TokenLoginRequestSerializer(_AnySerializer):
+	username = serializers.CharField()
+	password = serializers.CharField(write_only=True)
+	remember_me = serializers.BooleanField(default=True, required=False)
+	device_label = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
+class TokenAccessResponseSerializer(_AnySerializer):
+	access = serializers.CharField()
+
+
+class TokenRefreshRequestSerializer(_AnySerializer):
+	pass
+
+
+class TokenLogoutResponseSerializer(_AnySerializer):
+	status = serializers.CharField()
+
+
 # ── password reset ───────────────────────────────────────────
 
 

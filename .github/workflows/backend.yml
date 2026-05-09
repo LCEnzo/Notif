@@ -65,5 +65,10 @@ jobs:
       - name: Missing migrations
         run: uv run python manage.py makemigrations --check --dry-run
 
+      - name: OpenAPI schema drift
+        run: |
+          uv run python manage.py spectacular --format openapi-json --file openapi.json
+          git diff --exit-code -- openapi.json
+
       - name: Test (pytest)
         run: uv run pytest -v
