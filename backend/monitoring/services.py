@@ -64,7 +64,7 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 			return Err(msg)
 		case Ok(value=scrape):
 			updates = scrape.updates
-			new_data = scrape.comparison_state_update
+			new_data: object = scrape.comparison_state_update
 			if new_data is not None and not isinstance(new_data, dict):
 				logger.error(
 					"Strategy %s returned invalid comparison state type %s for link %d (%s)",
@@ -105,15 +105,6 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 			link.save()
 
 			return Ok(created_count)
-
-	logger.error(
-		"Strategy %s returned unexpected scrape result type %s for link %d (%s)",
-		strategy_cls.__name__,
-		type(result).__name__,
-		link.pk,
-		link.url,
-	)
-	return Err("Unexpected scrape result")
 
 
 def scrape_all_links(

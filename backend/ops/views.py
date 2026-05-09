@@ -211,10 +211,10 @@ def _unlink_quiet(path: str) -> None:
 
 
 def _client_ip(request: Request) -> str:
-	forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+	forwarded = str(request.META.get("HTTP_X_FORWARDED_FOR", ""))
 	if forwarded:
 		return forwarded.split(",")[0].strip()
-	return request.META.get("REMOTE_ADDR", "")
+	return str(request.META.get("REMOTE_ADDR", ""))
 
 
 def _read_caddy_log_tail(log_path: Path, limit: int) -> list[dict[str, Any]]:
