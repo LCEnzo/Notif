@@ -267,8 +267,9 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 
 class SystemEventHandlerTestCase(TestCase):
 	def test_emit_creates_system_event(self):
-		from ops.logging import SystemEventHandler
 		import logging
+
+		from ops.logging import SystemEventHandler
 
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
@@ -290,8 +291,9 @@ class SystemEventHandlerTestCase(TestCase):
 		self.assertEqual(event.details["lineno"], 42)
 
 	def test_emit_truncates_long_source(self):
-		from ops.logging import SystemEventHandler
 		import logging
+
+		from ops.logging import SystemEventHandler
 
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
@@ -309,8 +311,9 @@ class SystemEventHandlerTestCase(TestCase):
 		self.assertEqual(len(event.source), 120)
 
 	def test_emit_truncates_long_message(self):
-		from ops.logging import SystemEventHandler
 		import logging
+
+		from ops.logging import SystemEventHandler
 
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
@@ -328,9 +331,11 @@ class SystemEventHandlerTestCase(TestCase):
 		self.assertEqual(len(event.message), 1000)
 
 	def test_emit_survives_db_error(self):
-		from ops.logging import SystemEventHandler
 		import logging
+
 		from django.db import OperationalError
+
+		from ops.logging import SystemEventHandler
 
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
@@ -349,8 +354,9 @@ class SystemEventHandlerTestCase(TestCase):
 			handler.emit(record)
 
 	def test_emit_survives_generic_exception(self):
-		from ops.logging import SystemEventHandler
 		import logging
+
+		from ops.logging import SystemEventHandler
 
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
