@@ -665,6 +665,32 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 		assert result.error == "Strategy returned invalid comparison state."
 		assert any("returned invalid comparison state type list" in message for message in logs.output)
 
+	def test_scrape_link_invalid_scrape_result_returns_logged_err(self):
+		class InvalidScrapeResultStrategy(BaseStrategy):
+			display_name = "Invalid scrape result"
+
+			def can_scrape_url(self, url: URL) -> bool:
+				return True
+
+			def scrape(
+				self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, Any], *args, **kwargs
+			) -> ScrapeResult:
+				return cast(ScrapeResult, "not a scrape result")
+
+		link = self.links[0]
+		link.strategy = Strategy.objects.create(strat_cls="InvalidScrapeResultStrategy", data={})
+		link.save(update_fields=["strategy"])
+
+		with (
+			patch.dict(STRATEGY_CHOICES, {"InvalidScrapeResultStrategy": InvalidScrapeResultStrategy}),
+			self.assertLogs("monitoring.services", level="ERROR") as logs,
+		):
+			result = scrape_link(link)
+
+		assert isinstance(result, Err)
+		assert result.error == "Unexpected scrape result"
+		assert any("returned unexpected scrape result type str" in message for message in logs.output)
+
 	def test_management_command_runs(self):
 		link = self.links[0]
 		html = '<html><body><article class="post-card">Post</article></body></html>'

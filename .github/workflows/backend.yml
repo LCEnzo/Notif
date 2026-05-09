@@ -65,5 +65,5 @@ jobs:
       - name: Missing migrations
         run: uv run python manage.py makemigrations --check --dry-run
 
-      - name: Test (pytest)
-        run: uv run pytest -v
+      - name: Test (pytest + coverage)
+        run: uv run pytest -v --cov --cov-report=term
