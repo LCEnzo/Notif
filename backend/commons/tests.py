@@ -23,7 +23,8 @@ class SendPasswordResetEmailTestCase(TestCase):
 
 		msg = cast(EmailMultiAlternatives, mail.outbox[0])
 		self.assertIn("654321", msg.body)
-		html: str = msg.alternatives[0][0]  # type: ignore[assignment]
+		html = msg.alternatives[0][0]
+		assert isinstance(html, str), f"Expected str alternative, got {type(html)}"
 		self.assertIn("654321", html)
 		self.assertEqual(msg.alternatives[0][1], "text/html")
 
@@ -32,7 +33,8 @@ class SendPasswordResetEmailTestCase(TestCase):
 
 		msg = cast(EmailMultiAlternatives, mail.outbox[0])
 		self.assertIn("Your reset code is:", msg.body)
-		html: str = msg.alternatives[0][0]  # type: ignore[assignment]
+		html = msg.alternatives[0][0]
+		assert isinstance(html, str), f"Expected str alternative, got {type(html)}"
 		self.assertIn("<p>Your reset code is:</p>", html)
 		self.assertIn("30 minutes", msg.body)
 		self.assertIn("30 minutes", html)
