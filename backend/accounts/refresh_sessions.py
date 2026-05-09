@@ -193,7 +193,7 @@ def _user_agent(request: Request) -> str:
 
 
 def _client_ip(request: Request) -> str:
-	forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+	forwarded = str(request.META.get("HTTP_X_FORWARDED_FOR", ""))
 	if forwarded:
 		return forwarded.split(",", maxsplit=1)[0].strip()
 	return str(request.META.get("REMOTE_ADDR", ""))

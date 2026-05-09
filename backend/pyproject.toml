@@ -93,6 +93,9 @@ warn_unused_configs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_reexport = true
+warn_unreachable = true
+warn_return_any = true
+strict_equality = true
 
 [[tool.mypy.overrides]]
 module = ["*.tests", "*.tests.*"]
@@ -127,3 +130,20 @@ markers = [
     "e2e: end-to-end tests using real downloaded feeds — most directly test parsing correctness",
     "property: Hypothesis property-based tests that verify invariants across generated inputs",
 ]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "*/migrations/*",
+    "*/tests.py",
+    "*/tests/*",
+    "*/test_*.py",
+    "*_test.py",
+    "manage.py",
+    "notif/asgi.py",
+    "notif/wsgi.py",
+    "*/management/commands/*",
+]
+
+[tool.coverage.report]
+fail_under = 80

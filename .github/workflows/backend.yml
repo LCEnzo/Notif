@@ -70,5 +70,5 @@ jobs:
           uv run python manage.py spectacular --format openapi-json --file openapi.json
           git diff --exit-code -- openapi.json
 
-      - name: Test (pytest)
-        run: uv run pytest -v
+      - name: Test (pytest + coverage)
+        run: uv run pytest -v --cov --cov-report=term

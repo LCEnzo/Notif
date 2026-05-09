@@ -8,7 +8,7 @@ from django.utils import timezone
 from commons.result import Err, Ok, Result
 from monitoring.models import Link, Notification, Update
 from monitoring.rate_limiter import DomainRateLimiter
-from monitoring.strategies import STRATEGY_CHOICES, URL
+from monitoring.strategies import STRATEGY_CHOICES, URL, ScrapeSuccess
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 		rate_limiter.wait_for_domain(link.url)
 
 	try:
-		result = strategy.scrape(URL(link.url), config_data, comparison_data)
+		result: object = strategy.scrape(URL(link.url), config_data, comparison_data)
 	except AssertionError:
 		raise
 	except Exception as exc:
@@ -59,12 +59,12 @@ def scrape_link(link: Link, rate_limiter: DomainRateLimiter | None = None) -> Re
 		return Err(f"Scrape failed unexpectedly: {exc}")
 
 	match result:
-		case Err(error=msg):
+		case Err(error=str() as msg):
 			logger.warning("Scrape failed for link %d (%s): %s", link.pk, link.url, msg)
 			return Err(msg)
-		case Ok(value=scrape):
+		case Ok(value=ScrapeSuccess() as scrape):
 			updates = scrape.updates
-			new_data = scrape.comparison_state_update
+			new_data: object = scrape.comparison_state_update
 			if new_data is not None and not isinstance(new_data, dict):
 				logger.error(
 					"Strategy %s returned invalid comparison state type %s for link %d (%s)",
