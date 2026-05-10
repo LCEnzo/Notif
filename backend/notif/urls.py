@@ -52,3 +52,8 @@ urlpatterns = [
 	),
 	path("api/v1/redoc/", SpectacularRedocView.as_view(permission_classes=[AllowAny], url_name="schema"), name="redoc"),
 ]
+
+if app_settings.DEBUG:
+	urlpatterns += [
+		path("silk/", include("silk.urls", namespace="silk")),
+	]
