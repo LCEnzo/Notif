@@ -61,6 +61,9 @@ INSTALLED_APPS = [
 	"ops",
 ]
 
+if DEBUG:
+	INSTALLED_APPS += ["silk"]
+
 MIDDLEWARE = [
 	"django.middleware.security.SecurityMiddleware",
 	"notif.middleware.DevLatencyMiddleware",
@@ -72,6 +75,9 @@ MIDDLEWARE = [
 	"django.contrib.messages.middleware.MessageMiddleware",
 	"django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+if DEBUG:
+	MIDDLEWARE.insert(1, "silk.middleware.SilkyMiddleware")
 
 ROOT_URLCONF = "notif.urls"
 
