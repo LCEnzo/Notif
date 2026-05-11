@@ -227,7 +227,7 @@ Future<Response<dynamic>> _performRequest(
         method: method,
         headers: requestHeaders,
         responseType: responseType,
-        extra: const {'withCredentials': true},
+        withCredentials: true,
       ),
     );
     await _rememberNativeRefreshCookieFromResponse(requestUri, response);

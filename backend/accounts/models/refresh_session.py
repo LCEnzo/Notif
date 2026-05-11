@@ -14,6 +14,7 @@ class RefreshSessionFamily(models.Model):
 		REUSE = "reuse", "Refresh token reuse"
 		UNKNOWN_TOKEN = "unknown_token", "Unknown refresh token"
 		EXPIRED = "expired", "Expired"
+		LOGIN_REPLACED = "login_replaced", "Replaced by a new login"
 
 	user = models.ForeignKey(
 		settings.AUTH_USER_MODEL,

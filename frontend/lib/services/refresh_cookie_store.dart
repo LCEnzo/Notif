@@ -75,6 +75,13 @@ Future<void> rememberNativeRefreshCookie(
   }
 }
 
+Future<void> clearNativeRefreshCookies() async {
+  if (kIsWeb) return;
+  final store = await PreferenceStore.load();
+  await store.remove(_nativeRefreshCookieStoreKey);
+}
+
+
 bool _isRefreshCookiePath(String apiPath) {
   final normalized = apiPath.startsWith('/') ? apiPath : '/$apiPath';
   return normalized.startsWith(_refreshCookiePathPrefix);
