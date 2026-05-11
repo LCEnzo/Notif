@@ -1,10 +1,12 @@
 #! /usr/bin/env bash
-# Pre-push hook: run quick CI checks on changed code before pushing.
+# Pre-push hook: run quick CI-ish checks on changed code before pushing.
 #
 # Detects which part of the stack changed (backend, frontend, or both)
 # and runs the matching fast checks:
-#   backend  → ruff format --check, ruff check, mypy
+#   backend  → uv lock --check, uv sync --frozen, ruff format --check, ruff check, mypy, migration drift
 #   frontend → dart format --set-exit-if-changed, flutter analyze
+#
+# This is intentionally not full CI, as tests and builds take too long for everyday operations. They are checked in CI.
 #
 # Bypass: git -c core.hooksPath=/dev/null push
 set -euo pipefail
@@ -17,11 +19,28 @@ NC='\033[0m' # No Color
 check_backend=false
 check_frontend=false
 exit_code=0
+repo_root=$(git rev-parse --show-toplevel)
+
+run_check() {
+	local label="$1"
+	shift
+
+	local output
+	echo -n "  ${label} … "
+
+	if output=$("$@" 2>&1); then
+		echo -e "${GREEN}OK${NC}"
+	else
+		echo -e "${RED}FAIL${NC}"
+		printf '%s\n' "$output"
+		exit_code=1
+	fi
+}
 
 # ── detect what changed ──────────────────────────────────────────
 while read -r local_ref local_sha remote_ref remote_sha; do
 	if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
-		# New branch — diff against merge-base with master.
+		# New branch — diff against merge-base with origin/master.
 		base=$(git merge-base "$local_sha" origin/master 2>/dev/null || echo "")
 		if [ -n "$base" ]; then
 			changed=$(git diff --name-only "$base..$local_sha" 2>/dev/null || true)
@@ -46,37 +65,20 @@ done
 if $check_backend; then
 	echo -e "${YELLOW}━━━ backend changed — running quick checks ━━━${NC}"
 
-	cd backend
+	cd "$repo_root/backend"
 
-	echo -n "  ruff format --check … "
-	if uv run ruff format --check . &>/dev/null; then
-		echo -e "${GREEN}OK${NC}"
-	else
-		echo -e "${RED}FAIL${NC}"
-		uv run ruff format --check .
-		exit_code=1
-	fi
+	export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-test-key-for-pre-push-hook}"
+	export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-notif.settings}"
 
-	echo -n "  ruff check … "
-	if uv run ruff check . &>/dev/null; then
-		echo -e "${GREEN}OK${NC}"
-	else
-		echo -e "${RED}FAIL${NC}"
-		uv run ruff check .
-		exit_code=1
-	fi
+	run_check "uv lock --check" uv lock --check
+	run_check "uv sync --frozen" uv sync --frozen
+	run_check "ruff format --check" uv run ruff format --check .
+	run_check "ruff check" uv run ruff check .
+	run_check "mypy" uv run mypy .
+	run_check "Django system check" uv run python manage.py check
+	run_check "migration drift" uv run python manage.py makemigrations --check --dry-run
 
-	echo -n "  mypy … "
-	SECRET="${DJANGO_SECRET_KEY:-test-key-for-pre-push-hook}"
-	if DJANGO_SECRET_KEY="$SECRET" uv run mypy . &>/dev/null; then
-		echo -e "${GREEN}OK${NC}"
-	else
-		echo -e "${RED}FAIL${NC}"
-		DJANGO_SECRET_KEY="$SECRET" uv run mypy .
-		exit_code=1
-	fi
-
-	cd "$OLDPWD"
+	cd "$repo_root"
 fi
 
 # ── frontend checks ──────────────────────────────────────────────
@@ -92,30 +94,23 @@ if $check_frontend; then
 		DART=dart
 	fi
 
-	cd frontend
+	cd "$repo_root/frontend"
 
-	echo -n "  dart format --set-exit-if-changed … "
-	if $DART format --set-exit-if-changed . &>/dev/null; then
-		echo -e "${GREEN}OK${NC}"
-	else
-		echo -e "${RED}FAIL${NC}"
-		$DART format --set-exit-if-changed .
-		exit_code=1
-	fi
+	run_check "dart format --set-exit-if-changed" "$DART" format --set-exit-if-changed .
 
 	echo -n "  flutter analyze … "
 	# --no-pub avoids triggering pub get, which can fail in minimal
 	# git-hook environments when the Snap Flutter version file is
-	# unreachable.  Run `flutter pub get` manually before pushing.
-	if $FLUTTER analyze --no-pub &>/dev/null; then
+	# unreachable. Run `flutter pub get` manually before pushing.
+	if "$FLUTTER" analyze --no-pub &>/dev/null; then
 		echo -e "${GREEN}OK${NC}"
 	else
 		echo -e "${RED}FAIL${NC}"
-		$FLUTTER analyze --no-pub
+		"$FLUTTER" analyze --no-pub
 		exit_code=1
 	fi
 
-	cd "$OLDPWD"
+	cd "$repo_root"
 fi
 
 if [ $exit_code -ne 0 ]; then
