@@ -18,6 +18,7 @@ NC='\033[0m' # No Color
 
 check_backend=false
 check_frontend=false
+check_hooks=false
 exit_code=0
 repo_root=$(git rev-parse --show-toplevel)
 
@@ -53,13 +54,22 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 		changed=$(git diff --name-only "$range" 2>/dev/null || true)
 	fi
 
-	if echo "$changed" | grep -q '^backend/'; then
+	if echo "$changed" | grep -Eq '^(backend/|\.github/workflows/backend\.yml)$'; then
 		check_backend=true
 	fi
-	if echo "$changed" | grep -q '^frontend/'; then
+	if echo "$changed" | grep -Eq '^(frontend/|\.github/workflows/frontend\.yml)$'; then
 		check_frontend=true
 	fi
+	if echo "$changed" | grep -Eq '^\.githooks/'; then
+		check_hooks=true
+	fi
 done
+
+# ── hook checks ──────────────────────────────────────────────────
+if $check_hooks; then
+	echo -e "${YELLOW}━━━ hooks changed — checking shell syntax ━━━${NC}"
+	run_check "bash syntax" bash -n "$repo_root/.githooks/pre-push"
+fi
 
 # ── backend checks ───────────────────────────────────────────────
 if $check_backend; then
