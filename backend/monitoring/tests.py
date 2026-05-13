@@ -1,8 +1,10 @@
 import hashlib
 import logging
 import xml.sax.saxutils
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 from pprint import pprint  # noqa: F401
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -28,9 +30,13 @@ from monitoring.services import scrape_link
 from monitoring.strategies import (
 	STRATEGY_CHOICES,
 	URL,
+	AlertInfo,
 	BaseStrategy,
 	FeedStrategy,
 	GeneralSelectorStrategy,
+	KemonoCardInfo,
+	KemonoFavouritesStrategy,
+	QQAlertsStrategy,
 	SBSVThreadmarksStrategy,
 	ScrapeResult,
 	ScrapeSuccess,
@@ -178,7 +184,6 @@ class TestSelectorStrat(TestCase):
 
 		url = "https://kemono.party/patreon/user/50187986"
 		config_data = {"selectors": ["article.post-card"]}
-		old_data: dict[str, list[int]] = {}
 		html_content = """
 		<html>
 			<body>
@@ -189,13 +194,170 @@ class TestSelectorStrat(TestCase):
 
 		with requests_mock.Mocker() as mocker:
 			mocker.get(url, text=html_content)
-			result = strat(URL(url), config_data, old_data)
+			result = strat(URL(url), config_data, {})
 
 		logger.debug("selector strat on kemono: \\t" + f"{result = } \n--------------------------\n")
 
 		assert isinstance(result, Ok)
 		assert len(result.value.updates) > 0
 		assert result.value.comparison_state_update is not None
+
+	def test_selector_strat_uses_stable_digest_state(self):
+		strat = GeneralSelectorStrategy()
+		url = "https://example.com"
+		config_data = {"selectors": ["article.post-card"]}
+		html_content = """
+		<html>
+			<body>
+				<article class="post-card">Post 1</article>
+			</body>
+		</html>
+		"""
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, text=html_content)
+			result = strat(URL(url), config_data, {})
+
+		assert isinstance(result, Ok)
+		comparison_state = result.value.comparison_state_update
+		assert comparison_state is not None
+		selector_state = comparison_state["article.post-card"]
+		assert isinstance(selector_state, list)
+		assert len(selector_state) == 1
+		assert isinstance(selector_state[0], str)
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, text=html_content)
+			second_result = strat(URL(url), config_data, comparison_state)
+
+		assert isinstance(second_result, Ok)
+		assert second_result.value.updates == []
+		assert second_result.value.comparison_state_update is None
+
+	def test_selector_strat_migrates_legacy_python_hash_state_without_notification(self):
+		strat = GeneralSelectorStrategy()
+		url = "https://example.com"
+		config_data = {"selectors": ["article.post-card"]}
+		html_content = """
+		<html>
+			<body>
+				<article class="post-card">Post 1</article>
+			</body>
+		</html>
+		"""
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(url, text=html_content)
+			result = strat(URL(url), config_data, {"article.post-card": [123]})
+
+		assert isinstance(result, Ok)
+		assert result.value.updates == []
+		comparison_state = result.value.comparison_state_update
+		assert comparison_state is not None
+		selector_state = comparison_state["article.post-card"]
+		assert isinstance(selector_state, list)
+		assert isinstance(selector_state[0], str)
+
+
+class QQAlertsStrategyTestCase(TestCase):
+	def test_convert_relative_date_accepts_dash_date(self):
+		assert QQAlertsStrategy._convert_relative_date("2024-01-02") == date(2024, 1, 2)
+
+	def test_first_scrape_without_comparison_state_uses_new_alert_as_baseline(self):
+		strategy = QQAlertsStrategy()
+		alert = AlertInfo(
+			author_name="Writer",
+			post_link="https://forum.questionablequesting.com/posts/1",
+			alert_text="New chapter",
+			post_date=date(2024, 1, 2),
+			post_time=time(3, 4),
+			lengthy_response=True,
+		)
+
+		with (
+			patch.object(QQAlertsStrategy, "_get_alerts_html", return_value=SimpleNamespace(text="")),
+			patch.object(QQAlertsStrategy, "_extract_alerts", return_value=[alert]),
+		):
+			result = strategy.scrape(
+				URL("https://forum.questionablequesting.com/account/alerts"),
+				{"username": "u", "password": "p", "include_all": False},
+				{},
+			)
+
+		assert isinstance(result, Ok)
+		assert len(result.value.updates) == 1
+		assert result.value.comparison_state_update == {"last_alert": "2024-01-02 03:04:00"}
+
+	def test_existing_comparison_state_compares_alert_datetimes(self):
+		strategy = QQAlertsStrategy()
+		alert = AlertInfo(
+			author_name="Writer",
+			post_link="https://forum.questionablequesting.com/posts/1",
+			alert_text="New chapter",
+			post_date=date(2024, 1, 2),
+			post_time=time(3, 4),
+			lengthy_response=True,
+		)
+
+		with (
+			patch.object(QQAlertsStrategy, "_get_alerts_html", return_value=SimpleNamespace(text="")),
+			patch.object(QQAlertsStrategy, "_extract_alerts", return_value=[alert]),
+		):
+			result = strategy.scrape(
+				URL("https://forum.questionablequesting.com/account/alerts"),
+				{"username": "u", "password": "p", "include_all": False},
+				{"last_alert": "2024-01-01 00:00:00"},
+			)
+
+		assert isinstance(result, Ok)
+		assert len(result.value.updates) == 1
+
+
+class KemonoFavouritesStrategyTestCase(TestCase):
+	def test_first_scrape_without_comparison_state_uses_new_card_as_baseline(self):
+		strategy = KemonoFavouritesStrategy()
+		card = KemonoCardInfo(
+			name="Creator",
+			date_time=datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC),
+			service="patreon",
+			link=URL("https://kemono.party/patreon/user/1"),
+		)
+
+		with (
+			patch.object(KemonoFavouritesStrategy, "_get_favourites_html", return_value=SimpleNamespace(text="")),
+			patch.object(KemonoFavouritesStrategy, "_extract_kemono_profile_cards", return_value=[card]),
+		):
+			result = strategy.scrape(
+				URL("https://kemono.party/favorites"),
+				{"username": "u", "password": "p"},
+				{},
+			)
+
+		assert isinstance(result, Ok)
+		assert len(result.value.updates) == 1
+		assert result.value.comparison_state_update == {"last_update": "2024-01-02T03:04:05+00:00"}
+
+	def test_existing_iso_comparison_state_compares_card_datetimes(self):
+		strategy = KemonoFavouritesStrategy()
+		card = KemonoCardInfo(
+			name="Creator",
+			date_time=datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC),
+			service="patreon",
+			link=URL("https://kemono.party/patreon/user/1"),
+		)
+
+		with (
+			patch.object(KemonoFavouritesStrategy, "_get_favourites_html", return_value=SimpleNamespace(text="")),
+			patch.object(KemonoFavouritesStrategy, "_extract_kemono_profile_cards", return_value=[card]),
+		):
+			result = strategy.scrape(
+				URL("https://kemono.party/favorites"),
+				{"username": "u", "password": "p"},
+				{"last_update": "2024-01-01T00:00:00+00:00"},
+			)
+
+		assert isinstance(result, Ok)
+		assert len(result.value.updates) == 1
 
 
 class SBSVThreadmarksStrategyTestCase(TestCase):

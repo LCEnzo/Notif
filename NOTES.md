@@ -236,3 +236,54 @@ Run an agent harness alongside the Notif backend on the VPS. First milestone: ta
 - Rate-limit budget: probably **separate** buckets for scraper vs agent. Different workloads, different blast radii.
 - KB visibility: global for v1 (Notif is single-user today). Add per-user scoping when/if that changes.
 - Concurrency: how many worker processes? Start with one. Concurrency adds correctness questions (locking, KB merge conflicts) before the workload demands it.
+
+---
+
+## Best Rust Candidates In This Codebase
+
+Do not Rustify the Django app wholesale. Django should stay the source of truth for auth, ORM, migrations, API, admin, scheduling, and product state. Rust fits best either below the current scraper strategy boundary as deterministic parsing/diffing code, or beside Django as an isolated worker process with an explicit JSON contract.
+
+### Scrape parsing and diff core
+
+The strongest first experiment is a small `notif_scrape_core` Rust crate exposed to Python through PyO3/maturin. Keep network fetches and DB writes in Python, but move pure transforms behind a stable API:
+
+- `selector_digests(html, selectors) -> dict[str, list[str]]`
+- `html_to_readable_text(html) -> str`
+- `normalize_feed(xml_bytes) -> list[entry]`
+- `merge_seen_entry_hashes(current, previous, max_seen) -> list[str]`
+
+This maps to the current `monitoring.strategies` contract: strategies emit normalized `ScrapedUpdate` rows plus optional comparison state. It is low-risk because fixtures can pin behavior before and after the port.
+
+### Separate scraper or collector worker
+
+If scraping grows into concurrent fetching, conditional requests, source-specific cooldowns, or heavier HTML parsing, Rust could own a worker that receives due scrape jobs as JSON and returns normalized updates plus comparison-state patches. Django would still own `Link`, `Update`, `Notification`, scheduling, backoff, and persistence.
+
+This is a better fit than embedding large async scraping logic inside the Django request/management-command process. It also makes timeouts, memory limits, and crash recovery easier to reason about.
+
+### Search later
+
+Start any search endpoint with SQLite FTS or Postgres search. If local search becomes large or ranking-heavy, a Rust/Tantivy sidecar is plausible later. Do not start there.
+
+### Agent worker supervisor
+
+For the planned agent harness, keep `AgentJob` models and DRF endpoints in Django. Rust could be useful as the worker/sandbox wrapper that claims jobs, writes briefing JSON, invokes the harness, enforces CPU/memory/time limits, and records output references.
+
+Rust should not own the agent product logic or write directly to Notif's operational tables.
+
+### Big archive/import parsing
+
+For X/Twitter profile export or other large JSON/archive imports, Rust is a reasonable candidate if Python parsing becomes slow or memory-heavy. Live X monitoring should be prototyped in Python first unless a stable structured source exists.
+
+### Poor Rust candidates
+
+- Push notification product state and `DeliveryAttempt` modeling.
+- Django auth, refresh-token rotation, permissions, serializers, admin, migrations, and API views.
+- F-Droid/APK release plumbing.
+- Flutter UI state and normal API DTO parsing.
+
+### Recommended build order
+
+1. Add a tiny Rust crate for one deterministic scraper helper, probably `html_to_readable_text` or selector digest extraction.
+2. Expose it with PyO3/maturin and keep a Python fallback while the packaging settles.
+3. Run existing scraper fixtures against both implementations until behavior is pinned.
+4. Only then consider moving larger feed normalization or worker boundaries.
