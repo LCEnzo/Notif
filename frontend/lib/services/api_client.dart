@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:notif/services/app_settings.dart';
+import 'package:notif/services/dio_credentials.dart';
 import 'package:notif/services/json_contracts.dart';
 import 'package:notif/services/refresh_cookie_store.dart';
 
@@ -13,21 +14,26 @@ const Duration connectTimeout = Duration(seconds: 10);
 const Duration receiveTimeout = Duration(seconds: 15);
 
 /// Shared Dio instance — connection pooling happens here.
-final Dio _dio =
-    Dio(
-        BaseOptions(
-          connectTimeout: connectTimeout,
-          receiveTimeout: receiveTimeout,
-        ),
-      )
-      ..interceptors.addAll([
-        if (kDebugMode)
-          LogInterceptor(
-            requestBody: true,
-            responseBody: true,
-            logPrint: (o) => debugPrint(o.toString()),
-          ),
-      ]);
+final Dio _dio = _createDio();
+
+Dio _createDio() {
+  final dio = Dio(
+    BaseOptions(
+      connectTimeout: connectTimeout,
+      receiveTimeout: receiveTimeout,
+    ),
+  );
+  configureDioCredentials(dio);
+  dio.interceptors.addAll([
+    if (kDebugMode)
+      LogInterceptor(
+        requestBody: true,
+        responseBody: true,
+        logPrint: (o) => debugPrint(o.toString()),
+      ),
+  ]);
+  return dio;
+}
 
 typedef AccessTokenReader = String? Function();
 typedef RefreshAccessToken = Future<String?> Function();
@@ -227,7 +233,6 @@ Future<Response<dynamic>> _performRequest(
         method: method,
         headers: requestHeaders,
         responseType: responseType,
-        withCredentials: true,
       ),
     );
     await _rememberNativeRefreshCookieFromResponse(requestUri, response);

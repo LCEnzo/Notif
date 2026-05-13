@@ -2,7 +2,7 @@
     "openapi": "3.0.3",
     "info": {
         "title": "Notif API",
-        "version": "0.2.0",
+        "version": "0.3.0",
         "description": "Personal update monitoring and notification service.\n\nMonitors URLs for changes via pluggable scraping strategies (RSS/Atom feeds, CSS selectors, forum threadmarks, and more)."
     },
     "paths": {
