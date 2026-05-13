@@ -2,26 +2,41 @@ import json
 import logging
 from datetime import timedelta
 from json import JSONDecodeError
+from typing import TypeGuard
 
 from django.utils import timezone
 
 from commons.result import Err, Ok, Result
 from monitoring.models import Link, Notification, Update
 from monitoring.rate_limiter import DomainRateLimiter
-from monitoring.strategies import STRATEGY_CHOICES, URL, ScrapeSuccess
+from monitoring.strategies import STRATEGY_CHOICES, URL, ComparisonState, JsonValue, ScrapeSuccess
 
 logger = logging.getLogger(__name__)
 
 
-def _comparison_data_for_link(link: Link) -> Result[dict[str, object], str]:
+def _is_json_value(value: object) -> TypeGuard[JsonValue]:
+	if value is None or isinstance(value, bool | int | float | str):
+		return True
+	if isinstance(value, list):
+		return all(_is_json_value(item) for item in value)
+	if isinstance(value, dict):
+		return all(isinstance(key, str) and _is_json_value(item) for key, item in value.items())
+	return False
+
+
+def _is_comparison_state(value: object) -> TypeGuard[ComparisonState]:
+	return isinstance(value, dict) and all(isinstance(key, str) and _is_json_value(item) for key, item in value.items())
+
+
+def _comparison_data_for_link(link: Link) -> Result[ComparisonState, str]:
 	if not link.comparison_info:
 		return Ok({})
 	try:
-		data = json.loads(link.comparison_info)
+		data: object = json.loads(link.comparison_info)
 	except JSONDecodeError as exc:
 		logger.warning("Invalid comparison_info for link %d: %s", link.pk, exc)
 		return Err("Stored comparison data is invalid; clear the link state before scraping again.")
-	if not isinstance(data, dict):
+	if not _is_comparison_state(data):
 		logger.warning("Invalid comparison_info shape for link %d: %s", link.pk, type(data).__name__)
 		return Err("Stored comparison data is invalid; clear the link state before scraping again.")
 	return Ok(data)
