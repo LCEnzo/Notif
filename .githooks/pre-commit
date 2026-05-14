@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Pre-commit hook: scan staged files for secrets with detect-secrets.
+#
+# Relies on a .secrets.baseline at the repo root.  Secrets that are
+# already in the baseline (known or flagged as false positive) are
+# allowed; any new secret triggers a reject.
+#
+# Bypass: git -c core.hooksPath=/dev/null commit
+set -euo pipefail
+
+mapfile -d "" -t staged < <(git diff --cached --name-only -z --diff-filter=ACM)
+[ "${#staged[@]}" -eq 0 ] && exit 0
+
+cd "$(git rev-parse --show-toplevel)"
+
+if ! uv --project backend run detect-secrets-hook --baseline .secrets.baseline "${staged[@]}"; then
+	echo ""
+	echo "--- detect-secrets found potential secrets in staged files ---"
+	echo "If these are false positives, regenerate the baseline through a temp file:"
+	echo "  uv --project backend run detect-secrets scan --baseline .secrets.baseline > .secrets.baseline.new"
+	echo "  mv .secrets.baseline.new .secrets.baseline"
+	exit 1
+fi
