@@ -28,6 +28,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from commons.network import client_ip
 from ops.models import SystemEvent
 from ops.serializers import (
 	CaddyAccessLogResponseSerializer,
@@ -129,7 +130,7 @@ class ClientEventView(APIView):
 				"git_hash": _scrub_client_text(str(event.get("git_hash", "")), max_length=80),
 				"browser": _scrub_client_text(str(event.get("browser", "")), max_length=200),
 				"stack": _scrub_client_text(str(event.get("stack", "")), max_length=2000),
-				"remote_ip": _client_ip(request),
+				"remote_ip": client_ip(request),
 			},
 		)
 		return Response({"status": "accepted"}, status=202)
@@ -183,7 +184,7 @@ def download_sqlite_backup(request: Request) -> HttpResponse | Response | Stream
 		"user_id": user.pk,
 		"username": user.get_username(),
 		"size_bytes": size_bytes,
-		"remote_ip": _client_ip(request),
+		"remote_ip": client_ip(request),
 	}
 	SystemEvent.objects.create(
 		level=SystemEvent.Level.INFO,
@@ -268,17 +269,6 @@ def _record_stream_outcome(audit_context: dict[str, Any], bytes_sent: int, compl
 def _unlink_quiet(path: str) -> None:
 	with contextlib.suppress(OSError):
 		Path(path).unlink()
-
-
-def _client_ip(request: Request) -> str:
-	forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-	if isinstance(forwarded, str) and forwarded:
-		return forwarded.split(",", 1)[0].strip()
-
-	remote_addr = request.META.get("REMOTE_ADDR", "")
-	if isinstance(remote_addr, str):
-		return remote_addr
-	return ""
 
 
 def _scrub_client_text(value: str, *, max_length: int) -> str:

@@ -14,6 +14,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from accounts.models import RefreshSessionFamily, RefreshTokenRecord, User
+from commons.network import client_ip
 
 REFRESH_FAMILY_CLAIM = "family_id"
 REFRESH_REQUEST_HEADER = "HTTP_X_REFRESH_REQUEST"
@@ -61,7 +62,7 @@ def issue_tokens_for_login(
 			user=user,
 			last_used_at=now,
 			device_label=_device_label(request),
-			ip=_client_ip(request) or None,
+			ip=client_ip(request) or None,
 			user_agent=_user_agent(request),
 		)
 		refresh = RefreshToken.for_user(user)
@@ -204,8 +205,4 @@ def _user_agent(request: Request) -> str:
 	return str(request.META.get("HTTP_USER_AGENT", ""))[:500]
 
 
-def _client_ip(request: Request) -> str:
-	forwarded = str(request.META.get("HTTP_X_FORWARDED_FOR", ""))
-	if forwarded:
-		return forwarded.split(",", maxsplit=1)[0].strip()
-	return str(request.META.get("REMOTE_ADDR", ""))
+
