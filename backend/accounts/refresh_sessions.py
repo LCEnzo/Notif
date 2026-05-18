@@ -203,6 +203,3 @@ def _device_label(request: Request) -> str:
 
 def _user_agent(request: Request) -> str:
 	return str(request.META.get("HTTP_USER_AGENT", ""))[:500]
-
-
-
