@@ -157,15 +157,52 @@ docker compose -f compose.yaml --profile prod logs caddy | grep -i "certificate"
 
 Caddy serves the Flutter web app at `/`, the API at `/api/*`, and Django static files at `/static/*`. The backend is not published directly to the host — Caddy proxies internally.
 
-### A4. Cron for scraping
+### A4. Boot services and scheduled work
+
+`./deploy.sh` installs and enables the checked-in host units on each deploy. For
+first-time setup or manual repair, the equivalent commands are:
 
 ```bash
-crontab -e
-# Add:
-*/15 * * * * cd /home/deploy/notif && docker compose -f compose.yaml exec -T backend python manage.py scrape
+sudo install -d -m 0755 /etc/notif
+sudo tee /etc/notif/notif-compose.env >/dev/null <<'ENV'
+NOTIF_DEPLOY_DIR=/home/deploy/notif
+NOTIF_COMPOSE_FILE=compose.yaml
+NOTIF_COMPOSE_PROFILE=prod
+ENV
+
+sudo install -m 0644 deploy/systemd/notif-compose.service /etc/systemd/system/notif-compose.service
+sudo install -m 0644 deploy/systemd/notif-run-due-tasks.service /etc/systemd/system/notif-run-due-tasks.service
+sudo install -m 0644 deploy/systemd/notif-run-due-tasks.timer /etc/systemd/system/notif-run-due-tasks.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now docker.service
+sudo systemctl enable --now notif-compose.service
+sudo systemctl enable --now notif-run-due-tasks.timer
 ```
 
-### A5. Maintenance
+This makes systemd the explicit boot owner for the Compose stack. The timer runs
+`python manage.py run_due_tasks` every five minutes inside the backend
+container. `./deploy.sh` removes the legacy user crontab entry for that exact
+command if it is still present, so systemd remains the only production
+scheduler.
+
+### A5. Unattended OS maintenance
+
+```bash
+sudo apt update
+sudo apt install -y unattended-upgrades apt-listchanges
+sudo install -m 0644 deploy/apt/52unattended-upgrades-notif /etc/apt/apt.conf.d/52unattended-upgrades-notif
+sudo systemctl enable --now apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service
+sudo unattended-upgrade --dry-run --debug
+```
+
+The repo policy enables daily unattended upgrades for Debian's configured
+allowed origins, weekly apt autoclean, stale kernel cleanup, and reboot at
+`04:30` only when a package requires it. `./deploy.sh` installs this policy on
+hosts where `unattended-upgrade` is available. See
+`docs/operations/vps_host.md` for the host-level contract and future service
+pattern.
+
+### A6. Maintenance
 
 ```bash
 # View logs
@@ -339,13 +376,43 @@ curl https://notif.lcenzo.com/api/v1/monitoring/status/
 journalctl -u caddy --no-pager | grep -i "certificate"
 ```
 
-### B6. Cron for scraping
+### B6. systemd timer for scheduled work
 
 ```bash
-cat > /etc/cron.d/notif-scrape << 'CRON'
-# Scrape every 15 minutes
-*/15 * * * * notif cd /opt/notif/backend && /opt/notif/backend/.venv/bin/python manage.py scrape
-CRON
+cat > /etc/systemd/system/notif-run-due-tasks.service << 'UNIT'
+[Unit]
+Description=Run due Notif maintenance and scrape tasks
+Requires=notif.service
+After=notif.service
+
+[Service]
+Type=oneshot
+User=notif
+Group=notif
+WorkingDirectory=/opt/notif/backend
+EnvironmentFile=/opt/notif/backend/.env
+ExecStart=/opt/notif/backend/.venv/bin/python manage.py run_due_tasks
+TimeoutStartSec=300
+UNIT
+
+cat > /etc/systemd/system/notif-run-due-tasks.timer << 'UNIT'
+[Unit]
+Description=Run due Notif tasks every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Persistent=true
+Unit=notif-run-due-tasks.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now notif-run-due-tasks.timer
 ```
 
 ### B7. Maintenance
@@ -456,4 +523,4 @@ In production Compose, only Caddy publishes public ports. In bare-metal mode, gu
 | Service | What it monitors | Setup |
 |---------|-----------------|-------|
 | [UptimeRobot](https://uptimerobot.com) | `GET /api/v1/monitoring/status/` every 5 min | 2 min, free tier |
-| [Healthchecks.io](https://healthchecks.io) | Cron scrape jobs — alerts if a run is missed | 2 min, free tier |
+| [Healthchecks.io](https://healthchecks.io) | Scheduled `run_due_tasks` jobs — alerts if a run is missed | 2 min, free tier |
