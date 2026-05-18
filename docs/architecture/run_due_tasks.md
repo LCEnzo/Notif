@@ -4,7 +4,7 @@ Source: `backend/ops/management/commands/run_due_tasks.py`.
 
 ## Purpose
 
-A single management command that cron / a systemd timer invokes on a fixed cadence (e.g. every 5 minutes). It decides what is due — scrape jobs, cleanup tasks — and runs a bounded slice of them. Cron expresses cadence; the command and DB express which work is due.
+A single management command that a systemd timer invokes on a fixed cadence (e.g. every 5 minutes). It decides what is due — scrape jobs, cleanup tasks — and runs a bounded slice of them. systemd expresses cadence; the command and DB express which work is due.
 
 This is the production scheduler. The older `manage.py scrape` command remains for ad-hoc invocation but should not be the cron entry-point.
 
@@ -52,4 +52,4 @@ A Link with a 15-minute interval that fails 6 times in a row backs off to ≈8 h
 
 ## Production status
 
-Wired in production as of **2026-05-07**: `*/5 * * * * cd /home/luka/notif && docker compose -f compose.yaml exec -T backend python manage.py run_due_tasks` on the `luka` user crontab on `notif`. To verify operationally: `crontab -l` on the VPS plus recent `SystemEvent` rows with `source='ops.run_due_tasks'`.
+Preferred production wiring as of **2026-05-18**: `deploy/systemd/notif-run-due-tasks.timer` invokes `deploy/systemd/notif-run-due-tasks.service`, which runs `python manage.py run_due_tasks` inside the backend container. To verify operationally: `systemctl list-timers 'notif-*'`, `journalctl -u notif-run-due-tasks.service --since today --no-pager`, plus recent `SystemEvent` rows with `source='ops.run_due_tasks'`.
