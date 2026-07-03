@@ -417,6 +417,31 @@ class LinkViewSetTestCase(ViewSetMixin):
 		# print(f"{resp = }")
 		# print(f"{resp.content!r}")
 
+	def test_create_link_forces_owner_to_requester(self):
+		"""A client cannot plant a link in another user's account; owner is the requester."""
+		secondary_client = login_client(APIClient(), self.secondary_user.get_username())
+		strat_resp = secondary_client.post(
+			reverse("strategies-list"),
+			{"strat_cls": "GeneralSelectorStrategy", "data": {"selectors": ["body"]}},
+			format="json",
+		)
+		self.assertEqual(strat_resp.status_code, 201)
+
+		response = secondary_client.post(
+			reverse("links-list"),
+			{
+				"name": "Planted link",
+				"url": "https://example.com/planted",
+				"user": f"{self.regular_user.pk}",
+				"strategy": strat_resp.data["id"],
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 201)
+		created = Link.objects.get(name="Planted link")
+		self.assertEqual(created.user_id, self.secondary_user.pk)
+
 	def test_get_strat_choices(self):
 		response = self.api_client.get(reverse("get-strat-choices"))
 
@@ -468,11 +493,13 @@ class LinkViewSetTestCase(ViewSetMixin):
 		)
 
 	def test_other_user_link_permissions(self):
+		# The acting user (secondary) may only reference a strategy they own.
+		secondary_strat = Strategy.objects.filter(user=self.secondary_user).first()
+		assert secondary_strat is not None
 		fields = {
 			"name": "Skitterdoc on Spacebattles",
 			"url": "http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1",
-			"user": f"{self.regular_user.pk}",
-			"strategy": self.strat.pk,
+			"strategy": secondary_strat.pk,
 		}
 		update_fields = {"name": "Maria"}
 		permissions = {"list": True, "retrieve": False, "create": True, "update": False, "delete": False}
@@ -486,8 +513,9 @@ class LinkViewSetTestCase(ViewSetMixin):
 
 
 class StrategyViewSetTestCase(SetupMixin, TestCase):
-	def test_list_includes_orphaned_strategies(self):
-		orphan = Strategy.objects.create(
+	def test_list_includes_my_unlinked_strategies(self):
+		mine = Strategy.objects.create(
+			user=self.regular_user,
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["body"]},
 		)
@@ -496,42 +524,70 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 
 		self.assertEqual(response.status_code, 200)
 		ids = [item["id"] for item in response.data]
-		self.assertIn(orphan.pk, ids)
+		self.assertIn(mine.pk, ids)
 
-	def test_list_excludes_other_users_non_orphaned_strategies(self):
-		other_only_strategy = Strategy.objects.create(
+	def test_list_excludes_other_users_strategies(self):
+		other_strategy = Strategy.objects.create(
+			user=self.secondary_user,
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["article.post-card"]},
 		)
-		Link.objects.create(
-			name="Other user's private strategy",
-			url="https://example.com/private",
-			user=self.secondary_user,
-			strategy=other_only_strategy,
-		)
 
 		response = self.api_client.get(reverse("strategies-list"))
 
 		self.assertEqual(response.status_code, 200)
 		ids = [item["id"] for item in response.data]
-		self.assertNotIn(other_only_strategy.pk, ids)
+		self.assertNotIn(other_strategy.pk, ids)
 
-	def test_delete_orphaned_strategy(self):
-		orphan = Strategy.objects.create(
+	def test_delete_my_unlinked_strategy(self):
+		mine = Strategy.objects.create(
+			user=self.regular_user,
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["body"]},
 		)
 
-		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": orphan.pk}))
+		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": mine.pk}))
 
 		self.assertEqual(response.status_code, 204)
-		self.assertFalse(Strategy.objects.filter(pk=orphan.pk).exists())
+		self.assertFalse(Strategy.objects.filter(pk=mine.pk).exists())
 
 	def test_delete_strategy_still_in_use(self):
 		"""Deleting a strategy with active links returns 400."""
 		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": self.strat.pk}))
 		self.assertEqual(response.status_code, 400)
 		self.assertTrue(Strategy.objects.filter(pk=self.strat.pk).exists())
+
+	def test_create_strategy_sets_owner_to_requester(self):
+		"""Strategy ownership is server-assigned to the creating user."""
+		resp = self.api_client.post(
+			reverse("strategies-list"),
+			{"strat_cls": "GeneralSelectorStrategy", "data": {"selectors": ["body"]}},
+			format="json",
+		)
+		self.assertEqual(resp.status_code, 201)
+		strat = Strategy.objects.get(pk=resp.data["id"])
+		self.assertEqual(strat.user_id, self.regular_user.pk)
+
+	def test_pivot_link_does_not_expose_another_users_strategy(self):
+		"""F2: referencing another user's strategy from your own link must not expose it."""
+		other_client = login_client(APIClient(), self.secondary_user.get_username())
+		other_client.post(
+			reverse("links-list"),
+			{"name": "pivot", "url": "https://example.com/x", "strategy": self.strat.pk},
+			format="json",
+		)
+		response = other_client.get(reverse("strategies-detail", kwargs={"pk": self.strat.pk}))
+		self.assertEqual(response.status_code, 404)
+
+	def test_cannot_reference_another_users_strategy_on_link(self):
+		"""A link cannot reference a strategy the requester does not own."""
+		other_client = login_client(APIClient(), self.secondary_user.get_username())
+		response = other_client.post(
+			reverse("links-list"),
+			{"name": "pivot", "url": "https://example.com/x", "strategy": self.strat.pk},
+			format="json",
+		)
+		self.assertEqual(response.status_code, 400)
 
 
 class NotificationViewSetTestCase(SetupMixin, TestCase):
@@ -714,6 +770,14 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 			assert notification.status == Notification.Status.UNREAD
 			assert notification.read_at is None
 
+	def test_scrape_link_refuses_internal_url(self):
+		"""A link resolving to an internal address is refused by the SSRF guard."""
+		link = self.links[0]
+		with patch("commons.safe_fetch._resolve", return_value=["169.254.169.254"]):
+			result = scrape_link(link)
+
+		assert isinstance(result, Err)
+
 	def test_scrape_link_no_strategy_returns_err(self):
 		link = self.links[0]
 		link.strategy = None
@@ -788,7 +852,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 				raise RuntimeError("boom")
 
 		link = self.links[0]
-		link.strategy = Strategy.objects.create(strat_cls="RaisingStrategy", data={})
+		link.strategy = Strategy.objects.create(user=link.user, strat_cls="RaisingStrategy", data={})
 		link.save(update_fields=["strategy"])
 
 		with (
@@ -814,7 +878,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 				return Ok(ScrapeSuccess(updates=[], comparison_state_update=cast(Any, [])))
 
 		link = self.links[0]
-		link.strategy = Strategy.objects.create(strat_cls="InvalidComparisonStateStrategy", data={})
+		link.strategy = Strategy.objects.create(user=link.user, strat_cls="InvalidComparisonStateStrategy", data={})
 		link.save(update_fields=["strategy"])
 
 		with (
@@ -840,7 +904,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 				return cast(ScrapeResult, "not a scrape result")
 
 		link = self.links[0]
-		link.strategy = Strategy.objects.create(strat_cls="InvalidScrapeResultStrategy", data={})
+		link.strategy = Strategy.objects.create(user=link.user, strat_cls="InvalidScrapeResultStrategy", data={})
 		link.save(update_fields=["strategy"])
 
 		with (
@@ -1387,7 +1451,7 @@ class FeedStrategyRealFeedTestCase(TestCase):
 
 class RssContentBackfillTestCase(SetupMixin, TestCase):
 	def test_backfill_updates_existing_rss_update_from_full_content(self):
-		strategy = Strategy.objects.create(strat_cls="FeedStrategy", data={})
+		strategy = Strategy.objects.create(user=self.regular_user, strat_cls="FeedStrategy", data={})
 		link = Link.objects.create(
 			name="RSS source",
 			url="https://example.com/feed",

@@ -1823,7 +1823,8 @@
                         "maxLength": 1000
                     },
                     "user": {
-                        "type": "integer"
+                        "type": "integer",
+                        "readOnly": true
                     },
                     "strategy": {
                         "type": "integer",
@@ -2053,7 +2054,8 @@
                         "maxLength": 1000
                     },
                     "user": {
-                        "type": "integer"
+                        "type": "integer",
+                        "readOnly": true
                     },
                     "strategy": {
                         "type": "integer",
@@ -2126,10 +2128,14 @@
                         "type": "integer",
                         "readOnly": true
                     },
-                    "data": {},
+                    "user": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "strat_cls": {
                         "$ref": "#/components/schemas/StratClsEnum"
-                    }
+                    },
+                    "data": {}
                 }
             },
             "PatchedUserCreation": {
@@ -2210,14 +2216,19 @@
                         "type": "integer",
                         "readOnly": true
                     },
-                    "data": {},
+                    "user": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "strat_cls": {
                         "$ref": "#/components/schemas/StratClsEnum"
-                    }
+                    },
+                    "data": {}
                 },
                 "required": [
                     "id",
-                    "strat_cls"
+                    "strat_cls",
+                    "user"
                 ]
             },
             "SystemEvent": {
