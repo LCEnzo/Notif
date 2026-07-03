@@ -26,6 +26,7 @@ from accounts.refresh_sessions import (
 	RefreshTokenReuseError,
 	issue_tokens_for_login,
 	refresh_lifetime_seconds,
+	revoke_all_refresh_families_for_user,
 	revoke_refresh_family_for_token,
 	rotate_refresh_token,
 )
@@ -255,16 +256,24 @@ class UserViewSet(_UserModelViewSet):
 		return super().get_throttles()
 
 	def get_serializer_class(self) -> type[BaseSerializer[User]]:
-		requester_pk = self.request.user.pk if not self.request.user.is_anonymous else None
-		wanted_pk = self.kwargs.get("pk", None)
+		if self.request.method in ("POST", "PUT", "PATCH"):
+			return UserCreationSerializer
 
-		match (self.request.method, requester_pk):
-			case ("POST" | "PUT" | "PATCH", _):
-				return UserCreationSerializer
-			case ("GET", wanted_pk) if wanted_pk is not None:
-				return UserFullReadSerializer
-			case _:
-				return UserMinimalReadSerializer
+		requester = self.request.user
+		if requester.is_anonymous:
+			return UserMinimalReadSerializer
+
+		# The full serializer (email, privilege flags, timestamps) is only for the
+		# account owner viewing themselves, or an admin. Everyone else — including
+		# any authenticated user listing or fetching *other* users — gets the
+		# minimal serializer. The previous match-case rebound `wanted_pk` to the
+		# requester's pk (a capture pattern, not a comparison), so every GET fell
+		# through to the full serializer and leaked all users' PII.
+		wanted_pk = self.kwargs.get("pk")
+		is_self = wanted_pk is not None and str(requester.pk) == str(wanted_pk)
+		if is_self or requester.is_staff or requester.is_superuser:
+			return UserFullReadSerializer
+		return UserMinimalReadSerializer
 
 	def get_permissions(self) -> Sequence[Any]:
 		# Account creation, ie. registration, needs to work for visitors without an account
@@ -316,6 +325,7 @@ class UserViewSet(_UserModelViewSet):
 
 		user.set_password(new_password)
 		user.save(update_fields=["password", "date_modified"])
+		revoke_all_refresh_families_for_user(user, reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
 
 		return Response({"status": "ok"})
 
@@ -433,6 +443,7 @@ class PasswordResetConfirmView(APIView):
 
 		user.set_password(new_password)
 		user.save(update_fields=["password", "date_modified"])
+		revoke_all_refresh_families_for_user(user, reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
 
 		# Clean up used code
 		PasswordResetCode.objects.filter(user=user).delete()

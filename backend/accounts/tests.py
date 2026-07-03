@@ -41,6 +41,63 @@ class UserViewSetTestCase(ViewSetMixin):
 	def test_retrieve_user(self):
 		self._test_retrieve_object(comparison_field="username")
 
+	def test_list_does_not_leak_other_users_pii(self):
+		"""Listing users must not expose email / privilege flags of other accounts."""
+		response = self.api_client.get(reverse("users-list"))
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		body = response.data
+		items = body["results"] if isinstance(body, dict) and "results" in body else body
+		self.assertGreater(len(items), 1)
+		for item in items:
+			self.assertNotIn("email", item)
+			self.assertNotIn("is_staff", item)
+			self.assertNotIn("is_superuser", item)
+
+	def test_retrieve_other_user_does_not_leak_pii(self):
+		"""Fetching another user's detail returns the minimal serializer, not their email/flags."""
+		response = self.api_client.get(reverse("users-detail", kwargs={"pk": self.secondary_user.pk}))
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertNotIn("email", response.data)
+		self.assertNotIn("is_superuser", response.data)
+
+	def test_retrieve_self_returns_full_profile(self):
+		"""The requester can still see their own full profile (regression guard)."""
+		response = self.api_client.get(reverse("users-detail", kwargs={"pk": self.regular_user.pk}))
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertIn("email", response.data)
+
+	def test_change_password_revokes_refresh_sessions(self):
+		"""A password change must revoke outstanding refresh sessions so a thief is evicted."""
+		# SetupMixin logged regular_user in with remember-me, creating an active family.
+		family = RefreshSessionFamily.objects.filter(user=self.regular_user, revoked_at__isnull=True).first()
+		assert family is not None
+
+		response = self.api_client.post(
+			reverse("users-change-password"),
+			{"current_password": password, "new_password": _VALID_TEST_PASSWORD},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		family.refresh_from_db()
+		self.assertIsNotNone(family.revoked_at)
+
+	def test_password_reset_confirm_revokes_refresh_sessions(self):
+		"""Completing a password reset must revoke outstanding refresh sessions."""
+		family = RefreshSessionFamily.objects.filter(user=self.regular_user, revoked_at__isnull=True).first()
+		assert family is not None
+		PasswordResetCode.issue_for_user(user=self.regular_user, code="123456")
+
+		response = self.api_client.post(
+			reverse("password-reset-confirm"),
+			{"email": self.regular_user.email, "code": "123456", "new_password": _VALID_TEST_PASSWORD},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		family.refresh_from_db()
+		self.assertIsNotNone(family.revoked_at)
+
 	def test_create_user(self):
 		fields = {
 			"username": "test_username01",

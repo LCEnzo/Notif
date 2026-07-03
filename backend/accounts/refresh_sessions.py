@@ -140,6 +140,19 @@ def revoke_refresh_family_for_token(raw_refresh_token: str, *, reason: str) -> b
 	return True
 
 
+def revoke_all_refresh_families_for_user(user: User, *, reason: str) -> int:
+	"""Revoke every currently-active refresh session family owned by ``user``.
+
+	Used when a credential change should evict all outstanding sessions (password
+	change/reset). Returns the number of families revoked. Already-revoked
+	families are left untouched so their original reason/timestamp is preserved.
+	"""
+	return RefreshSessionFamily.objects.filter(user=user, revoked_at__isnull=True).update(
+		revoked_at=timezone.now(),
+		revoked_reason=reason[:80],
+	)
+
+
 def cleanup_refresh_sessions(*, now: datetime | None = None) -> RefreshSessionCleanupResult:
 	now = now or timezone.now()
 	cutoff = now - _refresh_token_lifetime()
