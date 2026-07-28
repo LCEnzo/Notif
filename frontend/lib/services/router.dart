@@ -10,24 +10,41 @@ import 'package:notif/screens/reset_password.dart';
 import 'package:notif/screens/settings.dart';
 import 'package:notif/services/auth.dart';
 
+/// Where the app waits while a remembered session is being restored, instead
+/// of showing the login screen it is about to redirect away from.
+const String splashRoute = '/splash';
+
 GoRouter createRouter(AuthService authService) {
   return GoRouter(
     initialLocation: '/login',
     refreshListenable: authService,
     redirect: (context, state) {
-      final loggedIn = authService.jwt != null;
+      final location = state.matchedLocation;
       final isAuthRoute =
-          state.matchedLocation == '/login' ||
-          state.matchedLocation == '/register' ||
-          state.matchedLocation == '/forgot-password' ||
-          state.matchedLocation == '/reset-password';
-      final isPublicRoute = state.matchedLocation == '/about';
+          location == '/login' ||
+          location == '/register' ||
+          location == '/forgot-password' ||
+          location == '/reset-password';
+      final isPublicRoute = location == '/about';
 
+      // Restoring: we do not yet know whether there is a session, so committing
+      // to either side would flash a screen the user is not staying on.
+      if (authService.isRestoringSession) {
+        if (location == splashRoute || isPublicRoute) return null;
+        return splashRoute;
+      }
+
+      final loggedIn = authService.jwt != null;
+      if (location == splashRoute) return loggedIn ? '/home' : '/login';
       if (!loggedIn && !isAuthRoute && !isPublicRoute) return '/login';
       if (loggedIn && isAuthRoute) return '/home';
       return null;
     },
     routes: [
+      GoRoute(
+        path: splashRoute,
+        builder: (context, state) => const SessionRestoreSplash(),
+      ),
       GoRoute(path: '/login', builder: (context, state) => const LogInPage()),
       GoRoute(
         path: '/register',

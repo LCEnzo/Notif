@@ -30,6 +30,75 @@ class LogInPage extends StatelessWidget {
   }
 }
 
+/// Shown while a remembered session is being restored, so a cold start does not
+/// flash the login form it is about to redirect away from.
+class SessionRestoreSplash extends StatelessWidget {
+  const SessionRestoreSplash({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AuthScaffold(
+      child: Column(
+        key: const Key('sessionRestoreSplash'),
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Restoring session',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Explains why the app is signed out when the reason is not "you signed out":
+/// an unreachable backend that the app is still retrying, or a configuration
+/// that cannot keep a session at all.
+class AuthSessionNotice extends StatelessWidget {
+  const AuthSessionNotice({super.key, required this.authService});
+
+  final AuthService authService;
+
+  @override
+  Widget build(BuildContext context) {
+    final failure = authService.sessionUnavailableFailure;
+    final diagnostic = authService.sessionDiagnostic;
+    if (failure == null && diagnostic == null) {
+      return const SizedBox.shrink();
+    }
+
+    final text$ = Theme.of(context).textTheme;
+    final lines = <String>[?failure?.userMessage, ?diagnostic];
+
+    return Padding(
+      key: const Key('authSessionNotice'),
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(lines.join('\n\n'), style: text$.bodySmall),
+          if (failure != null)
+            AuthInlineAction(
+              key: const Key('authSessionRetry'),
+              label: authService.isRecoveryScheduled
+                  ? 'Retry now'
+                  : 'Try again',
+              onPressed: () =>
+                  unawaited(authService.retryRememberedSession()),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FormContent extends StatefulWidget {
   const _FormContent();
 
@@ -52,7 +121,8 @@ class _FormContentState extends State<_FormContent> {
 
   @override
   Widget build(BuildContext context) {
-    final authService = context.read<AuthService>();
+    // Watched, not read: the session notice below reflects auth state.
+    final authService = context.watch<AuthService>();
     final isFramed =
         context.watch<AppSettingsController?>()?.authCardStyle ==
         AuthCardStyle.framed;
@@ -79,6 +149,7 @@ class _FormContentState extends State<_FormContent> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        AuthSessionNotice(authService: authService),
         AppTextField(
           key: const Key('usernameField'),
           labelText: 'Username',
@@ -138,6 +209,7 @@ class _FormContentState extends State<_FormContent> {
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
+        AuthSessionNotice(authService: authService),
         AppTextField(
           key: const Key('usernameField'),
           labelText: 'Username',
