@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 # Pre-commit hook: scan staged files for secrets with detect-secrets.
 #
-# Relies on a .secrets.baseline at the repo root.  Secrets that are
-# already in the baseline (known or flagged as false positive) are
+# The staged BYTES are scanned, not the working tree: with a partially staged
+# file the two differ, and the commit is the staged version. The index is
+# materialised into a temp dir via git checkout-index and the scan runs there.
+# The baseline is read from the index too, so a regenerated baseline must be
+# staged (git add .secrets.baseline) to take effect.
+#
+# Secrets already in the baseline (known or audited false positives) are
 # allowed; any new secret triggers a reject.
 #
 # Bypass: git -c core.hooksPath=/dev/null commit
@@ -11,13 +16,21 @@ set -euo pipefail
 mapfile -d "" -t staged < <(git diff --cached --name-only -z --diff-filter=ACM)
 [ "${#staged[@]}" -eq 0 ] && exit 0
 
-cd "$(git rev-parse --show-toplevel)"
+repo_root=$(git rev-parse --show-toplevel)
+cd "$repo_root"
 
-if ! uv --project backend run detect-secrets-hook --baseline .secrets.baseline "${staged[@]}"; then
+staging_dir=$(mktemp -d)
+trap 'rm -rf "$staging_dir"' EXIT
+
+git checkout-index --prefix="$staging_dir/" -- "${staged[@]}" .secrets.baseline
+
+if ! (cd "$staging_dir" && uv --project "$repo_root/backend" run detect-secrets-hook --baseline .secrets.baseline "${staged[@]}"); then
 	echo ""
 	echo "--- detect-secrets found potential secrets in staged files ---"
-	echo "If these are false positives, regenerate the baseline through a temp file:"
-	echo "  uv --project backend run detect-secrets scan --baseline .secrets.baseline > .secrets.baseline.new"
-	echo "  mv .secrets.baseline.new .secrets.baseline"
+	echo "If these are false positives, regenerate the baseline, re-audit the"
+	echo "new entries, and stage it:"
+	echo "  uv --project backend run detect-secrets scan > .secrets.baseline"
+	echo "  uv --project backend run detect-secrets audit .secrets.baseline"
+	echo "  git add .secrets.baseline"
 	exit 1
 fi
