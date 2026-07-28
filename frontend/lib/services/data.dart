@@ -794,6 +794,10 @@ class LinkService extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint('LinkService._fetchStrategyChoices: $error');
       }
+      // Reported, not just logged: falling back to a single hardcoded choice
+      // silently degrades the strategy dropdown, so a contract break here was
+      // previously invisible outside a debug build.
+      _recordFailure(error, endpoint: 'GET /monitoring/strat-choices');
       _strategyChoices = defaultStrategyChoices;
       _strategyChoicesLoaded = false;
     }
@@ -1279,12 +1283,13 @@ String _formatScrapeResult(JsonCursor data, {required int? linkId}) {
   var totalUpdates = 0;
   var failedCount = 0;
 
-  for (final key in data.object().keys) {
-    final value = data.field(key);
+  final results = data.optionalField('results');
+  for (final key in results?.object().keys ?? const <String>[]) {
+    final value = results!.field(key);
     final status = value.optionalField('status')?.string() ?? '';
     if (status == 'ok') {
       okCount += 1;
-      totalUpdates += value.optionalField('count')?.integer() ?? 0;
+      totalUpdates += value.optionalField('updates_found')?.integer() ?? 0;
     } else {
       failedCount += 1;
     }
