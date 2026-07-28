@@ -4,17 +4,20 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from django.db.models.query import QuerySet
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.mixins import ListModelMixin
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 from rest_framework.throttling import BaseThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
-from rest_framework.viewsets import ModelViewSet
+from rest_framework.viewsets import GenericViewSet, ModelViewSet
 from rest_framework_simplejwt.serializers import TokenObtainSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenVerifyView
 
@@ -24,14 +27,18 @@ from accounts.refresh_sessions import (
 	REFRESH_REQUEST_HEADER_VALUE,
 	RefreshSessionError,
 	RefreshTokenReuseError,
+	active_refresh_families_for_user,
 	issue_tokens_for_login,
 	refresh_lifetime_seconds,
+	revoke_all_refresh_families_for_user,
 	revoke_refresh_family_for_token,
 	rotate_refresh_token,
 )
 from accounts.serializers import (
 	PasswordResetConfirmSerializer,
 	PasswordResetRequestSerializer,
+	RefreshSessionRevokeResponseSerializer,
+	RefreshSessionSerializer,
 	TokenAccessResponseSerializer,
 	TokenLoginRequestSerializer,
 	TokenLogoutResponseSerializer,
@@ -44,8 +51,10 @@ from commons.permissions import IsRequestingThemselves, ReadOnly
 
 if TYPE_CHECKING:
 	_UserModelViewSet = ModelViewSet[User]
+	_RefreshSessionGenericViewSet = GenericViewSet[RefreshSessionFamily]
 else:
 	_UserModelViewSet = ModelViewSet
+	_RefreshSessionGenericViewSet = GenericViewSet
 
 
 class DevBootstrapTokenObtainPairSerializer(TokenObtainSerializer):
@@ -159,15 +168,89 @@ def _require_refresh_request_header(request: Request) -> None:
 		raise ValidationError({"X-Refresh-Request": "Refresh requests must include X-Refresh-Request: 1."})
 
 
+def _is_json_content_type(request: Request) -> bool:
+	media_type = (request.content_type or "").split(";", 1)[0].strip().lower()
+	return media_type == "application/json"
+
+
+def _require_non_simple_request(request: Request) -> None:
+	"""Reject anything a cross-site HTML form could have produced.
+
+	DRF marks its views ``csrf_exempt``, SimpleJWT's token views clear
+	``authentication_classes``, and DRF's default ``FormParser`` is enabled — so
+	without this gate a top-level form POST from any site is a CORS *simple
+	request*: no preflight, no CSRF token, and the browser happily stores the
+	``Set-Cookie: notif_refresh`` that comes back. On ``/token/`` that plants the
+	attacker's session in the victim's browser (the victim's app then silently
+	authenticates into the attacker's account); on ``/token/logout/`` it drops an
+	arbitrary user's session.
+
+	An HTML form can only send ``application/x-www-form-urlencoded``,
+	``multipart/form-data`` or ``text/plain``, and it cannot set request headers.
+	Either signal therefore proves the request was not one: a custom header, or a
+	JSON content type.
+
+	``X-Refresh-Request: 1`` is the preferred signal, but the Flutter client only
+	sends it on ``/token/refresh/`` — login and logout send just
+	``Content-Type: application/json``. Both are accepted here so the shipped client
+	keeps working; ``parser_classes = [JSONParser]`` on the token views makes the
+	content-type branch structural rather than advisory (a form-encoded body cannot
+	be parsed at all, even if the header is present). Once the client sends the
+	header on login/logout too, drop the content-type branch and call
+	``_require_refresh_request_header`` everywhere.
+	"""
+	if request.META.get(REFRESH_REQUEST_HEADER) == REFRESH_REQUEST_HEADER_VALUE:
+		return
+	if _is_json_content_type(request):
+		return
+	raise ValidationError(
+		{
+			"X-Refresh-Request": (
+				"Send X-Refresh-Request: 1 or a JSON request body. Form-encoded requests are "
+				"rejected because a cross-site form could forge them."
+			)
+		}
+	)
+
+
+def _refresh_request_header_parameter(*, required: bool) -> OpenApiParameter:
+	return OpenApiParameter(
+		name="X-Refresh-Request",
+		type=str,
+		location=OpenApiParameter.HEADER,
+		required=required,
+		description=(
+			"Set to 1. Proves the request did not come from a cross-site HTML form. "
+			+ (
+				"Required."
+				if required
+				else "Optional only because a JSON request body proves the same thing; one of the two is required."
+			)
+		),
+	)
+
+
 class DevBootstrapTokenObtainPairView(TokenThrottleMixin, TokenObtainPairView):
 	serializer_class = DevBootstrapTokenObtainPairSerializer
+	# JSON only. A cross-site HTML form cannot produce this content type, which is
+	# what stops an attacker from planting their own notif_refresh cookie in a
+	# victim's browser via a top-level form POST to this endpoint.
+	parser_classes = [JSONParser]
 	throttle_scope = "login"
 
 	@extend_schema(
+		parameters=[_refresh_request_header_parameter(required=False)],
 		request=TokenLoginRequestSerializer,
-		responses={status.HTTP_200_OK: TokenAccessResponseSerializer},
+		responses={
+			status.HTTP_200_OK: TokenAccessResponseSerializer,
+			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				description="Request was not proven non-cross-site (see X-Refresh-Request), or the body was invalid."
+			),
+			status.HTTP_401_UNAUTHORIZED: OpenApiResponse(description="Invalid credentials."),
+		},
 	)
 	def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+		_require_non_simple_request(request)
 		response = super().post(request, *args, **kwargs)
 		if not isinstance(response.data, dict):
 			return response
@@ -186,20 +269,31 @@ class DevBootstrapTokenObtainPairView(TokenThrottleMixin, TokenObtainPairView):
 
 class ThrottledTokenRefreshView(TokenThrottleMixin, APIView):
 	permission_classes = [AllowAny]
+	parser_classes = [JSONParser]
 	throttle_scope = "token_refresh"
 
+	def get_throttles(self) -> list[BaseThrottle]:
+		"""Scoped throttle only — see the token_refresh comment in settings.py.
+
+		The endpoint authenticates by cookie, so DRF sees an anonymous caller and
+		``UserRateThrottle`` also keys on IP at the "user" rate (500/hour ≈ 8/min).
+		Stacking it under a per-minute scope just made the coarser limit bind first
+		and turned a NAT full of users into forced logouts.
+		"""
+		if settings.TESTING:
+			return []
+		return [ScopedRateThrottle()]
+
 	@extend_schema(
-		parameters=[
-			OpenApiParameter(
-				name="X-Refresh-Request",
-				type=str,
-				location=OpenApiParameter.HEADER,
-				required=True,
-				description="Must be set to 1 for refresh requests.",
-			)
-		],
+		parameters=[_refresh_request_header_parameter(required=True)],
 		request=TokenRefreshRequestSerializer,
-		responses={status.HTTP_200_OK: TokenAccessResponseSerializer},
+		responses={
+			status.HTTP_200_OK: TokenAccessResponseSerializer,
+			status.HTTP_400_BAD_REQUEST: OpenApiResponse(description="Missing the X-Refresh-Request header."),
+			status.HTTP_401_UNAUTHORIZED: OpenApiResponse(
+				description="Refresh cookie missing, expired, revoked, or replayed outside the rotation grace window."
+			),
+		},
 	)
 	def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
 		_require_refresh_request_header(request)
@@ -221,25 +315,40 @@ class ThrottledTokenRefreshView(TokenThrottleMixin, APIView):
 
 class ThrottledTokenLogoutView(TokenThrottleMixin, APIView):
 	permission_classes = [AllowAny]
+	parser_classes = [JSONParser]
 	throttle_scope = "token_logout"
 
 	@extend_schema(
+		parameters=[_refresh_request_header_parameter(required=False)],
 		request=TokenRefreshRequestSerializer,
-		responses={status.HTTP_200_OK: TokenLogoutResponseSerializer},
+		responses={
+			status.HTTP_200_OK: TokenLogoutResponseSerializer,
+			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				description="Request was not proven non-cross-site (see X-Refresh-Request)."
+			),
+		},
 	)
 	def post(self, request: Request) -> Response:
+		_require_non_simple_request(request)
 		raw_refresh_token = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME, "")
-		if raw_refresh_token:
-			revoke_refresh_family_for_token(
-				raw_refresh_token,
-				reason="logout",
-			)
 		response = Response({"status": "ok"}, status=status.HTTP_200_OK)
+		response["Cache-Control"] = "no-store"
+		if not raw_refresh_token:
+			# Nothing was presented, so there is nothing to revoke and nothing to
+			# clear. Emitting a Set-Cookie here would let any origin that can reach
+			# this endpoint drop a session it never held.
+			return response
+
+		revoke_refresh_family_for_token(
+			raw_refresh_token,
+			reason=RefreshSessionFamily.RevokeReason.LOGOUT,
+		)
 		_clear_refresh_cookie(response)
 		return response
 
 
 class ThrottledTokenVerifyView(TokenThrottleMixin, TokenVerifyView):
+	parser_classes = [JSONParser]
 	throttle_scope = "token_verify"
 
 
@@ -267,8 +376,13 @@ class UserViewSet(_UserModelViewSet):
 				return UserMinimalReadSerializer
 
 	def get_permissions(self) -> Sequence[Any]:
-		# Account creation, ie. registration, needs to work for visitors without an account
-		if self.request.method == "POST":
+		# Account creation, ie. registration, needs to work for visitors without an
+		# account. This is keyed on the action rather than the HTTP method because
+		# keying on the method also stripped IsAuthenticated off every POST @action
+		# on this viewset — change_password and get_my_info — which then reached
+		# their `assert isinstance(user, User)` with an AnonymousUser and returned
+		# 500 to unauthenticated callers.
+		if self.action == "create":
 			return []
 
 		return super().get_permissions()
@@ -316,8 +430,89 @@ class UserViewSet(_UserModelViewSet):
 
 		user.set_password(new_password)
 		user.save(update_fields=["password", "date_modified"])
+		revoke_all_refresh_families_for_user(user, reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
 
 		return Response({"status": "ok"})
+
+
+# ── refresh sessions ─────────────────────────────────────────
+
+
+@extend_schema_view(
+	list=extend_schema(
+		summary="List the caller's active sessions",
+		description=(
+			"Every refresh session (signed-in device) that can still mint access tokens for the "
+			"requesting user, most recently used first. Sessions that are revoked, stale beyond the "
+			"refresh token lifetime, or past the absolute session lifetime are omitted. Strictly "
+			"owner-scoped: a user never sees another user's sessions."
+		),
+		responses={
+			status.HTTP_200_OK: RefreshSessionSerializer(many=True),
+			status.HTTP_401_UNAUTHORIZED: OpenApiResponse(description="Authentication credentials were not provided."),
+		},
+	)
+)
+class RefreshSessionViewSet(ListModelMixin, _RefreshSessionGenericViewSet):
+	"""Inspect and revoke the requesting user's own refresh sessions."""
+
+	permission_classes = [IsAuthenticated]
+	serializer_class = RefreshSessionSerializer
+	# Metadata only — get_queryset() below is what actually runs. Declared so
+	# drf-spectacular can derive the model (and therefore the {family_id} path
+	# parameter's type) without calling get_queryset() with an AnonymousUser.
+	queryset = RefreshSessionFamily.objects.none()
+	lookup_field = "family_id"
+	lookup_url_kwarg = "family_id"
+
+	def get_queryset(self) -> QuerySet[RefreshSessionFamily]:
+		user = self.request.user
+		if not isinstance(user, User):
+			return RefreshSessionFamily.objects.none()
+		return active_refresh_families_for_user(user)
+
+	@extend_schema(
+		summary="Revoke one session",
+		description=(
+			"Revokes a single session by its family_id, signing that device out at its next refresh. "
+			"Scoped to the caller's own sessions, so another user's family_id resolves to 404 rather "
+			"than revealing that it exists."
+		),
+		request=None,
+		responses={
+			status.HTTP_200_OK: RefreshSessionRevokeResponseSerializer,
+			status.HTTP_401_UNAUTHORIZED: OpenApiResponse(description="Authentication credentials were not provided."),
+			status.HTTP_404_NOT_FOUND: OpenApiResponse(description="No such active session for this user."),
+		},
+	)
+	@action(detail=True, methods=["post"])
+	def revoke(self, request: Request, family_id: str | None = None) -> Response:
+		family = self.get_object()
+		family.revoke(RefreshSessionFamily.RevokeReason.REVOKED_BY_USER)
+		return Response({"status": "ok", "revoked": 1})
+
+	@extend_schema(
+		summary="Revoke every session",
+		description=(
+			"Signs the caller out everywhere, including the device making the request. Returns how "
+			"many sessions were revoked; already-revoked sessions are left untouched so their "
+			"original reason and timestamp survive."
+		),
+		request=None,
+		responses={
+			status.HTTP_200_OK: RefreshSessionRevokeResponseSerializer,
+			status.HTTP_401_UNAUTHORIZED: OpenApiResponse(description="Authentication credentials were not provided."),
+		},
+	)
+	@action(detail=False, methods=["post"], url_path="revoke-all")
+	def revoke_all(self, request: Request) -> Response:
+		user = request.user
+		assert isinstance(user, User), "revoking sessions requires an application User"
+		revoked = revoke_all_refresh_families_for_user(
+			user,
+			reason=RefreshSessionFamily.RevokeReason.REVOKED_BY_USER,
+		)
+		return Response({"status": "ok", "revoked": revoked})
 
 
 # ── password reset ───────────────────────────────────────────
@@ -433,6 +628,7 @@ class PasswordResetConfirmView(APIView):
 
 		user.set_password(new_password)
 		user.save(update_fields=["password", "date_modified"])
+		revoke_all_refresh_families_for_user(user, reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
 
 		# Clean up used code
 		PasswordResetCode.objects.filter(user=user).delete()
