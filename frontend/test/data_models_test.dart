@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/services/data.dart';
+import 'package:notif/services/failures.dart';
 import 'package:notif/services/json_contracts.dart';
 
 JsonCursor cursor(Object? value) {
@@ -299,13 +300,25 @@ void main() {
       );
     });
 
-    test('falls back to DioException message', () {
+    test('never shows the transport message to the user', () {
+      // Dio always populates `message`, and its text is written for library
+      // authors, not users. Copy goes to the UI; the technical text stays on
+      // AppFailure.detail for logs.
       final error = DioException(
         requestOptions: RequestOptions(path: '/test'),
         type: DioExceptionType.connectionTimeout,
-        message: 'Connection timed out',
+        message:
+            'The request connection took longer than 0:00:10.000000 '
+            'to establish. It was aborted.',
       );
-      expect(describeDataError(error), 'Connection timed out');
+
+      expect(describeDataError(error), isNot(contains('0:00:10')));
+      expect(describeDataError(error), isNot(contains('aborted')));
+      expect(
+        describeDataError(error),
+        'The server took too long to respond. Try again in a moment.',
+      );
+      expect(AppFailure.from(error).detail, contains('0:00:10'));
     });
 
     test('returns toString for non-DioException objects', () {
