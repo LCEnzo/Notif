@@ -68,7 +68,9 @@ done
 # ── hook checks ──────────────────────────────────────────────────
 if $check_hooks; then
 	echo -e "${YELLOW}━━━ hooks changed — checking shell syntax ━━━${NC}"
-	run_check "bash syntax" bash -n "$repo_root/.githooks/pre-push"
+	for hook in "$repo_root"/.githooks/*; do
+		run_check "bash syntax ($(basename "$hook"))" bash -n "$hook"
+	done
 fi
 
 # ── backend checks ───────────────────────────────────────────────
