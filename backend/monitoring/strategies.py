@@ -982,7 +982,9 @@ class FeedStrategy(BaseStrategy):
 			if not seen_entry_hash_set and last_entry_id is not None and entry_id == last_entry_id:
 				continue
 
-			title = entry.get("title", "Untitled")
+			# A present-but-empty <title> is common in the wild, and dict.get
+			# only substitutes when the key is absent.
+			title = str(entry.get("title") or "").strip() or "Untitled"
 			description = self._entry_description(entry)
 			link = URL(entry.get("link", url))
 
