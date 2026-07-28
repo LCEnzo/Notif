@@ -28,20 +28,25 @@ Future<void> reportClientFailure({
       settings: settings,
       headers: _jsonHeaders,
       body: {
+        // Every free-text field is capped at the sink's max_length, because
+        // DRF rejects over-length values outright rather than truncating -
+        // an uncapped stack trace would 400 and lose the whole report.
         'category': failure.category.wireName,
-        'route': route ?? '',
-        'endpoint': failure.endpoint ?? endpoint ?? '',
-        'contract_path': failure.contractPath ?? contract?.path ?? '',
-        'expected': failure.expected ?? contract?.expected ?? '',
-        'actual': failure.actual ?? contract?.actual ?? '',
-        'app_version': packageInfo,
-        'git_hash': _gitHash,
-        'browser': _browserSummary(),
+        'route': _capped(route ?? '', 200),
+        'endpoint': _capped(failure.endpoint ?? endpoint ?? '', 200),
+        'contract_path': _capped(
+          failure.contractPath ?? contract?.path ?? '',
+          200,
+        ),
+        'expected': _capped(failure.expected ?? contract?.expected ?? '', 500),
+        'actual': _capped(failure.actual ?? contract?.actual ?? '', 500),
+        'app_version': _capped(packageInfo, 60),
+        'git_hash': _capped(_gitHash, 80),
+        'browser': _capped(_browserSummary(), 200),
         // debugMessage, not the user copy: this channel exists for diagnosis,
         // and the transport detail is the part that identifies an outage.
-        // Capped at the backend's documented 500-char limit for this field.
         'message': _capped(failure.debugMessage, 500),
-        'stack': stackTrace?.toString() ?? '',
+        'stack': _capped(stackTrace?.toString() ?? '', 2000),
       },
     );
   } on Exception catch (reportError) {
