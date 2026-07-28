@@ -37,7 +37,10 @@ Future<void> reportClientFailure({
         'app_version': packageInfo,
         'git_hash': _gitHash,
         'browser': _browserSummary(),
-        'message': failure.message,
+        // debugMessage, not the user copy: this channel exists for diagnosis,
+        // and the transport detail is the part that identifies an outage.
+        // Capped at the backend's documented 500-char limit for this field.
+        'message': _capped(failure.debugMessage, 500),
         'stack': stackTrace?.toString() ?? '',
       },
     );
@@ -47,6 +50,9 @@ Future<void> reportClientFailure({
     }
   }
 }
+
+String _capped(String value, int maxLength) =>
+    value.length <= maxLength ? value : value.substring(0, maxLength);
 
 Future<String> _loadPackageInfo() async {
   try {
