@@ -33,9 +33,17 @@ typedef RefreshAccessToken = Future<String?> Function();
 typedef AuthExpiredHandler = Future<void> Function();
 
 class ApiClientException implements Exception {
-  const ApiClientException(this.message);
+  const ApiClientException(this.message, {this.statusCode, this.data});
 
   final String message;
+
+  /// HTTP status that produced this failure, when there was a response.
+  /// Preserved so [AppFailure] can classify it instead of degrading every
+  /// non-2xx into an unexpected failure.
+  final int? statusCode;
+
+  /// Response body that produced this failure, for message extraction.
+  final Object? data;
 
   @override
   String toString() => message;
@@ -358,5 +366,7 @@ void expectSuccessStatus(
 
   throw ApiClientException(
     "$context failed: (${response.statusCode}) ${response.data}",
+    statusCode: statusCode,
+    data: response.data,
   );
 }
