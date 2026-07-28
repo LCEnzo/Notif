@@ -18,7 +18,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework_simplejwt.serializers import TokenObtainSerializer
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenVerifyView
 
-from accounts.models import User
+from accounts.models import RefreshSessionFamily, User
 from accounts.refresh_sessions import (
 	REFRESH_REQUEST_HEADER,
 	REFRESH_REQUEST_HEADER_VALUE,
@@ -135,6 +135,15 @@ def _clear_refresh_cookie(response: Response) -> None:
 	response["Cache-Control"] = "no-store"
 
 
+def _revoke_existing_refresh_cookie(request: Request) -> None:
+	raw_refresh_token = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME, "")
+	if raw_refresh_token:
+		revoke_refresh_family_for_token(
+			raw_refresh_token,
+			reason=RefreshSessionFamily.RevokeReason.LOGIN_REPLACED,
+		)
+
+
 def _wants_remember_me(raw: Any) -> bool:
 	if raw is None:
 		return True
@@ -163,6 +172,7 @@ class DevBootstrapTokenObtainPairView(TokenThrottleMixin, TokenObtainPairView):
 		if not isinstance(response.data, dict):
 			return response
 
+		_revoke_existing_refresh_cookie(request)
 		remember_me = _wants_remember_me(request.data.get("remember_me"))
 		refresh_token = response.data.pop("refresh", None)
 		if not remember_me:
