@@ -4,6 +4,8 @@ from django.core.paginator import Page
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
+from rest_framework import serializers
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter
@@ -19,7 +21,15 @@ from accounts.models import User
 from commons.permissions import IsOwnerOrAdmin, OwnerOrAdminQuerysetMixin
 from commons.result import Err, Ok
 from monitoring.models import Link, Notification, Strategy
-from monitoring.serializers import LinkSerializer, NotificationSerializer, StrategySerializer
+from monitoring.serializers import (
+	HealthCheckResponseSerializer,
+	LinkSerializer,
+	NotificationSerializer,
+	StatusCheckResponseSerializer,
+	StrategySerializer,
+	TriggerScrapeRequestSerializer,
+	TriggerScrapeSingleResponseSerializer,
+)
 from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
 from notif.config import settings
@@ -147,6 +157,10 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		return Response({"marked_read": updated})
 
 
+@extend_schema(
+	request=TriggerScrapeRequestSerializer,
+	responses={200: TriggerScrapeSingleResponseSerializer},
+)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def trigger_scrape(request: Request) -> Response:
@@ -176,12 +190,14 @@ def trigger_scrape(request: Request) -> Response:
 		return Response(summary)
 
 
+@extend_schema(responses={200: serializers.ListField(child=serializers.CharField())})
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_strat_choices(request: Request) -> Response:
 	return Response(data=list(STRATEGY_CHOICES))
 
 
+@extend_schema(responses={200: HealthCheckResponseSerializer})
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request: Request) -> Response:
@@ -193,6 +209,7 @@ def health_check(request: Request) -> Response:
 	return Response({"status": "ok"})
 
 
+@extend_schema(responses={200: StatusCheckResponseSerializer, 503: StatusCheckResponseSerializer})
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def status_check(request: Request) -> Response:

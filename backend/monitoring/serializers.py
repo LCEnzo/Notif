@@ -1,6 +1,6 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from rest_framework import serializers  # noqa: F401
+from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
 from monitoring.models import Link, Notification, Strategy, Update
@@ -10,11 +10,13 @@ if TYPE_CHECKING:
 	_LinkModelSerializer = ModelSerializer[Link]
 	_UpdateModelSerializer = ModelSerializer[Update]
 	_NotificationModelSerializer = ModelSerializer[Notification]
+	_AnySerializer = serializers.Serializer[Any]
 else:
 	_StrategyModelSerializer = ModelSerializer
 	_LinkModelSerializer = ModelSerializer
 	_UpdateModelSerializer = ModelSerializer
 	_NotificationModelSerializer = ModelSerializer
+	_AnySerializer = serializers.Serializer
 
 
 class StrategySerializer(_StrategyModelSerializer):
@@ -73,3 +75,29 @@ class NotificationSerializer(_NotificationModelSerializer):
 		model = Notification
 		fields = ["id", "update", "status", "read_at"]
 		read_only_fields = ["id", "update", "read_at"]
+
+
+class TriggerScrapeRequestSerializer(_AnySerializer):
+	link_id = serializers.IntegerField(min_value=1, required=False)
+
+
+class TriggerScrapeSingleResponseSerializer(_AnySerializer):
+	status = serializers.CharField()
+	updates_found = serializers.IntegerField(required=False)
+	message = serializers.CharField(required=False)
+
+
+class TriggerScrapeAllResponseSerializer(_AnySerializer):
+	results = serializers.DictField(child=serializers.DictField())
+
+
+class HealthCheckResponseSerializer(_AnySerializer):
+	status = serializers.CharField()
+
+
+class StatusCheckResponseSerializer(_AnySerializer):
+	status = serializers.CharField()
+	db = serializers.CharField()
+	version = serializers.CharField()
+	commit = serializers.CharField()
+	environment = serializers.CharField()
