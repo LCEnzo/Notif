@@ -1,8 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- allowBackup=false plus dataExtractionRules: the app holds a live
+         refresh token, so a cloud backup or a device-to-device transfer must
+         not be able to hand a working session to another device. Backup
+         defaults to true, which is why both are stated explicitly. -->
     <application
         android:label="Notif"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
         <activity
             android:name=".MainActivity"
             android:exported="true"
