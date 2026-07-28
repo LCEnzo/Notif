@@ -49,6 +49,12 @@ const _refreshHeaders = {
 };
 const _lastSuccessfulUsernameKey = 'lastSuccessfulUsername';
 
+/// Set when a login asks to be remembered, cleared on logout and on a genuine
+/// rejection. Lets a cold start tell "this device never had a session"
+/// (anonymous) from "the session we had was refused" (expired) — the refresh
+/// cookie itself is invisible to us on web, so it cannot answer that question.
+const _rememberedSessionKey = 'hasRememberedSession';
+
 sealed class AuthState {
   const AuthState();
 }
@@ -73,6 +79,32 @@ final class AuthRefreshing extends AuthState {
   final JWT previous;
 }
 
+/// The refresh could not be completed, and not because anything was rejected:
+/// the backend is unreachable, restarting, timing out, or behind a failing
+/// gateway. Credentials are still presumed valid — this state exists so an
+/// outage (a deploy, most often) can never be mistaken for a logout.
+final class AuthUnavailable extends AuthState {
+  const AuthUnavailable({
+    required this.failure,
+    required this.hadRememberedSession,
+    this.previous,
+  });
+
+  /// Why the refresh could not be completed.
+  final AppFailure failure;
+
+  /// Access token still held from before the outage, if any. Null after a
+  /// cold start that never got one.
+  final JWT? previous;
+
+  /// Whether a remembered session is expected to come back once the backend
+  /// does — i.e. whether retrying is worth anything.
+  final bool hadRememberedSession;
+
+  /// Whether the app should keep retrying on its own.
+  bool get isRetryable => failure.isRetryable;
+}
+
 final class AuthExpired extends AuthState {
   const AuthExpired();
 }
@@ -81,26 +113,74 @@ final class AuthLoggingOut extends AuthState {
   const AuthLoggingOut();
 }
 
+/// Resolves the backend origin when it cannot carry the session cookie.
+/// Injectable so the browser-only condition is testable off-browser.
+typedef CrossSiteBackendProbe =
+    String? Function(AppSettingsController? settings);
+
 class AuthService extends ChangeNotifier {
-  AuthService({bool restoreSessionOnStart = false})
-    : _restoreSessionOnStart = restoreSessionOnStart {
+  AuthService({
+    bool restoreSessionOnStart = false,
+    List<Duration>? recoveryBackoff,
+    CrossSiteBackendProbe? crossSiteBackendProbe,
+  }) : _restoreSessionOnStart = restoreSessionOnStart,
+       _recoveryBackoff = recoveryBackoff ?? defaultRecoveryBackoff,
+       _crossSiteBackendProbe = crossSiteBackendProbe ?? crossSiteBackendOrigin,
+       // Starting in "restoring" keeps the router on a splash instead of
+       // flashing the login screen before the remembered session lands.
+       _state = restoreSessionOnStart
+           ? const AuthRestoring()
+           : const AuthAnonymous() {
     _configureApiAuth();
   }
 
-  AuthState _state = const AuthAnonymous();
+  /// Delay before each automatic recovery attempt while the backend is
+  /// unreachable. Length doubles as the attempt budget: after the last entry
+  /// the app waits for the user (or a settings change) instead of polling
+  /// forever. Sized to cover a deploy or a container restart.
+  static const List<Duration> defaultRecoveryBackoff = [
+    Duration(seconds: 2),
+    Duration(seconds: 5),
+    Duration(seconds: 10),
+    Duration(seconds: 20),
+    Duration(seconds: 30),
+    Duration(seconds: 30),
+    Duration(seconds: 30),
+    Duration(seconds: 30),
+    Duration(seconds: 30),
+    Duration(seconds: 30),
+    Duration(seconds: 30),
+    Duration(seconds: 30),
+  ];
+
+  AuthState _state;
   AppSettingsController? _settings;
   final bool _restoreSessionOnStart;
+  final List<Duration> _recoveryBackoff;
+  final CrossSiteBackendProbe _crossSiteBackendProbe;
   Future<void>? _restoreSessionFuture;
   Future<String?>? _refreshInFlight;
+  Timer? _recoveryTimer;
+  int _recoveryAttempt = 0;
   int _authEpoch = 0;
   bool _restoreAttempted = false;
+  bool _disposed = false;
+  String? _sessionDiagnostic;
 
   void updateSettings(AppSettingsController? settings) {
+    final changed = !identical(_settings, settings);
     _settings = settings;
     _configureApiAuth();
     if (_restoreSessionOnStart && !_restoreAttempted) {
       _restoreAttempted = true;
       unawaited(restoreRememberedSession());
+      return;
+    }
+    // A settings change is a user action and a fresh chance for the backend to
+    // be reachable — spend a new recovery budget on it.
+    if (changed && _state is AuthUnavailable) {
+      _recoveryAttempt = 0;
+      _scheduleRecoveryAttempt();
     }
   }
 
@@ -135,6 +215,8 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<String?> _performRefresh(int epoch, JWT? previous) async {
+    final hadRememberedSession =
+        previous != null || await _hasRememberedSession();
     try {
       final response = await apiPost(
         "/token/refresh/",
@@ -148,31 +230,125 @@ class AuthService extends ChangeNotifier {
         return null;
       }
 
+      _recoveryAttempt = 0;
+      _sessionDiagnostic = null;
       _setState(AuthAuthenticated(JWT(access: accessToken)));
       return accessToken;
     } on Exception catch (error) {
+      final failure = AppFailure.from(error, endpoint: 'POST /token/refresh/');
       if (kDebugMode) {
-        debugPrint('AuthService._refreshAccessToken: $error');
+        debugPrint('AuthService._refreshAccessToken: ${failure.debugMessage}');
       }
       if (epoch != _authEpoch) {
+        // A newer login or logout already decided what the session is; this is
+        // the answer to a question nobody is asking any more.
         return null;
       }
 
-      final failure = AppFailure.from(error, endpoint: '/token/refresh/');
-      if (previous != null && failure.isAuthRejection) {
-        // The server looked at the refresh cookie and said no. Only this is
-        // proof the session died.
-        _setState(const AuthExpired());
-      } else if (previous != null) {
-        // A timeout or unreachable server says nothing about the session.
-        // Keep it; the next 401 will try the refresh again.
-        _setState(AuthAuthenticated(previous));
-      } else if (_state is AuthRestoring) {
-        // A cold start that cannot refresh is simply not signed in. This is
-        // where a fresh install lands, and it never had a session to expire.
-        _setState(const AuthAnonymous());
+      if (failure.isAuthRejection) {
+        await _handleRejectedSession(hadRememberedSession);
+      } else {
+        // Unreachable, timing out, 502 from the gateway mid-deploy: the
+        // credentials were never judged, so they stay.
+        _setState(
+          AuthUnavailable(
+            failure: failure,
+            previous: previous,
+            hadRememberedSession: hadRememberedSession,
+          ),
+        );
+        if (failure.isRetryable) {
+          _scheduleRecoveryAttempt();
+        }
       }
       return null;
+    }
+  }
+
+  /// The server refused the refresh credentials. Only here is ending the
+  /// session correct.
+  Future<void> _handleRejectedSession(bool hadRememberedSession) async {
+    _diagnoseCrossSiteCookie();
+    await _setRememberedSession(false);
+    _setState(
+      hadRememberedSession ? const AuthExpired() : const AuthAnonymous(),
+    );
+  }
+
+  /// A cross-site backend URL on web makes remember-me structurally
+  /// impossible: the browser will not attach the `SameSite=Lax` refresh cookie
+  /// to a request going to another site, so every refresh looks like a
+  /// rejection. Without this the only trace was a debug print.
+  void _diagnoseCrossSiteCookie() {
+    final crossSiteOrigin = _crossSiteBackendProbe(_settings);
+    if (crossSiteOrigin == null) {
+      return;
+    }
+    _sessionDiagnostic =
+        'Staying signed in is not possible with a cross-site backend '
+        '($crossSiteOrigin): the browser refuses to send the session cookie '
+        'to a different site than the one serving the app. Use a same-origin '
+        'backend URL, or expect to sign in again after every reload.';
+    if (kDebugMode) {
+      debugPrint('AuthService: $_sessionDiagnostic');
+    }
+  }
+
+  void _scheduleRecoveryAttempt() {
+    if (_disposed || _recoveryTimer != null) {
+      return;
+    }
+    if (_recoveryAttempt >= _recoveryBackoff.length) {
+      if (kDebugMode) {
+        debugPrint(
+          'AuthService: automatic recovery paused after $_recoveryAttempt '
+          'attempts — waiting for a manual retry',
+        );
+      }
+      return;
+    }
+
+    final delay = _recoveryBackoff[_recoveryAttempt];
+    _recoveryAttempt += 1;
+    _recoveryTimer = Timer(delay, () {
+      _recoveryTimer = null;
+      unawaited(_attemptRecovery());
+    });
+  }
+
+  Future<void> _attemptRecovery() async {
+    if (_disposed || _state is! AuthUnavailable) {
+      return;
+    }
+
+    if (!await _isBackendReachable()) {
+      if (!_disposed && _state is AuthUnavailable) {
+        _scheduleRecoveryAttempt();
+      }
+      return;
+    }
+
+    await _refreshAccessToken();
+    if (!_disposed && _state is AuthUnavailable) {
+      _scheduleRecoveryAttempt();
+    }
+  }
+
+  /// Liveness probe, so recovery does not spend refresh attempts on a backend
+  /// that is still down.
+  Future<bool> _isBackendReachable() async {
+    try {
+      final response = await apiGet(
+        healthPath,
+        settings: _settings,
+        headers: _jsonHeaders,
+      );
+      return response.statusCode == 200;
+    } on Exception catch (error) {
+      if (kDebugMode) {
+        debugPrint('AuthService._isBackendReachable: $error');
+      }
+      return false;
     }
   }
 
@@ -194,12 +370,17 @@ class AuthService extends ChangeNotifier {
     final data = expectSuccessObject(response, 'Login');
     final access = data.field('access').string(allowEmpty: false);
     _authEpoch += 1;
+    _cancelRecovery();
+    _sessionDiagnostic = null;
     _setState(AuthAuthenticated(JWT(access: access)));
+    await _setRememberedSession(rememberMe);
     await persistLastSuccessfulUsername(username);
   }
 
   Future<void> logout() async {
     _authEpoch += 1;
+    _cancelRecovery();
+    _sessionDiagnostic = null;
     _setState(const AuthLoggingOut());
     try {
       await apiPost(
@@ -214,6 +395,7 @@ class AuthService extends ChangeNotifier {
       }
     } finally {
       await clearNativeRefreshCookies();
+      await _setRememberedSession(false);
       _setState(const AuthAnonymous());
     }
   }
@@ -240,6 +422,19 @@ class AuthService extends ChangeNotifier {
 
     if (autoLogIn) {
       return loginWithRememberMe(username, password, rememberMe: true);
+    }
+  }
+
+  Future<void> refreshToken() async {
+    final accessToken = await _refreshAccessToken();
+    if (accessToken == null) {
+      // Surface the classified failure so a caller can tell an outage (retry)
+      // from a rejection (sign in again) without parsing a string.
+      throw sessionUnavailableFailure ??
+          const AppFailure(
+            category: FailureCategory.unauthorized,
+            message: 'Sign in again to continue.',
+          );
     }
   }
 
@@ -276,12 +471,28 @@ class AuthService extends ChangeNotifier {
     return switch (_state) {
       AuthAuthenticated(:final jwt) => jwt,
       AuthRefreshing(:final previous) => previous,
+      // An outage does not invalidate the token we already hold.
+      AuthUnavailable(:final previous) => previous,
       _ => null,
     };
   }
 
   int? get currentUserId => jwt?.userId;
   bool get isRestoringSession => _state is AuthRestoring;
+
+  /// Why the app cannot currently reach the session, when that is the case.
+  /// Retryable by definition — [retryRememberedSession] is the action.
+  AppFailure? get sessionUnavailableFailure => switch (_state) {
+    AuthUnavailable(:final failure) => failure,
+    _ => null,
+  };
+
+  /// A configuration problem that makes staying signed in impossible, phrased
+  /// for the user. Survives until the next successful sign-in.
+  String? get sessionDiagnostic => _sessionDiagnostic;
+
+  /// Whether an automatic recovery attempt is pending.
+  bool get isRecoveryScheduled => _recoveryTimer != null;
 
   Future<void> restoreRememberedSession() {
     final existing = _restoreSessionFuture;
@@ -294,10 +505,26 @@ class AuthService extends ChangeNotifier {
     return future;
   }
 
+  /// Re-attempts a session restore after it failed for a non-auth reason.
+  ///
+  /// The automatic attempt latches, so without this a single outage at launch
+  /// left the app signed out for the whole process lifetime even though the
+  /// refresh cookie stayed valid for days.
+  Future<void> retryRememberedSession() {
+    _cancelRecovery();
+    _recoveryAttempt = 0;
+    return restoreRememberedSession();
+  }
+
   Future<void> _restoreRememberedSession() async {
     _setState(const AuthRestoring());
     try {
       await _settings?.initialized;
+      if (!await _hasRememberedSession()) {
+        // Nothing to restore: a first-time visitor is anonymous, not expired.
+        // Also avoids a guaranteed-401 request on every first launch.
+        return;
+      }
       await _refreshAccessToken();
     } finally {
       _restoreSessionFuture = null;
@@ -307,9 +534,48 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<bool> _hasRememberedSession() async {
+    try {
+      final store = await PreferenceStore.load();
+      return store.read<bool>(_rememberedSessionKey) ?? false;
+    } on Exception catch (error) {
+      if (kDebugMode) {
+        debugPrint('AuthService._hasRememberedSession: $error');
+      }
+      return false;
+    }
+  }
+
+  Future<void> _setRememberedSession(bool remembered) async {
+    try {
+      final store = await PreferenceStore.load();
+      if (remembered) {
+        await store.writeBool(_rememberedSessionKey, true);
+      } else {
+        await store.remove(_rememberedSessionKey);
+      }
+    } on Exception catch (error) {
+      if (kDebugMode) {
+        debugPrint('AuthService._setRememberedSession: $error');
+      }
+    }
+  }
+
+  void _cancelRecovery() {
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
+  }
+
   void _setState(AuthState state) {
     _state = state;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _cancelRecovery();
+    super.dispose();
   }
 }
 

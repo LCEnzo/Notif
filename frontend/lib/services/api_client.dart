@@ -13,8 +13,29 @@ const String builtinApiUrl = String.fromEnvironment(
 const Duration connectTimeout = Duration(seconds: 10);
 const Duration receiveTimeout = Duration(seconds: 15);
 
+/// Liveness probe. Cheap, unauthenticated, and safe to poll while waiting for
+/// a backend to come back after a deploy.
+const String healthPath = '/monitoring/health/';
+
+/// Requests whose effect the server commits before we see the response, so a
+/// transport-level retry is not a retry but a second, different operation.
+///
+/// `/token/refresh/` rotates the refresh-token family: the backend commits the
+/// rotation and only then writes the response. Re-sending after a timeout
+/// presents an already-rotated token, which the backend's theft detection
+/// treats as a stolen-token replay and answers by revoking the whole family —
+/// a hard logout with the credentials deleted. `/token/logout/` revokes, so a
+/// replay is pointless but equally destructive to diagnose.
+const Set<String> nonReplayablePaths = {'/token/refresh/', '/token/logout/'};
+
 /// Shared Dio instance — connection pooling happens here.
 final Dio _dio = _createDio();
+
+/// Test seam: lets tests install a fake [HttpClientAdapter] on the same Dio
+/// instance the app uses, so transport behaviour (fallback, retry, cookie
+/// handling) is exercised for real instead of being mocked out.
+@visibleForTesting
+Dio get apiDio => _dio;
 
 Dio _createDio() {
   final dio = Dio(
@@ -34,12 +55,6 @@ Dio _createDio() {
   ]);
   return dio;
 }
-
-/// The app's own Dio instance, exposed so tests can install a fake HTTP
-/// adapter and drive the real request pipeline — URL fallback, auth retry —
-/// instead of a stubbed-out copy of it.
-@visibleForTesting
-Dio get apiDio => _dio;
 
 typedef AccessTokenReader = String? Function();
 typedef RefreshAccessToken = Future<String?> Function();
@@ -64,9 +79,6 @@ class ApiClientException implements Exception {
 AccessTokenReader? _accessTokenReader;
 RefreshAccessToken? _refreshAccessToken;
 
-/// Wires the API client to the auth service. The refresh callback owns every
-/// auth state transition, including expiry — the client only retries the
-/// original request once when a new token comes back.
 void configureApiAuth({
   required AccessTokenReader accessTokenReader,
   required RefreshAccessToken refreshAccessToken,
@@ -85,7 +97,8 @@ void resetApiAuthForTesting() {
 ///
 /// In [BackendUrlMode.builtin] mode the built-in compile-time URL is used.
 /// In [BackendUrlMode.customWithFallback] mode the custom URL is tried first;
-/// on any network error the request is retried against the built-in URL.
+/// on a network error that provably left the request unanswered the request is
+/// retried against the built-in URL.
 /// In [BackendUrlMode.customOnly] mode only the custom URL is tried.
 Future<Response<dynamic>> apiPost(
   String path, {
@@ -150,7 +163,10 @@ Future<Response<dynamic>> apiDelete(
 }) =>
     _requestWithFallback('DELETE', path, settings: settings, headers: headers);
 
-List<String> resolveUrls(String path, AppSettingsController? settings) {
+/// Base URLs to try, in order. Never contains duplicates: a custom URL that
+/// spells the same thing as the built-in one is a single destination, not a
+/// fallback chain, and sending every request twice to it is a bug.
+List<String> resolveUrls(AppSettingsController? settings) {
   final mode = settings?.backendUrlMode ?? BackendUrlMode.builtin;
   final custom = settings?.customBackendUrl.trim() ?? '';
 
@@ -158,7 +174,7 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
     case BackendUrlMode.builtin:
       return [builtinApiUrl];
     case BackendUrlMode.customWithFallback:
-      if (custom.isEmpty) return [builtinApiUrl];
+      if (custom.isEmpty || custom == builtinApiUrl) return [builtinApiUrl];
       return [custom, builtinApiUrl];
     case BackendUrlMode.customOnly:
       if (custom.isEmpty) return [];
@@ -166,10 +182,74 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
   }
 }
 
+/// The backend origin when it is not same-site with the page hosting the app.
+///
+/// Only meaningful on web: browsers attach the `SameSite=Lax` refresh cookie
+/// to same-site requests only, so pointing a web build at a cross-site backend
+/// silently breaks remember-me — every refresh arrives without the cookie and
+/// comes back 401, which looks exactly like an expired session. Returns null
+/// when the configuration cannot cause that.
+///
+/// [isWeb] and [pageUri] exist so this is testable off-browser.
+String? crossSiteBackendOrigin(
+  AppSettingsController? settings, {
+  bool isWeb = kIsWeb,
+  Uri? pageUri,
+}) {
+  if (!isWeb) {
+    return null;
+  }
+
+  final page = pageUri ?? Uri.base;
+  for (final url in resolveUrls(settings)) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      // Relative URLs ("/api/v1") are same-origin by construction.
+      continue;
+    }
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      continue;
+    }
+    if (!_isSameSite(uri, page)) {
+      return '${uri.scheme}://${uri.host}'
+          '${uri.hasPort ? ':${uri.port}' : ''}';
+    }
+  }
+  return null;
+}
+
+/// Approximates the SameSite definition: same scheme and same registrable
+/// domain, ports ignored. Without the public-suffix list this is a heuristic,
+/// which is why callers phrase the result as a diagnostic rather than a fact.
+bool _isSameSite(Uri a, Uri b) {
+  if (a.scheme != b.scheme) {
+    return false;
+  }
+  final hostA = a.host.toLowerCase();
+  final hostB = b.host.toLowerCase();
+  if (hostA == hostB) {
+    return true;
+  }
+  return _registrableDomain(hostA) == _registrableDomain(hostB);
+}
+
+String _registrableDomain(String host) {
+  final labels = host.split('.');
+  if (labels.length <= 2) {
+    return host;
+  }
+  return labels.sublist(labels.length - 2).join('.');
+}
+
 Uri _buildRequestUri(String baseUrl, String path) {
   final normalizedBaseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), '');
   final normalizedPath = path.replaceFirst(RegExp(r'^/+'), '');
   return Uri.parse('$normalizedBaseUrl/$normalizedPath');
+}
+
+bool _isReplayable(String path) {
+  final normalized = path.startsWith('/') ? path : '/$path';
+  return !nonReplayablePaths.any(normalized.startsWith);
 }
 
 Future<Response<dynamic>> _requestWithFallback(
@@ -180,16 +260,18 @@ Future<Response<dynamic>> _requestWithFallback(
   dynamic body,
   ResponseType? responseType,
 }) async {
-  final urls = resolveUrls(path, settings);
+  final urls = resolveUrls(settings);
   if (urls.isEmpty) {
     throw ApiClientException(
       '$method $path failed: no backend URL configured',
     );
   }
 
-  Object? lastError;
+  final replayable = _isReplayable(path);
 
-  for (final url in urls) {
+  // Every URL except the last may fall back; the last one is attempted
+  // outside the loop so its failure propagates untouched.
+  for (final url in urls.take(urls.length - 1)) {
     try {
       return await _performRequest(
         method,
@@ -200,10 +282,7 @@ Future<Response<dynamic>> _requestWithFallback(
         responseType: responseType,
       );
     } on DioException catch (error) {
-      lastError = error;
-      final shouldTryFallback =
-          !identical(url, urls.last) && _isFallbackableNetworkError(error);
-      if (!shouldTryFallback) {
+      if (!_isFallbackableNetworkError(error, replayable: replayable)) {
         rethrow;
       }
       if (kDebugMode) {
@@ -213,18 +292,19 @@ Future<Response<dynamic>> _requestWithFallback(
         );
       }
     } on FormatException catch (error) {
-      lastError = error;
-      if (identical(url, urls.last)) {
-        rethrow;
-      }
       if (kDebugMode) {
         debugPrint('$method $url invalid ($error), trying fallback');
       }
     }
   }
 
-  throw ApiClientException(
-    '$method $path failed: ${lastError ?? 'all URLs exhausted'}',
+  return _performRequest(
+    method,
+    urls.last,
+    path,
+    headers: headers,
+    body: body,
+    responseType: responseType,
   );
 }
 
@@ -323,35 +403,61 @@ Future<bool> _shouldRetryAfterUnauthorized(
   return refreshedToken != null && refreshedToken.isNotEmpty;
 }
 
+/// Asks the auth layer for a fresh access token. Deliberately does *not*
+/// decide anything about session state: the refresher owns that transition and
+/// is the only place that knows whether the failure was a rejection, an outage,
+/// or a stale response from a session that has since been replaced. A caller
+/// telling it "the session expired" here used to kill freshly re-logged-in
+/// sessions whenever a slow request 401'd after a new login.
 Future<String?> _refreshAccessTokenIfNeeded() async {
+  String? refreshedToken;
   try {
-    return await _refreshAccessToken?.call();
+    refreshedToken = await _refreshAccessToken?.call();
   } on Exception catch (error) {
     if (kDebugMode) {
       debugPrint('api_client._refreshAccessTokenIfNeeded: $error');
     }
+  }
+
+  if (refreshedToken == null || refreshedToken.isEmpty) {
     return null;
   }
+
+  return refreshedToken;
 }
 
-bool _isFallbackableNetworkError(DioException error) {
+/// Whether [error] leaves the request provably unanswered, so re-sending it to
+/// the next base URL is safe.
+///
+/// [replayable] is false for requests the server may have already committed
+/// (see [nonReplayablePaths]). For those, only failures that happen before the
+/// request reaches the server at all can be retried: a connect timeout means
+/// no connection was established, a bad certificate means the transport was
+/// refused during TLS. Everything else — send/receive timeouts, dropped
+/// connections (which is also how the browser reports a failed XHR), unknown
+/// transport errors — can happen *after* the server processed the request, and
+/// retrying those is what destroys credentials.
+bool _isFallbackableNetworkError(
+  DioException error, {
+  required bool replayable,
+}) {
   switch (error.type) {
     case DioExceptionType.connectionTimeout:
+    case DioExceptionType.badCertificate:
+      return true;
     case DioExceptionType.sendTimeout:
     case DioExceptionType.receiveTimeout:
-    case DioExceptionType.badCertificate:
     case DioExceptionType.connectionError:
     case DioExceptionType.unknown:
-      return true;
+      return replayable;
     case DioExceptionType.badResponse:
     case DioExceptionType.cancel:
       return false;
   }
 }
 
-/// Validates [response] is 200 and returns its body as a JSON object map.
-/// Throws [ApiClientException] on any other status and [ContractViolation]
-/// when the body is not a JSON object.
+/// Validates [response] is 200 and returns decoded JSON as `Map<String, dynamic>`.
+/// Throws a descriptive [Exception] on any non-200 status.
 Map<String, Object?> expectSuccessJson(
   Response<dynamic> response,
   String context,
