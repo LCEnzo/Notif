@@ -34,6 +34,9 @@ void main() {
   test('Dio imports stay in HTTP and failure boundaries', () {
     final allowed = {
       'lib/services/api_client.dart',
+      'lib/services/dio_credentials.dart',
+      'lib/services/dio_credentials_stub.dart',
+      'lib/services/dio_credentials_web.dart',
       'lib/services/failures.dart',
     };
     final violations = <String>[];

@@ -7,6 +7,7 @@ import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/failures.dart';
 import 'package:notif/services/json_contracts.dart';
 import 'package:notif/services/persistence.dart';
+import 'package:notif/services/refresh_cookie_store.dart';
 
 class UserData {
   UserData({
@@ -212,6 +213,7 @@ class AuthService extends ChangeNotifier {
         debugPrint('AuthService.logout: $error');
       }
     } finally {
+      await clearNativeRefreshCookies();
       _setState(const AuthAnonymous());
     }
   }
