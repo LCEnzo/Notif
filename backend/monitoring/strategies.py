@@ -10,10 +10,10 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
-from typing import Any, NamedTuple, NewType
+from typing import Any, NamedTuple, NewType, TypeGuard
 from urllib.parse import urlsplit, urlunsplit
 
 import feedparser
@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 30
 MAX_UPDATE_DESCRIPTION_CHARS = 12000
+SELECTOR_DIGEST_BYTES = 16
 
 _BLOCK_TEXT_TAGS = {
 	"article",
@@ -82,8 +83,12 @@ class ScrapedUpdate(NamedTuple):
 
 # A scrape result payload: the normalized updates a strategy found for one source.
 type NotifData = list[ScrapedUpdate]
-type ComparisonState = dict[str, Any]
+type JsonScalar = None | bool | int | float | str
+type JsonValue = JsonScalar | Sequence[JsonValue] | Mapping[str, JsonValue]
+type ComparisonState = dict[str, JsonValue]
 type ComparisonStateUpdate = ComparisonState | None
+type SelectorDigestState = list[str]
+type LegacySelectorHashState = list[int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -132,6 +137,24 @@ def _get_content_with_css_selector(html_content: str, css_selector: str) -> Resu
 	return elements
 
 
+def _stable_tag_digest(tag: Tag) -> str:
+	return hashlib.blake2s(str(tag).encode("utf-8"), digest_size=SELECTOR_DIGEST_BYTES).hexdigest()
+
+
+def _legacy_selector_state(value: JsonValue) -> TypeGuard[LegacySelectorHashState]:
+	return bool(value) and isinstance(value, list) and all(isinstance(item, int) for item in value)
+
+
+def _selector_digest_state(value: JsonValue) -> SelectorDigestState:
+	if not isinstance(value, list):
+		return []
+	return [item for item in value if isinstance(item, str)]
+
+
+def _selector_comparison_state(selector_state: Mapping[str, SelectorDigestState]) -> ComparisonState:
+	return dict(selector_state)
+
+
 def _html_to_readable_text(html_content: str) -> str:
 	"""Convert feed HTML into bounded readable text for notification bodies."""
 	soup = BeautifulSoup(html_content, "html.parser")
@@ -174,7 +197,7 @@ class BaseStrategy(ABC):
 		self,
 		url: URL,
 		config_data: dict[str, Any],
-		comparison_data: dict[str, Any],
+		comparison_data: ComparisonState,
 		*args: Any,
 		**kwargs: Any,
 	) -> ScrapeResult:
@@ -192,7 +215,7 @@ class BaseStrategy(ABC):
 		self,
 		url: URL,
 		config_data: dict[str, Any],
-		comparison_data: dict[str, Any],
+		comparison_data: ComparisonState,
 		*args: Any,
 		**kwargs: Any,
 	) -> ScrapeResult:
@@ -214,30 +237,34 @@ class GeneralSelectorStrategy(BaseStrategy):
 		self,
 		url: URL,
 		config_data: dict[str, Any],
-		comparison_data: dict[str, list[int]],
+		comparison_data: ComparisonState,
 		*args: Any,
 		**kwargs: Any,
 	) -> ScrapeResult:
 		selectors: list[str] = config_data["selectors"]
-		old_data: dict[str, list[int]] = {selector: comparison_data.get(str(selector), []) for selector in selectors}
 		updates: NotifData = []
-		comparison_state_update: dict[str, list[int]] | None = None
+		comparison_state_update: ComparisonStateUpdate = None
+		has_legacy_selector_state = False
+		empty_selector_state: JsonValue = []
 
 		html_content = _fetch_url_content(url)
 		if html_content is None:
 			return Err("Empty html_content")
 
-		comparison_state_update = {
-			selector: [hash(ret) for ret in _get_content_with_css_selector(html_content, selector)]
+		current_selector_state = {
+			selector: [_stable_tag_digest(ret) for ret in _get_content_with_css_selector(html_content, selector)]
 			for selector in selectors
 		}
+		comparison_state_update = _selector_comparison_state(current_selector_state)
 
 		for selector in selectors:
-			tags = comparison_state_update.get(f"{selector}", [])
-			old_tags = old_data.get(f"{selector}", [])
-			update = False
+			tags = current_selector_state.get(f"{selector}", [])
+			old_value = comparison_data.get(str(selector), empty_selector_state)
+			old_tags = _selector_digest_state(old_value)
+			legacy_state = _legacy_selector_state(old_value)
+			has_legacy_selector_state = has_legacy_selector_state or legacy_state
 
-			update = len(tags) != len(old_tags) or tags != old_tags
+			update = not legacy_state and (len(tags) != len(old_tags) or tags != old_tags)
 
 			if update:
 				split = urlsplit(url)
@@ -251,7 +278,7 @@ class GeneralSelectorStrategy(BaseStrategy):
 				)
 
 		# No need to save new info to the db if the new info is the same as the old info
-		if len(updates) == 0:
+		if len(updates) == 0 and not has_legacy_selector_state:
 			comparison_state_update = None
 
 		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_state_update))
@@ -307,8 +334,9 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 	def can_scrape_url(self, url: URL) -> bool:
 		return ("forums.spacebattles.com/threads" in url) or ("forums.sufficientvelocity.com/threads" in url)
 
-	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: dict[str, str]) -> ScrapeResult:
-		last_alert_str = comparison_data.get("last_alert")
+	def scrape(self, url: URL, config_data: dict[str, Any], comparison_data: ComparisonState) -> ScrapeResult:
+		last_alert_value = comparison_data.get("last_alert")
+		last_alert_str = last_alert_value if isinstance(last_alert_value, str) else None
 
 		last_alert: datetime | None = (
 			datetime.strptime(last_alert_str, self.time_format).astimezone(timezone.get_default_timezone())
@@ -334,7 +362,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 			if mark.pub_date is not None and (last_alert is None or mark.pub_date > last_alert)
 		]
 
-		comparison_state_update: dict[str, str] = {"last_alert": ""}
+		comparison_state_update: ComparisonState = {"last_alert": ""}
 		if len(marks) > 0:
 			latest_mark = marks.pop()
 			while latest_mark.pub_date is None and len(marks) > 0:
@@ -505,7 +533,7 @@ class QQAlertsStrategy(BaseStrategy):
 		self,
 		url: URL,
 		config_data: dict[str, Any],
-		comparison_data: dict[str, str],
+		comparison_data: ComparisonState,
 		*args: Any,
 		**kwargs: Any,
 	) -> ScrapeResult:
@@ -518,10 +546,7 @@ class QQAlertsStrategy(BaseStrategy):
 		# Whether to include all alerts, or only those likely to be a new chapter
 		include_all: bool = bool(config_data["include_all"])
 
-		last_alert_datetime_str = comparison_data["last_alert"]
-		last_alert_datetime = datetime.strptime(last_alert_datetime_str, "%Y-%m-%d %H:%M:%S").astimezone(
-			timezone.get_default_timezone()
-		)
+		last_alert_datetime = self._parse_last_alert_datetime(comparison_data.get("last_alert"))
 
 		try:
 			resp = self._get_alerts_html(username, password)
@@ -532,9 +557,11 @@ class QQAlertsStrategy(BaseStrategy):
 		# Fill updates with new alerts
 		for alert in alerts:
 			if alert.post_date is not None and alert.post_time is not None:
-				alert_dt = datetime.combine(alert.post_date, alert.post_time)
+				alert_dt = datetime.combine(alert.post_date, alert.post_time, tzinfo=timezone.get_default_timezone())
 
-				if alert_dt > last_alert_datetime and (include_all or alert.lengthy_response):
+				if (last_alert_datetime is None or alert_dt > last_alert_datetime) and (
+					include_all or alert.lengthy_response
+				):
 					title = "QQ: " + (
 						f"Likely chapter by {alert.author_name}"
 						if alert.lengthy_response
@@ -545,17 +572,25 @@ class QQAlertsStrategy(BaseStrategy):
 
 					updates.append(ScrapedUpdate(title=title, description=description, item_url=link))
 
-		comparison_state_update = None
+		comparison_state_update: ComparisonStateUpdate = None
 		# search alerts for latest update (discarding those with None time)
 		for alert in alerts:
 			if alert.post_date is not None and alert.post_time is not None:
-				alert_dt = datetime.combine(alert.post_date, alert.post_time)
+				alert_dt = datetime.combine(alert.post_date, alert.post_time, tzinfo=timezone.get_default_timezone())
 
-				if alert_dt > last_alert_datetime and (include_all or alert.lengthy_response):
+				if (last_alert_datetime is None or alert_dt > last_alert_datetime) and (
+					include_all or alert.lengthy_response
+				):
 					comparison_state_update = {"last_alert": alert_dt.strftime("%Y-%m-%d %H:%M:%S")}
 					break
 
 		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_state_update))
+
+	@staticmethod
+	def _parse_last_alert_datetime(value: object) -> datetime | None:
+		if not isinstance(value, str) or value.strip() == "":
+			return None
+		return datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.get_default_timezone())
 
 	@staticmethod
 	def _extract_alerts(html: str) -> list[AlertInfo]:
@@ -698,10 +733,8 @@ class QQAlertsStrategy(BaseStrategy):
 				)
 				days_offset = (today.weekday() - weekday) % 7
 				return today - timedelta(days=days_offset)
-			case _ if datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()):
-				return datetime.strptime(relative_date, "%Y/%m/%d").astimezone(timezone.get_default_timezone()).date()
 			case _:
-				return datetime.strptime(relative_date, "%Y-%m-%d").astimezone(timezone.get_default_timezone()).date()
+				return date.fromisoformat(relative_date.replace("/", "-"))
 
 		# For mypy
 		raise ValueError
@@ -764,7 +797,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		self,
 		url: URL,
 		config_data: dict[str, Any],
-		comparison_data: dict[str, str],
+		comparison_data: ComparisonState,
 		*args: Any,
 		**kwargs: Any,
 	) -> ScrapeResult:
@@ -775,10 +808,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		username: str = config_data["username"]
 		password: str = config_data["password"]
 
-		last_update_datetime_str = comparison_data["last_update"]
-		last_update_datetime = datetime.strptime(last_update_datetime_str, "%Y-%m-%d %H:%M:%S").astimezone(
-			timezone.get_default_timezone()
-		)
+		last_update_datetime = self._parse_last_update_datetime(comparison_data.get("last_update"))
 
 		try:
 			resp = self._get_favourites_html(username, password)
@@ -788,7 +818,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 		# Fill updates with new alerts
 		for card in cards:
-			if card.date_time is not None and card.date_time > last_update_datetime:
+			if card.date_time is not None and (last_update_datetime is None or card.date_time > last_update_datetime):
 				title = f"Kemono: {card.name} - {card.service}"
 				description = f"New posts by {card.name} on {card.service}, time {card.date_time}"
 				link = card.link if card.link is not None else url
@@ -798,12 +828,24 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		comparison_state_update = None
 		# search alerts for latest update (discarding those with None time)
 		for card in cards:
-			if card.date_time is not None and card.date_time > last_update_datetime:
+			if card.date_time is not None and (last_update_datetime is None or card.date_time > last_update_datetime):
 				json_dt = json.loads(card.to_json())["date_time"]
 				comparison_state_update = {"last_update": json_dt}
 				break
 
 		return Ok(ScrapeSuccess(updates=updates, comparison_state_update=comparison_state_update))
+
+	@staticmethod
+	def _parse_last_update_datetime(value: object) -> datetime | None:
+		if not isinstance(value, str) or value.strip() == "":
+			return None
+		try:
+			parsed = datetime.fromisoformat(value)
+		except ValueError:
+			parsed = datetime.strptime(value, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.get_default_timezone())
+		if timezone.is_naive(parsed):
+			return timezone.make_aware(parsed, timezone.get_default_timezone())
+		return parsed.astimezone(timezone.get_default_timezone())
 
 	def _extract_service(self, card_tag: Tag) -> str | None:
 		service = card_tag.select_one(".user-card__service")
@@ -816,8 +858,8 @@ class KemonoFavouritesStrategy(BaseStrategy):
 	def _extract_datetime(self, card_tag: Tag) -> datetime | None:
 		dt = card_tag.select_one("time.timestamp")
 		if dt is not None:
-			return datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f").astimezone(
-				timezone.get_default_timezone()
+			return datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f").replace(
+				tzinfo=timezone.get_default_timezone()
 			)
 		return None
 
@@ -893,7 +935,7 @@ class FeedStrategy(BaseStrategy):
 		self,
 		url: URL,
 		config_data: dict[str, Any],
-		comparison_data: dict[str, Any],
+		comparison_data: ComparisonState,
 		*args: Any,
 		**kwargs: Any,
 	) -> ScrapeResult:
@@ -915,7 +957,8 @@ class FeedStrategy(BaseStrategy):
 			empty_updates: NotifData = []
 			return Ok(ScrapeSuccess(updates=empty_updates))
 
-		last_entry_id: str | None = comparison_data.get("last_entry_id")
+		last_entry_value = comparison_data.get("last_entry_id")
+		last_entry_id = last_entry_value if isinstance(last_entry_value, str) else None
 		seen_entry_hashes = self._seen_entry_hashes(comparison_data)
 		seen_entry_hash_set = set(seen_entry_hashes)
 
@@ -939,7 +982,9 @@ class FeedStrategy(BaseStrategy):
 			if not seen_entry_hash_set and last_entry_id is not None and entry_id == last_entry_id:
 				continue
 
-			title = entry.get("title", "Untitled")
+			# A present-but-empty <title> is common in the wild, and dict.get
+			# only substitutes when the key is absent.
+			title = str(entry.get("title") or "").strip() or "Untitled"
 			description = self._entry_description(entry)
 			link = URL(entry.get("link", url))
 
@@ -1000,7 +1045,7 @@ class FeedStrategy(BaseStrategy):
 		return merged_entry_hashes
 
 	@classmethod
-	def _seen_entry_hashes(cls, comparison_data: dict[str, Any]) -> list[str]:
+	def _seen_entry_hashes(cls, comparison_data: ComparisonState) -> list[str]:
 		value = comparison_data.get("seen_entry_hashes")
 		if isinstance(value, list):
 			entry_hashes = [str(entry_hash) for entry_hash in value if entry_hash]
