@@ -61,6 +61,9 @@ INSTALLED_APPS = [
 	"ops",
 ]
 
+if DEBUG:
+	INSTALLED_APPS += ["silk"]
+
 MIDDLEWARE = [
 	"django.middleware.security.SecurityMiddleware",
 	"notif.middleware.DevLatencyMiddleware",
@@ -72,6 +75,9 @@ MIDDLEWARE = [
 	"django.contrib.messages.middleware.MessageMiddleware",
 	"django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+if DEBUG:
+	MIDDLEWARE.insert(1, "silk.middleware.SilkyMiddleware")
 
 ROOT_URLCONF = "notif.urls"
 
@@ -204,7 +210,7 @@ SPECTACULAR_SETTINGS = {
 		"Monitors URLs for changes via pluggable scraping strategies "
 		"(RSS/Atom feeds, CSS selectors, forum threadmarks, and more)."
 	),
-	"VERSION": "0.2.0",
+	"VERSION": settings.VERSION,
 	"SERVE_INCLUDE_SCHEMA": False,
 }
 
