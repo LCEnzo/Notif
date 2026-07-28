@@ -6,6 +6,7 @@ import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/client_events.dart';
+import 'package:notif/services/failures.dart';
 import 'package:notif/services/json_contracts.dart';
 
 class SystemEvent {
@@ -137,7 +138,7 @@ class OpsService extends ChangeNotifier {
         ..addAll(data.field('results').items().map(SystemEvent.fromJson));
     } on Exception catch (error) {
       _recordFailure(error, endpoint: 'GET /ops/events/');
-      _error = error.toString();
+      _error = AppFailure.from(error).userMessage;
     } finally {
       _loading = false;
       notifyListeners();
@@ -166,7 +167,7 @@ class OpsService extends ChangeNotifier {
         );
     } on Exception catch (error) {
       _recordFailure(error, endpoint: 'GET /ops/logs/caddy/');
-      _error = error.toString();
+      _error = AppFailure.from(error).userMessage;
     } finally {
       _caddyLogsLoading = false;
       notifyListeners();
@@ -200,7 +201,7 @@ class OpsService extends ChangeNotifier {
       );
     } on Exception catch (error) {
       _recordFailure(error, endpoint: 'GET /ops/backup/sqlite/');
-      _error = error.toString();
+      _error = AppFailure.from(error).userMessage;
     } finally {
       _downloading = false;
       notifyListeners();

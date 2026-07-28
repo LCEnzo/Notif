@@ -1035,8 +1035,7 @@ class NotificationService extends ChangeNotifier {
       _currentPage = page;
       _hasMore = body.hasNonNullField('next');
       _totalCount = body.field('count').integer();
-      _totalUnreadCount =
-          body.optionalField('unread_count')?.integer() ?? _totalUnreadCount;
+      _totalUnreadCount = body.field('unread_count').integer();
     } on Exception catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;

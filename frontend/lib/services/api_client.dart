@@ -320,8 +320,9 @@ bool _isFallbackableNetworkError(DioException error) {
   }
 }
 
-/// Validates [response] is 200 and returns decoded JSON as `Map<String, dynamic>`.
-/// Throws a descriptive [Exception] on any non-200 status.
+/// Validates [response] is 200 and returns its body as a JSON object map.
+/// Throws [ApiClientException] on any other status and [ContractViolation]
+/// when the body is not a JSON object.
 Map<String, Object?> expectSuccessJson(
   Response<dynamic> response,
   String context,

@@ -4,20 +4,17 @@ class ContractViolation implements Exception {
     required this.path,
     required this.expected,
     required this.actual,
-    this.cause,
   });
 
   final String endpoint;
   final String path;
   final String expected;
   final String actual;
-  final Object? cause;
 
   @override
   String toString() {
-    final suffix = cause == null ? '' : ' Cause: $cause';
     return 'ContractViolation($endpoint at $path): expected $expected, '
-        'got $actual.$suffix';
+        'got $actual.';
   }
 }
 
