@@ -36,7 +36,6 @@ Dio get apiDio => _dio;
 
 typedef AccessTokenReader = String? Function();
 typedef RefreshAccessToken = Future<String?> Function();
-typedef AuthExpiredHandler = Future<void> Function();
 
 class ApiClientException implements Exception {
   const ApiClientException(this.message, {this.statusCode, this.data});
@@ -57,23 +56,22 @@ class ApiClientException implements Exception {
 
 AccessTokenReader? _accessTokenReader;
 RefreshAccessToken? _refreshAccessToken;
-AuthExpiredHandler? _authExpiredHandler;
 
+/// Wires the API client to the auth service. The refresh callback owns every
+/// auth state transition, including expiry — the client only retries the
+/// original request once when a new token comes back.
 void configureApiAuth({
   required AccessTokenReader accessTokenReader,
   required RefreshAccessToken refreshAccessToken,
-  required AuthExpiredHandler authExpiredHandler,
 }) {
   _accessTokenReader = accessTokenReader;
   _refreshAccessToken = refreshAccessToken;
-  _authExpiredHandler = authExpiredHandler;
 }
 
 @visibleForTesting
 void resetApiAuthForTesting() {
   _accessTokenReader = null;
   _refreshAccessToken = null;
-  _authExpiredHandler = null;
 }
 
 /// Sends a POST request to [path], respecting [BackendUrlMode] from [settings].
@@ -297,21 +295,14 @@ Future<bool> _shouldRetryAfterUnauthorized(
 }
 
 Future<String?> _refreshAccessTokenIfNeeded() async {
-  String? refreshedToken;
   try {
-    refreshedToken = await _refreshAccessToken?.call();
+    return await _refreshAccessToken?.call();
   } on Exception catch (error) {
     if (kDebugMode) {
       debugPrint('api_client._refreshAccessTokenIfNeeded: $error');
     }
-  }
-
-  if (refreshedToken == null || refreshedToken.isEmpty) {
-    await _authExpiredHandler?.call();
     return null;
   }
-
-  return refreshedToken;
 }
 
 bool _isFallbackableNetworkError(DioException error) {

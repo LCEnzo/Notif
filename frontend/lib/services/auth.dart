@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
+import 'package:notif/services/failures.dart';
 import 'package:notif/services/json_contracts.dart';
 import 'package:notif/services/persistence.dart';
 
@@ -35,7 +36,7 @@ class UserData {
 
 class JWT {
   JWT({required this.access});
-  String access;
+  final String access;
 
   int? get userId => _decodeJwtUserId(access);
 }
@@ -106,16 +107,7 @@ class AuthService extends ChangeNotifier {
     configureApiAuth(
       accessTokenReader: () => jwt?.access,
       refreshAccessToken: _refreshAccessToken,
-      authExpiredHandler: _handleAuthExpired,
     );
-  }
-
-  Future<void> _handleAuthExpired() async {
-    if (jwt == null) {
-      return;
-    }
-
-    _setState(const AuthExpired());
   }
 
   Future<String?> _refreshAccessToken() async {
@@ -130,7 +122,7 @@ class AuthService extends ChangeNotifier {
       _setState(AuthRefreshing(previous));
     }
 
-    final refresh = _performRefresh(epoch);
+    final refresh = _performRefresh(epoch, previous);
     _refreshInFlight = refresh;
     try {
       return await refresh;
@@ -141,7 +133,7 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<String?> _performRefresh(int epoch) async {
+  Future<String?> _performRefresh(int epoch, JWT? previous) async {
     try {
       final response = await apiPost(
         "/token/refresh/",
@@ -161,15 +153,26 @@ class AuthService extends ChangeNotifier {
       if (kDebugMode) {
         debugPrint('AuthService._refreshAccessToken: $error');
       }
-      if (epoch == _authEpoch) {
+      if (epoch != _authEpoch) {
+        return null;
+      }
+
+      final failure = AppFailure.from(error, endpoint: '/token/refresh/');
+      if (previous != null && failure.isAuthRejection) {
+        // The server looked at the refresh cookie and said no. Only this is
+        // proof the session died.
         _setState(const AuthExpired());
+      } else if (previous != null) {
+        // A timeout or unreachable server says nothing about the session.
+        // Keep it; the next 401 will try the refresh again.
+        _setState(AuthAuthenticated(previous));
+      } else if (_state is AuthRestoring) {
+        // A cold start that cannot refresh is simply not signed in. This is
+        // where a fresh install lands, and it never had a session to expire.
+        _setState(const AuthAnonymous());
       }
       return null;
     }
-  }
-
-  Future<void> login(String username, String password) async {
-    await loginWithRememberMe(username, password, rememberMe: true);
   }
 
   Future<void> loginWithRememberMe(
@@ -234,25 +237,8 @@ class AuthService extends ChangeNotifier {
     }
 
     if (autoLogIn) {
-      return login(username, password);
+      return loginWithRememberMe(username, password, rememberMe: true);
     }
-  }
-
-  Future<void> refreshToken([String? _]) async {
-    final accessToken = await _refreshAccessToken();
-    if (accessToken == null) {
-      throw Exception('Token refresh failed.');
-    }
-  }
-
-  Future<bool> verifyToken(String token) async {
-    final response = await apiPost(
-      '/token/verify/',
-      settings: _settings,
-      headers: _jsonHeaders,
-      body: {'token': token},
-    );
-    return response.statusCode == 200;
   }
 
   Future<void> requestPasswordReset(String email) async {
