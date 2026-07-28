@@ -4,11 +4,13 @@ from rest_framework.routers import DefaultRouter
 from accounts.views import (
 	PasswordResetConfirmView,
 	PasswordResetRequestView,
+	RefreshSessionViewSet,
 	UserViewSet,
 )
 
 router = DefaultRouter()
 router.register(r"users", UserViewSet, basename="users")
+router.register(r"sessions", RefreshSessionViewSet, basename="refresh-sessions")
 
 urlpatterns = router.urls
 urlpatterns += [

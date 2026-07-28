@@ -5,13 +5,15 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
-from accounts.models import User
+from accounts.models import RefreshSessionFamily, User
 
 if TYPE_CHECKING:
 	_UserModelSerializer = ModelSerializer[User]
+	_RefreshSessionModelSerializer = ModelSerializer[RefreshSessionFamily]
 	_AnySerializer = serializers.Serializer[Any]
 else:
 	_UserModelSerializer = ModelSerializer
+	_RefreshSessionModelSerializer = ModelSerializer
 	_AnySerializer = serializers.Serializer
 
 
@@ -98,6 +100,36 @@ class TokenRefreshRequestSerializer(_AnySerializer):
 
 class TokenLogoutResponseSerializer(_AnySerializer):
 	status = serializers.CharField()
+
+
+# ── refresh sessions ─────────────────────────────────────────
+
+
+class RefreshSessionSerializer(_RefreshSessionModelSerializer):
+	"""One active refresh session — in practice, one signed-in device.
+
+	``family_id`` is the public handle used to revoke a session; the row's integer
+	primary key is deliberately not exposed.
+	"""
+
+	class Meta:
+		model = RefreshSessionFamily
+		fields = [
+			"family_id",
+			"created_at",
+			"last_used_at",
+			"device_label",
+			"ip",
+			"user_agent",
+		]
+		read_only_fields = fields
+
+
+class RefreshSessionRevokeResponseSerializer(_AnySerializer):
+	"""Result of revoking one session or all of them."""
+
+	status = serializers.CharField()
+	revoked = serializers.IntegerField(help_text="Number of sessions this call revoked.")
 
 
 # ── password reset ───────────────────────────────────────────

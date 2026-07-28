@@ -1,5 +1,5 @@
 from datetime import timedelta
-from typing import cast
+from typing import Any, cast
 from unittest.mock import patch
 
 from django.conf import settings
@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from accounts.models import RefreshSessionFamily, RefreshTokenRecord, User
 from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetCode
@@ -238,6 +239,12 @@ class TokenCookieViewTestCase(TestCase):
 		client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = old_cookie
 		first_refresh = client.post(reverse("token_refresh"), {}, format="json", HTTP_X_REFRESH_REQUEST="1")
 		self.assertEqual(first_refresh.status_code, status.HTTP_200_OK)
+		# Age the rotation past JWT_REFRESH_ROTATION_GRACE so this is unambiguous
+		# reuse rather than the benign multi-tab / lost-response replay that the
+		# grace window forgives (see test_refresh_replay_* below).
+		RefreshTokenRecord.objects.filter(parent_jti="").update(
+			used_at=timezone.now() - settings.JWT_REFRESH_ROTATION_GRACE - timedelta(seconds=1)
+		)
 
 		reuse_client = APIClient()
 		reuse_client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = old_cookie
@@ -296,6 +303,361 @@ class TokenCookieViewTestCase(TestCase):
 		self.assertFalse(RefreshSessionFamily.objects.filter(pk=revoked.pk).exists())
 		self.assertFalse(RefreshTokenRecord.objects.filter(pk=active_old_used.pk).exists())
 		self.assertTrue(RefreshTokenRecord.objects.filter(pk=active_current.pk).exists())
+
+	# ── cross-site request forgery gates ────────────────────
+
+	def test_login_rejects_form_encoded_credentials(self):
+		"""A cross-site top-level form POST must not be able to plant a refresh cookie."""
+		response = APIClient().post(
+			reverse("token_obtain_pair"),
+			{"username": self.user.username, "password": _VALID_TEST_PASSWORD},
+			format="multipart",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertNotIn(settings.JWT_REFRESH_COOKIE_NAME, response.cookies)
+		self.assertEqual(RefreshSessionFamily.objects.count(), 0)
+
+	def test_login_rejects_text_plain_body(self):
+		"""text/plain is the other enctype a form can produce — also refused."""
+		response = APIClient().post(
+			reverse("token_obtain_pair"),
+			f'{{"username": "{self.user.username}", "password": "{_VALID_TEST_PASSWORD}"}}',
+			content_type="text/plain",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertNotIn(settings.JWT_REFRESH_COOKIE_NAME, response.cookies)
+		self.assertEqual(RefreshSessionFamily.objects.count(), 0)
+
+	def test_login_only_parses_json_even_with_the_refresh_header(self):
+		"""Passing the header does not re-enable form parsing — JSONParser is the only parser."""
+		response = APIClient().post(
+			reverse("token_obtain_pair"),
+			{"username": self.user.username, "password": _VALID_TEST_PASSWORD},
+			format="multipart",
+			HTTP_X_REFRESH_REQUEST="1",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE)
+		self.assertEqual(RefreshSessionFamily.objects.count(), 0)
+
+	def test_login_accepts_json_content_type(self):
+		"""The signal the Flutter client actually sends on login (Content-Type: application/json)."""
+		response = self._login(APIClient())
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertIn(settings.JWT_REFRESH_COOKIE_NAME, response.cookies)
+
+	def test_logout_rejects_form_encoded_body(self):
+		client = APIClient()
+		login_response = self._login(client)
+		client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = login_response.cookies[
+			settings.JWT_REFRESH_COOKIE_NAME
+		].value
+
+		response = client.post(reverse("token_logout"), {}, format="multipart")
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		family = RefreshSessionFamily.objects.get()
+		self.assertIsNone(family.revoked_at)
+
+	def test_logout_without_a_refresh_cookie_does_not_touch_cookies(self):
+		"""No cookie presented → nothing to revoke and no Set-Cookie, so any site
+		POSTing here cannot force-log-out an arbitrary user."""
+		response = APIClient().post(reverse("token_logout"), {}, format="json")
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, {"status": "ok"})
+		self.assertNotIn(settings.JWT_REFRESH_COOKIE_NAME, response.cookies)
+
+	def test_refresh_cookie_is_samesite_strict(self):
+		"""Deployment is same-origin (Caddyfile), so Strict is free defence in depth."""
+		self.assertEqual(settings.JWT_REFRESH_COOKIE_SAMESITE, "Strict")
+
+		response = self._login(APIClient())
+
+		self.assertEqual(response.cookies[settings.JWT_REFRESH_COOKIE_NAME]["samesite"], "Strict")
+
+	# ── rotation grace window ───────────────────────────────
+
+	@staticmethod
+	def _jti(raw_refresh_token: str) -> str:
+		return str(RefreshToken(cast(Any, raw_refresh_token))["jti"])
+
+	def _refresh(self, cookie_value: str):
+		client = APIClient()
+		client.cookies[settings.JWT_REFRESH_COOKIE_NAME] = cookie_value
+		return client.post(reverse("token_refresh"), {}, format="json", HTTP_X_REFRESH_REQUEST="1")
+
+	def test_refresh_replay_within_grace_window_reissues_the_live_child(self):
+		"""Two tabs cold-starting with the same restored cookie must not nuke the family."""
+		login_response = self._login(APIClient())
+		original_cookie = login_response.cookies[settings.JWT_REFRESH_COOKIE_NAME].value
+
+		first = self._refresh(original_cookie)
+		self.assertEqual(first.status_code, status.HTTP_200_OK)
+		child_jti = self._jti(first.cookies[settings.JWT_REFRESH_COOKIE_NAME].value)
+
+		replay = self._refresh(original_cookie)
+
+		self.assertEqual(replay.status_code, status.HTTP_200_OK)
+		self.assertIn("access", replay.data)
+		# The replay hands back the token that is already live, it does not mint a third.
+		self.assertEqual(self._jti(replay.cookies[settings.JWT_REFRESH_COOKIE_NAME].value), child_jti)
+		self.assertEqual(RefreshTokenRecord.objects.count(), 2)
+		family = RefreshSessionFamily.objects.get()
+		self.assertIsNone(family.revoked_at)
+
+	def test_refresh_replay_of_a_non_parent_token_still_revokes_family(self):
+		"""Grace only forgives the direct parent of the live token, never an older ancestor."""
+		login_response = self._login(APIClient())
+		original_cookie = login_response.cookies[settings.JWT_REFRESH_COOKIE_NAME].value
+
+		first = self._refresh(original_cookie)
+		self.assertEqual(first.status_code, status.HTTP_200_OK)
+		second = self._refresh(first.cookies[settings.JWT_REFRESH_COOKIE_NAME].value)
+		self.assertEqual(second.status_code, status.HTTP_200_OK)
+
+		replay = self._refresh(original_cookie)
+
+		self.assertEqual(replay.status_code, status.HTTP_401_UNAUTHORIZED)
+		family = RefreshSessionFamily.objects.get()
+		self.assertEqual(family.revoked_reason, RefreshSessionFamily.RevokeReason.REUSE)
+
+	# ── absolute session lifetime ───────────────────────────
+
+	def test_refresh_past_absolute_session_lifetime_revokes_family(self):
+		login_response = self._login(APIClient())
+		cookie = login_response.cookies[settings.JWT_REFRESH_COOKIE_NAME].value
+		expired_at = timezone.now() - settings.JWT_REFRESH_ABSOLUTE_LIFETIME - timedelta(minutes=1)
+		RefreshSessionFamily.objects.update(created_at=expired_at)
+
+		response = self._refresh(cookie)
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertEqual(response.cookies[settings.JWT_REFRESH_COOKIE_NAME]["max-age"], 0)
+		family = RefreshSessionFamily.objects.get()
+		self.assertEqual(family.revoked_reason, RefreshSessionFamily.RevokeReason.MAX_LIFETIME)
+
+	def test_refresh_inside_absolute_session_lifetime_still_rotates(self):
+		login_response = self._login(APIClient())
+		cookie = login_response.cookies[settings.JWT_REFRESH_COOKIE_NAME].value
+		created_at = timezone.now() - settings.JWT_REFRESH_ABSOLUTE_LIFETIME + timedelta(hours=1)
+		RefreshSessionFamily.objects.update(created_at=created_at)
+
+		response = self._refresh(cookie)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		family = RefreshSessionFamily.objects.get()
+		self.assertIsNone(family.revoked_at)
+
+
+class RefreshSessionEndpointTestCase(TestCase):
+	"""Listing and revoking the caller's own refresh sessions."""
+
+	user: User
+	other_user: User
+
+	@classmethod
+	def setUpTestData(cls) -> None:
+		cls.user = User.objects.create_user(
+			username="sessions-owner",
+			email="sessions-owner@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+		cls.other_user = User.objects.create_user(
+			username="sessions-other",
+			email="sessions-other@example.com",
+			password=_ALTERNATE_VALID_TEST_PASSWORD,
+		)
+
+	def setUp(self) -> None:
+		self.client_for_user = login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD)
+
+	def test_list_requires_authentication(self):
+		response = APIClient().get(reverse("refresh-sessions-list"))
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+	def test_list_returns_only_the_callers_active_sessions(self):
+		mine = RefreshSessionFamily.objects.create(user=self.user, device_label="Pixel 8")
+		RefreshSessionFamily.objects.create(user=self.other_user, device_label="Other laptop")
+		RefreshSessionFamily.objects.create(
+			user=self.user,
+			device_label="Revoked laptop",
+			revoked_at=timezone.now(),
+			revoked_reason=RefreshSessionFamily.RevokeReason.LOGOUT,
+		)
+
+		response = self.client_for_user.get(reverse("refresh-sessions-list"))
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		# login_client() logs in, which itself creates one family.
+		labels = {item["device_label"] for item in response.data}
+		self.assertIn("Pixel 8", labels)
+		self.assertNotIn("Other laptop", labels)
+		self.assertNotIn("Revoked laptop", labels)
+		returned = {item["family_id"] for item in response.data}
+		self.assertIn(str(mine.family_id), returned)
+
+	def test_list_excludes_sessions_past_the_absolute_lifetime(self):
+		stale = RefreshSessionFamily.objects.create(user=self.user, device_label="Ancient")
+		RefreshSessionFamily.objects.filter(pk=stale.pk).update(
+			created_at=timezone.now() - settings.JWT_REFRESH_ABSOLUTE_LIFETIME - timedelta(minutes=1)
+		)
+
+		response = self.client_for_user.get(reverse("refresh-sessions-list"))
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertNotIn("Ancient", {item["device_label"] for item in response.data})
+
+	def test_revoke_one_session(self):
+		family = RefreshSessionFamily.objects.create(user=self.user, device_label="Old tablet")
+
+		response = self.client_for_user.post(
+			reverse("refresh-sessions-revoke", kwargs={"family_id": str(family.family_id)}),
+			{},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, {"status": "ok", "revoked": 1})
+		family.refresh_from_db()
+		self.assertEqual(family.revoked_reason, RefreshSessionFamily.RevokeReason.REVOKED_BY_USER)
+
+	def test_cannot_revoke_another_users_session(self):
+		family = RefreshSessionFamily.objects.create(user=self.other_user, device_label="Not yours")
+
+		response = self.client_for_user.post(
+			reverse("refresh-sessions-revoke", kwargs={"family_id": str(family.family_id)}),
+			{},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+		family.refresh_from_db()
+		self.assertIsNone(family.revoked_at)
+
+	def test_revoke_all_only_affects_the_caller(self):
+		RefreshSessionFamily.objects.create(user=self.user, device_label="Phone")
+		RefreshSessionFamily.objects.create(user=self.user, device_label="Laptop")
+		theirs = RefreshSessionFamily.objects.create(user=self.other_user, device_label="Theirs")
+
+		response = self.client_for_user.post(reverse("refresh-sessions-revoke-all"), {}, format="json")
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["status"], "ok")
+		# Two created here plus the one login_client() created.
+		self.assertEqual(response.data["revoked"], 3)
+		self.assertFalse(RefreshSessionFamily.objects.filter(user=self.user, revoked_at__isnull=True).exists())
+		theirs.refresh_from_db()
+		self.assertIsNone(theirs.revoked_at)
+
+	def test_revoke_all_requires_authentication(self):
+		response = APIClient().post(reverse("refresh-sessions-revoke-all"), {}, format="json")
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ChangePasswordTestCase(TestCase):
+	user: User
+	url: str
+
+	@classmethod
+	def setUpTestData(cls) -> None:
+		cls.user = User.objects.create_user(
+			username="change-password-user",
+			email="change-password@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+		cls.url = reverse("users-change-password")
+
+	def setUp(self) -> None:
+		self.authed = login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD)
+
+	def test_requires_authentication(self):
+		response = APIClient().post(
+			self.url,
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+	def test_changes_password_and_revokes_every_session(self):
+		other_session = RefreshSessionFamily.objects.create(user=self.user, device_label="Other device")
+
+		response = self.authed.post(
+			self.url,
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, {"status": "ok"})
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_ALTERNATE_VALID_TEST_PASSWORD))
+		other_session.refresh_from_db()
+		self.assertEqual(other_session.revoked_reason, RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
+		self.assertFalse(RefreshSessionFamily.objects.filter(user=self.user, revoked_at__isnull=True).exists())
+
+	def test_rejects_wrong_current_password(self):
+		response = self.authed.post(
+			self.url,
+			{
+				# Deliberately wrong literal, not a credential.
+				"current_password": "not-the-current-password",  # pragma: allowlist secret
+				"new_password": _ALTERNATE_VALID_TEST_PASSWORD,
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn("error", response.data)
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_requires_both_fields(self):
+		for payload in ({"new_password": _ALTERNATE_VALID_TEST_PASSWORD}, {"current_password": _VALID_TEST_PASSWORD}):
+			with self.subTest(payload=payload):
+				response = self.authed.post(self.url, payload, format="json")
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertIn("error", response.data)
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_enforces_password_validators(self):
+		response = self.authed.post(
+			self.url,
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": "password"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn("error", response.data)
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_password_reset_confirm_also_revokes_sessions(self):
+		family = RefreshSessionFamily.objects.create(user=self.user, device_label="Stolen laptop")
+		PasswordResetCode.create_for_user(user=self.user, code="654321")
+
+		response = APIClient().post(
+			reverse("password-reset-confirm"),
+			{
+				"email": self.user.email,
+				"code": "654321",
+				"new_password": _ALTERNATE_VALID_TEST_PASSWORD,
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		family.refresh_from_db()
+		self.assertEqual(family.revoked_reason, RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
 
 
 class PasswordResetTestCase(TestCase):

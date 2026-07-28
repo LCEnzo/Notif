@@ -7,7 +7,7 @@ from uuid import UUID
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.utils import timezone
 from rest_framework.request import Request
 from rest_framework_simplejwt.exceptions import TokenError
@@ -17,6 +17,7 @@ from accounts.models import RefreshSessionFamily, RefreshTokenRecord, User
 from commons.network import client_ip
 
 REFRESH_FAMILY_CLAIM = "family_id"
+REFRESH_JTI_CLAIM = "jti"
 REFRESH_REQUEST_HEADER = "HTTP_X_REFRESH_REQUEST"
 REFRESH_REQUEST_HEADER_VALUE = "1"
 
@@ -91,31 +92,41 @@ def rotate_refresh_token(raw_refresh_token: str) -> RotatedRefreshTokens:
 		if family.is_revoked:
 			raise RefreshSessionError("Refresh session family has been revoked.")
 
+		# Rejections that also write (a revoke) must not raise inside the atomic
+		# block, or the rollback would undo the revoke. Stash and raise afterwards.
 		rejection: RefreshSessionError | None = None
 		next_refresh: RefreshToken | None = None
-		try:
-			record = RefreshTokenRecord.objects.select_for_update().get(family=family, jti=jti)
-		except RefreshTokenRecord.DoesNotExist as exc:
-			family.revoke(RefreshSessionFamily.RevokeReason.UNKNOWN_TOKEN)
-			rejection = RefreshSessionError("Refresh token is not part of this session family.")
-			rejection.__cause__ = exc
-		else:
-			updated = RefreshTokenRecord.objects.filter(pk=record.pk, used_at__isnull=True).update(used_at=now)
-			if updated == 0:
-				family.revoke(RefreshSessionFamily.RevokeReason.REUSE)
-				rejection = RefreshTokenReuseError("Refresh token has already been used.")
-			else:
-				family.last_used_at = now
-				family.save(update_fields=["last_used_at"])
 
-				next_refresh = RefreshToken.for_user(family.user)
-				next_refresh[REFRESH_FAMILY_CLAIM] = str(family.family_id)
-				RefreshTokenRecord.objects.create(
-					family=family,
-					jti=_token_jti(next_refresh),
-					parent_jti=record.jti,
-					issued_at=now,
-				)
+		if now - family.created_at > _refresh_absolute_lifetime():
+			family.revoke(RefreshSessionFamily.RevokeReason.MAX_LIFETIME)
+			rejection = RefreshSessionError("Refresh session has reached its maximum lifetime.")
+		else:
+			try:
+				record = RefreshTokenRecord.objects.select_for_update().get(family=family, jti=jti)
+			except RefreshTokenRecord.DoesNotExist as exc:
+				family.revoke(RefreshSessionFamily.RevokeReason.UNKNOWN_TOKEN)
+				rejection = RefreshSessionError("Refresh token is not part of this session family.")
+				rejection.__cause__ = exc
+			else:
+				updated = RefreshTokenRecord.objects.filter(pk=record.pk, used_at__isnull=True).update(used_at=now)
+				if updated == 0:
+					live_child = _replayable_child(family, record, now=now)
+					if live_child is None:
+						family.revoke(RefreshSessionFamily.RevokeReason.REUSE)
+						rejection = RefreshTokenReuseError("Refresh token has already been used.")
+					else:
+						_touch_family(family, now)
+						next_refresh = _token_for_record(family, live_child)
+				else:
+					_touch_family(family, now)
+					next_refresh = RefreshToken.for_user(family.user)
+					next_refresh[REFRESH_FAMILY_CLAIM] = str(family.family_id)
+					RefreshTokenRecord.objects.create(
+						family=family,
+						jti=_token_jti(next_refresh),
+						parent_jti=record.jti,
+						issued_at=now,
+					)
 
 	if rejection is not None:
 		raise rejection
@@ -123,6 +134,60 @@ def rotate_refresh_token(raw_refresh_token: str) -> RotatedRefreshTokens:
 		raise RefreshSessionError("Refresh token rotation did not issue a replacement token.")
 
 	return RotatedRefreshTokens(access=str(next_refresh.access_token), refresh=str(next_refresh))
+
+
+def _replayable_child(
+	family: RefreshSessionFamily,
+	record: RefreshTokenRecord,
+	*,
+	now: datetime,
+) -> RefreshTokenRecord | None:
+	"""The still-unused child of an already-used ``record``, if the replay is benign.
+
+	Strict single-use rotation causes spurious full logouts in two situations that
+	have nothing to do with theft:
+
+	1. Browser session restore cold-starts several tabs at once and they all
+	present the same cookie before any of them has seen a rotated one.
+	2. A rotation commits server-side but its response never reaches the client
+	(a container recreated mid-deploy), so the client retries with the old jti.
+
+	Neither is distinguishable from theft *in general*, so the replay is only
+	forgiven when both hold: it happened inside ``JWT_REFRESH_ROTATION_GRACE``, and
+	the presented token is the direct parent of the token that is currently live.
+	A replay of any older ancestor, or of a parent whose child has itself already
+	been rotated away, returns ``None`` and the caller revokes the family — theft
+	detection is unchanged outside the window.
+	"""
+	used_at = record.used_at
+	if used_at is None or now - used_at > _rotation_grace_period():
+		return None
+
+	return (
+		RefreshTokenRecord.objects.select_for_update()
+		.filter(family=family, parent_jti=record.jti, used_at__isnull=True)
+		.first()
+	)
+
+
+def _token_for_record(family: RefreshSessionFamily, record: RefreshTokenRecord) -> RefreshToken:
+	"""Rebuild a refresh token that maps onto an existing, still-unused record.
+
+	Only the jti is persisted, not the token, so the replacement is minted fresh and
+	pinned to the stored jti. That keeps single-use accounting intact — the reissued
+	token and the original child are the same record — at the cost of pushing the
+	token's own ``exp`` out to a full REFRESH_TOKEN_LIFETIME again, which stays
+	bounded by JWT_REFRESH_ABSOLUTE_LIFETIME.
+	"""
+	token = RefreshToken.for_user(family.user)
+	token[REFRESH_FAMILY_CLAIM] = str(family.family_id)
+	token[REFRESH_JTI_CLAIM] = record.jti
+	return token
+
+
+def _touch_family(family: RefreshSessionFamily, now: datetime) -> None:
+	family.last_used_at = now
+	family.save(update_fields=["last_used_at"])
 
 
 def revoke_refresh_family_for_token(raw_refresh_token: str, *, reason: str) -> bool:
@@ -138,6 +203,37 @@ def revoke_refresh_family_for_token(raw_refresh_token: str, *, reason: str) -> b
 			return False
 		family.revoke(reason)
 	return True
+
+
+def revoke_all_refresh_families_for_user(user: User, *, reason: str) -> int:
+	"""Revoke every currently-active refresh session family owned by ``user``.
+
+	Used when a credential change should evict all outstanding sessions (password
+	change/reset). Returns the number of families revoked. Already-revoked
+	families are left untouched so their original reason/timestamp is preserved.
+	"""
+	return RefreshSessionFamily.objects.filter(user=user, revoked_at__isnull=True).update(
+		revoked_at=timezone.now(),
+		revoked_reason=reason[:80],
+	)
+
+
+def active_refresh_families_for_user(user: User) -> QuerySet[RefreshSessionFamily]:
+	"""Families that could still mint an access token, newest activity first.
+
+	"Active" means all three of: not revoked, used recently enough that its newest
+	refresh token has not expired, and still inside the absolute session cap. The
+	staleness and cap filters matter for the session list — a family last used four
+	days ago is dead in practice (REFRESH_TOKEN_LIFETIME is 72h) and showing it as a
+	live device would be a lie.
+	"""
+	now = timezone.now()
+	return RefreshSessionFamily.objects.filter(
+		user=user,
+		revoked_at__isnull=True,
+		last_used_at__gte=now - _refresh_token_lifetime(),
+		created_at__gte=now - _refresh_absolute_lifetime(),
+	).order_by("-last_used_at")
 
 
 def cleanup_refresh_sessions(*, now: datetime | None = None) -> RefreshSessionCleanupResult:
@@ -182,7 +278,7 @@ def _token_family_id(refresh: RefreshToken) -> UUID:
 
 
 def _token_jti(refresh: RefreshToken) -> str:
-	raw = refresh.get("jti")
+	raw = refresh.get(REFRESH_JTI_CLAIM)
 	if not isinstance(raw, str) or not raw:
 		raise RefreshSessionError("Refresh token is missing its jti claim.")
 	if len(raw) > 64:
@@ -192,6 +288,14 @@ def _token_jti(refresh: RefreshToken) -> str:
 
 def _refresh_token_lifetime() -> timedelta:
 	return cast(timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
+
+
+def _rotation_grace_period() -> timedelta:
+	return settings.JWT_REFRESH_ROTATION_GRACE
+
+
+def _refresh_absolute_lifetime() -> timedelta:
+	return settings.JWT_REFRESH_ABSOLUTE_LIFETIME
 
 
 def _device_label(request: Request) -> str:

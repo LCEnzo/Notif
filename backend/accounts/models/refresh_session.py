@@ -15,6 +15,10 @@ class RefreshSessionFamily(models.Model):
 		UNKNOWN_TOKEN = "unknown_token", "Unknown refresh token"
 		EXPIRED = "expired", "Expired"
 		LOGIN_REPLACED = "login_replaced", "Replaced by a new login"
+		# An enum label, not a credential.
+		PASSWORD_CHANGE = "password_change", "Password changed or reset"  # pragma: allowlist secret
+		MAX_LIFETIME = "max_lifetime", "Absolute session lifetime exceeded"
+		REVOKED_BY_USER = "revoked_by_user", "Revoked by the account owner"
 
 	user = models.ForeignKey(
 		settings.AUTH_USER_MODEL,
