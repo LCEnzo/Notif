@@ -28,6 +28,19 @@ const String healthPath = '/monitoring/health/';
 /// replay is pointless but equally destructive to diagnose.
 const Set<String> nonReplayablePaths = {'/token/refresh/', '/token/logout/'};
 
+/// Requests whose credentials belong to one specific origin, so trying them
+/// against a different base URL is not a fallback but an unauthenticated call.
+///
+/// The refresh cookie is scoped to the origin that issued it — the browser jar
+/// on web, [refreshCookieName] keyed by `scheme://host:port` on native. Under
+/// [BackendUrlMode.customWithFallback] a network failure at the custom origin
+/// would otherwise re-send the refresh to the built-in origin, which has no
+/// such cookie. The backend answers 401 "refresh token missing", the client
+/// cannot tell that from a genuinely rejected session, and an outage at the
+/// preferred origin becomes the forced logout this whole path exists to avoid.
+/// Better to surface the transport failure and let recovery retry it.
+const Set<String> originPinnedPaths = {'/token/refresh/', '/token/logout/'};
+
 /// Shared Dio instance — connection pooling happens here.
 final Dio _dio = _createDio();
 
@@ -252,6 +265,11 @@ bool _isReplayable(String path) {
   return !nonReplayablePaths.any(normalized.startsWith);
 }
 
+bool _isOriginPinned(String path) {
+  final normalized = path.startsWith('/') ? path : '/$path';
+  return originPinnedPaths.any(normalized.startsWith);
+}
+
 Future<Response<dynamic>> _requestWithFallback(
   String method,
   String path, {
@@ -269,9 +287,13 @@ Future<Response<dynamic>> _requestWithFallback(
 
   final replayable = _isReplayable(path);
 
+  // An origin-pinned request only has credentials at the preferred origin, so
+  // there is nowhere to fall back to.
+  final candidates = _isOriginPinned(path) ? urls.take(1).toList() : urls;
+
   // Every URL except the last may fall back; the last one is attempted
   // outside the loop so its failure propagates untouched.
-  for (final url in urls.take(urls.length - 1)) {
+  for (final url in candidates.take(candidates.length - 1)) {
     try {
       return await _performRequest(
         method,
@@ -300,7 +322,7 @@ Future<Response<dynamic>> _requestWithFallback(
 
   return _performRequest(
     method,
-    urls.last,
+    candidates.last,
     path,
     headers: headers,
     body: body,

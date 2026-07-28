@@ -241,7 +241,66 @@ void main() {
       expect(adapter.requests, hasLength(1));
     });
 
-    test('refresh POST still falls back when no connection was made', () async {
+    // Falling back here looks harmless - nothing reached the server, so there is
+    // no rotation to replay - but the refresh cookie is scoped to the origin
+    // that issued it. Re-sending to the built-in origin arrives without it, and
+    // the resulting 401 is indistinguishable from a rejected session, so an
+    // outage at the custom origin would sign the user out. The transport error
+    // has to surface instead, leaving recovery to retry the pinned origin.
+    test('refresh POST does not fall back to an origin without its cookie', () async {
+      final settings = await createFallbackSettings(custom);
+      final adapter = FakeHttpAdapter((options) {
+        if (options.uri.host == 'custom.example.com') {
+          throw DioException.connectionTimeout(
+            timeout: const Duration(seconds: 10),
+            requestOptions: options,
+          );
+        }
+        return jsonResponse({'access': 'fresh-token'});
+      });
+      apiDio.httpClientAdapter = adapter;
+
+      await expectLater(
+        () => apiPost(
+          '/token/refresh/',
+          settings: settings,
+          headers: const {'Content-Type': 'application/json'},
+          body: const <String, Object?>{},
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(adapter.requests, hasLength(1));
+      expect(adapter.requests.single.uri.host, 'custom.example.com');
+    });
+
+    test('logout POST does not fall back either', () async {
+      final settings = await createFallbackSettings(custom);
+      final adapter = FakeHttpAdapter((options) {
+        if (options.uri.host == 'custom.example.com') {
+          throw DioException.connectionTimeout(
+            timeout: const Duration(seconds: 10),
+            requestOptions: options,
+          );
+        }
+        return jsonResponse({'status': 'ok'});
+      });
+      apiDio.httpClientAdapter = adapter;
+
+      await expectLater(
+        () => apiPost(
+          '/token/logout/',
+          settings: settings,
+          headers: const {'Content-Type': 'application/json'},
+          body: const <String, Object?>{},
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(adapter.requests, hasLength(1));
+    });
+
+    test('login POST may still fall back - it has no cookie to lose', () async {
       final settings = await createFallbackSettings(custom);
       final adapter = FakeHttpAdapter((options) {
         if (options.uri.host == 'custom.example.com') {
@@ -255,7 +314,7 @@ void main() {
       apiDio.httpClientAdapter = adapter;
 
       final response = await apiPost(
-        '/token/refresh/',
+        '/token/',
         settings: settings,
         headers: const {'Content-Type': 'application/json'},
         body: const <String, Object?>{},
