@@ -5,13 +5,15 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
-from accounts.models import User
+from accounts.models import RefreshSessionFamily, User
 
 if TYPE_CHECKING:
 	_UserModelSerializer = ModelSerializer[User]
+	_RefreshSessionModelSerializer = ModelSerializer[RefreshSessionFamily]
 	_AnySerializer = serializers.Serializer[Any]
 else:
 	_UserModelSerializer = ModelSerializer
+	_RefreshSessionModelSerializer = ModelSerializer
 	_AnySerializer = serializers.Serializer
 
 
@@ -35,13 +37,16 @@ class UserCreationSerializer(_UserModelSerializer):
 
 	@transaction.atomic
 	def update(self, instance: User, validated_data: dict[str, Any]) -> User:
-		# Ensure a user can only update their own password.
-		request = self.context.get("request")
-		password = validated_data.pop("password", None)
-		if password is not None:
-			if request is None or request.user != instance:
-				raise serializers.ValidationError({"password": "Only the account owner can change their password."})
-			instance.set_password(password)
+		# Password changes are refused here outright. change_password is the
+		# only path: it verifies the current password, which is the one proof a
+		# stolen bearer token cannot forge. Accepting a password on a generic
+		# PATCH would let any valid access token take the account over. No
+		# client has ever used this path - both the deployed and the pending
+		# frontend post to change_password.
+		if "password" in validated_data:
+			raise serializers.ValidationError(
+				{"password": "Use the change_password endpoint, which verifies the current password."}
+			)
 
 		return super().update(instance, validated_data)
 
@@ -76,6 +81,58 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = ["username", "date_created"]
+
+
+# ── token auth ───────────────────────────────────────────────
+
+
+class TokenLoginRequestSerializer(_AnySerializer):
+	username = serializers.CharField()
+	password = serializers.CharField(write_only=True)
+	remember_me = serializers.BooleanField(default=True, required=False)
+	device_label = serializers.CharField(max_length=120, required=False, allow_blank=True)
+
+
+class TokenAccessResponseSerializer(_AnySerializer):
+	access = serializers.CharField()
+
+
+class TokenRefreshRequestSerializer(_AnySerializer):
+	pass
+
+
+class TokenLogoutResponseSerializer(_AnySerializer):
+	status = serializers.CharField()
+
+
+# ── refresh sessions ─────────────────────────────────────────
+
+
+class RefreshSessionSerializer(_RefreshSessionModelSerializer):
+	"""One active refresh session — in practice, one signed-in device.
+
+	``family_id`` is the public handle used to revoke a session; the row's integer
+	primary key is deliberately not exposed.
+	"""
+
+	class Meta:
+		model = RefreshSessionFamily
+		fields = [
+			"family_id",
+			"created_at",
+			"last_used_at",
+			"device_label",
+			"ip",
+			"user_agent",
+		]
+		read_only_fields = fields
+
+
+class RefreshSessionRevokeResponseSerializer(_AnySerializer):
+	"""Result of revoking one session or all of them."""
+
+	status = serializers.CharField()
+	revoked = serializers.IntegerField(help_text="Number of sessions this call revoked.")
 
 
 # ── password reset ───────────────────────────────────────────

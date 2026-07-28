@@ -3,9 +3,11 @@ import sqlite3
 from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from typing import cast
 from unittest.mock import patch
 
 import pytest
+from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase
@@ -15,6 +17,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.throttling import ScopedRateThrottle
 
+from accounts.models import RefreshSessionFamily, RefreshTokenRecord
 from accounts.models.password_reset import (
 	PASSWORD_RESET_CODE_MAX_ATTEMPTS,
 	PasswordResetCode,
@@ -278,6 +281,26 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 
 		self.assertEqual(PasswordResetCode.objects.count(), 0)
 		self.assertTrue(SystemEvent.objects.filter(kind="maintenance").exists())
+
+	def test_command_cleans_expired_refresh_sessions(self):
+		refresh_lifetime = cast(timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
+		active = RefreshSessionFamily.objects.create(user=self.regular_user)
+		RefreshTokenRecord.objects.create(
+			family=active,
+			jti="active-old-used",
+			used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
+		)
+		expired = RefreshSessionFamily.objects.create(
+			user=self.regular_user,
+			last_used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
+		)
+
+		call_command("run_due_tasks", "--max-links", "0")
+
+		self.assertFalse(RefreshSessionFamily.objects.filter(pk=expired.pk).exists())
+		event = SystemEvent.objects.filter(kind="maintenance").latest("id")
+		self.assertEqual(event.details["refresh_session_families_deleted"], 1)
+		self.assertEqual(event.details["refresh_token_records_deleted"], 1)
 
 	def test_command_skips_when_lock_is_held(self):
 		MaintenanceLock.objects.create(key="run_due_tasks", acquired_at=timezone.now())

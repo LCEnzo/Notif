@@ -39,8 +39,16 @@ DEV_BOOTSTRAP_EMAIL = settings.DEV_BOOTSTRAP_EMAIL
 DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 
 ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]
-CORS_ALLOW_ALL_ORIGINS = settings.DEBUG
+# Never allow every origin, not even in DEBUG. Combined with CORS_ALLOW_CREDENTIALS
+# below, "*" would hand any page a developer happens to visit credentialed access to
+# the dev API — and DEV_BOOTSTRAP_LOGIN_ENABLED defaults to DEBUG with a password
+# committed to the repo, so that page could log itself in as the dev user.
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
+# Dev allowlist: loopback only. A regex rather than a literal list because the
+# Flutter web dev server picks a random port on every `flutter run`.
+CORS_ALLOWED_ORIGIN_REGEXES = [r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"] if DEBUG else []
+CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in settings.CSRF_TRUSTED_ORIGINS.split(",") if origin.strip()]
 
 
@@ -108,6 +116,31 @@ DATABASES = {
 	"default": {
 		"ENGINE": "django.db.backends.sqlite3",
 		"NAME": settings.SQLITE_PATH,
+		# SQLite reports has_select_for_update = False, and Django's compiler
+		# silently drops the FOR UPDATE clause rather than raising - so the
+		# select_for_update() in accounts.refresh_sessions takes no row lock
+		# here. Two restored tabs can both read the same unused refresh record
+		# before either writes.
+		#
+		# In the default DEFERRED mode a transaction reads first, holding only a
+		# SHARED lock, and asks for a write lock at its first UPDATE. SQLite
+		# refuses that upgrade with SQLITE_BUSY *immediately* when another
+		# transaction holds the write lock - the busy timeout is not honoured,
+		# because waiting could only deadlock. The loser raises "database is
+		# locked" (a 500) instead of reaching the grace-window branch that exists
+		# for exactly this multi-tab case.
+		#
+		# IMMEDIATE takes the write lock when the transaction opens, so the
+		# second writer waits out the timeout and then finds used_at already set
+		# - the conditional-update path the grace window is built on. The cost is
+		# that write transactions serialise, which on a single-instance
+		# deployment is the right trade. WAL additionally lets reads proceed
+		# during a write.
+		"OPTIONS": {
+			"transaction_mode": "IMMEDIATE",
+			"timeout": 20,
+			"init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+		},
 	}
 	# 'default': {
 	# 	'ENGINE': 'django.db.backends.postgresql',
@@ -181,8 +214,17 @@ _REST_THROTTLE_RATES = {
 	"anon": "60/min",
 	"login": "5/min",
 	"register": "3/min",
-	"token_refresh": "10/min",
+	# /token/refresh/ is cookie-authenticated, so DRF sees an anonymous caller and
+	# keys this scope on the client IP. At 10/min roughly eleven page reloads — or a
+	# handful of users behind one NAT/CGNAT — produced 429s, which the client turns
+	# into a forced logout. Hammering here buys an attacker nothing: rotation is
+	# single-use and a replayed token revokes the whole family, so the rate limit
+	# only needs to stop floods. ThrottledTokenRefreshView deliberately drops
+	# UserRateThrottle (user = 500/hour ≈ 8/min, also IP-keyed when anonymous) so
+	# that this scope is the binding limit rather than dead weight behind it.
+	"token_refresh": "60/min",
 	"token_verify": "20/min",
+	"token_logout": "20/min",
 	"client_events": "30/min",
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
@@ -296,9 +338,15 @@ if not DEBUG:
 # https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
 SIMPLE_JWT = {
 	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20 if not DEBUG else 48 * 60),
-	"REFRESH_TOKEN_LIFETIME": timedelta(hours=30 if not DEBUG else 7 * 24),
+	"REFRESH_TOKEN_LIFETIME": timedelta(hours=72),
 	"LEEWAY": 0,
-	"AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
+	# Bearer only. OpenAPI 3 can express exactly one bearerFormat, so listing extra
+	# prefixes made drf-spectacular emit a warning on every single view while the
+	# generated schema documented "Bearer" anyway. The "JWT" prefix had no client
+	# (the Flutter app always sends "Bearer"), and the empty prefix never matched
+	# anything: SimpleJWT compares the first space-delimited token of the header
+	# against this tuple, so a header with no prefix is rejected regardless.
+	"AUTH_HEADER_TYPES": ("Bearer",),
 	"AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
 	"USER_ID_FIELD": "id",
 	"USER_ID_CLAIM": "user_id",
@@ -306,6 +354,33 @@ SIMPLE_JWT = {
 	"SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
 	"SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
 }
+
+JWT_REFRESH_COOKIE_NAME = "notif_refresh"
+# Cookie paths are prefix matches, so this prefix also covers /api/v1/token/verify/,
+# which reads its token from the request body and never touches request.COOKIES.
+# It is left as-is deliberately: every *other* endpoint under the prefix needs the
+# cookie — /token/ (login revokes any pre-existing family), /token/refresh/ and
+# /token/logout/ — and there is no cookie-path syntax for "this prefix except one
+# child". The alternative, issuing two narrowly-scoped cookies, would double the
+# Set-Cookie bookkeeping on every rotation to stop sending the cookie to one
+# endpoint that ignores it.
+JWT_REFRESH_COOKIE_PATH = "/api/v1/token/"
+# Strict, not Lax: the SPA and the API are served from a single origin (see the
+# Caddyfile — /api/* and the Flutter bundle share one host), so no legitimate
+# cross-site navigation ever needs to carry this cookie.
+JWT_REFRESH_COOKIE_SAMESITE = "Strict"
+JWT_REFRESH_COOKIE_SECURE = not DEBUG
+# How long a just-rotated refresh token may still be replayed. Two everyday events
+# replay one: a restored browser session cold-starting several tabs that all hold
+# the same cookie, and a rotation that commits server-side while its response is
+# lost (container recreated mid-deploy). Inside this window, replaying the direct
+# parent of the currently-live token re-issues that live token instead of revoking
+# the family; every other replay still trips theft detection.
+JWT_REFRESH_ROTATION_GRACE = timedelta(seconds=30)
+# Hard ceiling on one refresh session, measured from RefreshSessionFamily.created_at.
+# Rotation mints a brand-new token each time, so without this a stolen cookie that
+# is refreshed once per REFRESH_TOKEN_LIFETIME would stay valid forever.
+JWT_REFRESH_ABSOLUTE_LIFETIME = timedelta(days=30)
 
 # Email
 EMAIL_BACKEND = settings.EMAIL_BACKEND or (
