@@ -306,7 +306,6 @@ Ordered roughly by impact within each section.
 **Low impact / housekeeping**
 - Remove `misc/secrets.json` + `misc/*.ipynb`
 - Delete dead `IsOwner` permission — subsumed by `IsOwnerOrAdmin`, never imported
-- Remove unused `TriggerScrapeAllResponseSerializer`
 - Remove unused `lxml` dependency
 - Remove unused `Notification.Status.DISMISSED`
 - `UserMinimalReadSerializer` list view missing `name` / `email`

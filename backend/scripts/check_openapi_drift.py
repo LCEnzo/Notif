@@ -22,6 +22,11 @@ def generate_schema(output_path: Path) -> None:
 			"--file",
 			str(output_path),
 			"--validate",
+			# --validate alone only catches structurally invalid OpenAPI. The failures
+			# that actually reach clients are drf-spectacular's *warnings* — e.g.
+			# "could not resolve ... defaulting to generic free-form object", which is
+			# how an endpoint returning an array shipped a schema saying object.
+			"--fail-on-warn",
 		],
 		cwd=BACKEND_ROOT,
 		check=True,

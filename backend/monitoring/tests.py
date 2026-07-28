@@ -875,6 +875,127 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 		scrape_all.assert_called_once_with(user_id=None, rate_limiter=rate_limiter)
 
 
+class TriggerScrapeViewTestCase(SetupMixin, TestCase):
+	"""The /monitoring/trigger-scrape/ endpoint's contract.
+
+	Every response — single link or scrape-all, success or failure — carries a
+	top-level ``status``. Single-link responses add ``updates_found``/``message``;
+	scrape-all responses add ``results``, a ``{"<link_id>": {...}}`` map whose
+	entries use the same ``updates_found`` field name as the single-link shape.
+	"""
+
+	url: str
+
+	def setUp(self):
+		self.url = reverse("trigger-scrape")
+		# Fixture links use schemeless URLs like "www.google.com"; requests can't
+		# dispatch those, and requests_mock only intercepts dispatchable URLs.
+		for link in self.links:
+			link.url = f"https://{link.url}"
+			link.save(update_fields=["url"])
+
+	@staticmethod
+	def _mocked_scrape():
+		mocker = requests_mock.Mocker()
+		mocker.start()
+		mocker.get(requests_mock.ANY, text='<html><body><article class="post-card">Post</article></body></html>')
+		return mocker
+
+	def test_requires_authentication(self):
+		response = APIClient().post(self.url, {}, format="json")
+
+		self.assertEqual(response.status_code, 401)
+
+	def test_single_link_returns_status_and_updates_found(self):
+		link = self.links[0]
+
+		mocker = self._mocked_scrape()
+		try:
+			response = self.api_client.post(self.url, {"link_id": link.pk}, format="json")
+		finally:
+			mocker.stop()
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["status"], "ok")
+		self.assertIsInstance(response.data["updates_found"], int)
+		self.assertNotIn("results", response.data)
+
+	def test_unknown_link_returns_404_error_shape(self):
+		response = self.api_client.post(self.url, {"link_id": 10_000_000}, format="json")
+
+		self.assertEqual(response.status_code, 404)
+		self.assertEqual(response.data["status"], "error")
+		self.assertEqual(response.data["message"], "Link not found")
+
+	def test_other_users_link_returns_404(self):
+		other_link = next(link for link in self.links if link.user_id == self.secondary_user.pk)
+
+		response = self.api_client.post(self.url, {"link_id": other_link.pk}, format="json")
+
+		self.assertEqual(response.status_code, 404)
+		self.assertEqual(response.data["status"], "error")
+
+	def test_scrape_failure_returns_400_error_shape(self):
+		link = self.links[0]
+		link.strategy = None
+		link.save(update_fields=["strategy"])
+
+		response = self.api_client.post(self.url, {"link_id": link.pk}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(response.data["status"], "error")
+		self.assertEqual(response.data["message"], "No strategy assigned")
+
+	def test_non_numeric_link_id_returns_400_not_500(self):
+		response = self.api_client.post(self.url, {"link_id": "not-a-number"}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(response.data["status"], "error")
+		self.assertIn("link_id", response.data["message"])
+
+	def test_zero_link_id_returns_400_instead_of_scraping_everything(self):
+		before = Update.objects.count()
+
+		response = self.api_client.post(self.url, {"link_id": 0}, format="json")
+
+		self.assertEqual(response.status_code, 400)
+		self.assertEqual(response.data["status"], "error")
+		self.assertEqual(Update.objects.count(), before)
+
+	def test_scrape_all_returns_results_envelope_keyed_by_link_id(self):
+		own_link_ids = {link.pk for link in self.links if link.user_id == self.regular_user.pk}
+
+		mocker = self._mocked_scrape()
+		try:
+			response = self.api_client.post(self.url, {}, format="json")
+		finally:
+			mocker.stop()
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["status"], "ok")
+		results = response.data["results"]
+		self.assertEqual(set(results.keys()), {str(pk) for pk in own_link_ids})
+		for entry in results.values():
+			self.assertEqual(entry["status"], "ok")
+			# Renamed from "count" so one field name means one thing everywhere.
+			self.assertIn("updates_found", entry)
+			self.assertNotIn("count", entry)
+
+
+class StratChoicesViewTestCase(SetupMixin, TestCase):
+	def test_returns_a_json_array_of_strategy_names(self):
+		response = self.api_client.get(reverse("get-strat-choices"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIsInstance(response.data, list)
+		self.assertEqual(set(response.data), set(STRATEGY_CHOICES))
+
+	def test_requires_authentication(self):
+		response = APIClient().get(reverse("get-strat-choices"))
+
+		self.assertEqual(response.status_code, 401)
+
+
 # ── FeedStrategy Tests ────────────────────────────────────────────────────
 
 ATOM_FEED_XML = """\

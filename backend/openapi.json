@@ -100,6 +100,113 @@
                 }
             }
         },
+        "/api/v1/accounts/sessions/": {
+            "get": {
+                "operationId": "accounts_sessions_list",
+                "description": "Every refresh session (signed-in device) that can still mint access tokens for the requesting user, most recently used first. Sessions that are revoked, stale beyond the refresh token lifetime, or past the absolute session lifetime are omitted. Strictly owner-scoped: a user never sees another user's sessions.",
+                "summary": "List the caller's active sessions",
+                "tags": [
+                    "accounts"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/RefreshSession"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": "Authentication credentials were not provided."
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/sessions/{family_id}/revoke/": {
+            "post": {
+                "operationId": "accounts_sessions_revoke_create",
+                "description": "Revokes a single session by its family_id, signing that device out at its next refresh. Scoped to the caller's own sessions, so another user's family_id resolves to 404 rather than revealing that it exists.",
+                "summary": "Revoke one session",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "family_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "accounts"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RefreshSessionRevokeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": "Authentication credentials were not provided."
+                    },
+                    "404": {
+                        "description": "No such active session for this user."
+                    }
+                }
+            }
+        },
+        "/api/v1/accounts/sessions/revoke-all/": {
+            "post": {
+                "operationId": "accounts_sessions_revoke_all_create",
+                "description": "Signs the caller out everywhere, including the device making the request. Returns how many sessions were revoked; already-revoked sessions are left untouched so their original reason and timestamp survive.",
+                "summary": "Revoke every session",
+                "tags": [
+                    "accounts"
+                ],
+                "security": [
+                    {
+                        "jwtAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RefreshSessionRevokeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": "Authentication credentials were not provided."
+                    }
+                }
+            }
+        },
         "/api/v1/accounts/users/": {
             "get": {
                 "operationId": "accounts_users_list",
@@ -863,8 +970,9 @@
                         "in": "path",
                         "name": "id",
                         "schema": {
-                            "type": "string"
+                            "type": "integer"
                         },
+                        "description": "A unique integer value identifying this notification.",
                         "required": true
                     }
                 ],
@@ -896,8 +1004,9 @@
                         "in": "path",
                         "name": "id",
                         "schema": {
-                            "type": "string"
+                            "type": "integer"
                         },
+                        "description": "A unique integer value identifying this notification.",
                         "required": true
                     }
                 ],
@@ -948,8 +1057,9 @@
                         "in": "path",
                         "name": "id",
                         "schema": {
-                            "type": "string"
+                            "type": "integer"
                         },
+                        "description": "A unique integer value identifying this notification.",
                         "required": true
                     }
                 ],
@@ -1077,7 +1187,9 @@
         },
         "/api/v1/monitoring/strat-choices": {
             "get": {
-                "operationId": "monitoring_strat_choices_retrieve",
+                "operationId": "monitoring_strat_choices_list",
+                "description": "The strategy class names a Link's Strategy may use, as a flat JSON array. Values match the StratClsEnum used by the Strategy endpoints.",
+                "summary": "List available scraping strategy names",
                 "tags": [
                     "monitoring"
                 ],
@@ -1091,13 +1203,17 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "additionalProperties": {},
-                                    "description": "Unspecified response body"
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/StratClsEnum"
+                                    }
                                 }
                             }
                         },
-                        "description": ""
+                        "description": "Available strategy class names."
+                    },
+                    "401": {
+                        "description": "Authentication credentials were not provided."
                     }
                 }
             }
@@ -1352,6 +1468,7 @@
         "/api/v1/monitoring/trigger-scrape/": {
             "post": {
                 "operationId": "monitoring_trigger_scrape_create",
+                "description": "Scrape one link, or every link the caller owns.\n\nSupply ``link_id`` to scrape a single link; omit it to scrape all of them. Both\nmodes answer with a top-level ``status``; scrape-all additionally returns a\n``results`` map keyed by stringified link id, whose entries use the same\n``updates_found``/``message`` field names as the single-link response.",
                 "tags": [
                     "monitoring"
                 ],
@@ -1384,7 +1501,27 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/TriggerScrapeSingleResponse"
+                                    "$ref": "#/components/schemas/TriggerScrapeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TriggerScrapeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TriggerScrapeResponse"
                                 }
                             }
                         },
@@ -1538,22 +1675,22 @@
             "post": {
                 "operationId": "token_create",
                 "description": "Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.\n\nSubclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-Refresh-Request",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Set to 1. Proves the request did not come from a cross-site HTML form. Optional only because a JSON request body proves the same thing; one of the two is required."
+                    }
+                ],
                 "tags": [
                     "token"
                 ],
                 "requestBody": {
                     "content": {
                         "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenLoginRequest"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenLoginRequest"
-                            }
-                        },
-                        "multipart/form-data": {
                             "schema": {
                                 "$ref": "#/components/schemas/TokenLoginRequest"
                             }
@@ -1571,6 +1708,12 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "Request was not proven non-cross-site (see X-Refresh-Request), or the body was invalid."
+                    },
+                    "401": {
+                        "description": "Invalid credentials."
                     }
                 }
             }
@@ -1579,6 +1722,16 @@
             "post": {
                 "operationId": "token_logout_create",
                 "description": "Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.\n\nSubclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.",
+                "parameters": [
+                    {
+                        "in": "header",
+                        "name": "X-Refresh-Request",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "description": "Set to 1. Proves the request did not come from a cross-site HTML form. Optional only because a JSON request body proves the same thing; one of the two is required."
+                    }
+                ],
                 "tags": [
                     "token"
                 ],
@@ -1598,6 +1751,9 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "Request was not proven non-cross-site (see X-Refresh-Request)."
                     }
                 }
             }
@@ -1613,7 +1769,7 @@
                         "schema": {
                             "type": "string"
                         },
-                        "description": "Must be set to 1 for refresh requests.",
+                        "description": "Set to 1. Proves the request did not come from a cross-site HTML form. Required.",
                         "required": true
                     }
                 ],
@@ -1636,6 +1792,12 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "Missing the X-Refresh-Request header."
+                    },
+                    "401": {
+                        "description": "Refresh cookie missing, expired, revoked, or replayed outside the rotation grace window."
                     }
                 }
             }
@@ -1650,16 +1812,6 @@
                 "requestBody": {
                     "content": {
                         "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenVerify"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenVerify"
-                            }
-                        },
-                        "multipart/form-data": {
                             "schema": {
                                 "$ref": "#/components/schemas/TokenVerify"
                             }
@@ -2156,6 +2308,65 @@
                     }
                 }
             },
+            "RefreshSession": {
+                "type": "object",
+                "description": "One active refresh session — in practice, one signed-in device.\n\n``family_id`` is the public handle used to revoke a session; the row's integer\nprimary key is deliberately not exposed.",
+                "properties": {
+                    "family_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "last_used_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "device_label": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "ip": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "user_agent": {
+                        "type": "string",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "device_label",
+                    "family_id",
+                    "ip",
+                    "last_used_at",
+                    "user_agent"
+                ]
+            },
+            "RefreshSessionRevokeResponse": {
+                "type": "object",
+                "description": "Result of revoking one session or all of them.",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    },
+                    "revoked": {
+                        "type": "integer",
+                        "description": "Number of sessions this call revoked."
+                    }
+                },
+                "required": [
+                    "revoked",
+                    "status"
+                ]
+            },
             "StatusCheckResponse": {
                 "type": "object",
                 "properties": {
@@ -2324,6 +2535,27 @@
                     "token"
                 ]
             },
+            "TriggerScrapeLinkResult": {
+                "type": "object",
+                "description": "Outcome for one link inside a scrape-all response.",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "description": "\"ok\" or \"error\"."
+                    },
+                    "updates_found": {
+                        "type": "integer",
+                        "description": "Present when status is \"ok\"."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Present when status is \"error\"."
+                    }
+                },
+                "required": [
+                    "status"
+                ]
+            },
             "TriggerScrapeRequest": {
                 "type": "object",
                 "properties": {
@@ -2333,17 +2565,28 @@
                     }
                 }
             },
-            "TriggerScrapeSingleResponse": {
+            "TriggerScrapeResponse": {
                 "type": "object",
+                "description": "The single response shape for POST /monitoring/trigger-scrape/.\n\nEvery response, at every status code, carries ``status``. A single-link call\n(``link_id`` supplied) adds ``updates_found`` on success or ``message`` on\nfailure. A scrape-all call adds ``results``: a ``{\"<link_id>\": {...}}`` map whose\nentries reuse the same field names.\n\nThis replaces the previous pair of serializers. The two request modes genuinely\nreturn different payloads, and drf-spectacular 0.29 cannot express that as a\nunion without a discriminator — ``PolymorphicProxySerializer`` breaks client\ngeneration — so the honest declaration is one component whose only guaranteed\nmember is ``status``, which is exactly what the endpoint promises.",
                 "properties": {
                     "status": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "\"ok\" or \"error\"."
                     },
                     "updates_found": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "Single-link success only: number of updates created."
                     },
                     "message": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Error detail."
+                    },
+                    "results": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/TriggerScrapeLinkResult"
+                        },
+                        "description": "Scrape-all only: per-link outcome keyed by stringified link id."
                     }
                 },
                 "required": [
