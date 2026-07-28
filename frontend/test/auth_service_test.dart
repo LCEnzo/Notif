@@ -515,4 +515,149 @@ void main() {
       expect(auth.sessionDiagnostic, isNull);
     });
   });
+
+  group('session-origin pinning', () {
+    Future<AppSettingsController> fallbackSettings() async {
+      final settings = await loadedSettings();
+      await settings.setBackendUrlMode(BackendUrlMode.customWithFallback);
+      await settings.setCustomBackendUrl('http://custom.example:1234/api/v1');
+      return settings;
+    }
+
+    test('refresh goes to the origin that answered login', () async {
+      // Login falls back (a connection timeout provably sent nothing) and the
+      // built-in origin issues the cookie. Refresh must then go to the
+      // built-in origin - the custom one never issued anything.
+      final settings = await fallbackSettings();
+      final adapter = install((options) {
+        if (options.uri.host == 'custom.example') {
+          throw DioException.connectionTimeout(
+            requestOptions: options,
+            timeout: const Duration(milliseconds: 1),
+          );
+        }
+        if (isLogin(options)) {
+          return jsonResponse({'access': 'access-1'});
+        }
+        if (isRefresh(options)) {
+          return jsonResponse({'access': 'access-2'});
+        }
+        return jsonResponse({'detail': 'nope'}, statusCode: 401);
+      });
+      final auth = createService();
+      auth.updateSettings(settings);
+      await auth.loginWithRememberMe('user', 'pass', rememberMe: true);
+
+      await triggerRefresh(auth);
+
+      final refreshHosts = adapter
+          .requestsFor('/token/refresh/')
+          .map((request) => request.uri.host)
+          .toSet();
+      expect(refreshHosts, {'localhost'});
+      expect(auth.jwt?.access, 'access-2');
+    });
+
+    test('bearer requests never fall back to another origin', () async {
+      // The access token was issued by the custom origin; when that origin
+      // goes down mid-session, the request must fail rather than replay the
+      // token against the built-in origin.
+      final settings = await fallbackSettings();
+      var customUp = true;
+      final adapter = install((options) {
+        if (options.uri.host == 'custom.example') {
+          if (!customUp) {
+            throw DioException.connectionError(
+              requestOptions: options,
+              reason: 'down',
+            );
+          }
+          if (isLogin(options)) {
+            return jsonResponse({'access': 'access-1'});
+          }
+        }
+        return jsonResponse(const <String, Object?>{});
+      });
+      final auth = createService();
+      auth.updateSettings(settings);
+      await auth.loginWithRememberMe('user', 'pass', rememberMe: true);
+      customUp = false;
+
+      await expectLater(
+        apiGet(
+          '/monitoring/links/',
+          settings: settings,
+          headers: {'Authorization': 'Bearer ${auth.jwt!.access}'},
+        ),
+        throwsA(isA<DioException>()),
+      );
+
+      final linkHosts = adapter
+          .requestsFor('/monitoring/links/')
+          .map((request) => request.uri.host)
+          .toSet();
+      expect(linkHosts, {'custom.example'});
+    });
+
+    test('login does not replay after a lost response', () async {
+      // A receive timeout means the server may already have committed the
+      // login - revoked the old family, minted a new cookie - so trying the
+      // next origin is a second login, not a retry.
+      final settings = await fallbackSettings();
+      final adapter = install((options) {
+        if (options.uri.host == 'custom.example') {
+          throw DioException.receiveTimeout(
+            requestOptions: options,
+            timeout: const Duration(milliseconds: 1),
+          );
+        }
+        return jsonResponse({'access': 'access-1'});
+      });
+      final auth = createService();
+      auth.updateSettings(settings);
+
+      await expectLater(
+        auth.loginWithRememberMe('user', 'pass', rememberMe: true),
+        throwsA(isA<DioException>()),
+      );
+
+      final loginHosts = adapter
+          .requestsFor('/token/')
+          .map((request) => request.uri.host)
+          .toSet();
+      expect(loginHosts, {'custom.example'});
+    });
+
+    test(
+      'cross-site check is not fooled by multi-part public suffixes',
+      () async {
+        // app.example.co.uk and api.other.co.uk share only the public suffix
+        // co.uk; a naive last-two-labels registrable domain calls them
+        // same-site and silently skips the diagnostic.
+        final settings = await loadedSettings();
+        await settings.setBackendUrlMode(BackendUrlMode.customOnly);
+        await settings.setCustomBackendUrl('https://api.other.co.uk/api/v1');
+
+        expect(
+          crossSiteBackendOrigin(
+            settings,
+            isWeb: true,
+            pageUri: Uri.parse('https://app.example.co.uk/'),
+          ),
+          'https://api.other.co.uk',
+        );
+
+        // Sibling subdomains of one registrable domain stay same-site.
+        await settings.setCustomBackendUrl('https://api.example.co.uk/api/v1');
+        expect(
+          crossSiteBackendOrigin(
+            settings,
+            isWeb: true,
+            pageUri: Uri.parse('https://app.example.co.uk/'),
+          ),
+          isNull,
+        );
+      },
+    );
+  });
 }

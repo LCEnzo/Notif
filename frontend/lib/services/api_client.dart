@@ -26,7 +26,14 @@ const String healthPath = '/monitoring/health/';
 /// treats as a stolen-token replay and answers by revoking the whole family —
 /// a hard logout with the credentials deleted. `/token/logout/` revokes, so a
 /// replay is pointless but equally destructive to diagnose.
-const Set<String> nonReplayablePaths = {'/token/refresh/', '/token/logout/'};
+/// `/token/` (login) also commits before responding: the backend revokes the
+/// caller's previous session family and issues a new cookie. Replaying it
+/// after a lost response can revoke and mint families at two origins.
+const Set<String> nonReplayablePaths = {
+  '/token/',
+  '/token/refresh/',
+  '/token/logout/',
+};
 
 /// Requests whose credentials belong to one specific origin, so trying them
 /// against a different base URL is not a fallback but an unauthenticated call.
@@ -72,6 +79,12 @@ Dio _createDio() {
 typedef AccessTokenReader = String? Function();
 typedef RefreshAccessToken = Future<String?> Function();
 
+/// The base URL of the origin that issued the current session, when one
+/// exists. Session credentials — the refresh cookie and the access token it
+/// mints — are valid at exactly that origin, so every request carrying them
+/// is sent only there, never to a fallback.
+typedef SessionBaseUrlReader = String? Function();
+
 class ApiClientException implements Exception {
   const ApiClientException(this.message, {this.statusCode, this.data});
 
@@ -91,19 +104,23 @@ class ApiClientException implements Exception {
 
 AccessTokenReader? _accessTokenReader;
 RefreshAccessToken? _refreshAccessToken;
+SessionBaseUrlReader? _sessionBaseUrlReader;
 
 void configureApiAuth({
   required AccessTokenReader accessTokenReader,
   required RefreshAccessToken refreshAccessToken,
+  required SessionBaseUrlReader sessionBaseUrlReader,
 }) {
   _accessTokenReader = accessTokenReader;
   _refreshAccessToken = refreshAccessToken;
+  _sessionBaseUrlReader = sessionBaseUrlReader;
 }
 
 @visibleForTesting
 void resetApiAuthForTesting() {
   _accessTokenReader = null;
   _refreshAccessToken = null;
+  _sessionBaseUrlReader = null;
 }
 
 /// Sends a POST request to [path], respecting [BackendUrlMode] from [settings].
@@ -130,7 +147,14 @@ Future<Response<dynamic>> apiGet(
   String path, {
   required AppSettingsController? settings,
   required Map<String, String> headers,
-}) => _requestWithFallback('GET', path, settings: settings, headers: headers);
+  String? baseUrlOverride,
+}) => _requestWithFallback(
+  'GET',
+  path,
+  settings: settings,
+  headers: headers,
+  baseUrlOverride: baseUrlOverride,
+);
 
 Future<Response<List<int>>> apiGetBytes(
   String path, {
@@ -197,7 +221,7 @@ List<String> resolveUrls(AppSettingsController? settings) {
 
 /// The backend origin when it is not same-site with the page hosting the app.
 ///
-/// Only meaningful on web: browsers attach the `SameSite=Lax` refresh cookie
+/// Only meaningful on web: browsers attach the `SameSite=Strict` refresh cookie
 /// to same-site requests only, so pointing a web build at a cross-site backend
 /// silently breaks remember-me — every refresh arrives without the cookie and
 /// comes back 401, which looks exactly like an expired session. Returns null
@@ -246,12 +270,83 @@ bool _isSameSite(Uri a, Uri b) {
   return _registrableDomain(hostA) == _registrableDomain(hostB);
 }
 
+/// Two-label public suffixes common enough to matter here. Without the full
+/// public-suffix list, a tail like `co.uk` would count as a registrable
+/// domain and make `a.example.co.uk` and `b.other.co.uk` look same-site.
+const Set<String> _twoLabelPublicSuffixes = {
+  'co.uk',
+  'org.uk',
+  'ac.uk',
+  'gov.uk',
+  'me.uk',
+  'net.uk',
+  'com.au',
+  'net.au',
+  'org.au',
+  'edu.au',
+  'gov.au',
+  'co.jp',
+  'ne.jp',
+  'or.jp',
+  'ac.jp',
+  'go.jp',
+  'com.br',
+  'net.br',
+  'org.br',
+  'co.nz',
+  'net.nz',
+  'org.nz',
+  'govt.nz',
+  'co.in',
+  'net.in',
+  'org.in',
+  'com.cn',
+  'net.cn',
+  'org.cn',
+  'co.za',
+  'org.za',
+  'net.za',
+  'com.mx',
+  'com.ar',
+  'com.tr',
+  'com.sg',
+  'com.hk',
+  'com.tw',
+  'co.kr',
+  'or.kr',
+};
+
 String _registrableDomain(String host) {
   final labels = host.split('.');
   if (labels.length <= 2) {
     return host;
   }
-  return labels.sublist(labels.length - 2).join('.');
+  final lastTwo = labels.sublist(labels.length - 2).join('.');
+  final registrableLabels = _twoLabelPublicSuffixes.contains(lastTwo) ? 3 : 2;
+  if (labels.length <= registrableLabels) {
+    return host;
+  }
+  return labels.sublist(labels.length - registrableLabels).join('.');
+}
+
+/// The configured base URL that actually served [response] — the origin a
+/// just-established session belongs to. Null when no configured base matches
+/// (settings changed mid-flight); callers then simply have no origin to pin.
+String? servingBaseUrl(
+  Response<dynamic> response,
+  AppSettingsController? settings,
+) {
+  final served = response.requestOptions.uri.toString();
+  String? best;
+  for (final base in resolveUrls(settings)) {
+    final normalized = base.replaceFirst(RegExp(r'/+$'), '');
+    if (served == normalized || served.startsWith('$normalized/')) {
+      if (best == null || normalized.length > best.length) {
+        best = normalized;
+      }
+    }
+  }
+  return best;
 }
 
 Uri _buildRequestUri(String baseUrl, String path) {
@@ -277,9 +372,10 @@ Future<Response<dynamic>> _requestWithFallback(
   required Map<String, String> headers,
   dynamic body,
   ResponseType? responseType,
+  String? baseUrlOverride,
 }) async {
   final urls = resolveUrls(settings);
-  if (urls.isEmpty) {
+  if (baseUrlOverride == null && urls.isEmpty) {
     throw ApiClientException(
       '$method $path failed: no backend URL configured',
     );
@@ -287,9 +383,25 @@ Future<Response<dynamic>> _requestWithFallback(
 
   final replayable = _isReplayable(path);
 
-  // An origin-pinned request only has credentials at the preferred origin, so
-  // there is nowhere to fall back to.
-  final candidates = _isOriginPinned(path) ? urls.take(1).toList() : urls;
+  // Session credentials — the refresh cookie and the bearer token it minted —
+  // exist at exactly the origin that served login. Requests carrying either
+  // are sent only there: a fallback would at best 401 with an unknown token
+  // and at worst hand the token to a different origin or look like a revoked
+  // session. Before any session exists (a cold-start refresh probe with no
+  // persisted origin), the preferred origin is the only sensible guess.
+  final carriesSessionCredentials =
+      _isOriginPinned(path) ||
+      headers['Authorization']?.startsWith('Bearer ') == true;
+  final sessionBaseUrl = _sessionBaseUrlReader?.call();
+
+  final List<String> candidates;
+  if (baseUrlOverride != null) {
+    candidates = [baseUrlOverride];
+  } else if (carriesSessionCredentials) {
+    candidates = [sessionBaseUrl ?? urls.first];
+  } else {
+    candidates = urls;
+  }
 
   // Every URL except the last may fall back; the last one is attempted
   // outside the loop so its failure propagates untouched.

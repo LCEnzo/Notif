@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
+import 'package:notif/services/client_events.dart';
 import 'package:notif/services/failures.dart';
 import 'package:notif/services/json_contracts.dart';
 import 'package:notif/services/persistence.dart';
@@ -54,6 +55,12 @@ const _lastSuccessfulUsernameKey = 'lastSuccessfulUsername';
 /// (anonymous) from "the session we had was refused" (expired) — the refresh
 /// cookie itself is invisible to us on web, so it cannot answer that question.
 const _rememberedSessionKey = 'hasRememberedSession';
+
+/// Base URL of the origin that answered login. Session credentials are only
+/// valid there, so refresh, logout and every bearer-authenticated request is
+/// pinned to it — persisted so a cold-start restore refreshes at the origin
+/// that actually holds the cookie, not whichever is first in the settings.
+const _sessionBaseUrlKey = 'sessionBaseUrl';
 
 sealed class AuthState {
   const AuthState();
@@ -166,6 +173,7 @@ class AuthService extends ChangeNotifier {
   bool _restoreAttempted = false;
   bool _disposed = false;
   String? _sessionDiagnostic;
+  String? _sessionBaseUrl;
 
   void updateSettings(AppSettingsController? settings) {
     final changed = !identical(_settings, settings);
@@ -188,6 +196,7 @@ class AuthService extends ChangeNotifier {
     configureApiAuth(
       accessTokenReader: () => jwt?.access,
       refreshAccessToken: _refreshAccessToken,
+      sessionBaseUrlReader: () => _sessionBaseUrl,
     );
   }
 
@@ -269,14 +278,15 @@ class AuthService extends ChangeNotifier {
   /// session correct.
   Future<void> _handleRejectedSession(bool hadRememberedSession) async {
     _diagnoseCrossSiteCookie();
-    await _setRememberedSession(false);
+    _sessionBaseUrl = null;
+    await _persistSessionMarker(remembered: false);
     _setState(
       hadRememberedSession ? const AuthExpired() : const AuthAnonymous(),
     );
   }
 
   /// A cross-site backend URL on web makes remember-me structurally
-  /// impossible: the browser will not attach the `SameSite=Lax` refresh cookie
+  /// impossible: the browser will not attach the `SameSite=Strict` refresh cookie
   /// to a request going to another site, so every refresh looks like a
   /// rejection. Without this the only trace was a debug print.
   void _diagnoseCrossSiteCookie() {
@@ -342,6 +352,9 @@ class AuthService extends ChangeNotifier {
         healthPath,
         settings: _settings,
         headers: _jsonHeaders,
+        // Recovery is waiting for the session's origin to come back;
+        // reachability of a fallback origin proves nothing useful.
+        baseUrlOverride: _sessionBaseUrl,
       );
       return response.statusCode == 200;
     } on Exception catch (error) {
@@ -372,8 +385,12 @@ class AuthService extends ChangeNotifier {
     _authEpoch += 1;
     _cancelRecovery();
     _sessionDiagnostic = null;
+    _sessionBaseUrl = servingBaseUrl(response, _settings);
     _setState(AuthAuthenticated(JWT(access: access)));
-    await _setRememberedSession(rememberMe);
+    await _persistSessionMarker(
+      remembered: rememberMe,
+      baseUrl: _sessionBaseUrl,
+    );
     await persistLastSuccessfulUsername(username);
   }
 
@@ -395,7 +412,8 @@ class AuthService extends ChangeNotifier {
       }
     } finally {
       await clearNativeRefreshCookies();
-      await _setRememberedSession(false);
+      _sessionBaseUrl = null;
+      await _persistSessionMarker(remembered: false);
       _setState(const AuthAnonymous());
     }
   }
@@ -525,6 +543,9 @@ class AuthService extends ChangeNotifier {
         // Also avoids a guaranteed-401 request on every first launch.
         return;
       }
+      // The cookie lives at the origin that issued it, which is not
+      // necessarily the first origin in the current settings.
+      _sessionBaseUrl = await _storedSessionBaseUrl();
       await _refreshAccessToken();
     } finally {
       _restoreSessionFuture = null;
@@ -546,18 +567,50 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  Future<void> _setRememberedSession(bool remembered) async {
+  Future<void> _persistSessionMarker({
+    required bool remembered,
+    String? baseUrl,
+  }) async {
     try {
       final store = await PreferenceStore.load();
       if (remembered) {
         await store.writeBool(_rememberedSessionKey, true);
+        if (baseUrl != null) {
+          await store.writeString(_sessionBaseUrlKey, baseUrl);
+        } else {
+          await store.remove(_sessionBaseUrlKey);
+        }
       } else {
         await store.remove(_rememberedSessionKey);
+        await store.remove(_sessionBaseUrlKey);
       }
+    } on Exception catch (error, stackTrace) {
+      // A marker that fails to clear can resurrect a session the user asked
+      // to end - the restore path trusts it - so this is reported, not just
+      // printed. Reporting is itself best-effort when offline.
+      unawaited(
+        reportClientFailure(
+          settings: _settings,
+          error: error,
+          stackTrace: stackTrace,
+          endpoint: 'local: session marker write',
+        ),
+      );
+      if (kDebugMode) {
+        debugPrint('AuthService._persistSessionMarker: $error');
+      }
+    }
+  }
+
+  Future<String?> _storedSessionBaseUrl() async {
+    try {
+      final store = await PreferenceStore.load();
+      return store.read<String>(_sessionBaseUrlKey);
     } on Exception catch (error) {
       if (kDebugMode) {
-        debugPrint('AuthService._setRememberedSession: $error');
+        debugPrint('AuthService._storedSessionBaseUrl: $error');
       }
+      return null;
     }
   }
 
