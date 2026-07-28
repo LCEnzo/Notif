@@ -4,6 +4,8 @@ from django.core.paginator import Page
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
+from drf_spectacular.utils import OpenApiResponse, extend_schema
+from rest_framework import status as http_status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter
@@ -19,7 +21,15 @@ from accounts.models import User
 from commons.permissions import IsOwnerOrAdmin, OwnerOrAdminQuerysetMixin
 from commons.result import Err, Ok
 from monitoring.models import Link, Notification, Strategy
-from monitoring.serializers import LinkSerializer, NotificationSerializer, StrategySerializer
+from monitoring.serializers import (
+	HealthCheckResponseSerializer,
+	LinkSerializer,
+	NotificationSerializer,
+	StatusCheckResponseSerializer,
+	StrategySerializer,
+	TriggerScrapeRequestSerializer,
+	TriggerScrapeResponseSerializer,
+)
 from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
 from notif.config import settings
@@ -111,6 +121,10 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 	filter_backends = [OrderingFilter]
 	ordering_fields = ["update__created_at", "pk"]
 	ordering = ["-update__created_at", "-pk"]
+	# Metadata only — get_queryset() below is what runs. Declared so drf-spectacular
+	# can derive the model without calling get_queryset() with an AnonymousUser,
+	# which asserted and left the {id} path parameter typed as a bare string.
+	queryset = Notification.objects.none()
 
 	def get_queryset(self) -> QuerySet[Notification]:
 		user = self.request.user
@@ -147,41 +161,104 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		return Response({"marked_read": updated})
 
 
+def _request_error_message(errors: dict[str, Any]) -> str:
+	"""Flatten DRF field errors into the single `message` string this endpoint returns."""
+	parts = [f"{field}: {' '.join(str(detail) for detail in details)}" for field, details in errors.items()]
+	return "; ".join(parts) or "Invalid request."
+
+
+@extend_schema(
+	request=TriggerScrapeRequestSerializer,
+	responses={
+		http_status.HTTP_200_OK: TriggerScrapeResponseSerializer,
+		http_status.HTTP_400_BAD_REQUEST: TriggerScrapeResponseSerializer,
+		http_status.HTTP_404_NOT_FOUND: TriggerScrapeResponseSerializer,
+	},
+)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def trigger_scrape(request: Request) -> Response:
+	"""Scrape one link, or every link the caller owns.
+
+	Supply ``link_id`` to scrape a single link; omit it to scrape all of them. Both
+	modes answer with a top-level ``status``; scrape-all additionally returns a
+	``results`` map keyed by stringified link id, whose entries use the same
+	``updates_found``/``message`` field names as the single-link response.
+	"""
 	user = request.user
 	assert isinstance(user, User), "authenticated scrape trigger requires an application User"
-	link_id = request.data.get("link_id")
-	if link_id:
+
+	# Validated rather than read straight off request.data: a non-numeric link_id
+	# used to reach the ORM and raise ValueError (an unhandled 500), and link_id=0
+	# was falsy, so it silently scraped *everything*.
+	request_serializer = TriggerScrapeRequestSerializer(data=request.data)
+	if not request_serializer.is_valid():
+		return Response(
+			{"status": "error", "message": _request_error_message(request_serializer.errors)},
+			status=http_status.HTTP_400_BAD_REQUEST,
+		)
+
+	link_id = request_serializer.validated_data.get("link_id")
+	if link_id is not None:
 		try:
 			link = Link.objects.get(pk=link_id, user=user)
 		except Link.DoesNotExist:
-			return Response({"status": "error", "message": "Link not found"}, status=404)
+			return Response(
+				{"status": "error", "message": "Link not found"},
+				status=http_status.HTTP_404_NOT_FOUND,
+			)
 
 		result = scrape_link(link)
 		match result:
 			case Ok(value=count):
 				return Response({"status": "ok", "updates_found": count})
 			case Err(error=msg):
-				return Response({"status": "error", "message": msg}, status=400)
+				return Response(
+					{"status": "error", "message": msg},
+					status=http_status.HTTP_400_BAD_REQUEST,
+				)
 	else:
 		results = scrape_all_links(user_id=user.pk)
-		summary = {
-			str(lid): {"status": "ok", "count": r.value}
-			if isinstance(r, Ok)
-			else {"status": "error", "message": r.error}
-			for lid, r in results.items()
-		}
-		return Response(summary)
+		return Response(
+			{
+				"status": "ok",
+				"results": {
+					str(lid): {"status": "ok", "updates_found": r.value}
+					if isinstance(r, Ok)
+					else {"status": "error", "message": r.error}
+					for lid, r in results.items()
+				},
+			}
+		)
 
 
+@extend_schema(
+	# Renamed from the auto-generated ..._retrieve: this returns a collection.
+	operation_id="monitoring_strat_choices_list",
+	summary="List available scraping strategy names",
+	description=(
+		"The strategy class names a Link's Strategy may use, as a flat JSON array. "
+		"Values match the StratClsEnum used by the Strategy endpoints."
+	),
+	responses={
+		http_status.HTTP_200_OK: OpenApiResponse(
+			# A raw schema dict, not a bare Field: `serializers.ListField(...)` is not
+			# resolvable by drf-spectacular, which silently fell back to a free-form
+			# *object* while this endpoint returns an *array*.
+			response={"type": "array", "items": {"$ref": "#/components/schemas/StratClsEnum"}},
+			description="Available strategy class names.",
+		),
+		http_status.HTTP_401_UNAUTHORIZED: OpenApiResponse(description="Authentication credentials were not provided."),
+	},
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_strat_choices(request: Request) -> Response:
+	"""Return the scraping strategy class names a Strategy can be configured with."""
 	return Response(data=list(STRATEGY_CHOICES))
 
 
+@extend_schema(responses={200: HealthCheckResponseSerializer})
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def health_check(request: Request) -> Response:
@@ -193,6 +270,7 @@ def health_check(request: Request) -> Response:
 	return Response({"status": "ok"})
 
 
+@extend_schema(responses={200: StatusCheckResponseSerializer, 503: StatusCheckResponseSerializer})
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def status_check(request: Request) -> Response:
