@@ -116,6 +116,31 @@ DATABASES = {
 	"default": {
 		"ENGINE": "django.db.backends.sqlite3",
 		"NAME": settings.SQLITE_PATH,
+		# SQLite reports has_select_for_update = False, and Django's compiler
+		# silently drops the FOR UPDATE clause rather than raising - so the
+		# select_for_update() in accounts.refresh_sessions takes no row lock
+		# here. Two restored tabs can both read the same unused refresh record
+		# before either writes.
+		#
+		# In the default DEFERRED mode a transaction reads first, holding only a
+		# SHARED lock, and asks for a write lock at its first UPDATE. SQLite
+		# refuses that upgrade with SQLITE_BUSY *immediately* when another
+		# transaction holds the write lock - the busy timeout is not honoured,
+		# because waiting could only deadlock. The loser raises "database is
+		# locked" (a 500) instead of reaching the grace-window branch that exists
+		# for exactly this multi-tab case.
+		#
+		# IMMEDIATE takes the write lock when the transaction opens, so the
+		# second writer waits out the timeout and then finds used_at already set
+		# - the conditional-update path the grace window is built on. The cost is
+		# that write transactions serialise, which on a single-instance
+		# deployment is the right trade. WAL additionally lets reads proceed
+		# during a write.
+		"OPTIONS": {
+			"transaction_mode": "IMMEDIATE",
+			"timeout": 20,
+			"init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+		},
 	}
 	# 'default': {
 	# 	'ENGINE': 'django.db.backends.postgresql',
