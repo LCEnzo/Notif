@@ -585,7 +585,20 @@ class ChangePasswordTestCase(TestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-	def test_changes_password_and_revokes_every_session(self):
+	def _remember_me_client(self) -> tuple[APIClient, RefreshSessionFamily]:
+		"""A client authenticated with a family-bound access token, plus its family."""
+		response = APIClient().post(
+			reverse("token_obtain_pair"),
+			{"username": self.user.get_username(), "password": _VALID_TEST_PASSWORD, "remember_me": True},
+			format="json",
+		)
+		assert response.status_code == status.HTTP_200_OK
+		client = APIClient()
+		client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['access']}")
+		family = RefreshSessionFamily.objects.filter(user=self.user, revoked_at__isnull=True).latest("created_at")
+		return client, family
+
+	def test_changes_password_and_revokes_other_sessions(self):
 		other_session = RefreshSessionFamily.objects.create(user=self.user, device_label="Other device")
 
 		response = self.authed.post(
@@ -600,7 +613,47 @@ class ChangePasswordTestCase(TestCase):
 		self.assertTrue(self.user.check_password(_ALTERNATE_VALID_TEST_PASSWORD))
 		other_session.refresh_from_db()
 		self.assertEqual(other_session.revoked_reason, RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
-		self.assertFalse(RefreshSessionFamily.objects.filter(user=self.user, revoked_at__isnull=True).exists())
+		# An absent remember_me defaults to true, so login_client's login has a
+		# family of its own - the one session that must survive the change.
+		active = RefreshSessionFamily.objects.filter(user=self.user, revoked_at__isnull=True)
+		self.assertEqual(active.count(), 1)
+		self.assertNotEqual(active.get().pk, other_session.pk)
+
+	def test_change_password_keeps_the_session_that_changed_it(self):
+		"""The account screen promises "you will stay logged in" - hold it to that."""
+		client, own_family = self._remember_me_client()
+		other_session = RefreshSessionFamily.objects.create(user=self.user, device_label="Other device")
+
+		response = client.post(
+			self.url,
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		other_session.refresh_from_db()
+		self.assertEqual(other_session.revoked_reason, RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
+		own_family.refresh_from_db()
+		self.assertIsNone(own_family.revoked_at)
+
+	def test_patch_password_also_revokes_other_sessions(self):
+		"""PATCHing the user must not be a quieter way to change the password."""
+		client, own_family = self._remember_me_client()
+		other_session = RefreshSessionFamily.objects.create(user=self.user, device_label="Stolen laptop")
+
+		response = client.patch(
+			reverse("users-detail", kwargs={"pk": self.user.pk}),
+			{"password": _ALTERNATE_VALID_TEST_PASSWORD},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_ALTERNATE_VALID_TEST_PASSWORD))
+		other_session.refresh_from_db()
+		self.assertEqual(other_session.revoked_reason, RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
+		own_family.refresh_from_db()
+		self.assertIsNone(own_family.revoked_at)
 
 	def test_rejects_wrong_current_password(self):
 		response = self.authed.post(

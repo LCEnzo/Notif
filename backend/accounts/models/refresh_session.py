@@ -36,7 +36,7 @@ class RefreshSessionFamily(models.Model):
 
 	class Meta:
 		indexes = [
-			models.Index(fields=["user", "-last_used_at"], name="accounts_rsf_user_last_used_idx"),
+			models.Index(fields=["user", "-last_used_at"], name="accounts_rsf_user_lastused_idx"),
 			models.Index(fields=["revoked_at", "last_used_at"], name="accounts_rsf_gc_idx"),
 		]
 

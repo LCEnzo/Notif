@@ -205,17 +205,44 @@ def revoke_refresh_family_for_token(raw_refresh_token: str, *, reason: str) -> b
 	return True
 
 
-def revoke_all_refresh_families_for_user(user: User, *, reason: str) -> int:
+def revoke_all_refresh_families_for_user(user: User, *, reason: str, except_family: UUID | None = None) -> int:
 	"""Revoke every currently-active refresh session family owned by ``user``.
 
-	Used when a credential change should evict all outstanding sessions (password
-	change/reset). Returns the number of families revoked. Already-revoked
+	Used when a credential change should evict outstanding sessions. Password
+	*change* passes ``except_family`` (the family bound to the access token that
+	authenticated the change) so the session that proved it knows the current
+	password stays signed in; password *reset* passes nothing and evicts
+	everything, because reset exists precisely for when the credential may be in
+	the wrong hands. Returns the number of families revoked. Already-revoked
 	families are left untouched so their original reason/timestamp is preserved.
 	"""
-	return RefreshSessionFamily.objects.filter(user=user, revoked_at__isnull=True).update(
+	families = RefreshSessionFamily.objects.filter(user=user, revoked_at__isnull=True)
+	if except_family is not None:
+		families = families.exclude(family_id=except_family)
+	return families.update(
 		revoked_at=timezone.now(),
 		revoked_reason=reason[:80],
 	)
+
+
+def family_id_from_access_token(token: object) -> UUID | None:
+	"""The refresh-family claim carried by a validated access token, if any.
+
+	Access tokens minted through a remember-me family inherit the family claim
+	from their refresh token; plain (non-remember-me) access tokens carry none.
+	Returns None for absent or malformed claims rather than raising - callers
+	use this to *narrow* a revocation, and the safe default is to narrow nothing.
+	"""
+	get = getattr(token, "get", None)
+	if get is None:
+		return None
+	raw = get(REFRESH_FAMILY_CLAIM)
+	if not isinstance(raw, str):
+		return None
+	try:
+		return UUID(raw)
+	except ValueError:
+		return None
 
 
 def active_refresh_families_for_user(user: User) -> QuerySet[RefreshSessionFamily]:

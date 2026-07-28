@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
 from accounts.models import RefreshSessionFamily, User
+from accounts.refresh_sessions import family_id_from_access_token, revoke_all_refresh_families_for_user
 
 if TYPE_CHECKING:
 	_UserModelSerializer = ModelSerializer[User]
@@ -44,6 +45,16 @@ class UserCreationSerializer(_UserModelSerializer):
 			if request is None or request.user != instance:
 				raise serializers.ValidationError({"password": "Only the account owner can change their password."})
 			instance.set_password(password)
+			# A credential change evicts every other session, same as the
+			# change_password action - a PATCH must not be a quieter way to
+			# change the password while stolen sessions stay live. The session
+			# making the change is kept, identified by its access token's
+			# family claim.
+			revoke_all_refresh_families_for_user(
+				instance,
+				reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE,
+				except_family=family_id_from_access_token(getattr(request, "auth", None)),
+			)
 
 		return super().update(instance, validated_data)
 

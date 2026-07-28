@@ -28,6 +28,7 @@ from accounts.refresh_sessions import (
 	RefreshSessionError,
 	RefreshTokenReuseError,
 	active_refresh_families_for_user,
+	family_id_from_access_token,
 	issue_tokens_for_login,
 	refresh_lifetime_seconds,
 	revoke_all_refresh_families_for_user,
@@ -430,7 +431,15 @@ class UserViewSet(_UserModelViewSet):
 
 		user.set_password(new_password)
 		user.save(update_fields=["password", "date_modified"])
-		revoke_all_refresh_families_for_user(user, reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
+		# Evict every other session, but keep the one that just proved it knows
+		# the current password - matching the account screen's "you will stay
+		# logged in" promise. The current session is identified by the family
+		# claim its access token inherited from the refresh rotation.
+		revoke_all_refresh_families_for_user(
+			user,
+			reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE,
+			except_family=family_id_from_access_token(request.auth),
+		)
 
 		return Response({"status": "ok"})
 
