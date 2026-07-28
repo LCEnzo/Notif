@@ -12,4 +12,7 @@ class Command(BaseCommand):
 
 	def handle(self, *args: Any, **options: Any) -> None:
 		deleted = cleanup_refresh_sessions()
-		self.stdout.write(f"Deleted {deleted} refresh session family/families.")
+		self.stdout.write(
+			f"Deleted {deleted.families_deleted} refresh session family/families "
+			f"and {deleted.token_records_deleted} stale refresh token record(s)."
+		)

@@ -17,7 +17,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.throttling import ScopedRateThrottle
 
-from accounts.models import RefreshSessionFamily
+from accounts.models import RefreshSessionFamily, RefreshTokenRecord
 from accounts.models.password_reset import (
 	PASSWORD_RESET_CODE_MAX_ATTEMPTS,
 	PasswordResetCode,
@@ -284,6 +284,12 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 
 	def test_command_cleans_expired_refresh_sessions(self):
 		refresh_lifetime = cast(timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
+		active = RefreshSessionFamily.objects.create(user=self.regular_user)
+		RefreshTokenRecord.objects.create(
+			family=active,
+			jti="active-old-used",
+			used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
+		)
 		expired = RefreshSessionFamily.objects.create(
 			user=self.regular_user,
 			last_used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
@@ -294,6 +300,7 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 		self.assertFalse(RefreshSessionFamily.objects.filter(pk=expired.pk).exists())
 		event = SystemEvent.objects.filter(kind="maintenance").latest("id")
 		self.assertEqual(event.details["refresh_session_families_deleted"], 1)
+		self.assertEqual(event.details["refresh_token_records_deleted"], 1)
 
 	def test_command_skips_when_lock_is_held(self):
 		MaintenanceLock.objects.create(key="run_due_tasks", acquired_at=timezone.now())
