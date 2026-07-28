@@ -232,6 +232,36 @@ class OpsApiTestCase(SetupMixin, TestCase):
 			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 202)
 			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 429)
 
+	def test_client_event_endpoint_evicts_oldest_rows_at_cap(self):
+		"""The sink is a ring buffer: total storage stays bounded, newest rows win."""
+		with patch("ops.views._CLIENT_EVENT_MAX_ROWS", 2):
+			for message in ("first", "second", "third"):
+				response = APIClient().post(
+					reverse("client-events"),
+					{"category": "unexpected_failure", "message": message},
+					format="json",
+				)
+				self.assertEqual(response.status_code, 202)
+
+		frontend_events = SystemEvent.objects.filter(source="frontend").order_by("id")
+		self.assertEqual(frontend_events.count(), 2)
+		self.assertEqual([event.message for event in frontend_events], ["second", "third"])
+
+	def test_client_event_eviction_leaves_other_sources_alone(self):
+		backend_event = SystemEvent.objects.create(
+			level=SystemEvent.Level.INFO, source="test", kind="log", message="keep me"
+		)
+		with patch("ops.views._CLIENT_EVENT_MAX_ROWS", 1):
+			for message in ("first", "second"):
+				APIClient().post(
+					reverse("client-events"),
+					{"category": "unexpected_failure", "message": message},
+					format="json",
+				)
+
+		self.assertTrue(SystemEvent.objects.filter(pk=backend_event.pk).exists())
+		self.assertEqual(SystemEvent.objects.filter(source="frontend").count(), 1)
+
 
 class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 	def test_command_cleans_expired_and_locked_password_reset_codes(self):
