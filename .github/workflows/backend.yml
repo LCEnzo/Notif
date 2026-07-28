@@ -65,5 +65,8 @@ jobs:
       - name: Missing migrations
         run: uv run python manage.py makemigrations --check --dry-run
 
+      - name: OpenAPI schema drift
+        run: uv run python scripts/check_openapi_drift.py
+
       - name: Test (pytest + coverage)
         run: uv run pytest -v --cov --cov-report=term
