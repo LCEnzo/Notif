@@ -16,6 +16,7 @@ from accounts.models.password_reset import (
 	PASSWORD_RESET_CODE_TTL,
 	PasswordResetCode,
 )
+from accounts.refresh_sessions import cleanup_refresh_sessions
 from commons.result import Err, Ok
 from monitoring.models import Link
 from monitoring.rate_limiter import DomainRateLimiter
@@ -81,6 +82,7 @@ class Command(BaseCommand):
 		now = timezone.now()
 		summary = {
 			"password_reset_codes_deleted": 0,
+			"refresh_session_families_deleted": 0,
 			"links_considered": 0,
 			"scrape_ok": 0,
 			"scrape_error": 0,
@@ -94,6 +96,7 @@ class Command(BaseCommand):
 
 		try:
 			summary["password_reset_codes_deleted"] = _cleanup_password_reset_codes(now)
+			summary["refresh_session_families_deleted"] = cleanup_refresh_sessions(now=now)
 			rss_backfill = _run_pending_rss_content_backfill(
 				max_links=rss_content_backfill_max_links,
 				max_updates=rss_content_backfill_max_updates,
@@ -134,6 +137,7 @@ class Command(BaseCommand):
 					f"{summary['scrape_ok']} scrape(s) ok, "
 					f"{summary['scrape_error']} error(s), "
 					f"{summary['password_reset_codes_deleted']} reset code(s) deleted, "
+					f"{summary['refresh_session_families_deleted']} refresh session family/families deleted, "
 					f"{summary['rss_content_backfill_updates_updated']} RSS description(s) backfilled."
 				),
 				details=summary,
@@ -144,6 +148,7 @@ class Command(BaseCommand):
 				f"{summary['scrape_error']} error(s), "
 				f"{summary['updates_found']} update(s), "
 				f"{summary['password_reset_codes_deleted']} reset code(s) deleted, "
+				f"{summary['refresh_session_families_deleted']} refresh session family/families deleted, "
 				f"{summary['rss_content_backfill_updates_updated']} RSS description(s) backfilled."
 			)
 		finally:

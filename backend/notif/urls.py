@@ -21,6 +21,7 @@ from rest_framework.permissions import AllowAny
 
 from accounts.views import (
 	DevBootstrapTokenObtainPairView,
+	ThrottledTokenLogoutView,
 	ThrottledTokenRefreshView,
 	ThrottledTokenVerifyView,
 )
@@ -40,6 +41,7 @@ urlpatterns = [
 	# JWT config
 	path("api/v1/token/", DevBootstrapTokenObtainPairView.as_view(), name="token_obtain_pair"),
 	path("api/v1/token/refresh/", ThrottledTokenRefreshView.as_view(), name="token_refresh"),
+	path("api/v1/token/logout/", ThrottledTokenLogoutView.as_view(), name="token_logout"),
 	path("api/v1/token/verify/", ThrottledTokenVerifyView.as_view(), name="token_verify"),
 	# OpenAPI schema & docs (public — no auth so agents can discover the API)
 	path("api/v1/schema/", SpectacularAPIView.as_view(permission_classes=[AllowAny]), name="schema"),

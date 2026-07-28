@@ -1,11 +1,13 @@
 import logging
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -13,11 +15,27 @@ from rest_framework.serializers import BaseSerializer
 from rest_framework.throttling import BaseThrottle, ScopedRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from rest_framework_simplejwt.serializers import TokenObtainSerializer
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenVerifyView
 
 from accounts.models import User
+from accounts.refresh_sessions import (
+	REFRESH_REQUEST_HEADER,
+	REFRESH_REQUEST_HEADER_VALUE,
+	RefreshSessionError,
+	RefreshTokenReuseError,
+	issue_tokens_for_login,
+	refresh_lifetime_seconds,
+	revoke_refresh_family_for_token,
+	rotate_refresh_token,
+)
 from accounts.serializers import (
+	PasswordResetConfirmSerializer,
+	PasswordResetRequestSerializer,
+	TokenAccessResponseSerializer,
+	TokenLoginRequestSerializer,
+	TokenLogoutResponseSerializer,
+	TokenRefreshRequestSerializer,
 	UserCreationSerializer,
 	UserFullReadSerializer,
 	UserMinimalReadSerializer,
@@ -30,10 +48,19 @@ else:
 	_UserModelViewSet = ModelViewSet
 
 
-class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
+class DevBootstrapTokenObtainPairSerializer(TokenObtainSerializer):
 	def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
 		self._ensure_dev_user(attrs)
-		return super().validate(attrs)
+		super().validate(attrs)
+		assert isinstance(self.user, User), "token login requires an application User"
+		request = self.context["request"]
+		assert isinstance(request, Request)
+		remember_me = _wants_remember_me(request.data.get("remember_me"))
+		tokens = issue_tokens_for_login(user=self.user, remember_me=remember_me, request=request)
+		data = {"access": tokens.access}
+		if tokens.refresh is not None:
+			data["refresh"] = tokens.refresh
+		return data
 
 	def _ensure_dev_user(self, attrs: dict[str, Any]) -> None:
 		if not settings.DEV_BOOTSTRAP_LOGIN_ENABLED:
@@ -61,6 +88,7 @@ class DevBootstrapTokenObtainPairSerializer(TokenObtainPairSerializer):
 
 
 logger = logging.getLogger(__name__)
+RefreshCookieSameSite = Literal["Lax", "Strict", "None", False]
 
 
 class TokenThrottleMixin:
@@ -77,13 +105,119 @@ class TokenThrottleMixin:
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 
+def _refresh_cookie_max_age() -> int:
+	return refresh_lifetime_seconds()
+
+
+def _refresh_cookie_samesite() -> RefreshCookieSameSite:
+	return cast(RefreshCookieSameSite, settings.JWT_REFRESH_COOKIE_SAMESITE)
+
+
+def _set_refresh_cookie(response: Response, refresh_token: str) -> None:
+	response.set_cookie(
+		settings.JWT_REFRESH_COOKIE_NAME,
+		refresh_token,
+		max_age=_refresh_cookie_max_age(),
+		path=settings.JWT_REFRESH_COOKIE_PATH,
+		secure=settings.JWT_REFRESH_COOKIE_SECURE,
+		httponly=True,
+		samesite=_refresh_cookie_samesite(),
+	)
+	response["Cache-Control"] = "no-store"
+
+
+def _clear_refresh_cookie(response: Response) -> None:
+	response.delete_cookie(
+		settings.JWT_REFRESH_COOKIE_NAME,
+		path=settings.JWT_REFRESH_COOKIE_PATH,
+		samesite=_refresh_cookie_samesite(),
+	)
+	response["Cache-Control"] = "no-store"
+
+
+def _wants_remember_me(raw: Any) -> bool:
+	if raw is None:
+		return True
+	if isinstance(raw, bool):
+		return raw
+	if isinstance(raw, str):
+		return raw.strip().lower() not in {"0", "false", "no", "off"}
+	return bool(raw)
+
+
+def _require_refresh_request_header(request: Request) -> None:
+	if request.META.get(REFRESH_REQUEST_HEADER) != REFRESH_REQUEST_HEADER_VALUE:
+		raise ValidationError({"X-Refresh-Request": "Refresh requests must include X-Refresh-Request: 1."})
+
+
 class DevBootstrapTokenObtainPairView(TokenThrottleMixin, TokenObtainPairView):
 	serializer_class = DevBootstrapTokenObtainPairSerializer
 	throttle_scope = "login"
 
+	@extend_schema(
+		request=TokenLoginRequestSerializer,
+		responses={status.HTTP_200_OK: TokenAccessResponseSerializer},
+	)
+	def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+		response = super().post(request, *args, **kwargs)
+		if not isinstance(response.data, dict):
+			return response
 
-class ThrottledTokenRefreshView(TokenThrottleMixin, TokenRefreshView):
+		remember_me = _wants_remember_me(request.data.get("remember_me"))
+		refresh_token = response.data.pop("refresh", None)
+		if not remember_me:
+			_clear_refresh_cookie(response)
+			return response
+
+		if isinstance(refresh_token, str) and refresh_token:
+			_set_refresh_cookie(response, refresh_token)
+		return response
+
+
+class ThrottledTokenRefreshView(TokenThrottleMixin, APIView):
+	permission_classes = [AllowAny]
 	throttle_scope = "token_refresh"
+
+	@extend_schema(
+		request=TokenRefreshRequestSerializer,
+		responses={status.HTTP_200_OK: TokenAccessResponseSerializer},
+	)
+	def post(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+		_require_refresh_request_header(request)
+		try:
+			tokens = rotate_refresh_token(request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME, ""))
+		except RefreshTokenReuseError as exc:
+			response = Response({"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+			_clear_refresh_cookie(response)
+			return response
+		except RefreshSessionError as exc:
+			response = Response({"detail": str(exc)}, status=status.HTTP_401_UNAUTHORIZED)
+			_clear_refresh_cookie(response)
+			return response
+
+		response = Response({"access": tokens.access}, status=status.HTTP_200_OK)
+		_set_refresh_cookie(response, tokens.refresh)
+		return response
+
+
+class ThrottledTokenLogoutView(TokenThrottleMixin, APIView):
+	permission_classes = [AllowAny]
+	throttle_scope = "token_logout"
+
+	@extend_schema(
+		request=TokenRefreshRequestSerializer,
+		responses={status.HTTP_200_OK: TokenLogoutResponseSerializer},
+	)
+	def post(self, request: Request) -> Response:
+		raw_refresh_token = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME, "")
+		if raw_refresh_token:
+			revoke_refresh_family_for_token(
+				raw_refresh_token,
+				reason="logout",
+			)
+		response = Response({"status": "ok"}, status=status.HTTP_200_OK)
+		_clear_refresh_cookie(response)
+		return response
 
 
 class ThrottledTokenVerifyView(TokenThrottleMixin, TokenVerifyView):
@@ -186,9 +320,12 @@ class PasswordResetRequestView(APIView):
 			return []
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
+	@extend_schema(
+		request=PasswordResetRequestSerializer,
+		responses={status.HTTP_200_OK: TokenLogoutResponseSerializer},
+	)
 	def post(self, request: Request) -> Response:
 		from accounts.models.password_reset import PasswordResetCode
-		from accounts.serializers import PasswordResetRequestSerializer
 		from commons.email import send_password_reset_email
 
 		serializer = PasswordResetRequestSerializer(data=request.data)
@@ -227,9 +364,12 @@ class PasswordResetConfirmView(APIView):
 			return []
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
+	@extend_schema(
+		request=PasswordResetConfirmSerializer,
+		responses={status.HTTP_200_OK: TokenLogoutResponseSerializer},
+	)
 	def post(self, request: Request) -> Response:
 		from accounts.models.password_reset import PasswordResetCode
-		from accounts.serializers import PasswordResetConfirmSerializer
 
 		serializer = PasswordResetConfirmSerializer(data=request.data)
 		if not serializer.is_valid():
