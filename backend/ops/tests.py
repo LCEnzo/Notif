@@ -204,6 +204,28 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 400)
 		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
 
+	def test_client_event_endpoint_rejects_form_encoded_posts(self):
+		"""A cross-site form must not be able to write rows to this anonymous sink."""
+		response = APIClient().post(
+			reverse("client-events"),
+			{"category": "unexpected_failure", "message": "from a hidden form"},
+			format="multipart",
+		)
+
+		self.assertEqual(response.status_code, 415)
+		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
+
+	def test_client_event_endpoint_rejects_text_plain_posts(self):
+		"""text/plain is the other enctype a form can emit."""
+		response = APIClient().post(
+			reverse("client-events"),
+			'{"category": "unexpected_failure", "message": "from a hidden form"}',
+			content_type="text/plain",
+		)
+
+		self.assertEqual(response.status_code, 415)
+		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
+
 	def test_client_event_endpoint_is_throttled(self):
 		client = APIClient()
 		payload = {"category": "unexpected_failure", "message": "one"}

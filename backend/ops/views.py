@@ -21,6 +21,7 @@ from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -97,6 +98,14 @@ class SystemEventViewSet(_SystemEventReadOnlyModelViewSet):
 
 class ClientEventView(APIView):
 	permission_classes = [AllowAny]
+	# JSON only, for the same reason the token views are JSON only: this endpoint
+	# is anonymous and writes a persistent SystemEvent row per request. With the
+	# default form parsers a cross-site page can POST here via a hidden form,
+	# which is a CORS simple request and so never preflighted, and the per-IP
+	# throttle is charged to whichever visitor's browser made the call - so the
+	# writes distribute across arbitrary client IPs. A form cannot produce a
+	# JSON content type, so refusing to parse anything else closes it.
+	parser_classes = [JSONParser]
 	throttle_classes = [ScopedRateThrottle]
 	throttle_scope = "client_events"
 
