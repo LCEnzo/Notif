@@ -37,6 +37,7 @@ faker = MultiLocaleFaker(locales)
 
 def create_users(user_count: int = 30) -> list[User]:
 	existing_usernames = set(User.objects.values_list("username", flat=True))
+	existing_emails = set(User.objects.values_list("email", flat=True))
 	users = []
 
 	for _ in range(user_count):
@@ -47,8 +48,22 @@ def create_users(user_count: int = 30) -> list[User]:
 
 		existing_usernames.add(username)
 
+		# User.email is unique=True, but faker draws from finite locale pools,
+		# so a batch of 30 collides often enough to flake CI depending on the
+		# pytest-randomly seed. Bounded retries, then force uniqueness.
+		email = faker.email()
+		for _attempt in range(20):
+			if email not in existing_emails:
+				break
+			email = faker.email()
+		if email in existing_emails:
+			local, _, domain = email.partition("@")
+			email = f"{local}+{len(existing_emails)}@{domain}"
+
+		existing_emails.add(email)
+
 		user = User.objects.create_user(
-			username=username, email=faker.email(), password=password, name=faker.first_name() + " " + faker.last_name()
+			username=username, email=email, password=password, name=faker.first_name() + " " + faker.last_name()
 		)
 		user.set_password(password)
 		user.save()
