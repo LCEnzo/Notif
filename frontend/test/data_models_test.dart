@@ -57,6 +57,29 @@ void main() {
       expect(item.readAt, isNull);
     });
 
+    test('fromJson falls back for an empty title instead of throwing', () {
+      // Update.title is a plain CharField and a feed item may carry an empty
+      // <title>, so empty titles reach the client. Treating that as a contract
+      // violation failed the entire notifications page over one blank string.
+      for (final blank in <String>['', '   ']) {
+        final json = <String, dynamic>{
+          'id': 1,
+          'status': 'unread',
+          'update': {
+            'title': blank,
+            'description': 'Chapter 42 is out',
+            'item_url': 'https://example.com/ch42',
+            'created_at': '2026-04-01T12:00:00Z',
+          },
+        };
+
+        final item = NotificationItem.fromJson(cursor(json));
+
+        expect(item.title, NotificationItem.untitledFallback);
+        expect(item.description, 'Chapter 42 is out');
+      }
+    });
+
     test('fromJson parses read notification with read_at', () {
       final json = <String, dynamic>{
         'id': 2,
