@@ -6,12 +6,14 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import pytest
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
+from rest_framework.throttling import ScopedRateThrottle
 
 from accounts.models.password_reset import (
 	PASSWORD_RESET_CODE_MAX_ATTEMPTS,
@@ -27,6 +29,10 @@ pytestmark = pytest.mark.timeout(30)
 
 
 class OpsApiTestCase(SetupMixin, TestCase):
+	def setUp(self):
+		super().setUp()
+		cache.clear()
+
 	def test_events_require_staff_user(self):
 		SystemEvent.objects.create(level=SystemEvent.Level.INFO, source="test", kind="log", message="visible")
 		client = login_client(APIClient(), self.regular_user.get_username())
@@ -50,6 +56,13 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(response.data["results"][0]["message"], "scrape warning")
 		self.assertEqual(response.data["results"][0]["details"], {"link_id": 1})
+
+	def test_openapi_schema_generates(self):
+		response = APIClient().get(reverse("schema"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertIn("openapi", response.data)
+		self.assertIn("/api/v1/client-events/", response.data["paths"])
 
 	def test_caddy_logs_require_staff_user(self):
 		client = login_client(APIClient(), self.regular_user.get_username())
@@ -153,6 +166,71 @@ class OpsApiTestCase(SetupMixin, TestCase):
 			source.close()
 
 		self.assertEqual(rows, [("ok",)])
+
+	def test_client_event_endpoint_records_scrubbed_frontend_event(self):
+		response = APIClient().post(
+			reverse("client-events"),
+			{
+				"category": "contract_violation",
+				"route": "/home?token=secret",
+				"endpoint": "GET /monitoring/links/",
+				"contract_path": "$.results[0].id",
+				"expected": "integer",
+				"actual": "string",
+				"message": "Bearer abc.def user@example.com notif_refresh=secret",
+				"stack": "password=hunter2",
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 202)
+		event = SystemEvent.objects.get(source="frontend")
+		self.assertEqual(event.kind, "client-contract_violation")
+		self.assertNotIn("abc.def", event.message)
+		self.assertNotIn("user@example.com", event.message)
+		self.assertNotIn("secret", event.message)
+		self.assertEqual(event.details["contract_path"], "$.results[0].id")
+
+	def test_client_event_endpoint_rejects_unknown_category(self):
+		response = APIClient().post(
+			reverse("client-events"),
+			{"category": "bogus", "message": "bad"},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
+
+	def test_client_event_endpoint_rejects_form_encoded_posts(self):
+		"""A cross-site form must not be able to write rows to this anonymous sink."""
+		response = APIClient().post(
+			reverse("client-events"),
+			{"category": "unexpected_failure", "message": "from a hidden form"},
+			format="multipart",
+		)
+
+		self.assertEqual(response.status_code, 415)
+		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
+
+	def test_client_event_endpoint_rejects_text_plain_posts(self):
+		"""text/plain is the other enctype a form can emit."""
+		response = APIClient().post(
+			reverse("client-events"),
+			'{"category": "unexpected_failure", "message": "from a hidden form"}',
+			content_type="text/plain",
+		)
+
+		self.assertEqual(response.status_code, 415)
+		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
+
+	def test_client_event_endpoint_is_throttled(self):
+		client = APIClient()
+		payload = {"category": "unexpected_failure", "message": "one"}
+
+		with patch.object(ScopedRateThrottle, "THROTTLE_RATES", {"client_events": "2/min"}):
+			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 202)
+			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 202)
+			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 429)
 
 
 class RunDueTasksCommandTestCase(SetupMixin, TestCase):

@@ -56,6 +56,7 @@ INSTALLED_APPS = [
 	"corsheaders",
 	"rest_framework",
 	"rest_framework_simplejwt",
+	"drf_spectacular",
 	"accounts",
 	"monitoring",
 	"ops",
@@ -182,6 +183,7 @@ _REST_THROTTLE_RATES = {
 	"register": "3/min",
 	"token_refresh": "10/min",
 	"token_verify": "20/min",
+	"client_events": "30/min",
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
 }
