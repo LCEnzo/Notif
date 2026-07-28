@@ -125,9 +125,10 @@ class NotificationItem {
 
   factory NotificationItem.fromJson(JsonCursor json) {
     final update = json.field('update');
+    final title = update.field('title').string();
     return NotificationItem(
       id: json.field('id').integer(),
-      title: update.field('title').string(allowEmpty: false),
+      title: title.isEmpty ? untitledFallback : title,
       description: update.field('description').string(),
       itemUrl: update.field('item_url').string(),
       status: NotificationStatus.fromWire(
@@ -137,6 +138,12 @@ class NotificationItem {
       readAt: json.optionalField('read_at')?.nullableDateTime(),
     );
   }
+
+  /// Shown when an update has no usable title. A feed item may legitimately
+  /// carry an empty `<title>`, and `Update.title` is a plain CharField, so
+  /// empty titles exist in the database. Treating that as a contract violation
+  /// would fail the whole notifications page over one cosmetic gap.
+  static const String untitledFallback = 'Untitled update';
 
   final int id;
   final String title;

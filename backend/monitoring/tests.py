@@ -1059,6 +1059,17 @@ class FeedStrategyTestCase(TestCase):
 		)
 		assert "seen_entry_ids" not in comparison
 
+	def test_scrape_substitutes_a_title_for_a_present_but_empty_one(self):
+		"""dict.get only defaults on a missing key, so <title></title> reached the DB empty."""
+		feed = ATOM_FEED_XML.replace("<title>First Post</title>", "<title></title>", 1)
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, text=feed)
+			result = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Ok)
+		assert result.value.updates[0][0] == "Untitled"
+
 	def test_scrape_with_seen_entry_ids_skips_seen(self):
 		"""Legacy raw seen_entry_ids state still suppresses previously seen entries."""
 		with requests_mock.Mocker() as mocker:
