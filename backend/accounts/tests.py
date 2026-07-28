@@ -3,6 +3,7 @@ from typing import Any, cast
 from unittest.mock import patch
 
 from django.conf import settings
+from django.core.management import call_command
 from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
@@ -636,8 +637,9 @@ class ChangePasswordTestCase(TestCase):
 		own_family.refresh_from_db()
 		self.assertIsNone(own_family.revoked_at)
 
-	def test_patch_password_also_revokes_other_sessions(self):
-		"""PATCHing the user must not be a quieter way to change the password."""
+	def test_patch_password_is_rejected(self):
+		"""A bearer token alone must never change the password: PATCH cannot verify
+		the current password, so a stolen access token could take the account over."""
 		client, own_family = self._remember_me_client()
 		other_session = RefreshSessionFamily.objects.create(user=self.user, device_label="Stolen laptop")
 
@@ -647,13 +649,47 @@ class ChangePasswordTestCase(TestCase):
 			format="json",
 		)
 
-		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertIn("password", response.data)
 		self.user.refresh_from_db()
-		self.assertTrue(self.user.check_password(_ALTERNATE_VALID_TEST_PASSWORD))
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
 		other_session.refresh_from_db()
-		self.assertEqual(other_session.revoked_reason, RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
+		self.assertIsNone(other_session.revoked_at)
 		own_family.refresh_from_db()
 		self.assertIsNone(own_family.revoked_at)
+
+	def test_change_password_is_atomic_with_revocation(self):
+		"""If revocation fails, the password change must roll back with it."""
+		other_session = RefreshSessionFamily.objects.create(user=self.user, device_label="Other device")
+
+		with (
+			patch(
+				"accounts.views.revoke_all_refresh_families_for_user",
+				side_effect=RuntimeError("db went away"),
+			),
+			self.assertRaises(RuntimeError),
+		):
+			self.authed.post(
+				self.url,
+				{"current_password": _VALID_TEST_PASSWORD, "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+				format="json",
+			)
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+		other_session.refresh_from_db()
+		self.assertIsNone(other_session.revoked_at)
+
+	def test_set_password_command_revokes_all_sessions(self):
+		"""Recovery assumes compromise: no session survives the command."""
+		family = RefreshSessionFamily.objects.create(user=self.user, device_label="Possibly stolen")
+
+		call_command("set_password", self.user.get_username(), "--password", _ALTERNATE_VALID_TEST_PASSWORD)
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_ALTERNATE_VALID_TEST_PASSWORD))
+		family.refresh_from_db()
+		self.assertEqual(family.revoked_reason, RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
 
 	def test_rejects_wrong_current_password(self):
 		response = self.authed.post(

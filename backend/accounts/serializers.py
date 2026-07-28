@@ -6,7 +6,6 @@ from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
 from accounts.models import RefreshSessionFamily, User
-from accounts.refresh_sessions import family_id_from_access_token, revoke_all_refresh_families_for_user
 
 if TYPE_CHECKING:
 	_UserModelSerializer = ModelSerializer[User]
@@ -38,22 +37,15 @@ class UserCreationSerializer(_UserModelSerializer):
 
 	@transaction.atomic
 	def update(self, instance: User, validated_data: dict[str, Any]) -> User:
-		# Ensure a user can only update their own password.
-		request = self.context.get("request")
-		password = validated_data.pop("password", None)
-		if password is not None:
-			if request is None or request.user != instance:
-				raise serializers.ValidationError({"password": "Only the account owner can change their password."})
-			instance.set_password(password)
-			# A credential change evicts every other session, same as the
-			# change_password action - a PATCH must not be a quieter way to
-			# change the password while stolen sessions stay live. The session
-			# making the change is kept, identified by its access token's
-			# family claim.
-			revoke_all_refresh_families_for_user(
-				instance,
-				reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE,
-				except_family=family_id_from_access_token(getattr(request, "auth", None)),
+		# Password changes are refused here outright. change_password is the
+		# only path: it verifies the current password, which is the one proof a
+		# stolen bearer token cannot forge. Accepting a password on a generic
+		# PATCH would let any valid access token take the account over. No
+		# client has ever used this path - both the deployed and the pending
+		# frontend post to change_password.
+		if "password" in validated_data:
+			raise serializers.ValidationError(
+				{"password": "Use the change_password endpoint, which verifies the current password."}
 			)
 
 		return super().update(instance, validated_data)

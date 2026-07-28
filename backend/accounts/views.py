@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.db.models.query import QuerySet
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
@@ -429,17 +430,20 @@ class UserViewSet(_UserModelViewSet):
 				status=status.HTTP_400_BAD_REQUEST,
 			)
 
-		user.set_password(new_password)
-		user.save(update_fields=["password", "date_modified"])
-		# Evict every other session, but keep the one that just proved it knows
-		# the current password - matching the account screen's "you will stay
-		# logged in" promise. The current session is identified by the family
-		# claim its access token inherited from the refresh rotation.
-		revoke_all_refresh_families_for_user(
-			user,
-			reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE,
-			except_family=family_id_from_access_token(request.auth),
-		)
+		# One transaction: a password that no longer matches the sessions that
+		# can use it is exactly the split-brain this feature exists to prevent.
+		with transaction.atomic():
+			user.set_password(new_password)
+			user.save(update_fields=["password", "date_modified"])
+			# Evict every other session, but keep the one that just proved it
+			# knows the current password - matching the account screen's "you
+			# will stay logged in" promise. The current session is identified
+			# by the family claim its access token inherited from rotation.
+			revoke_all_refresh_families_for_user(
+				user,
+				reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE,
+				except_family=family_id_from_access_token(request.auth),
+			)
 
 		return Response({"status": "ok"})
 
@@ -635,11 +639,14 @@ class PasswordResetConfirmView(APIView):
 				status=status.HTTP_400_BAD_REQUEST,
 			)
 
-		user.set_password(new_password)
-		user.save(update_fields=["password", "date_modified"])
-		revoke_all_refresh_families_for_user(user, reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
+		# One transaction: the new password, the eviction of every session, and
+		# the consumption of the reset code land together or not at all.
+		with transaction.atomic():
+			user.set_password(new_password)
+			user.save(update_fields=["password", "date_modified"])
+			revoke_all_refresh_families_for_user(user, reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE)
 
-		# Clean up used code
-		PasswordResetCode.objects.filter(user=user).delete()
+			# Clean up used code
+			PasswordResetCode.objects.filter(user=user).delete()
 
 		return Response({"status": "ok"})
