@@ -287,3 +287,47 @@ For X/Twitter profile export or other large JSON/archive imports, Rust is a reas
 2. Expose it with PyO3/maturin and keep a Python fallback while the packaging settles.
 3. Run existing scraper fixtures against both implementations until behavior is pinned.
 4. Only then consider moving larger feed normalization or worker boundaries.
+
+---
+
+## Cleanup TODO (added 2026-05-14)
+
+Ordered roughly by impact within each section.
+
+### Backend
+
+**Medium impact**
+- Squash `monitoring` migrations — 13 migrations + 1 merge → 1-2 squashed
+- Squash `accounts` migrations — 8 → 3
+- Split `monitoring/strategies.py` (1112 lines) into domain modules
+- Unify throttle-test-gating: `PasswordResetRequestView` / `PasswordResetConfirmView` reimplement `get_throttles()` instead of using `TokenThrottleMixin`
+- Extract `run_due_tasks.py` helper functions to `ops/maintenance.py`
+
+**Low impact / housekeeping**
+- Remove `misc/secrets.json` + `misc/*.ipynb`
+- Delete dead `IsOwner` permission — subsumed by `IsOwnerOrAdmin`, never imported
+- Remove unused `TriggerScrapeAllResponseSerializer`
+- Remove unused `lxml` dependency
+- Remove unused `Notification.Status.DISMISSED`
+- `UserMinimalReadSerializer` list view missing `name` / `email`
+- Remove unused Faker providers (`bank`, `company`) from `commons/utils.py`
+- TYPE_CHECKING boilerplate in 5 files
+
+### Frontend
+
+**High impact**
+- Split `homescreen.dart` (3152 lines) — 30+ private widget classes, pagination, dialogs
+- Split `data.dart` (1306 lines) — separate `LinkService` / `NotificationService`, extract pure utilities
+- Gate `auth_texture_tuner.dart` (820 lines) with conditional import — ships in release builds
+
+**Medium impact**
+- Shared `AuthFormLayout` widget — login/register share near-identical dual (framed/glass) form implementations
+- `PaginatedServiceMixin` — `LinkService.goToPage()` / `NotificationService.goToPage()` share ~80% identical code
+- Centralize `AuthCardStyle` branching (~20 sites)
+- Merge `AuthBackdropColors` / `_AuthBackdropPalette`
+
+**Low impact / housekeeping**
+- Remove unused `screens/shared.dart` barrel export
+- Inline `_KVText` (kv.dart), `_StaticText` (about.dart), `_AccountTextField` (account.dart)
+- Extract pagination window algorithm from `homescreen.dart` to a pure function (test duplicates it)
+- Test coverage: `AuthService`, `LinkService`, `NotificationService`, `OpsService`, `account.dart`, `forgot_password.dart`, `reset_password.dart`
