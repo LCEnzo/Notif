@@ -28,6 +28,12 @@ final Dio _dio =
           ),
       ]);
 
+/// The app's own Dio instance, exposed so tests can install a fake HTTP
+/// adapter and drive the real request pipeline — URL fallback, auth retry —
+/// instead of a stubbed-out copy of it.
+@visibleForTesting
+Dio get apiDio => _dio;
+
 typedef AccessTokenReader = String? Function();
 typedef RefreshAccessToken = Future<String?> Function();
 typedef AuthExpiredHandler = Future<void> Function();
@@ -61,6 +67,13 @@ void configureApiAuth({
   _accessTokenReader = accessTokenReader;
   _refreshAccessToken = refreshAccessToken;
   _authExpiredHandler = authExpiredHandler;
+}
+
+@visibleForTesting
+void resetApiAuthForTesting() {
+  _accessTokenReader = null;
+  _refreshAccessToken = null;
+  _authExpiredHandler = null;
 }
 
 /// Sends a POST request to [path], respecting [BackendUrlMode] from [settings].
