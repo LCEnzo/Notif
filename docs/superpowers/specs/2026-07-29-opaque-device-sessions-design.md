@@ -1,6 +1,6 @@
 # Opaque device-session auth (replaces JWT + refresh rotation)
 
-Date: 2026-07-29. Status: draft v4 - second review round incorporated.
+Date: 2026-07-29. Status: draft v5 - third review round incorporated.
 
 ## Why
 
@@ -43,8 +43,10 @@ concurrent requests cannot defeat the write damping on SQLite.
 
 Raw token: `secrets.token_urlsafe(32)`; only the hash is stored.
 
-Bounded growth: at most 20 live sessions per user (login evicts the
-least-recently-used beyond the cap, reason `capacity_evicted`); the existing cleanup command deletes
+Bounded growth: at most 20 live sessions per user — the count, create and
+evict run in one transaction (SQLite `BEGIN IMMEDIATE` serializes writers),
+evicting least-recently-used with reason `capacity_evicted`, with a
+concurrent-login test; the existing cleanup command deletes
 rows dead (revoked or expired) for more than 30 days; the sessions list is
 paginated with the standard page size.
 
@@ -65,7 +67,10 @@ paginated with the standard page size.
 **Endpoints** (replace `/token/*`; login keeps the existing JSON-only /
 non-simple-request defense it has today):
 
-- `POST /auth/login/` — credentials + `device_label` +
+- `POST /auth/login/` — `authentication_classes = []`, like logout: a stale
+  cookie riding along must not 401 the request before credentials are seen.
+  After credential validation the view tolerantly looks up any presented
+  session itself (for `login_replaced`). Takes credentials + `device_label` +
   `transport: "cookie" | "bearer"`. Transports are mutually exclusive:
   - `cookie` (web): sets HttpOnly `SameSite=Strict; Secure; Path=/api/v1/`
     cookie (`Max-Age` = 90d) — returns **no token** in the body, and rotates
@@ -81,7 +86,10 @@ non-simple-request defense it has today):
   installed authenticator would 401 an expired cookie before the view could
   clear it. The view instead does a tolerant manual token lookup (revoking
   the row when one matches), enforces the cookie-CSRF check itself, and
-  unconditionally deletes the session cookie — and, until the cutover is
+  unconditionally deletes the session cookie. CSRF is conditional on
+  liveness: a live cookie session requires a valid CSRF token before it is
+  revoked; an expired, revoked, or unknown cookie is cleared without one
+  (clearing a dead cookie is not a protected mutation) — and, until the cutover is
   aged out, the legacy `notif_refresh` cookie at its old
   `/api/v1/token/` path, which no new-cookie deletion reaches. Offline logout is best-effort: native deletes its
   keystore token, web clears its marker; the orphaned row dies at idle/cap
@@ -104,8 +112,10 @@ atomic with the password write.
 
 ### Frontend
 
-- Native: bearer transport; token in `flutter_secure_storage` (existing seam +
-  backup exclusion); attach `Authorization: Session <token>`.
+- Native: bearer transport; one secure record `{token, origin}` in
+  `flutter_secure_storage` (existing seam + backup exclusion) — its existence
+  *is* the restoration intent; there is no separate marker to drift out of
+  sync. Attach `Authorization: Session <token>`.
 - Web: cookie transport; `withCredentials` stays; CSRF token read from the
   `csrftoken` cookie and attached as `X-CSRFToken` on writes. Cookie-backed
   web auth is declared **same-origin-only** — not merely same-site: the
@@ -113,15 +123,28 @@ atomic with the password write.
   one set by `api.example.com`. A non-same-origin backend URL on web is
   rejected at settings time (the existing diagnostic becomes a validation);
   no `SameSite=None`, no CSRF-bootstrap endpoint. This matches the actual
-  deployment (Caddy serves app and API from one origin).
+  deployment (Caddy serves app and API from one origin). Exception: loopback
+  hosts compare host-only (ports ignored), because Flutter's dev server and
+  Django use different ports — verified in the supported browser, since RFC
+  6265 leaves secure-channel semantics to the user agent.
 - State machine kept minus refresh states: Anonymous / Restoring /
   Authenticated / Unavailable / Expired / LoggingOut. A single monotonically
   increasing auth generation remains: responses (401s included) dispatched
   under an older generation are ignored, so a slow request from a
-  logged-out-then-logged-in-again window cannot kill the new session. This is
-  the only piece of the old choreography that survives, because it guards the
-  network boundary, not rotation.
-- Cold start: if the remembered-session marker is set, one
+  logged-out-then-logged-in-again window cannot kill the new session. The
+  generation cannot fence the browser itself — a late login response's
+  Set-Cookie is applied by the browser regardless of app state — so login
+  and logout are additionally serialized behind one auth-mutation lock:
+  logout awaits any in-flight login and is guaranteed to be the final
+  server-visible operation.
+- Web: one typed record `{origin, restoreIntent}` in `PreferenceStore`
+  replaces the loose marker — a single mutation, so partial states between
+  token, intent and origin are unrepresentable on either platform.
+- "Request carried the credential" means: the request was designated
+  session-bearing under the stored intent and origin. Native can verify the
+  token was attached; web cannot see its HttpOnly cookie and relies on the
+  designation.
+- Cold start: if the stored intent says so, one
   `GET /accounts/users/get_my_info/`; transport failure → `AuthUnavailable` +
   existing bounded health-probe recovery; 401 (current generation) → Expired
   (marker set) or Anonymous.
@@ -174,8 +197,9 @@ tests keep keystore/dio boundaries; drift check pins the schema.
 - A logout fence beyond the generation counter: in-flight responses from
   before logout carry the old generation and are ignored; new authenticated
   requests cannot start because `AuthLoggingOut` exposes no credential.
-- `Secure` cookie breaking local web dev: browsers treat localhost as a
-  secure context, so the flag is kept unconditionally.
+- `Secure` cookie breaking local web dev: Chromium accepts Secure cookies
+  from trustworthy loopback origins, so the flag is kept unconditionally;
+  the real dev friction was the port mismatch, handled above.
 - CSRF-bootstrap endpoint: unnecessary under the same-origin-only rule.
 
 ## Out of scope
