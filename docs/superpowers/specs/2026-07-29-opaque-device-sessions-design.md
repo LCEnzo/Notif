@@ -1,6 +1,6 @@
 # Opaque device-session auth (replaces JWT + refresh rotation)
 
-Date: 2026-07-29. Status: draft v2, incorporating design review.
+Date: 2026-07-29. Status: draft v3 - design review incorporated, remember-me split removed.
 
 ## Why
 
@@ -24,15 +24,16 @@ new migrations, deployed history untouched):
 - `user` FK, `public_id` UUID (the handle used by the sessions UI)
 - `token_hash` — SHA-256 hex of the raw token, `unique=True` (which already
   indexes it)
-- `remembered` bool, `device_label`, `ip`, `user_agent`
+- `device_label`, `ip`, `user_agent`
 - `created_at`, `last_used_at`
 - `revoked_at` / `revoke_reason` (logout, revoked_by_user, password_change,
   login_replaced) — natural expiry is represented by time, not a reason
 
-No stored expiry columns. A session is live iff not revoked and:
-- remembered: `now < last_used_at + 14d` (idle) and `now < created_at + 90d`
-  (absolute cap)
-- not remembered: `now < created_at + 24h` (fixed; no sliding)
+No stored expiry columns. A session is live iff not revoked,
+`now < last_used_at + 14d` (idle), and `now < created_at + 90d` (absolute
+cap). There is no remember-me split: every session is remembered, and the
+devices list is the answer to "I logged in somewhere I should not have" —
+revoke it. (The old stack already defaulted `remember_me` to true.)
 
 `last_used_at` advances via one conditional SQL update
 (`UPDATE ... SET last_used_at = now WHERE last_used_at < now - 1h`) so
@@ -56,12 +57,11 @@ Raw token: `secrets.token_urlsafe(32)`; only the hash is stored.
 **Endpoints** (replace `/token/*`; login keeps the existing JSON-only /
 non-simple-request defense it has today):
 
-- `POST /auth/login/` — credentials + `device_label` + `remember_me` +
+- `POST /auth/login/` — credentials + `device_label` +
   `transport: "cookie" | "bearer"`. Transports are mutually exclusive:
   - `cookie` (web): sets HttpOnly `SameSite=Strict; Secure; Path=/api/v1/`
-    cookie — `Max-Age` = 90d for remembered, session cookie (no Max-Age) for
-    not-remembered — returns **no token** in the body, and rotates the CSRF
-    token so Django emits the readable `csrftoken` cookie.
+    cookie (`Max-Age` = 90d) — returns **no token** in the body, and rotates
+    the CSRF token so Django emits the readable `csrftoken` cookie.
   - `bearer` (native): returns the raw token once in JSON, sets **no cookie**.
   - Both responses carry `Cache-Control: no-store`. Server-side expiry is
     authoritative regardless of cookie lifetime.
@@ -84,8 +84,7 @@ carry over 1:1 (revoke all but current, atomic with the password write).
 ### Frontend
 
 - Native: bearer transport; token in `flutter_secure_storage` (existing seam +
-  backup exclusion); attach `Authorization: Session <token>`. Non-remembered
-  native sessions keep the token in memory only.
+  backup exclusion); attach `Authorization: Session <token>`.
 - Web: cookie transport; `withCredentials` stays; CSRF token read from the
   `csrftoken` cookie and attached as `X-CSRFToken` on writes. Cookie-backed
   web auth is declared same-site-only: a cross-site backend URL on web is
@@ -129,7 +128,7 @@ carry over 1:1 (revoke all but current, atomic with the password write).
 ## Testing
 
 Backend: auth-class tests (both transports; CSRF enforced on cookie writes and
-absent on bearer; 401-not-403 via `authenticate_header`; idle/cap/24h expiry
+absent on bearer; 401-not-403 via `authenticate_header`; idle/cap expiry
 boundaries; damped `last_used_at` under concurrency; revocation; idempotent
 logout incl. unauthenticated), deterministic token-hash test, atomicity tests
 carried over. Frontend: adapted auth_service_test (restore/outage/expired
