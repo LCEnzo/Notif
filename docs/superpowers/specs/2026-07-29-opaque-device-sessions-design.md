@@ -29,7 +29,7 @@ new migrations, deployed history untouched):
 - `device_label` (<=120 chars), `ip`, `user_agent` (truncated to 256)
 - `created_at`, `last_used_at`
 - `revoked_at` / `revoke_reason` (logout, revoked_by_user, password_change,
-  login_replaced) — natural expiry is represented by time, not a reason
+  login_replaced, capacity_evicted) — natural expiry is represented by time, not a reason
 
 No stored expiry columns. A session is live iff not revoked,
 `now < last_used_at + 14d` (idle), and `now < created_at + 90d` (absolute
@@ -44,7 +44,7 @@ concurrent requests cannot defeat the write damping on SQLite.
 Raw token: `secrets.token_urlsafe(32)`; only the hash is stored.
 
 Bounded growth: at most 20 live sessions per user (login evicts the
-least-recently-used beyond the cap); the existing cleanup command deletes
+least-recently-used beyond the cap, reason `capacity_evicted`); the existing cleanup command deletes
 rows dead (revoked or expired) for more than 30 days; the sessions list is
 paginated with the standard page size.
 
@@ -98,7 +98,9 @@ non-simple-request defense it has today):
 
 **Deleted**: refresh endpoint, rotation, token records, theft detection, grace
 window, simplejwt issuance/claims. Password-change/reset revocation semantics
-carry over 1:1 (revoke all but current, atomic with the password write).
+carry over 1:1: change_password revokes all but the caller's session,
+reset-confirm (unauthenticated, no current session) revokes all — each
+atomic with the password write.
 
 ### Frontend
 
@@ -162,6 +164,19 @@ eviction, login-replacement revocation, deterministic token-hash test,
 atomicity tests carried over. Frontend: adapted auth_service_test (restore/outage/expired
 paths, stale-generation 401 ignored), api_client CSRF attach, architecture
 tests keep keystore/dio boundaries; drift check pins the schema.
+
+## Considered and rejected
+
+- Login CSRF protection beyond the JSON-only defense: a cross-site login POST
+  with a JSON body is a non-simple request, blocked by CORS preflight.
+- Tighter `last_used_at` damping: at 1h damping the idle check is at most 1h
+  stale against a 14-day window — irrelevant.
+- A logout fence beyond the generation counter: in-flight responses from
+  before logout carry the old generation and are ignored; new authenticated
+  requests cannot start because `AuthLoggingOut` exposes no credential.
+- `Secure` cookie breaking local web dev: browsers treat localhost as a
+  secure context, so the flag is kept unconditionally.
+- CSRF-bootstrap endpoint: unnecessary under the same-origin-only rule.
 
 ## Out of scope
 
