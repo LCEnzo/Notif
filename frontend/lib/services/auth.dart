@@ -29,11 +29,11 @@ class UserData {
     );
   }
 
-  String email;
-  String username;
-  String name;
-  bool isStaff;
-  bool isSuperuser;
+  final String email;
+  final String username;
+  final String name;
+  final bool isStaff;
+  final bool isSuperuser;
 }
 
 class JWT {
@@ -123,7 +123,7 @@ final class AuthLoggingOut extends AuthState {
 /// Resolves the backend origin when it cannot carry the session cookie.
 /// Injectable so the browser-only condition is testable off-browser.
 typedef CrossSiteBackendProbe =
-    String? Function(AppSettingsController? settings);
+    String? Function(AppSettingsController? settings, {String? sessionBaseUrl});
 
 class AuthService extends ChangeNotifier {
   AuthService({
@@ -174,9 +174,18 @@ class AuthService extends ChangeNotifier {
   bool _disposed = false;
   String? _sessionDiagnostic;
   String? _sessionBaseUrl;
+  String? _lastBackendConfig;
 
   void updateSettings(AppSettingsController? settings) {
-    final changed = !identical(_settings, settings);
+    // The provider passes the same controller instance on every notification,
+    // so "did the backend config change" must compare the values, not the
+    // object. Only the backend fields matter here - a colorway change is not
+    // a reason to retry the network.
+    final backendConfig =
+        '${settings?.backendUrlMode.name}|${settings?.customBackendUrl}';
+    final changed =
+        _lastBackendConfig != null && backendConfig != _lastBackendConfig;
+    _lastBackendConfig = backendConfig;
     _settings = settings;
     _configureApiAuth();
     if (_restoreSessionOnStart && !_restoreAttempted) {
@@ -184,8 +193,8 @@ class AuthService extends ChangeNotifier {
       unawaited(restoreRememberedSession());
       return;
     }
-    // A settings change is a user action and a fresh chance for the backend to
-    // be reachable — spend a new recovery budget on it.
+    // A backend config change is a user action and a fresh chance for the
+    // backend to be reachable — spend a new recovery budget on it.
     if (changed && _state is AuthUnavailable) {
       _recoveryAttempt = 0;
       _scheduleRecoveryAttempt();
@@ -290,7 +299,12 @@ class AuthService extends ChangeNotifier {
   /// to a request going to another site, so every refresh looks like a
   /// rejection. Without this the only trace was a debug print.
   void _diagnoseCrossSiteCookie() {
-    final crossSiteOrigin = _crossSiteBackendProbe(_settings);
+    // Judge the origin the session actually belonged to when one is known;
+    // only fall back to scanning the configured chain before any session.
+    final crossSiteOrigin = _crossSiteBackendProbe(
+      _settings,
+      sessionBaseUrl: _sessionBaseUrl,
+    );
     if (crossSiteOrigin == null) {
       return;
     }
@@ -411,7 +425,18 @@ class AuthService extends ChangeNotifier {
         debugPrint('AuthService.logout: $error');
       }
     } finally {
-      await clearNativeRefreshCookies();
+      final cookiesCleared = await clearNativeRefreshCookies();
+      if (!cookiesCleared) {
+        // A persisted refresh token survived a logout - the one situation
+        // where "signed out" on screen is not true on disk.
+        unawaited(
+          reportClientFailure(
+            settings: _settings,
+            error: Exception('native refresh cookie jar failed to clear'),
+            endpoint: 'local: logout cookie clear',
+          ),
+        );
+      }
       _sessionBaseUrl = null;
       await _persistSessionMarker(remembered: false);
       _setState(const AuthAnonymous());

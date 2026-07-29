@@ -232,13 +232,20 @@ String? crossSiteBackendOrigin(
   AppSettingsController? settings, {
   bool isWeb = kIsWeb,
   Uri? pageUri,
+  String? sessionBaseUrl,
 }) {
   if (!isWeb) {
     return null;
   }
 
   final page = pageUri ?? Uri.base;
-  for (final url in resolveUrls(settings)) {
+  // When the session's own origin is known, judge that one alone — a
+  // cross-site origin elsewhere in the fallback chain never sees session
+  // credentials and would make the diagnostic blame the wrong host.
+  final candidates = sessionBaseUrl != null
+      ? [sessionBaseUrl]
+      : resolveUrls(settings);
+  for (final url in candidates) {
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
       // Relative URLs ("/api/v1") are same-origin by construction.

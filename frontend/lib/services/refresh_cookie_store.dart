@@ -154,18 +154,33 @@ Future<void> rememberNativeRefreshCookie(
   }
 }
 
-Future<void> clearNativeRefreshCookies() async {
-  if (kIsWeb) return;
+/// Clears the in-memory jar and both persisted copies. Returns false when a
+/// persisted copy could not be deleted — a replayable token may survive on
+/// disk, which the caller should surface rather than swallow. Never throws:
+/// this runs in logout's finally, where an escaping keystore error would
+/// leave the state machine stuck in AuthLoggingOut.
+Future<bool> clearNativeRefreshCookies() async {
+  if (kIsWeb) return true;
   _sessionCookies.clear();
-  await secureStore.delete(_secureCookieStoreKey);
+  var cleared = true;
+  try {
+    await secureStore.delete(_secureCookieStoreKey);
+  } on Exception catch (error) {
+    cleared = false;
+    if (kDebugMode) {
+      debugPrint('clearNativeRefreshCookies keystore: $error');
+    }
+  }
   try {
     final store = await PreferenceStore.load();
     await store.remove(_legacyPlaintextStoreKey);
   } on Exception catch (error) {
+    cleared = false;
     if (kDebugMode) {
       debugPrint('clearNativeRefreshCookies: $error');
     }
   }
+  return cleared;
 }
 
 bool _isRefreshCookiePath(String apiPath) {
@@ -204,9 +219,18 @@ Future<void> _migrateLegacyPlaintextCookies() async {
   if (legacy.trim().isEmpty) {
     return;
   }
-  final existing = await secureStore.read(_secureCookieStoreKey);
-  if (existing == null || existing.trim().isEmpty) {
-    await secureStore.write(_secureCookieStoreKey, legacy);
+  try {
+    final existing = await secureStore.read(_secureCookieStoreKey);
+    if (existing == null || existing.trim().isEmpty) {
+      await secureStore.write(_secureCookieStoreKey, legacy);
+    }
+  } on Exception catch (error) {
+    // The plaintext copy is already deleted; losing the migration costs one
+    // re-login, while an escaping keystore error would fail the request that
+    // happened to trigger the first cookie read.
+    if (kDebugMode) {
+      debugPrint('refresh_cookie_store keystore migration: $error');
+    }
   }
 }
 
@@ -255,25 +279,34 @@ Future<Map<String, _NativeRefreshCookie>> _loadNativeRefreshCookies() async {
   }
 }
 
+/// Best-effort persistence: a keystore failure must not fail the API call
+/// that delivered the cookie — the in-memory jar keeps the session working
+/// for this process, it just will not survive a restart.
 Future<void> _saveNativeRefreshCookies(
   Map<String, _NativeRefreshCookie> cookies,
 ) async {
-  if (cookies.isEmpty) {
-    await secureStore.delete(_secureCookieStoreKey);
-    return;
-  }
+  try {
+    if (cookies.isEmpty) {
+      await secureStore.delete(_secureCookieStoreKey);
+      return;
+    }
 
-  await secureStore.write(
-    _secureCookieStoreKey,
-    jsonEncode({
-      for (final entry in cookies.entries)
-        entry.key: {
-          'value': entry.value.value,
-          'expiresAt': entry.value.expiresAt?.millisecondsSinceEpoch,
-          'secure': entry.value.secure,
-        },
-    }),
-  );
+    await secureStore.write(
+      _secureCookieStoreKey,
+      jsonEncode({
+        for (final entry in cookies.entries)
+          entry.key: {
+            'value': entry.value.value,
+            'expiresAt': entry.value.expiresAt?.millisecondsSinceEpoch,
+            'secure': entry.value.secure,
+          },
+      }),
+    );
+  } on Exception catch (error) {
+    if (kDebugMode) {
+      debugPrint('_saveNativeRefreshCookies: $error');
+    }
+  }
 }
 
 _ParsedRefreshCookie? _parseRefreshCookie(String header) {

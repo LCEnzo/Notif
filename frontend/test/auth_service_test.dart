@@ -466,7 +466,8 @@ void main() {
           {'detail': 'Token is invalid'},
           statusCode: 401,
         ),
-        crossSiteBackendProbe: (_) => 'https://api.other.test',
+        crossSiteBackendProbe: (_, {sessionBaseUrl}) =>
+            'https://api.other.test',
       );
 
       await triggerRefresh(auth);
@@ -502,7 +503,8 @@ void main() {
         return jsonResponse({'access': 'access-2'});
       });
       final auth = createService(
-        crossSiteBackendProbe: (_) => 'https://api.other.test',
+        crossSiteBackendProbe: (_, {sessionBaseUrl}) =>
+            'https://api.other.test',
       );
       auth.updateSettings(settings);
       await auth.loginWithRememberMe('user', 'pass', rememberMe: true);
