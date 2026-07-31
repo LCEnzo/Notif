@@ -1,6 +1,6 @@
 # Opaque device-session auth (replaces JWT + refresh rotation)
 
-Date: 2026-07-29. Status: draft v5 - third review round incorporated.
+Date: 2026-07-29. Status: draft v6 - fourth review round incorporated.
 
 ## Why
 
@@ -47,8 +47,9 @@ Bounded growth: at most 20 live sessions per user — the count, create and
 evict run in one transaction (SQLite `BEGIN IMMEDIATE` serializes writers),
 evicting least-recently-used with reason `capacity_evicted`, with a
 concurrent-login test; the existing cleanup command deletes
-rows dead (revoked or expired) for more than 30 days; the sessions list is
-paginated with the standard page size.
+rows dead (revoked or expired) for more than 30 days; the sessions list
+returns live sessions only, so the 20-row cap bounds the response and no
+pagination is needed (the repo defines no global DRF pagination to inherit).
 
 **Auth class** (DRF `SessionTokenAuthentication`):
 - Reads `Authorization: Session <token>` first, else the `notif_session`
@@ -79,14 +80,28 @@ non-simple-request defense it has today):
   - A live session presented with the login request is revoked
     (`login_replaced`) in the same transaction that creates its replacement,
     so web re-logins do not accumulate orphaned live rows.
+  - The session-creation transaction re-reads the user's password hash and
+    aborts with 401 if it differs from the hash the credentials were just
+    validated against: a login checked against the old password must not
+    commit a session after a concurrent password change/reset has revoked
+    everything. The comparison is string equality on the stored hash — no
+    second KDF run — and `BEGIN IMMEDIATE` guarantees the re-read sees any
+    committed change. Concurrent login-vs-change and login-vs-reset tests.
   - Both responses carry `Cache-Control: no-store`. Server-side expiry is
     authoritative regardless of cookie lifetime.
 - `POST /auth/logout/` — idempotent, with `authentication_classes = []`:
   DRF authenticates before permission checks and rethrows failures, so an
   installed authenticator would 401 an expired cookie before the view could
-  clear it. The view instead does a tolerant manual token lookup (revoking
-  the row when one matches), enforces the cookie-CSRF check itself, and
-  unconditionally deletes the session cookie. CSRF is conditional on
+  clear it. The view keeps the same JSON-only / non-simple-request gate
+  login has, and the rejection path emits no `Set-Cookie`: a cross-site
+  top-level form POST omits the `SameSite=Strict` cookie but browsers still
+  *apply* `Set-Cookie` on such responses, so an ungated logout would let any
+  origin delete a session it never held — the defense master's logout
+  already encodes, and the only one possible for the legacy-path deletion,
+  which cannot be conditioned on presentation. Past the gate the view does
+  a tolerant manual token lookup (revoking the row when one matches),
+  enforces the cookie-CSRF check itself, and deletes the session cookie
+  unconditionally. CSRF is conditional on
   liveness: a live cookie session requires a valid CSRF token before it is
   revoked; an expired, revoked, or unknown cookie is cleared without one
   (clearing a dead cookie is not a protected mutation) — and, until the cutover is
@@ -98,8 +113,8 @@ non-simple-request defense it has today):
   event + UI): if this device could not clear its keystore token or marker,
   the logout screen says so instead of claiming a durable sign-out that a
   later cold start would undo.
-- `GET /auth/sessions/` — list (public_id, device_label, created_at,
-  last_used_at, ip, user_agent, current: bool).
+- `GET /auth/sessions/` — list of live sessions (public_id, device_label,
+  transport, created_at, last_used_at, ip, user_agent, current: bool).
 - `DELETE /auth/sessions/{public_id}/` — revoke one.
 - `POST /auth/sessions/revoke_all/` — revokes all but the caller's session
   (same semantics change_password uses today).
@@ -135,11 +150,18 @@ atomic with the password write.
   generation cannot fence the browser itself — a late login response's
   Set-Cookie is applied by the browser regardless of app state — so login
   and logout are additionally serialized behind one auth-mutation lock:
-  logout awaits any in-flight login and is guaranteed to be the final
-  server-visible operation.
-- Web: one typed record `{origin, restoreIntent}` in `PreferenceStore`
-  replaces the loose marker — a single mutation, so partial states between
-  token, intent and origin are unrepresentable on either platform.
+  within a tab, logout awaits any in-flight login and is the final
+  server-visible operation. The lock is per-tab and cannot span browser
+  contexts; cross-tab, the shared web record carries a monotonic auth stamp:
+  logout writes it, and a login that completes under a stamp newer than its
+  own start voids itself — it calls logout (revoking the just-created
+  session, clearing the cookie) instead of adopting it. Logins are explicit
+  credential entry (there is no background refresh to race), so the window
+  is human-scale rare, but the compensation closes it.
+- Web: one typed record `{origin, restoreIntent, authStamp}` in
+  `PreferenceStore` replaces the loose marker — a single mutation, so
+  partial states between token, intent and origin are unrepresentable on
+  either platform.
 - "Request carried the credential" means: the request was designated
   session-bearing under the stored intent and origin. Native can verify the
   token was attached; web cannot see its HttpOnly cookie and relies on the
@@ -182,10 +204,13 @@ atomic with the password write.
 Backend: auth-class tests (both transports; CSRF enforced on cookie writes and
 absent on bearer; 401-not-403 via `authenticate_header`; idle/cap expiry
 boundaries; damped `last_used_at` under concurrency; revocation; idempotent
-logout incl. dead cookies and CSRF), wrong-transport rejection, session cap
-eviction, login-replacement revocation, deterministic token-hash test,
+logout incl. dead cookies and CSRF; cross-site form POST rejected with no
+`Set-Cookie`), wrong-transport rejection, session cap eviction,
+login-replacement revocation, concurrent login-vs-password-change and
+login-vs-reset (hash re-check aborts), deterministic token-hash test,
 atomicity tests carried over. Frontend: adapted auth_service_test (restore/outage/expired
-paths, stale-generation 401 ignored), api_client CSRF attach, architecture
+paths, stale-generation 401 ignored, two-tab login/logout interleave via the
+auth stamp), api_client CSRF attach, architecture
 tests keep keystore/dio boundaries; drift check pins the schema.
 
 ## Considered and rejected
@@ -194,9 +219,14 @@ tests keep keystore/dio boundaries; drift check pins the schema.
   with a JSON body is a non-simple request, blocked by CORS preflight.
 - Tighter `last_used_at` damping: at 1h damping the idle check is at most 1h
   stale against a 14-day window — irrelevant.
-- A logout fence beyond the generation counter: in-flight responses from
-  before logout carry the old generation and are ignored; new authenticated
-  requests cannot start because `AuthLoggingOut` exposes no credential.
+- A server-side logout fence (revoking sessions created during a logout
+  window): response-side staleness is the generation's job, operation order
+  is the per-tab lock's, and the cross-tab auth stamp voids the one
+  interleaving those two cannot reach; the sessions UI shows any survivor.
+- Web Locks (`navigator.locks`) for cross-tab serialization: the auth stamp
+  covers the only harmful interleaving (a login spanning a logout) without
+  web-only interop code, and is unit-testable where a two-tab integration
+  harness is not.
 - `Secure` cookie breaking local web dev: Chromium accepts Secure cookies
   from trustworthy loopback origins, so the flag is kept unconditionally;
   the real dev friction was the port mismatch, handled above.
