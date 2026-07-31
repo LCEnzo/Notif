@@ -19,6 +19,7 @@ from django.utils import timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
+from rest_framework import status
 from rest_framework.test import APIClient
 
 from commons import Err, Ok
@@ -410,12 +411,25 @@ class LinkViewSetTestCase(ViewSetMixin):
 		fields = {
 			"name": "Skitterdoc on Spacebattles",
 			"url": "http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1",
-			"user": f"{self.regular_user.pk}",
 			"strategy": self.strat.pk,
 		}
-		resp = self._test_create_object(fields=fields)  # noqa: F841
-		# print(f"{resp = }")
-		# print(f"{resp.content!r}")
+		response = self._test_create_object(fields=fields)
+		self.assertEqual(Link.objects.get(pk=response.data["id"]).user, self.regular_user)
+
+	def test_create_link_cannot_spoof_another_owner(self):
+		response = self.api_client.post(
+			reverse("links-list"),
+			{
+				"name": "Owned by the authenticated caller",
+				"url": "https://example.com/threadmarks",
+				"user": self.secondary_user.pk,
+				"strategy": self.strat.pk,
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self.assertEqual(Link.objects.get(pk=response.data["id"]).user, self.regular_user)
 
 	def test_get_strat_choices(self):
 		response = self.api_client.get(reverse("get-strat-choices"))

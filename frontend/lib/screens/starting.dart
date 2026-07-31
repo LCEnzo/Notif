@@ -60,7 +60,7 @@ class StartingPage extends StatelessWidget {
                   const SizedBox(height: 20),
                   NotifButton(
                     label: 'Retry',
-                    onPressed: () => unawaited(auth.restore()),
+                    onPressed: () => unawaited(auth.retryNow()),
                   ),
                 ],
               ],

@@ -26,12 +26,16 @@ void main() {
   SessionCredential credential([String token = 'stored-token']) =>
       SessionCredential(token: token, origin: Uri.parse(builtinApiUrl).origin);
 
-  AuthService bearerService(InMemorySessionStore store) =>
-      AuthService(store: store, transport: SessionTransport.bearer);
+  AuthService bearerService(InMemorySessionStore store) => AuthService(
+    store: store,
+    transport: SessionTransport.bearer,
+    maxRecoveryProbes: 0,
+  );
 
   AuthService cookieService() => AuthService(
     store: const PlatformOwnedSessionStore(),
     transport: SessionTransport.cookie,
+    maxRecoveryProbes: 0,
   );
 
   group('cold start (native / bearer)', () {
@@ -137,6 +141,61 @@ void main() {
 
       expect(auth.state, isA<AuthAnonymous>());
       expect(adapter.requests.length, 1);
+    });
+  });
+
+  group('bounded outage recovery', () {
+    test('automatically restores when a later probe succeeds', () async {
+      final store = InMemorySessionStore(initial: credential());
+      adapter
+        ..enqueue('/get_my_info/', const FakeReply.offline())
+        ..enqueue(
+          '/get_my_info/',
+          const FakeReply(statusCode: 200, body: fakeUserJson),
+        );
+      final auth = AuthService(
+        store: store,
+        transport: SessionTransport.bearer,
+        maxRecoveryProbes: 2,
+        recoveryInitialDelay: Duration.zero,
+        recoveryMaxDelay: Duration.zero,
+      );
+
+      await auth.restore();
+      await pumpEventQueue(times: 20);
+
+      expect(auth.state, isA<AuthAuthenticated>());
+      expect(
+        adapter.requests.where(
+          (request) => request.path.endsWith('/get_my_info/'),
+        ),
+        hasLength(2),
+      );
+      auth.dispose();
+    });
+
+    test('stops after the configured probe budget', () async {
+      final store = InMemorySessionStore(initial: credential());
+      adapter.enqueue('/get_my_info/', const FakeReply.offline());
+      final auth = AuthService(
+        store: store,
+        transport: SessionTransport.bearer,
+        maxRecoveryProbes: 2,
+        recoveryInitialDelay: Duration.zero,
+        recoveryMaxDelay: Duration.zero,
+      );
+
+      await auth.restore();
+      await pumpEventQueue(times: 30);
+
+      expect(auth.state, isA<AuthUnavailable>());
+      expect(
+        adapter.requests.where(
+          (request) => request.path.endsWith('/get_my_info/'),
+        ),
+        hasLength(3),
+      );
+      auth.dispose();
     });
   });
 

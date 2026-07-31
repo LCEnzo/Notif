@@ -373,9 +373,7 @@ class LinkService extends ChangeNotifier {
     required String strategyClass,
     required String selectorsText,
   }) async {
-    final signedIn = _authService.isAuthenticated;
-    final userId = _authService.currentUserId;
-    if (!signedIn || userId == null) {
+    if (!_authService.isAuthenticated) {
       _error = 'You need to sign in again before creating a link.';
       notifyListeners();
       return false;
@@ -401,7 +399,6 @@ class LinkService extends ChangeNotifier {
         body: {
           'name': name.trim(),
           'url': url.trim(),
-          'user': userId,
           'strategy': strategyResolution.id,
         },
       );

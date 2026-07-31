@@ -46,6 +46,7 @@ class LinkSerializer(_LinkModelSerializer):
 
 		read_only_fields = [
 			"id",
+			"user",
 			"comparison_info",
 			"last_scraped",
 			"next_scrape_at",
@@ -56,7 +57,6 @@ class LinkSerializer(_LinkModelSerializer):
 		extra_kwargs = {
 			"name": {"required": True},
 			"url": {"required": True},
-			"user": {"required": True},
 			"strategy": {"required": True},
 		}
 

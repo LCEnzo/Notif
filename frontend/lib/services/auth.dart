@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
@@ -26,8 +27,8 @@ class UserData {
     isSuperuser: json['is_superuser'] == true,
   );
 
-  /// Needed when creating a link, which the API scopes by owner. Nullable
-  /// because an opaque token carries no claims — this arrives with the probe.
+  /// Needed by account-resource endpoints. Nullable because an opaque token
+  /// carries no claims — this arrives with the designated identity probe.
   int? id;
   String email;
   String username;
@@ -114,10 +115,31 @@ const List<String> _legacyPreferenceKeys = [
   'rememberMe',
 ];
 
+const int _defaultMaxRecoveryProbes = 6;
+const Duration _defaultRecoveryInitialDelay = Duration(seconds: 2);
+const Duration _defaultRecoveryMaxDelay = Duration(seconds: 30);
+
 class AuthService extends ChangeNotifier {
-  AuthService({SessionStore? store, SessionTransport? transport})
-    : _store = store ?? createSessionStore(),
-      _transport = transport ?? platformTransport {
+  AuthService({
+    SessionStore? store,
+    SessionTransport? transport,
+    int maxRecoveryProbes = _defaultMaxRecoveryProbes,
+    Duration recoveryInitialDelay = _defaultRecoveryInitialDelay,
+    Duration recoveryMaxDelay = _defaultRecoveryMaxDelay,
+  }) : assert(maxRecoveryProbes >= 0, 'Recovery probes cannot be negative.'),
+       assert(
+         !recoveryInitialDelay.isNegative,
+         'The initial recovery delay cannot be negative.',
+       ),
+       assert(
+         !recoveryMaxDelay.isNegative,
+         'The maximum recovery delay cannot be negative.',
+       ),
+       _maxRecoveryProbes = maxRecoveryProbes,
+       _recoveryInitialDelay = recoveryInitialDelay,
+       _recoveryMaxDelay = recoveryMaxDelay,
+       _store = store ?? createSessionStore(),
+       _transport = transport ?? platformTransport {
     configureApiAuth(
       credentialReader: () => _credential,
       generationReader: () => _generation,
@@ -129,6 +151,9 @@ class AuthService extends ChangeNotifier {
 
   final SessionStore _store;
   final SessionTransport _transport;
+  final int _maxRecoveryProbes;
+  final Duration _recoveryInitialDelay;
+  final Duration _recoveryMaxDelay;
 
   AppSettingsController? _settings;
   AuthState _state = const AuthRestoring();
@@ -147,6 +172,10 @@ class AuthService extends ChangeNotifier {
   /// tab operations is whatever the server committed last, and the sessions
   /// screen is where you notice and fix it.
   Future<void> _mutations = Future<void>.value();
+
+  Timer? _recoveryTimer;
+  int _recoveryAttempts = 0;
+  int _recoveryEpoch = 0;
 
   /// Surfaced to the UI when a local credential delete failed. Claiming a
   /// durable sign-out that a later cold start undoes is worse than saying so.
@@ -197,11 +226,26 @@ class AuthService extends ChangeNotifier {
   /// JS and asking the server is the only way to learn whether one is held.
   /// An anonymous web cold start therefore costs exactly one 401.
   Future<void> restore() async {
-    final generation = _generation;
-    _transitionTo(const AuthRestoring());
-
+    _stopRecovery(resetAttempts: true);
     if (_transport == SessionTransport.bearer) {
       unawaited(_deleteLegacyCredentials());
+    }
+    await _restore(
+      announceRestoring: true,
+      startRecoveryOnFailure: true,
+    );
+  }
+
+  Future<void> _restore({
+    required bool announceRestoring,
+    required bool startRecoveryOnFailure,
+  }) async {
+    final generation = _generation;
+    if (announceRestoring) {
+      _transitionTo(const AuthRestoring());
+    }
+
+    if (_transport == SessionTransport.bearer) {
       try {
         _credential = await _store.read();
       } on SessionStoreException catch (error) {
@@ -219,14 +263,20 @@ class AuthService extends ChangeNotifier {
       }
     }
 
-    await _probe(generation);
+    await _probe(
+      generation,
+      startRecoveryOnFailure: startRecoveryOnFailure,
+    );
   }
 
   /// `GET /accounts/users/get_my_info/`, treated as designated session-bearing.
   ///
   /// Three outcomes and no others: 200 authenticates, our own 401 ends the
   /// session, anything else is an outage rather than a verdict.
-  Future<void> _probe(int generation) async {
+  Future<void> _probe(
+    int generation, {
+    required bool startRecoveryOnFailure,
+  }) async {
     try {
       final response = await apiGet(
         '/accounts/users/get_my_info/',
@@ -244,11 +294,75 @@ class AuthService extends ChangeNotifier {
         _transitionTo(const AuthAnonymous());
         return;
       }
-      _transitionTo(AuthUnavailable(_describe(error)));
+      _enterUnavailable(
+        _describe(error),
+        startRecovery: startRecoveryOnFailure,
+      );
     } on Exception catch (error) {
       if (generation != _generation) return;
-      _transitionTo(AuthUnavailable(_describe(error)));
+      _enterUnavailable(
+        _describe(error),
+        startRecovery: startRecoveryOnFailure,
+      );
     }
+  }
+
+  void _enterUnavailable(String reason, {required bool startRecovery}) {
+    _transitionTo(AuthUnavailable(reason));
+    if (startRecovery) {
+      _startRecovery();
+    }
+  }
+
+  void _startRecovery() {
+    _stopRecovery(resetAttempts: true);
+    final epoch = _recoveryEpoch;
+    _scheduleRecoveryProbe(epoch);
+  }
+
+  void _scheduleRecoveryProbe(int epoch) {
+    if (_recoveryAttempts >= _maxRecoveryProbes || epoch != _recoveryEpoch) {
+      return;
+    }
+    final delayMs = math.min(
+      _recoveryInitialDelay.inMilliseconds << _recoveryAttempts,
+      _recoveryMaxDelay.inMilliseconds,
+    );
+    _recoveryTimer = Timer(
+      Duration(milliseconds: delayMs),
+      () => unawaited(_runRecoveryProbe(epoch)),
+    );
+  }
+
+  Future<void> _runRecoveryProbe(int epoch) async {
+    if (epoch != _recoveryEpoch || _state is! AuthUnavailable) {
+      return;
+    }
+    await _restore(
+      announceRestoring: false,
+      startRecoveryOnFailure: false,
+    );
+    if (epoch != _recoveryEpoch || _state is! AuthUnavailable) {
+      return;
+    }
+    _recoveryAttempts += 1;
+    _scheduleRecoveryProbe(epoch);
+  }
+
+  void _stopRecovery({bool resetAttempts = false}) {
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
+    _recoveryEpoch += 1;
+    if (resetAttempts) {
+      _recoveryAttempts = 0;
+    }
+  }
+
+  Future<void> retryNow() async {
+    if (_state is! AuthUnavailable) {
+      return;
+    }
+    await restore();
   }
 
   /// Report a 401 seen on a request the app issued while authenticated.
@@ -299,6 +413,7 @@ class AuthService extends ChangeNotifier {
     String password,
     String deviceLabel,
   ) async {
+    _stopRecovery(resetAttempts: true);
     _generation++;
     final generation = _generation;
     _credentialWarning = null;
@@ -341,7 +456,7 @@ class AuthService extends ChangeNotifier {
 
     // The login response deliberately carries no user record; the probe is the
     // one place that shape is parsed, so there is only one contract to keep.
-    await _probe(generation);
+    await _probe(generation, startRecoveryOnFailure: true);
   }
 
   /// Sign out.
@@ -356,6 +471,7 @@ class AuthService extends ChangeNotifier {
   Future<void> logout() => _serialized(_logout);
 
   Future<void> _logout() async {
+    _stopRecovery(resetAttempts: true);
     _generation++;
     final generation = _generation;
     _credentialWarning = null;
@@ -431,6 +547,12 @@ class AuthService extends ChangeNotifier {
   String _originFor(Response<dynamic> response) {
     final uri = response.requestOptions.uri;
     return Uri(scheme: uri.scheme, host: uri.host, port: uri.port).origin;
+  }
+
+  @override
+  void dispose() {
+    _stopRecovery();
+    super.dispose();
   }
 
   // ── unauthenticated flows ──────────────────────────────────
