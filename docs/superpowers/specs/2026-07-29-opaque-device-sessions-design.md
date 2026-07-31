@@ -1,6 +1,6 @@
 # Opaque device-session auth (replaces JWT + refresh rotation)
 
-Date: 2026-07-29. Status: draft v8 - sixth review round incorporated.
+Date: 2026-07-29. Status: draft v9 - seventh review round incorporated.
 
 ## Why
 
@@ -105,13 +105,15 @@ non-simple-request defense it has today):
   - A live session presented with the login request is revoked
     (`login_replaced`) in the same transaction that creates its replacement,
     so web re-logins do not accumulate orphaned live rows.
-  - The session-creation transaction re-reads the user's password hash and
-    aborts with 401 if it differs from the hash the credentials were just
-    validated against: a login checked against the old password must not
-    commit a session after a concurrent password change/reset has revoked
-    everything. The comparison is string equality on the stored hash — no
-    second KDF run — and `BEGIN IMMEDIATE` guarantees the re-read sees any
-    committed change. Concurrent login-vs-change and login-vs-reset tests.
+  - The session-creation transaction re-reads the user row and aborts with
+    401 if the password hash differs from the one the credentials were just
+    validated against **or the user is no longer active**: a login checked
+    against the old password (or a still-active account) must not commit a
+    session after a concurrent password change/reset/deactivation has
+    revoked everything. The hash comparison is string equality — no second
+    KDF run — and `BEGIN IMMEDIATE` guarantees the re-read sees any
+    committed change. Concurrent login-vs-change, login-vs-reset, and
+    login-vs-deactivation tests.
   - Both responses carry `Cache-Control: no-store`. Server-side expiry is
     authoritative regardless of cookie lifetime.
 - `POST /auth/logout/` — idempotent, with `authentication_classes = []`:
@@ -166,7 +168,13 @@ atomic with the password write.
   deployment (Caddy serves app and API from one origin). Exception: loopback
   hosts compare host-only (ports ignored), because Flutter's dev server and
   Django use different ports — verified in the supported browser, since RFC
-  6265 leaves secure-channel semantics to the user agent.
+  6265 leaves secure-channel semantics to the user agent. The client-side
+  allowance is not enough by itself: Django's CSRF origin comparison is
+  port-exact (CORS already admits arbitrary loopback ports;
+  `CSRF_TRUSTED_ORIGINS` does not), so cookie-authenticated writes from a
+  random dev port would 403. Dev therefore pins the Flutter web port
+  (`--web-port`) and dev-only settings list that exact loopback origin in
+  `CSRF_TRUSTED_ORIGINS`; production lists only the deployed origin.
 - State machine kept minus refresh states: Anonymous / Restoring /
   Authenticated / Unavailable / Expired / LoggingOut. A single monotonically
   increasing auth generation remains: responses (401s included) dispatched
@@ -177,31 +185,36 @@ atomic with the password write.
   and logout are additionally serialized behind one auth-mutation lock:
   within a tab, logout awaits any in-flight login and is the final
   server-visible operation. The lock is per-tab and cannot span browser
-  contexts; cross-tab, the shared web record carries a random logout
-  *nonce*, replaced at logout *initiation* (before the network call) and
-  read uncached — on web the nonce accessor must bypass the per-engine
-  `SharedPreferences.getInstance()` cache (`SharedPreferencesAsync` / direct
-  localStorage read), because a cached read cannot see another tab's write.
-  Inequality, not ordering: a login snapshots the nonce when it starts and
-  compares at completion — a changed nonce means a logout intervened. This
-  needs no atomic read-increment-write, which localStorage cannot provide;
-  every non-logout record write carries the existing nonce forward
-  unchanged. A login that completes under a changed nonce voids
-  itself: it revokes its **own** just-created session via
-  `DELETE /auth/sessions/{public_id}/` (login returns the id for exactly
-  this), leaves the cookie jar untouched, and does not write the shared
-  record (a newer login's write must survive). The compensation is monotone —
-  it can only ever remove the voided session, never a newer one — where a
-  full compensating logout could clear a cookie a third tab's login had
-  just installed. Residuals are benign: if the jar still holds the voided
-  cookie, the next request 401s into Anonymous; if the targeted revoke
-  itself fails, the orphaned row stays visible in the sessions UI and dies
-  at idle expiry. Logins are explicit credential entry (there is no
-  background refresh to race), so all of this is a human-scale-rare window.
-- Web: one typed record `{origin, restoreIntent, logoutNonce}` in
-  `PreferenceStore` replaces the loose marker — a single mutation, so
-  partial states between token, intent and origin are unrepresentable on
-  either platform.
+  contexts; cross-tab, a random logout *nonce* lives in its **own key with
+  a single writer**: only logout replaces it (at logout *initiation*,
+  before the network call), and login only ever reads it — so no login
+  write can destroy the fence, which is what burying the nonce inside a
+  shared read-modify-written record would allow. Reads are uncached — on
+  web the accessor must bypass the per-engine
+  `SharedPreferences.getInstance()` cache (`SharedPreferencesAsync` /
+  direct localStorage read), because a cached read cannot see another
+  tab's write. Inequality, not ordering: a login snapshots the nonce when
+  it starts and compares at completion — a changed nonce means a logout
+  intervened, and the login voids itself: it revokes its **own**
+  just-created session via `DELETE /auth/sessions/{public_id}/` (login
+  returns the id for exactly this), leaves the cookie jar untouched, and
+  writes nothing shared. The compensation is monotone — it can only ever
+  remove the voided session, never a newer one. The resulting guarantee:
+  **no interleaving lets a session survive a logout** — a cookie installed
+  after logout's clear belongs to a login that completed after it, and that
+  login's completion read (strictly ordered after the logout's
+  pre-network nonce write by the browser's same-origin storage
+  serialization) sees the changed nonce and voids. The residual failure
+  class is benign and one-sided: a login that lands mid-logout can end
+  Anonymous (dead cookie 401s on next use) with an orphaned live row that
+  stays visible in the sessions UI and dies at idle expiry. Logins are
+  explicit credential entry (there is no background refresh to race), so
+  all of this is a human-scale-rare window.
+- Web: one typed record `{origin, restoreIntent}` in `PreferenceStore`
+  replaces the loose marker — a single mutation, so partial states between
+  token, intent and origin are unrepresentable on either platform. The
+  logout nonce is deliberately *not* part of this record: it is a fence,
+  not credential state, and it needs a single writer (see above).
 - "Request carried the credential" means: the request was designated
   session-bearing under the stored intent and origin. Native can verify the
   token was attached; web cannot see its HttpOnly cookie and relies on the
