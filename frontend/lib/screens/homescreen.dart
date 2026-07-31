@@ -118,8 +118,27 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _logout() {
-    unawaited(context.read<AuthService>().logout());
-    context.go('/login');
+    unawaited(_performLogout());
+  }
+
+  Future<void> _performLogout() async {
+    final auth = context.read<AuthService>();
+    try {
+      await auth.logout();
+    } on LogoutRefusedException catch (error) {
+      _showMessage(error.message);
+      return;
+    }
+    if (!mounted) return;
+
+    switch (auth.state) {
+      case AuthAnonymous() || AuthExpired():
+        context.go('/login');
+      case AuthUnavailable(:final reason):
+        _showMessage(reason);
+      case AuthAuthenticated() || AuthLoggingOut() || AuthRestoring():
+        break;
+    }
   }
 
   void _showMessage(String? message) {

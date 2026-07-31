@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/services/api_client.dart';
+import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -105,14 +107,14 @@ void main() {
       },
     );
 
-    test('an unreadable keystore is reported, not fatal', () async {
+    test('an unreadable keystore is unavailable, never anonymous', () async {
       final store = InMemorySessionStore(initial: credential())
         ..failOn = 'read';
       final auth = bearerService(store);
 
       await auth.restore();
 
-      expect(auth.state, isA<AuthAnonymous>());
+      expect(auth.state, isA<AuthUnavailable>());
       expect(auth.credentialWarning, contains('read'));
       expect(adapter.sawRequestFor('/get_my_info/'), isFalse);
     });
@@ -253,6 +255,60 @@ void main() {
       expect(adapter.requestFor('/get_my_info/').authorization, isNull);
     });
 
+    test('does not replay an ambiguous login against fallback', () async {
+      final settings = AppSettingsController();
+      await settings.initialized;
+      await settings.setBackendUrlMode(BackendUrlMode.customWithFallback);
+      await settings.setCustomBackendUrl('http://localhost:8765/api/v1');
+      final auth = bearerService(InMemorySessionStore())
+        ..updateSettings(settings);
+      adapter.enqueue('/auth/login/', const FakeReply.offline());
+
+      await expectLater(
+        auth.login('tester', 'hunter2'),
+        throwsA(isA<DioException>()),
+      );
+
+      expect(
+        adapter.requests.where(
+          (request) => request.path.endsWith('/auth/login/'),
+        ),
+        hasLength(1),
+      );
+    });
+
+    test('debug transport logs omit passwords and session tokens', () async {
+      final output = StringBuffer();
+      final originalDebugPrint = debugPrint;
+      debugPrint = (message, {wrapWidth}) {
+        if (message != null) output.writeln(message);
+      };
+      addTearDown(() => debugPrint = originalDebugPrint);
+      final store = InMemorySessionStore();
+      adapter
+        ..enqueue(
+          '/auth/login/',
+          const FakeReply(
+            statusCode: 200,
+            body: {
+              'transport': 'bearer',
+              'public_id': 'abc',
+              'token': 'fresh-secret-token',
+            },
+          ),
+        )
+        ..enqueue(
+          '/get_my_info/',
+          const FakeReply(statusCode: 200, body: fakeUserJson),
+        );
+      final auth = bearerService(store);
+
+      await auth.login('tester', 'hunter2-secret');
+
+      expect(output.toString(), isNot(contains('hunter2-secret')));
+      expect(output.toString(), isNot(contains('fresh-secret-token')));
+    });
+
     test(
       'a bearer login with no token in the body is a hard failure',
       () async {
@@ -271,29 +327,40 @@ void main() {
       },
     );
 
-    test(
-      'a keystore write failure is reported without faking durability',
-      () async {
-        final store = InMemorySessionStore()..failOn = 'write';
-        adapter.enqueue(
+    test('a keystore write failure aborts and revokes the session', () async {
+      final store = InMemorySessionStore()..failOn = 'write';
+      adapter
+        ..enqueue(
           '/auth/login/',
           const FakeReply(
             statusCode: 200,
-            body: {'transport': 'bearer', 'public_id': 'abc', 'token': 'fresh'},
+            body: {
+              'transport': 'bearer',
+              'public_id': 'abc',
+              'token': 'fresh',
+            },
           ),
+        )
+        ..enqueue(
+          '/auth/logout/',
+          const FakeReply(statusCode: 200, body: {'status': 'ok'}),
         );
-        adapter.enqueue(
-          '/get_my_info/',
-          const FakeReply(statusCode: 200, body: fakeUserJson),
-        );
-        final auth = bearerService(store);
+      final auth = bearerService(store);
 
-        await auth.login('tester', 'hunter2');
+      await expectLater(
+        auth.login('tester', 'hunter2'),
+        throwsA(isA<SessionStoreException>()),
+      );
 
-        expect(auth.state, isA<AuthAuthenticated>());
-        expect(auth.credentialWarning, contains('could not remember'));
-      },
-    );
+      expect(auth.state, isNot(isA<AuthAuthenticated>()));
+      expect(store.record, isNull);
+      expect(
+        adapter.requestFor('/auth/logout/').authorization,
+        'Session fresh',
+      );
+      expect(adapter.sawRequestFor('/get_my_info/'), isFalse);
+      expect(auth.credentialWarning, contains('could not store'));
+    });
   });
 
   group('logout', () {
@@ -368,6 +435,28 @@ void main() {
       expect(auth.state, isA<AuthUnavailable>());
       expect(auth.isAuthenticated, isFalse);
       expect((auth.state as AuthUnavailable).reason, contains('still active'));
+    });
+
+    test('web logout refusal preserves the authenticated session', () async {
+      adapter
+        ..enqueue(
+          '/get_my_info/',
+          const FakeReply(statusCode: 200, body: fakeUserJson),
+        )
+        ..enqueue(
+          '/auth/logout/',
+          const FakeReply(statusCode: 403, body: {'detail': 'CSRF failed'}),
+        );
+      final auth = cookieService();
+      await auth.restore();
+
+      await expectLater(
+        auth.logout(),
+        throwsA(isA<LogoutRefusedException>()),
+      );
+
+      expect(auth.state, isA<AuthAuthenticated>());
+      expect(auth.isAuthenticated, isTrue);
     });
 
     test('web logout signs out when the server acknowledges', () async {

@@ -106,6 +106,15 @@ class AuthLoggingOut extends AuthState {
   const AuthLoggingOut();
 }
 
+class LogoutRefusedException implements Exception {
+  const LogoutRefusedException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 const String _lastSuccessfulUsernameKey = 'lastSuccessfulUsername';
 
 /// Legacy preference keys from the JWT-era client, removed on first run.
@@ -252,7 +261,10 @@ class AuthService extends ChangeNotifier {
         _credential = null;
         if (generation == _generation) {
           _credentialWarning = error.toString();
-          _transitionTo(const AuthAnonymous());
+          _enterUnavailable(
+            'The stored session could not be read: $error',
+            startRecovery: startRecoveryOnFailure,
+          );
         }
         return;
       }
@@ -422,6 +434,7 @@ class AuthService extends ChangeNotifier {
       '/auth/login/',
       settings: _settings,
       headers: jsonHeaders,
+      fallbackPolicy: FallbackPolicy.never,
       body: {
         'username': username,
         'password': password,
@@ -439,16 +452,26 @@ class AuthService extends ChangeNotifier {
         );
       }
       final origin = _originFor(response);
-      _credential = SessionCredential(token: token, origin: origin);
+      final candidate = SessionCredential(token: token, origin: origin);
       try {
-        await _store.write(_credential!);
-      } on SessionStoreException catch (error) {
-        // The session exists server-side either way; what failed is durability.
-        // Say so rather than implying the login will survive a restart.
+        await _store.write(candidate);
+      } on SessionStoreException catch (error, stackTrace) {
         _credentialWarning =
-            'Signed in, but this device could not remember '
-            'the session: $error';
+            'Sign-in could not be completed because this device could not '
+            'store the session: $error';
+        try {
+          await revokeIssuedBearerSession(candidate, settings: _settings);
+        } on Exception catch (revokeError) {
+          if (kDebugMode) {
+            debugPrint(
+              'AuthService._login: cleanup logout failed '
+              '(${_describe(revokeError)})',
+            );
+          }
+        }
+        Error.throwWithStackTrace(error, stackTrace);
       }
+      _credential = candidate;
     }
 
     await persistLastSuccessfulUsername(username);
@@ -475,6 +498,7 @@ class AuthService extends ChangeNotifier {
     _generation++;
     final generation = _generation;
     _credentialWarning = null;
+    final previousState = _state;
     _transitionTo(const AuthLoggingOut());
 
     Object? serverError;
@@ -493,11 +517,17 @@ class AuthService extends ChangeNotifier {
 
     if (_transport == SessionTransport.cookie) {
       if (serverError != null) {
-        _transitionTo(
-          AuthUnavailable(
-            'Could not sign out: ${_describe(serverError)}. The session is '
-            'still active — try again when the server is reachable.',
-          ),
+        if (_isClientRefusal(serverError)) {
+          _transitionTo(previousState);
+          throw LogoutRefusedException(
+            'The server refused sign-out: ${_describe(serverError)}.',
+          );
+        }
+        _enterUnavailable(
+          'Could not sign out: ${_describe(serverError)}. The session is '
+          'still active — recovery will verify it when the server is '
+          'reachable.',
+          startRecovery: true,
         );
         return;
       }
@@ -620,6 +650,14 @@ class AuthService extends ChangeNotifier {
     }
     final text = error.toString();
     return text.startsWith('Exception: ') ? text.substring(11) : text;
+  }
+
+  static bool _isClientRefusal(Object error) {
+    if (error is! DioException) {
+      return false;
+    }
+    final status = error.response?.statusCode;
+    return status != null && status >= 400 && status < 500;
   }
 }
 

@@ -290,7 +290,22 @@ void main() {
       );
     });
 
-    test('loopback compares host-only, so dev ports may differ', () {
+    test('same loopback scheme and host may use different dev ports', () {
+      const devCredential = SessionCredential(
+        token: 'tok',
+        origin: 'http://localhost:8000',
+      );
+
+      expect(
+        describeUnsupportedOrigin(
+          'http://localhost:5353/api/v1',
+          credential: devCredential,
+        ),
+        isNull,
+      );
+    });
+
+    test('loopback aliases are distinct credential origins', () {
       const devCredential = SessionCredential(
         token: 'tok',
         origin: 'http://localhost:8000',
@@ -301,7 +316,22 @@ void main() {
           'http://127.0.0.1:5353/api/v1',
           credential: devCredential,
         ),
-        isNull,
+        contains('will not be sent'),
+      );
+    });
+
+    test('loopback schemes are distinct credential origins', () {
+      const devCredential = SessionCredential(
+        token: 'tok',
+        origin: 'http://localhost:8000',
+      );
+
+      expect(
+        describeUnsupportedOrigin(
+          'https://localhost:8000/api/v1',
+          credential: devCredential,
+        ),
+        contains('will not be sent'),
       );
     });
 

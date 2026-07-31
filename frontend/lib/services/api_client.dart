@@ -34,11 +34,20 @@ final Dio _dio =
       ..interceptors.addAll([
         if (kDebugMode)
           LogInterceptor(
-            requestBody: true,
-            responseBody: true,
+            requestHeader: false,
+            requestBody: false,
+            responseHeader: false,
+            responseBody: false,
             logPrint: (o) => debugPrint(o.toString()),
           ),
       ]);
+
+/// Whether a request may be repeated against a second configured origin.
+///
+/// Login is deliberately [never]: once credentials have left this process,
+/// a timeout cannot establish whether the server created a session. Replaying
+/// the same login elsewhere could create two sessions or select the wrong one.
+enum FallbackPolicy { networkErrors, never }
 
 typedef SessionCredentialReader = SessionCredential? Function();
 
@@ -121,12 +130,32 @@ Future<Response<dynamic>> apiPost(
   required AppSettingsController? settings,
   required Map<String, String> headers,
   required dynamic body,
+  FallbackPolicy fallbackPolicy = FallbackPolicy.networkErrors,
 }) => _requestWithFallback(
   'POST',
   path,
   settings: settings,
   headers: headers,
   body: body,
+  fallbackPolicy: fallbackPolicy,
+);
+
+/// Revoke a bearer session that was issued but could not be stored durably.
+///
+/// The credential is explicit because installing it as the app's current
+/// session, even briefly, would let unrelated requests observe a login that
+/// has already failed. This request is never replayed against another origin.
+Future<Response<dynamic>> revokeIssuedBearerSession(
+  SessionCredential credential, {
+  required AppSettingsController? settings,
+}) => _requestWithFallback(
+  'POST',
+  '/auth/logout/',
+  settings: settings,
+  headers: jsonHeaders,
+  body: const <String, dynamic>{},
+  fallbackPolicy: FallbackPolicy.never,
+  credentialOverride: credential,
 );
 
 Future<Response<dynamic>> apiGet(
@@ -252,15 +281,16 @@ bool _isLoopback(Uri uri) =>
 bool _isSecureOrigin(Uri uri) => uri.scheme == 'https' || _isLoopback(uri);
 
 bool _sameOrigin(Uri left, Uri right) {
-  // Loopback compares host-only: the dev web server and Django live on
-  // different ports of the same machine, and a developer's browser treats both
-  // as trustworthy origins.
-  if (_isLoopback(left) && _isLoopback(right)) {
+  if (left.scheme != right.scheme || left.host != right.host) {
+    return false;
+  }
+  // The dev web server and Django use different ports on the same loopback
+  // host. Scheme and host remain exact so localhost, 127.0.0.1 and HTTPS are
+  // not silently treated as interchangeable credential boundaries.
+  if (_isLoopback(left)) {
     return true;
   }
-  return left.scheme == right.scheme &&
-      left.host == right.host &&
-      left.port == right.port;
+  return left.port == right.port;
 }
 
 Uri _buildRequestUri(String baseUrl, String path) {
@@ -276,6 +306,8 @@ Future<Response<dynamic>> _requestWithFallback(
   required Map<String, String> headers,
   dynamic body,
   ResponseType? responseType,
+  FallbackPolicy fallbackPolicy = FallbackPolicy.networkErrors,
+  SessionCredential? credentialOverride,
 }) async {
   final urls = resolveUrls(path, settings);
   if (urls.isEmpty) {
@@ -295,11 +327,14 @@ Future<Response<dynamic>> _requestWithFallback(
         headers: headers,
         body: body,
         responseType: responseType,
+        credentialOverride: credentialOverride,
       );
     } on DioException catch (error) {
       lastError = error;
       final shouldTryFallback =
-          !identical(url, urls.last) && _isFallbackableNetworkError(error);
+          fallbackPolicy == FallbackPolicy.networkErrors &&
+          !identical(url, urls.last) &&
+          _isFallbackableNetworkError(error);
       if (!shouldTryFallback) {
         rethrow;
       }
@@ -313,7 +348,7 @@ Future<Response<dynamic>> _requestWithFallback(
       // Not a transport failure — the fallback URL may still be usable, but
       // this one is disqualified on principle, so never retry it.
       lastError = error;
-      if (identical(url, urls.last)) {
+      if (fallbackPolicy == FallbackPolicy.never || identical(url, urls.last)) {
         rethrow;
       }
       if (kDebugMode) {
@@ -321,7 +356,7 @@ Future<Response<dynamic>> _requestWithFallback(
       }
     } on FormatException catch (error) {
       lastError = error;
-      if (identical(url, urls.last)) {
+      if (fallbackPolicy == FallbackPolicy.never || identical(url, urls.last)) {
         rethrow;
       }
       if (kDebugMode) {
@@ -342,8 +377,9 @@ Future<Response<dynamic>> _performRequest(
   required Map<String, String> headers,
   dynamic body,
   ResponseType? responseType,
+  SessionCredential? credentialOverride,
 }) async {
-  final credential = _credentialReader?.call();
+  final credential = credentialOverride ?? _credentialReader?.call();
   final refusal = describeUnsupportedOrigin(baseUrl, credential: credential);
   if (refusal != null) {
     throw UnsupportedOriginException(refusal);
