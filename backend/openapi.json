@@ -2050,7 +2050,8 @@
                         "maxLength": 1000
                     },
                     "user": {
-                        "type": "integer"
+                        "type": "integer",
+                        "readOnly": true
                     },
                     "strategy": {
                         "type": "integer",
@@ -2332,7 +2333,8 @@
                         "maxLength": 1000
                     },
                     "user": {
-                        "type": "integer"
+                        "type": "integer",
+                        "readOnly": true
                     },
                     "strategy": {
                         "type": "integer",

@@ -630,6 +630,16 @@ class SessionTokenAuthenticationTestCase(TestCase):
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 		self.assertEqual(response["WWW-Authenticate"], "Session")
 
+	@override_settings(CORS_ALLOWED_ORIGINS=["http://localhost:5353"])
+	def test_session_challenge_is_visible_to_cross_port_web_clients(self):
+		response = APIClient().get(
+			reverse("users-get-my-info"),
+			HTTP_ORIGIN="http://localhost:5353",
+		)
+
+		exposed_headers = {header.strip().lower() for header in response["Access-Control-Expose-Headers"].split(",")}
+		self.assertIn("www-authenticate", exposed_headers)
+
 	def test_dead_cookie_on_a_protected_endpoint_is_401_with_the_challenge(self):
 		token, session = self._issue(DeviceSession.Transport.COOKIE)
 		session.revoke(DeviceSession.RevokeReason.REVOKED_BY_USER)
@@ -722,6 +732,17 @@ class SessionTokenAuthenticationTestCase(TestCase):
 		_, second = self._issue(DeviceSession.Transport.COOKIE)
 
 		self.user.delete()
+
+		for session in (first, second):
+			session.refresh_from_db()
+			self.assertEqual(session.revoke_reason, DeviceSession.RevokeReason.USER_DEACTIVATED)
+
+	def test_direct_deactivation_revokes_every_session(self):
+		_, first = self._issue(DeviceSession.Transport.BEARER)
+		_, second = self._issue(DeviceSession.Transport.COOKIE)
+
+		self.user.is_active = False
+		self.user.save(update_fields=["is_active"])
 
 		for session in (first, second):
 			session.refresh_from_db()

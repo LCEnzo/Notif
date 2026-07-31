@@ -48,6 +48,10 @@ CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGI
 # Flutter web dev server picks a random port on every `flutter run`.
 CORS_ALLOWED_ORIGIN_REGEXES = [r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"] if DEBUG else []
 CORS_ALLOW_CREDENTIALS = True
+# The frontend distinguishes our session rejection from an edge-generated 401
+# by this challenge. Browsers hide non-safelisted response headers unless CORS
+# exposes them explicitly.
+CORS_EXPOSE_HEADERS = ["WWW-Authenticate"]
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in settings.CSRF_TRUSTED_ORIGINS.split(",") if origin.strip()]
 if DEBUG:
 	# Django's CSRF origin comparison is port-exact, and CORS_ALLOWED_ORIGIN_REGEXES

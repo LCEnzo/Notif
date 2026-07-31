@@ -234,7 +234,13 @@ def revoke_session_for_token(raw_token: str, *, reason: str) -> bool:
 	return updated > 0
 
 
-def revoke_all_sessions_for_user(user: User, *, reason: str, except_session: DeviceSession | None = None) -> int:
+def revoke_all_sessions_for_user(
+	user: User,
+	*,
+	reason: str,
+	except_session: DeviceSession | None = None,
+	using: str | None = None,
+) -> int:
 	"""Revoke every live session owned by ``user``, optionally sparing one.
 
 	Password *change* spares the caller's own session — it just proved it knows
@@ -243,7 +249,8 @@ def revoke_all_sessions_for_user(user: User, *, reason: str, except_session: Dev
 	because they exist for the case where the credential may be in the wrong
 	hands. Already-dead rows are untouched so their reason and timestamp survive.
 	"""
-	sessions = DeviceSession.objects.filter(user=user, revoked_at__isnull=True)
+	manager = DeviceSession.objects.using(using) if using is not None else DeviceSession.objects
+	sessions = manager.filter(user=user, revoked_at__isnull=True)
 	if except_session is not None:
 		sessions = sessions.exclude(pk=except_session.pk)
 	return sessions.update(revoked_at=timezone.now(), revoke_reason=reason[:32])

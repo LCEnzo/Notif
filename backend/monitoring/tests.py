@@ -413,8 +413,8 @@ class LinkViewSetTestCase(ViewSetMixin):
 			"url": "http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1",
 			"strategy": self.strat.pk,
 		}
-		response = self._test_create_object(fields=fields)
-		self.assertEqual(Link.objects.get(pk=response.data["id"]).user, self.regular_user)
+		self._test_create_object(fields=fields)
+		self.assertEqual(Link.objects.get(url=fields["url"]).user, self.regular_user)
 
 	def test_create_link_cannot_spoof_another_owner(self):
 		response = self.api_client.post(
