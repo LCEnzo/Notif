@@ -131,7 +131,20 @@ yet.
   `notif_session=` alongside the legacy patterns, so the client-event sink
   cannot become a place session tokens get logged.
 
-## 9. What is not implemented
+## 9. Pre-existing flake, not caused by this branch
+
+`monitoring/tests.py::FeedStrategyDedupPropertyTestCase::test_dedup_is_idempotent`
+fails intermittently (roughly 1 run in 5) when pytest runs **with `--cov`**, as
+CI does. It is a Hypothesis property test with `max_examples=200` against a
+`--timeout=30` in addopts; under coverage instrumentation plus xdist load it
+sits right on that boundary — in isolation with coverage it takes ~26 s.
+
+Verified pre-existing: reproduced on the branch base (`4775c1f`, none of this
+work applied) at the same rate. Nothing in this branch touches
+`monitoring/strategies.py`. Worth fixing separately by lowering
+`max_examples` or raising that test's timeout; deliberately not touched here.
+
+## 10. What is not implemented
 
 - No rate-limit tuning beyond renaming `token_logout` → `logout` and dropping
   the refresh/verify scopes.
