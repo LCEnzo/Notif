@@ -1,6 +1,6 @@
 # Opaque device-session auth (replaces JWT + refresh rotation)
 
-Date: 2026-07-29. Status: draft v7 - fifth review round incorporated.
+Date: 2026-07-29. Status: draft v8 - sixth review round incorporated.
 
 ## Why
 
@@ -29,7 +29,8 @@ new migrations, deployed history untouched):
 - `device_label` (<=120 chars), `ip`, `user_agent` (truncated to 256)
 - `created_at`, `last_used_at`
 - `revoked_at` / `revoke_reason` (logout, revoked_by_user, password_change,
-  login_replaced, capacity_evicted) — natural expiry is represented by time, not a reason
+  login_replaced, capacity_evicted, user_deactivated) — natural expiry is
+  represented by time, not a reason
 
 No stored expiry columns. A session is live iff not revoked,
 `now < last_used_at + 14d` (idle), and `now < created_at + 90d` (absolute
@@ -53,7 +54,25 @@ pagination is needed (the repo defines no global DRF pagination to inherit).
 
 **Auth class** (DRF `SessionTokenAuthentication`):
 - Reads `Authorization: Session <token>` first, else the `notif_session`
-  cookie. Hash → row lookup; reject if revoked or past expiry as above.
+  cookie. Hash → row lookup; a session is rejected if revoked, past expiry
+  as above, or its user is inactive (`User.delete()` soft-deletes by setting
+  `is_active=False`, and a custom row authenticator gets no
+  `user_can_authenticate` protection for free). Deactivation/soft-delete
+  revokes all the user's sessions in the same transaction
+  (`user_deactivated`), so reactivating an account cannot resurrect them.
+- Rejection is asymmetric by transport. A dead **cookie** resolves as *no
+  credential* (`return None`, anonymous): the browser attaches it to every
+  `/api/v1/` request the user makes, so raising would 401 every
+  intentionally-anonymous endpoint — password reset request/confirm,
+  registration, client events, the health probe (which would sabotage the
+  outage-recovery flow) — for up to 90 days after a session dies, and a
+  per-endpoint `authentication_classes = []` inventory is a maintenance
+  trap. A dead **bearer** header still raises: it is a deliberate
+  per-request credential, and explicit invalid credentials get explicit
+  rejection (DRF's own TokenAuthentication convention). Protected endpoints
+  lose nothing: with authenticators present and none successful, DRF's
+  permission denial raises `NotAuthenticated` — still 401 with
+  `WWW-Authenticate: Session` — so the client contract below is unchanged.
 - Implements `authenticate_header()` (returns `Session`) so authentication
   failures are 401 with `WWW-Authenticate: Session`, never DRF's 403
   coercion. That header is how the client tells our rejection from an edge
@@ -158,12 +177,16 @@ atomic with the password write.
   and logout are additionally serialized behind one auth-mutation lock:
   within a tab, logout awaits any in-flight login and is the final
   server-visible operation. The lock is per-tab and cannot span browser
-  contexts; cross-tab, the shared web record carries a monotonic auth stamp,
-  written at logout *initiation* (before the network call) and read uncached
-  — on web the stamp accessor must bypass the per-engine
+  contexts; cross-tab, the shared web record carries a random logout
+  *nonce*, replaced at logout *initiation* (before the network call) and
+  read uncached — on web the nonce accessor must bypass the per-engine
   `SharedPreferences.getInstance()` cache (`SharedPreferencesAsync` / direct
   localStorage read), because a cached read cannot see another tab's write.
-  A login that completes under a stamp newer than its own start voids
+  Inequality, not ordering: a login snapshots the nonce when it starts and
+  compares at completion — a changed nonce means a logout intervened. This
+  needs no atomic read-increment-write, which localStorage cannot provide;
+  every non-logout record write carries the existing nonce forward
+  unchanged. A login that completes under a changed nonce voids
   itself: it revokes its **own** just-created session via
   `DELETE /auth/sessions/{public_id}/` (login returns the id for exactly
   this), leaves the cookie jar untouched, and does not write the shared
@@ -175,7 +198,7 @@ atomic with the password write.
   itself fails, the orphaned row stays visible in the sessions UI and dies
   at idle expiry. Logins are explicit credential entry (there is no
   background refresh to race), so all of this is a human-scale-rare window.
-- Web: one typed record `{origin, restoreIntent, authStamp}` in
+- Web: one typed record `{origin, restoreIntent, logoutNonce}` in
   `PreferenceStore` replaces the loose marker — a single mutation, so
   partial states between token, intent and origin are unrepresentable on
   either platform.
@@ -222,15 +245,19 @@ Backend: auth-class tests (both transports; CSRF enforced on cookie writes and
 absent on bearer; 401-not-403 via `authenticate_header`; idle/cap expiry
 boundaries; damped `last_used_at` under concurrency; revocation; idempotent
 logout incl. dead cookies and CSRF; cross-site form POST rejected with no
-`Set-Cookie`), wrong-transport rejection, session cap eviction,
-login-replacement revocation, concurrent login-vs-password-change and
-login-vs-reset (hash re-check aborts), deterministic token-hash test,
+`Set-Cookie`), dead-cookie-resolves-anonymous regressions across the
+anonymous inventory (reset request/confirm, registration, client events,
+health) plus dead-cookie-on-protected → 401 with `WWW-Authenticate`,
+dead-bearer raises, inactive-user rejection and
+deactivation-revokes-atomically, wrong-transport rejection, session cap
+eviction, login-replacement revocation, concurrent login-vs-password-change
+and login-vs-reset (hash re-check aborts), deterministic token-hash test,
 atomicity tests carried over. Frontend: adapted auth_service_test (restore/outage/expired
 paths, stale-generation 401 ignored, two-tab login/logout interleave via the
-auth stamp against a shared fake store — a true multi-engine test is not
+logout nonce against a shared fake store — a true multi-engine test is not
 reachable from `flutter test` and is accepted as a manual check), api_client
 CSRF attach, architecture tests keep keystore/dio boundaries and pin the
-stamp accessor to the uncached-read path; drift check pins the schema.
+nonce accessor to the uncached-read path; drift check pins the schema.
 
 ## Considered and rejected
 
@@ -241,7 +268,7 @@ stamp accessor to the uncached-read path; drift check pins the schema.
 - A server-side logout fence (revoking sessions created during a logout
   window): response-side staleness is the generation's job, operation order
   is the per-tab lock's, and a late cross-tab login removes itself via the
-  auth stamp + targeted self-revoke; the sessions UI shows any survivor.
+  logout nonce + targeted self-revoke; the sessions UI shows any survivor.
 - Web Locks (`navigator.locks`) for cross-tab serialization: holding a lock
   across the whole login round-trip would genuinely fence `Set-Cookie`
   application, but costs web-only interop that `flutter test` cannot
