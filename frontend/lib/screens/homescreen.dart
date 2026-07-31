@@ -38,7 +38,7 @@ class _HomePageState extends State<HomePage> {
     ];
 
     final authService = context.read<AuthService>();
-    if (authService.jwt != null) {
+    if (authService.isAuthenticated) {
       futures.add(context.read<UserDataService>().getUserInfo());
     }
 
@@ -118,7 +118,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _logout() {
-    context.read<AuthService>().logout();
+    unawaited(context.read<AuthService>().logout());
     context.go('/login');
   }
 

@@ -66,6 +66,9 @@ class UserFullReadSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = [
+			# An opaque session token carries no claims, so this is where the
+			# client learns its own id - which the link API needs as an owner.
+			"id",
 			"name",
 			"email",
 			"username",

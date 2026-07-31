@@ -96,17 +96,16 @@ class OpsService extends ChangeNotifier {
     _settings = settings;
   }
 
+  /// The api_client attaches the credential itself; this only asserts that
+  /// there is one to attach, so an ops screen opened while signed out fails
+  /// with a sentence instead of a 401.
   Map<String, String> _authHeaders() {
-    final jwt = _authService.jwt;
-    if (jwt == null) {
+    if (!_authService.isAuthenticated) {
       throw const OpsException(
         'You need to sign in before viewing operations data.',
       );
     }
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ${jwt.access}',
-    };
+    return const {'Content-Type': 'application/json'};
   }
 
   Future<void> fetchEvents() async {
