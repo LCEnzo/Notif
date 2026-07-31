@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
 from django.contrib.auth.validators import UnicodeUsernameValidator
-from django.db import models
+from django.db import models, transaction
 from django.db.models.query import QuerySet
 from django.utils import timezone
 
@@ -94,9 +94,18 @@ class User(AbstractBaseUser, PermissionsMixin):
 		using: Any | None = None,
 		keep_parents: bool = False,
 	) -> tuple[int, dict[str, int]]:
-		self.date_deleted = timezone.now()
-		self.is_active = False
-		self.save(using=using, update_fields=["date_deleted", "is_active", "date_modified"])
+		# The row survives, so its sessions would too unless they are revoked
+		# here — and then reactivating the account would resurrect credentials
+		# that were handed out before the deletion. One transaction, so the
+		# account cannot be inactive-with-live-sessions at any observable point.
+		from accounts.device_sessions import revoke_all_sessions_for_user
+		from accounts.models.device_session import DeviceSession
+
+		with transaction.atomic(using=using):
+			self.date_deleted = timezone.now()
+			self.is_active = False
+			self.save(using=using, update_fields=["date_deleted", "is_active", "date_modified"])
+			revoke_all_sessions_for_user(self, reason=DeviceSession.RevokeReason.USER_DEACTIVATED)
 		return (1, {self._meta.label: 1})
 
 	def actually_delete(

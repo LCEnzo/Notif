@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
 import sys
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +49,16 @@ CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGI
 CORS_ALLOWED_ORIGIN_REGEXES = [r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"] if DEBUG else []
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in settings.CSRF_TRUSTED_ORIGINS.split(",") if origin.strip()]
+if DEBUG:
+	# Django's CSRF origin comparison is port-exact, and CORS_ALLOWED_ORIGIN_REGEXES
+	# above does not feed it — so the loopback wildcard that lets the Flutter dev
+	# server talk to us is not enough to let it POST. Pin the dev web port
+	# (`flutter run -d chrome --web-port=$DEV_WEB_PORT`) and trust exactly that.
+	CSRF_TRUSTED_ORIGINS += [
+		f"http://localhost:{settings.DEV_WEB_PORT}",
+		f"http://127.0.0.1:{settings.DEV_WEB_PORT}",
+	]
+DEV_WEB_PORT = settings.DEV_WEB_PORT
 
 
 # Application definition
@@ -63,7 +72,6 @@ INSTALLED_APPS = [
 	"django.contrib.staticfiles",
 	"corsheaders",
 	"rest_framework",
-	"rest_framework_simplejwt",
 	"drf_spectacular",
 	"accounts",
 	"monitoring",
@@ -214,17 +222,11 @@ _REST_THROTTLE_RATES = {
 	"anon": "60/min",
 	"login": "5/min",
 	"register": "3/min",
-	# /token/refresh/ is cookie-authenticated, so DRF sees an anonymous caller and
-	# keys this scope on the client IP. At 10/min roughly eleven page reloads — or a
-	# handful of users behind one NAT/CGNAT — produced 429s, which the client turns
-	# into a forced logout. Hammering here buys an attacker nothing: rotation is
-	# single-use and a replayed token revokes the whole family, so the rate limit
-	# only needs to stop floods. ThrottledTokenRefreshView deliberately drops
-	# UserRateThrottle (user = 500/hour ≈ 8/min, also IP-keyed when anonymous) so
-	# that this scope is the binding limit rather than dead weight behind it.
-	"token_refresh": "60/min",
-	"token_verify": "20/min",
-	"token_logout": "20/min",
+	# Logout is anonymous (it authenticates by presented token, not by DRF), so
+	# this scope keys on the client IP. It has to be generous enough that a
+	# NAT full of users signing out does not start 429-ing — a throttled logout
+	# leaves a live session behind, which is the failure mode worth avoiding.
+	"logout": "20/min",
 	"client_events": "30/min",
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
@@ -235,7 +237,7 @@ REST_FRAMEWORK = {
 		"rest_framework.permissions.IsAuthenticated",
 	],
 	"DEFAULT_AUTHENTICATION_CLASSES": [
-		"rest_framework_simplejwt.authentication.JWTAuthentication",
+		"accounts.authentication.SessionTokenAuthentication",
 	],
 	"DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 	"DEFAULT_THROTTLE_CLASSES": []
@@ -335,52 +337,30 @@ if not DEBUG:
 	CSRF_COOKIE_SECURE = True
 
 
-# https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
-SIMPLE_JWT = {
-	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20 if not DEBUG else 48 * 60),
-	"REFRESH_TOKEN_LIFETIME": timedelta(hours=72),
-	"LEEWAY": 0,
-	# Bearer only. OpenAPI 3 can express exactly one bearerFormat, so listing extra
-	# prefixes made drf-spectacular emit a warning on every single view while the
-	# generated schema documented "Bearer" anyway. The "JWT" prefix had no client
-	# (the Flutter app always sends "Bearer"), and the empty prefix never matched
-	# anything: SimpleJWT compares the first space-delimited token of the header
-	# against this tuple, so a header with no prefix is rejected regardless.
-	"AUTH_HEADER_TYPES": ("Bearer",),
-	"AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
-	"USER_ID_FIELD": "id",
-	"USER_ID_CLAIM": "user_id",
-	"SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
-	"SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
-	"SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
-}
+# ── device sessions ──────────────────────────────────────────
+# Lifetimes are derived from config rather than written onto rows, so retuning
+# one takes effect on the next request instead of needing a data migration.
+SESSION_IDLE_LIFETIME_DAYS = settings.SESSION_IDLE_LIFETIME_DAYS
+SESSION_ABSOLUTE_LIFETIME_DAYS = settings.SESSION_ABSOLUTE_LIFETIME_DAYS
 
-JWT_REFRESH_COOKIE_NAME = "notif_refresh"
-# Cookie paths are prefix matches, so this prefix also covers /api/v1/token/verify/,
-# which reads its token from the request body and never touches request.COOKIES.
-# It is left as-is deliberately: every *other* endpoint under the prefix needs the
-# cookie — /token/ (login revokes any pre-existing family), /token/refresh/ and
-# /token/logout/ — and there is no cookie-path syntax for "this prefix except one
-# child". The alternative, issuing two narrowly-scoped cookies, would double the
-# Set-Cookie bookkeeping on every rotation to stop sending the cookie to one
-# endpoint that ignores it.
-JWT_REFRESH_COOKIE_PATH = "/api/v1/token/"
-# Strict, not Lax: the SPA and the API are served from a single origin (see the
-# Caddyfile — /api/* and the Flutter bundle share one host), so no legitimate
-# cross-site navigation ever needs to carry this cookie.
-JWT_REFRESH_COOKIE_SAMESITE = "Strict"
-JWT_REFRESH_COOKIE_SECURE = not DEBUG
-# How long a just-rotated refresh token may still be replayed. Two everyday events
-# replay one: a restored browser session cold-starting several tabs that all hold
-# the same cookie, and a rotation that commits server-side while its response is
-# lost (container recreated mid-deploy). Inside this window, replaying the direct
-# parent of the currently-live token re-issues that live token instead of revoking
-# the family; every other replay still trips theft detection.
-JWT_REFRESH_ROTATION_GRACE = timedelta(seconds=30)
-# Hard ceiling on one refresh session, measured from RefreshSessionFamily.created_at.
-# Rotation mints a brand-new token each time, so without this a stolen cookie that
-# is refreshed once per REFRESH_TOKEN_LIFETIME would stay valid forever.
-JWT_REFRESH_ABSOLUTE_LIFETIME = timedelta(days=30)
+SESSION_TOKEN_COOKIE_NAME = "notif_session"
+# Every authenticated API call lives under this prefix, and nothing else does.
+SESSION_TOKEN_COOKIE_PATH = "/api/v1/"
+# Strict, not Lax: web auth is declared same-origin-only (the Caddyfile serves the
+# SPA and the API from one host), so no legitimate cross-site navigation ever
+# needs to carry this cookie.
+SESSION_TOKEN_COOKIE_SAMESITE = "Strict"
+# Unconditional, including local dev: Chromium treats loopback as a trustworthy
+# origin and accepts Secure cookies over plain HTTP there. Making the flag
+# conditional on DEBUG would mean the deployed configuration is one nobody ever
+# runs before deploying.
+SESSION_TOKEN_COOKIE_SECURE = True
+
+# Until the cutover ages out, login and logout also expire the JWT-era refresh
+# cookie. It sat at a path the new cookie's deletion does not reach, so without
+# this it would linger in browsers until its own Max-Age ran out.
+LEGACY_REFRESH_COOKIE_NAME = "notif_refresh"
+LEGACY_REFRESH_COOKIE_PATH = "/api/v1/token/"
 
 # Email
 EMAIL_BACKEND = settings.EMAIL_BACKEND or (
