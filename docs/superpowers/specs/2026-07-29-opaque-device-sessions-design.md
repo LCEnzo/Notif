@@ -1,6 +1,6 @@
 # Opaque device-session auth (replaces JWT + refresh rotation)
 
-Date: 2026-07-29. Status: draft v6 - fourth review round incorporated.
+Date: 2026-07-29. Status: draft v7 - fifth review round incorporated.
 
 ## Why
 
@@ -70,13 +70,19 @@ non-simple-request defense it has today):
 
 - `POST /auth/login/` — `authentication_classes = []`, like logout: a stale
   cookie riding along must not 401 the request before credentials are seen.
+  Both views also set `permission_classes = [AllowAny]` — the global DRF
+  default is `IsAuthenticated`, which would reject the now-anonymous caller
+  before the view runs (master's token views already carry `AllowAny`).
   After credential validation the view tolerantly looks up any presented
   session itself (for `login_replaced`). Takes credentials + `device_label` +
   `transport: "cookie" | "bearer"`. Transports are mutually exclusive:
   - `cookie` (web): sets HttpOnly `SameSite=Strict; Secure; Path=/api/v1/`
-    cookie (`Max-Age` = 90d) — returns **no token** in the body, and rotates
+    cookie (`Max-Age` = 90d) — returns **no token** in the body, only the
+    session's `public_id` (a handle, not a credential; the frontend needs it
+    for targeted self-revocation below), and rotates
     the CSRF token so Django emits the readable `csrftoken` cookie.
-  - `bearer` (native): returns the raw token once in JSON, sets **no cookie**.
+  - `bearer` (native): returns the raw token and `public_id` once in JSON,
+    sets **no cookie**.
   - A live session presented with the login request is revoked
     (`login_replaced`) in the same transaction that creates its replacement,
     so web re-logins do not accumulate orphaned live rows.
@@ -152,12 +158,23 @@ atomic with the password write.
   and logout are additionally serialized behind one auth-mutation lock:
   within a tab, logout awaits any in-flight login and is the final
   server-visible operation. The lock is per-tab and cannot span browser
-  contexts; cross-tab, the shared web record carries a monotonic auth stamp:
-  logout writes it, and a login that completes under a stamp newer than its
-  own start voids itself — it calls logout (revoking the just-created
-  session, clearing the cookie) instead of adopting it. Logins are explicit
-  credential entry (there is no background refresh to race), so the window
-  is human-scale rare, but the compensation closes it.
+  contexts; cross-tab, the shared web record carries a monotonic auth stamp,
+  written at logout *initiation* (before the network call) and read uncached
+  — on web the stamp accessor must bypass the per-engine
+  `SharedPreferences.getInstance()` cache (`SharedPreferencesAsync` / direct
+  localStorage read), because a cached read cannot see another tab's write.
+  A login that completes under a stamp newer than its own start voids
+  itself: it revokes its **own** just-created session via
+  `DELETE /auth/sessions/{public_id}/` (login returns the id for exactly
+  this), leaves the cookie jar untouched, and does not write the shared
+  record (a newer login's write must survive). The compensation is monotone —
+  it can only ever remove the voided session, never a newer one — where a
+  full compensating logout could clear a cookie a third tab's login had
+  just installed. Residuals are benign: if the jar still holds the voided
+  cookie, the next request 401s into Anonymous; if the targeted revoke
+  itself fails, the orphaned row stays visible in the sessions UI and dies
+  at idle expiry. Logins are explicit credential entry (there is no
+  background refresh to race), so all of this is a human-scale-rare window.
 - Web: one typed record `{origin, restoreIntent, authStamp}` in
   `PreferenceStore` replaces the loose marker — a single mutation, so
   partial states between token, intent and origin are unrepresentable on
@@ -210,8 +227,10 @@ login-replacement revocation, concurrent login-vs-password-change and
 login-vs-reset (hash re-check aborts), deterministic token-hash test,
 atomicity tests carried over. Frontend: adapted auth_service_test (restore/outage/expired
 paths, stale-generation 401 ignored, two-tab login/logout interleave via the
-auth stamp), api_client CSRF attach, architecture
-tests keep keystore/dio boundaries; drift check pins the schema.
+auth stamp against a shared fake store — a true multi-engine test is not
+reachable from `flutter test` and is accepted as a manual check), api_client
+CSRF attach, architecture tests keep keystore/dio boundaries and pin the
+stamp accessor to the uncached-read path; drift check pins the schema.
 
 ## Considered and rejected
 
@@ -221,12 +240,15 @@ tests keep keystore/dio boundaries; drift check pins the schema.
   stale against a 14-day window — irrelevant.
 - A server-side logout fence (revoking sessions created during a logout
   window): response-side staleness is the generation's job, operation order
-  is the per-tab lock's, and the cross-tab auth stamp voids the one
-  interleaving those two cannot reach; the sessions UI shows any survivor.
-- Web Locks (`navigator.locks`) for cross-tab serialization: the auth stamp
-  covers the only harmful interleaving (a login spanning a logout) without
-  web-only interop code, and is unit-testable where a two-tab integration
-  harness is not.
+  is the per-tab lock's, and a late cross-tab login removes itself via the
+  auth stamp + targeted self-revoke; the sessions UI shows any survivor.
+- Web Locks (`navigator.locks`) for cross-tab serialization: holding a lock
+  across the whole login round-trip would genuinely fence `Set-Cookie`
+  application, but costs web-only interop that `flutter test` cannot
+  exercise. The targeted self-revocation reaches the same end state
+  monotonically (it can never remove a newer session) with unit-testable
+  logic; the accepted residual is a voided cookie that 401s into Anonymous
+  instead of never having been set.
 - `Secure` cookie breaking local web dev: Chromium accepts Secure cookies
   from trustworthy loopback origins, so the flag is kept unconditionally;
   the real dev friction was the port mismatch, handled above.
