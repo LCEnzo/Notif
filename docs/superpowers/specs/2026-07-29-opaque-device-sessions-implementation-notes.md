@@ -38,11 +38,14 @@ decoded out of the access token. An opaque token carries no claims.
 
 Fix taken: `UserFullReadSerializer` now exposes `id`, so the designated probe
 (`GET /accounts/users/get_my_info/`) is where the client learns its own id.
-That is a one-field schema addition and keeps the monitoring contract as-is.
 
-The alternative — having `LinkViewSet.perform_create` set `user` from
-`request.user` and drop it from the payload — is the better design, and worth
-doing, but it changes the monitoring API and is outside this spec.
+A follow-up commit then also adopted what an earlier draft of this note called
+out of scope: `LinkViewSet.perform_create` now derives `user` from
+`request.user`, the serializer marks `user` read-only, and the client no longer
+sends it. This **does change the monitoring API contract** — link creation
+ignores any client-supplied `user` and derives ownership from the session. The
+probe keeps exposing `id` regardless: account-resource endpoints still address
+the user's own row by id.
 
 ## 3. `POST /auth/login/`'s response body is unspecified
 
@@ -94,10 +97,22 @@ slow and occasionally flaky.
 §5 says a failed web logout leaves the app in Unavailable rather than
 manufacturing a local sign-out. A router that keys purely on "is authenticated"
 renders Unavailable as the login screen — which is exactly the manufactured
-sign-out the spec forbids. The router therefore treats Restoring, Unavailable
-and LoggingOut as *undecided* and routes them to a `/starting` screen that
-names the problem and offers a retry (re-running the probe). This is an
-addition to the spec, not a deviation from it, but it is load-bearing.
+sign-out the spec forbids. The router therefore treats Restoring, Unavailable,
+ConfigError and LoggingOut as *undecided* and routes them to a `/starting`
+screen that names the problem and offers a retry (re-running the probe). This
+is an addition to the spec, not a deviation from it, but it is load-bearing.
+
+ConfigError is the fourth undecided state: the api client refuses a request
+before dispatch because the app's own configuration is unusable (no backend URL
+in custom-only mode, or one this build will not send credentials to). It is
+kept apart from Unavailable because no retry can heal it — recovery probes are
+not started, `/starting` offers an "Open settings" exit, and `/settings` is
+reachable in every auth state (it holds only local preferences, and locking it
+behind an undecided probe that the broken URL itself blocks would wall off the
+only way out). Settings-time validation (`describeUnsupportedOrigin` run on the
+custom URL before it is persisted) is the spec §4 behaviour; the ConfigError
+state is the safety net for configurations that predate it, e.g. a keystore
+credential pinned to an origin the URL no longer matches.
 
 ## 7. Sessions UI
 
