@@ -74,6 +74,15 @@ select = [
 	"T201",  # use of print, can leak secrets in logs
 	"PTH",
 	"RUF100",# unused-noqa
+	"ISC004",  # implicit str concat in collection literals (missing-comma typo)
+	"LOG004",  # .exception() outside an except handler
+	"PLE0304", # __bool__ returning non-bool
+	"PLR1708", # raise StopIteration inside a generator (PEP 479 RuntimeError)
+	"RUF036",  # None goes last in unions
+	"RUF063",  # fragile __dict__ annotations access under PEP 649 (py3.14)
+	"RUF068",  # duplicate entries in __all__
+	"FURB164", # Decimal/Fraction .from_float() over constructor
+	"FURB192", # sorted(x)[0] instead of min/max
 ]
 ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118", "W191"]
 
