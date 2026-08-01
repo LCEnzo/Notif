@@ -450,6 +450,7 @@ bool _isFallbackableNetworkError(DioException error) {
     case DioExceptionType.connectionTimeout:
     case DioExceptionType.sendTimeout:
     case DioExceptionType.receiveTimeout:
+    case DioExceptionType.transformTimeout:
     case DioExceptionType.badCertificate:
     case DioExceptionType.connectionError:
     case DioExceptionType.unknown:
