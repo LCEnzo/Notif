@@ -21,6 +21,7 @@ from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import JSONParser
 from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -50,9 +51,16 @@ _CADDY_LOG_DEFAULT_LINES = 50
 _CADDY_LOG_MAX_BYTES = 32 * 1024 * 1024
 _BACKUP_STREAM_CHUNK = 64 * 1024
 _CLIENT_EVENT_SOURCE = "frontend"
+# Hard ceiling on rows the anonymous client-event sink can keep. The per-IP
+# throttle bounds the write *rate*, but rows were permanent, so 30/min/IP was
+# still unbounded growth distributed across arbitrary IPs. At the cap the sink
+# evicts its oldest rows (ring buffer) rather than rejecting: after an outage
+# the newest reports are the ones that matter, and a flood then costs the
+# attacker their own diagnostics, not ours - other sources' rows are untouched.
+_CLIENT_EVENT_MAX_ROWS = 5000
 _SECRET_PATTERNS = [
-	re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
-	re.compile(r"(notif_refresh=)[^;\s]+", re.IGNORECASE),
+	re.compile(r"(?:Bearer|Session)\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+	re.compile(r"(notif_session=|notif_refresh=)[^;\s]+", re.IGNORECASE),
 	re.compile(r"([?&](?:access|refresh|token|password)=)[^&\s]+", re.IGNORECASE),
 	re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
 ]
@@ -97,6 +105,14 @@ class SystemEventViewSet(_SystemEventReadOnlyModelViewSet):
 
 class ClientEventView(APIView):
 	permission_classes = [AllowAny]
+	# JSON only, for the same reason the token views are JSON only: this endpoint
+	# is anonymous and writes a persistent SystemEvent row per request. With the
+	# default form parsers a cross-site page can POST here via a hidden form,
+	# which is a CORS simple request and so never preflighted, and the per-IP
+	# throttle is charged to whichever visitor's browser made the call - so the
+	# writes distribute across arbitrary client IPs. A form cannot produce a
+	# JSON content type, so refusing to parse anything else closes it.
+	parser_classes = [JSONParser]
 	throttle_classes = [ScopedRateThrottle]
 	throttle_scope = "client_events"
 
@@ -113,6 +129,7 @@ class ClientEventView(APIView):
 		if not message:
 			message = f"Frontend reported {category}."
 
+		_evict_client_events_over_cap()
 		SystemEvent.objects.create(
 			level=SystemEvent.Level.WARNING,
 			source=_CLIENT_EVENT_SOURCE,
@@ -134,6 +151,22 @@ class ClientEventView(APIView):
 			},
 		)
 		return Response({"status": "accepted"}, status=202)
+
+
+def _evict_client_events_over_cap() -> None:
+	"""Delete the oldest frontend rows so one more insert stays within the cap.
+
+	Two concurrent requests can both pass the count check and overshoot by a
+	row; the next insert evicts back down, so the bound holds within the
+	throttle's concurrency, not exactly. Overflow is tiny by construction
+	(cap plus at most a few in-flight requests), so the id list stays bounded.
+	"""
+	frontend_events = SystemEvent.objects.filter(source=_CLIENT_EVENT_SOURCE)
+	overflow = frontend_events.count() - _CLIENT_EVENT_MAX_ROWS + 1
+	if overflow <= 0:
+		return
+	evict_ids = list(frontend_events.order_by("id").values_list("id", flat=True)[:overflow])
+	SystemEvent.objects.filter(id__in=evict_ids).delete()
 
 
 @extend_schema(responses={200: CaddyAccessLogResponseSerializer})

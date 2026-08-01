@@ -4,8 +4,10 @@ from typing import Any
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 
-from accounts.models import User
+from accounts.device_sessions import revoke_all_sessions_for_user
+from accounts.models import DeviceSession, User
 
 
 class Command(BaseCommand):
@@ -38,6 +40,11 @@ class Command(BaseCommand):
 		except ValidationError as exc:
 			raise CommandError("\n".join(str(e) for e in exc.messages)) from exc
 
-		user.set_password(password)
-		user.save(update_fields=["password", "date_modified"])
-		self.stdout.write(self.style.SUCCESS(f"Password set for '{username}'"))
+		# Recovery assumes the account may be compromised, so every session
+		# goes - unlike an authenticated change, there is no session here that
+		# has proven anything.
+		with transaction.atomic():
+			user.set_password(password)
+			user.save(update_fields=["password", "date_modified"])
+			revoked = revoke_all_sessions_for_user(user, reason=DeviceSession.RevokeReason.PASSWORD_CHANGE)
+		self.stdout.write(self.style.SUCCESS(f"Password set for '{username}', {revoked} session(s) revoked"))

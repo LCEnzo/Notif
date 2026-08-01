@@ -9,6 +9,7 @@ import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/device_sessions.dart';
 import 'package:provider/provider.dart';
 
 class AccountPage extends StatefulWidget {
@@ -39,6 +40,7 @@ class _AccountPageState extends State<AccountPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserData();
+      unawaited(context.read<DeviceSessionService>().fetch());
     });
   }
 
@@ -62,16 +64,11 @@ class _AccountPageState extends State<AccountPage> {
     super.dispose();
   }
 
-  Map<String, String> _authHeaders(AuthService auth) {
-    final jwt = auth.jwt;
-    if (jwt == null) {
-      return const {};
-    }
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ${jwt.access}',
-    };
-  }
+  /// The api_client attaches the credential; this only names the payload
+  /// shape. Kept as a helper so the call sites read the same as before.
+  Map<String, String> _authHeaders(AuthService auth) => const {
+    'Content-Type': 'application/json',
+  };
 
   Future<void> _saveProfile() async {
     final auth = context.read<AuthService>();
@@ -233,8 +230,10 @@ class _AccountPageState extends State<AccountPage> {
         headers: _authHeaders(auth),
       );
       expectSuccessStatus(response, 'Delete account');
+      // Deleting the account revokes every session server-side, so this only
+      // has to clear the local credential and let the router take over.
+      await auth.logout();
       if (mounted) {
-        unawaited(auth.logout());
         context.go('/login');
       }
     } on Exception catch (error) {
@@ -450,7 +449,18 @@ class _AccountPageState extends State<AccountPage> {
                       ),
                     ),
                     const SizedBox(height: 40),
-                    const IndexRule(index: 3, title: 'Danger'),
+                    const IndexRule(index: 3, title: 'Devices'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Every device currently signed in as you. Revoking one '
+                      'signs it out on its next request — this is how you undo '
+                      'a sign-in you did not intend.',
+                      style: text$.body.copyWith(color: tokens.inkDim),
+                    ),
+                    const SizedBox(height: 16),
+                    const _DeviceSessionsSection(),
+                    const SizedBox(height: 40),
+                    const IndexRule(index: 4, title: 'Danger'),
                     const SizedBox(height: 8),
                     Text(
                       'Soft-delete your account. All your data is preserved but deactivated.',
@@ -534,6 +544,115 @@ class _AccountTextField extends StatelessWidget {
       hint: hint,
       obscureText: obscure,
       keyboardType: keyboardType,
+    );
+  }
+}
+
+class _DeviceSessionsSection extends StatelessWidget {
+  const _DeviceSessionsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<NotifTokens>()!;
+    final text$ = theme.extension<NotifTextTheme>()!;
+    final service = context.watch<DeviceSessionService>();
+    final sessions = service.sessions;
+    final others = sessions.where((session) => !session.isCurrent).length;
+
+    return NotifCard(
+      bordered: true,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (service.error != null) ...[
+            Text(
+              service.error!,
+              style: text$.body.copyWith(color: Colors.redAccent),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (service.loading && sessions.isEmpty)
+            Text(
+              'Loading devices…',
+              style: text$.body.copyWith(color: tokens.inkDim),
+            )
+          else if (sessions.isEmpty)
+            Text(
+              'No devices to show.',
+              style: text$.body.copyWith(color: tokens.inkDim),
+            )
+          else
+            for (final session in sessions) ...[
+              _DeviceSessionRow(session: session, service: service),
+              if (session != sessions.last) const SizedBox(height: 16),
+            ],
+          if (others > 0) ...[
+            const SizedBox(height: 20),
+            NotifButton(
+              label: service.loading
+                  ? 'Working…'
+                  : 'Sign out other devices ($others)',
+              onPressed: service.loading
+                  ? null
+                  : () => unawaited(service.revokeAllOthers()),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _DeviceSessionRow extends StatelessWidget {
+  const _DeviceSessionRow({required this.session, required this.service});
+
+  final DeviceSession session;
+  final DeviceSessionService service;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final tokens = theme.extension<NotifTokens>()!;
+    final text$ = theme.extension<NotifTextTheme>()!;
+    final lastUsed = session.lastUsedAt;
+    final revoking = service.isRevoking(session.publicId);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                session.isCurrent
+                    ? '${session.displayName} — this device'
+                    : session.displayName,
+                style: text$.body.copyWith(color: tokens.ink),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                [
+                  session.transport,
+                  if (session.ip.isNotEmpty) session.ip,
+                  if (lastUsed != null)
+                    'last used ${lastUsed.toIso8601String().substring(0, 16)}',
+                ].join(' · '),
+                style: text$.micro.copyWith(color: tokens.inkMute),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        NotifButton(
+          label: revoking ? 'Revoking…' : 'Revoke',
+          onPressed: revoking
+              ? null
+              : () => unawaited(service.revoke(session.publicId)),
+        ),
+      ],
     );
   }
 }

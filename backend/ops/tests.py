@@ -3,11 +3,9 @@ import sqlite3
 from datetime import timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import cast
 from unittest.mock import patch
 
 import pytest
-from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
 from django.test import TestCase
@@ -17,7 +15,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework.throttling import ScopedRateThrottle
 
-from accounts.models import RefreshSessionFamily, RefreshTokenRecord
+from accounts.device_sessions import DEAD_SESSION_RETENTION, idle_lifetime
+from accounts.models import DeviceSession
 from accounts.models.password_reset import (
 	PASSWORD_RESET_CODE_MAX_ATTEMPTS,
 	PasswordResetCode,
@@ -180,7 +179,7 @@ class OpsApiTestCase(SetupMixin, TestCase):
 				"contract_path": "$.results[0].id",
 				"expected": "integer",
 				"actual": "string",
-				"message": "Bearer abc.def user@example.com notif_refresh=secret",
+				"message": "Session abc.def user@example.com notif_session=secret notif_refresh=secret",
 				"stack": "password=hunter2",
 			},
 			format="json",
@@ -204,6 +203,28 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(response.status_code, 400)
 		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
 
+	def test_client_event_endpoint_rejects_form_encoded_posts(self):
+		"""A cross-site form must not be able to write rows to this anonymous sink."""
+		response = APIClient().post(
+			reverse("client-events"),
+			{"category": "unexpected_failure", "message": "from a hidden form"},
+			format="multipart",
+		)
+
+		self.assertEqual(response.status_code, 415)
+		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
+
+	def test_client_event_endpoint_rejects_text_plain_posts(self):
+		"""text/plain is the other enctype a form can emit."""
+		response = APIClient().post(
+			reverse("client-events"),
+			'{"category": "unexpected_failure", "message": "from a hidden form"}',
+			content_type="text/plain",
+		)
+
+		self.assertEqual(response.status_code, 415)
+		self.assertFalse(SystemEvent.objects.filter(source="frontend").exists())
+
 	def test_client_event_endpoint_is_throttled(self):
 		client = APIClient()
 		payload = {"category": "unexpected_failure", "message": "one"}
@@ -212,6 +233,36 @@ class OpsApiTestCase(SetupMixin, TestCase):
 			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 202)
 			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 202)
 			self.assertEqual(client.post(reverse("client-events"), payload, format="json").status_code, 429)
+
+	def test_client_event_endpoint_evicts_oldest_rows_at_cap(self):
+		"""The sink is a ring buffer: total storage stays bounded, newest rows win."""
+		with patch("ops.views._CLIENT_EVENT_MAX_ROWS", 2):
+			for message in ("first", "second", "third"):
+				response = APIClient().post(
+					reverse("client-events"),
+					{"category": "unexpected_failure", "message": message},
+					format="json",
+				)
+				self.assertEqual(response.status_code, 202)
+
+		frontend_events = SystemEvent.objects.filter(source="frontend").order_by("id")
+		self.assertEqual(frontend_events.count(), 2)
+		self.assertEqual([event.message for event in frontend_events], ["second", "third"])
+
+	def test_client_event_eviction_leaves_other_sources_alone(self):
+		backend_event = SystemEvent.objects.create(
+			level=SystemEvent.Level.INFO, source="test", kind="log", message="keep me"
+		)
+		with patch("ops.views._CLIENT_EVENT_MAX_ROWS", 1):
+			for message in ("first", "second"):
+				APIClient().post(
+					reverse("client-events"),
+					{"category": "unexpected_failure", "message": message},
+					format="json",
+				)
+
+		self.assertTrue(SystemEvent.objects.filter(pk=backend_event.pk).exists())
+		self.assertEqual(SystemEvent.objects.filter(source="frontend").count(), 1)
 
 
 class RunDueTasksCommandTestCase(SetupMixin, TestCase):
@@ -230,25 +281,25 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 		self.assertEqual(PasswordResetCode.objects.count(), 0)
 		self.assertTrue(SystemEvent.objects.filter(kind="maintenance").exists())
 
-	def test_command_cleans_expired_refresh_sessions(self):
-		refresh_lifetime = cast(timedelta, settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"])
-		active = RefreshSessionFamily.objects.create(user=self.regular_user)
-		RefreshTokenRecord.objects.create(
-			family=active,
-			jti="active-old-used",
-			used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
-		)
-		expired = RefreshSessionFamily.objects.create(
+	def test_command_cleans_long_dead_device_sessions(self):
+		live = DeviceSession.objects.create(
 			user=self.regular_user,
-			last_used_at=timezone.now() - refresh_lifetime - timedelta(minutes=1),
+			token_hash="live-session-hash",
+			transport=DeviceSession.Transport.BEARER,
+		)
+		long_dead = DeviceSession.objects.create(
+			user=self.regular_user,
+			token_hash="long-dead-session-hash",
+			transport=DeviceSession.Transport.BEARER,
+			last_used_at=timezone.now() - idle_lifetime() - DEAD_SESSION_RETENTION - timedelta(minutes=1),
 		)
 
 		call_command("run_due_tasks", "--max-links", "0")
 
-		self.assertFalse(RefreshSessionFamily.objects.filter(pk=expired.pk).exists())
+		self.assertTrue(DeviceSession.objects.filter(pk=live.pk).exists())
+		self.assertFalse(DeviceSession.objects.filter(pk=long_dead.pk).exists())
 		event = SystemEvent.objects.filter(kind="maintenance").latest("id")
-		self.assertEqual(event.details["refresh_session_families_deleted"], 1)
-		self.assertEqual(event.details["refresh_token_records_deleted"], 1)
+		self.assertEqual(event.details["device_sessions_deleted"], 1)
 
 	def test_command_skips_when_lock_is_held(self):
 		MaintenanceLock.objects.create(key="run_due_tasks", acquired_at=timezone.now())

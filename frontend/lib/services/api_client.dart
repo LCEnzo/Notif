@@ -1,9 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:notif/commons/browser_cookies.dart';
 import 'package:notif/services/app_settings.dart';
-import 'package:notif/services/dio_credentials.dart';
-import 'package:notif/services/json_contracts.dart';
-import 'package:notif/services/refresh_cookie_store.dart';
+import 'package:notif/services/session_store.dart';
 
 const String builtinApiUrl = String.fromEnvironment(
   'API_URL',
@@ -13,31 +12,52 @@ const String builtinApiUrl = String.fromEnvironment(
 const Duration connectTimeout = Duration(seconds: 10);
 const Duration receiveTimeout = Duration(seconds: 15);
 
+/// The scheme the backend challenges with, and the one we answer it with.
+const String sessionAuthScheme = 'Session';
+
+/// Django's readable CSRF cookie and the header it expects it echoed in.
+const String csrfCookieName = 'csrftoken';
+const String csrfHeaderName = 'X-CSRFToken';
+
+const Map<String, String> jsonHeaders = {'Content-Type': 'application/json'};
+
+const Set<String> _csrfSafeMethods = {'GET', 'HEAD', 'OPTIONS', 'TRACE'};
+
 /// Shared Dio instance — connection pooling happens here.
-final Dio _dio = _createDio();
+final Dio _dio =
+    Dio(
+        BaseOptions(
+          connectTimeout: connectTimeout,
+          receiveTimeout: receiveTimeout,
+        ),
+      )
+      ..interceptors.addAll([
+        if (kDebugMode)
+          LogInterceptor(
+            requestHeader: false,
+            requestBody: false,
+            responseHeader: false,
+            responseBody: false,
+            logPrint: (o) => debugPrint(o.toString()),
+          ),
+      ]);
 
-Dio _createDio() {
-  final dio = Dio(
-    BaseOptions(
-      connectTimeout: connectTimeout,
-      receiveTimeout: receiveTimeout,
-    ),
-  );
-  configureDioCredentials(dio);
-  dio.interceptors.addAll([
-    if (kDebugMode)
-      LogInterceptor(
-        requestBody: true,
-        responseBody: true,
-        logPrint: (o) => debugPrint(o.toString()),
-      ),
-  ]);
-  return dio;
-}
+/// Whether a request may be repeated against a second configured origin.
+///
+/// Login is deliberately [never]: once credentials have left this process,
+/// a timeout cannot establish whether the server created a session. Replaying
+/// the same login elsewhere could create two sessions or select the wrong one.
+enum FallbackPolicy { networkErrors, never }
 
-typedef AccessTokenReader = String? Function();
-typedef RefreshAccessToken = Future<String?> Function();
-typedef AuthExpiredHandler = Future<void> Function();
+typedef SessionCredentialReader = SessionCredential? Function();
+
+/// Reads the auth generation a request is being issued under.
+typedef AuthGenerationReader = int Function();
+
+/// Hands a failed request back to whoever owns auth state, tagged with the
+/// generation it was issued under. The owner decides whether it ends a session.
+typedef SessionEndReporter =
+    void Function(Object error, {required int generation});
 
 class ApiClientException implements Exception {
   const ApiClientException(this.message);
@@ -48,19 +68,68 @@ class ApiClientException implements Exception {
   String toString() => message;
 }
 
-AccessTokenReader? _accessTokenReader;
-RefreshAccessToken? _refreshAccessToken;
-AuthExpiredHandler? _authExpiredHandler;
+/// The configured backend cannot legitimately hold this app's credential.
+///
+/// Raised before any request goes out, because the alternative is discovering
+/// it by having sent the token somewhere it does not belong.
+class UnsupportedOriginException implements Exception {
+  const UnsupportedOriginException(this.message);
 
-void configureApiAuth({
-  required AccessTokenReader accessTokenReader,
-  required RefreshAccessToken refreshAccessToken,
-  required AuthExpiredHandler authExpiredHandler,
-}) {
-  _accessTokenReader = accessTokenReader;
-  _refreshAccessToken = refreshAccessToken;
-  _authExpiredHandler = authExpiredHandler;
+  final String message;
+
+  @override
+  String toString() => message;
 }
+
+/// No backend URL is configured for the current mode (custom-only with an
+/// empty custom URL). A configuration problem, not an outage: retrying cannot
+/// heal it, only a settings change can, and callers classify it accordingly.
+class MissingBackendUrlException implements Exception {
+  const MissingBackendUrlException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+SessionCredentialReader? _credentialReader;
+AuthGenerationReader? _generationReader;
+SessionEndReporter? _sessionEndReporter;
+
+/// Wire the client to whatever owns auth.
+///
+/// Reporting failures from here rather than from each service is what makes the
+/// designated-request rule hold everywhere at once: every app-issued request
+/// goes through this function, carries the generation it was issued under, and
+/// hands its failure back with that generation attached. A service that forgot
+/// to report would otherwise be a silent hole in the state machine.
+void configureApiAuth({
+  required SessionCredentialReader credentialReader,
+  AuthGenerationReader? generationReader,
+  SessionEndReporter? sessionEndReporter,
+}) {
+  _credentialReader = credentialReader;
+  _generationReader = generationReader;
+  _sessionEndReporter = sessionEndReporter;
+}
+
+@visibleForTesting
+void resetApiAuth() {
+  _credentialReader = null;
+  _generationReader = null;
+  _sessionEndReporter = null;
+}
+
+/// The one seam tests use to answer requests without a server. Kept narrow on
+/// purpose: everything else about the client — origin rules, credential
+/// attachment, CSRF — stays under test rather than being stubbed around.
+@visibleForTesting
+HttpClientAdapter get apiHttpClientAdapter => _dio.httpClientAdapter;
+
+@visibleForTesting
+set apiHttpClientAdapter(HttpClientAdapter adapter) =>
+    _dio.httpClientAdapter = adapter;
 
 /// Sends a POST request to [path], respecting [BackendUrlMode] from [settings].
 ///
@@ -73,12 +142,32 @@ Future<Response<dynamic>> apiPost(
   required AppSettingsController? settings,
   required Map<String, String> headers,
   required dynamic body,
+  FallbackPolicy fallbackPolicy = FallbackPolicy.networkErrors,
 }) => _requestWithFallback(
   'POST',
   path,
   settings: settings,
   headers: headers,
   body: body,
+  fallbackPolicy: fallbackPolicy,
+);
+
+/// Revoke a bearer session that was issued but could not be stored durably.
+///
+/// The credential is explicit because installing it as the app's current
+/// session, even briefly, would let unrelated requests observe a login that
+/// has already failed. This request is never replayed against another origin.
+Future<Response<dynamic>> revokeIssuedBearerSession(
+  SessionCredential credential, {
+  required AppSettingsController? settings,
+}) => _requestWithFallback(
+  'POST',
+  '/auth/logout/',
+  settings: settings,
+  headers: jsonHeaders,
+  body: const <String, dynamic>{},
+  fallbackPolicy: FallbackPolicy.never,
+  credentialOverride: credential,
 );
 
 Future<Response<dynamic>> apiGet(
@@ -147,6 +236,75 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
   }
 }
 
+/// Whether the app is allowed to send credentials to [baseUrl].
+///
+/// Two different rules, because the two platforms hold two different things:
+///
+/// * **Web** is same-origin-only, not merely same-site. The `csrftoken` cookie
+///   is host-scoped, so JS on `app.example.com` cannot read one set by
+///   `api.example.com` — a same-site-but-cross-origin backend could
+///   authenticate but never pass CSRF. Rejecting it here turns a confusing
+///   run-time 403 into a settings-time error.
+/// * **Native** pins the token to the origin that issued it, and requires that
+///   origin to be HTTPS: a credential that outlives a single request must never
+///   travel in plaintext.
+///
+/// Loopback is the documented exception on both. Flutter's dev server and
+/// Django run on different ports of the same host, so dev compares host only
+/// (and Django's port-exact CSRF check is satisfied by pinning the Flutter web
+/// port in `CSRF_TRUSTED_ORIGINS` — see backend `DEV_WEB_PORT`).
+String? describeUnsupportedOrigin(
+  String baseUrl, {
+  SessionCredential? credential,
+}) {
+  final target = Uri.tryParse(baseUrl);
+  if (target == null || !target.hasScheme || target.host.isEmpty) {
+    return 'Backend URL "$baseUrl" is not a usable http(s) URL.';
+  }
+
+  if (kIsWeb) {
+    final page = Uri.base;
+    if (_sameOrigin(page, target)) {
+      return null;
+    }
+    return 'Web builds are same-origin-only: this page is served from '
+        '${page.origin} but the backend is configured as ${target.origin}. '
+        'The CSRF cookie is host-scoped, so a cross-origin backend cannot be '
+        'used from the browser.';
+  }
+
+  if (!_isSecureOrigin(target)) {
+    return 'Refusing to send a session token to ${target.origin}: bearer '
+        'sessions require HTTPS (loopback excepted for development).';
+  }
+
+  if (credential != null &&
+      !_sameOrigin(Uri.parse(credential.origin), target)) {
+    return 'This session belongs to ${credential.origin} and will not be sent '
+        'to ${target.origin}. Sign in again after changing the backend URL.';
+  }
+
+  return null;
+}
+
+bool _isLoopback(Uri uri) =>
+    uri.host == 'localhost' || uri.host == '127.0.0.1' || uri.host == '::1';
+
+bool _isSecureOrigin(Uri uri) => uri.scheme == 'https' || _isLoopback(uri);
+
+bool _sameOrigin(Uri left, Uri right) {
+  if (left.scheme != right.scheme || left.host != right.host) {
+    return false;
+  }
+  // The dev web server and Django use different ports on the same loopback
+  // host. Scheme and host remain exact so localhost, 127.0.0.1 and HTTPS are
+  // not silently treated as interchangeable credential boundaries.
+  if (_isLoopback(left)) {
+    return true;
+  }
+  return left.port == right.port;
+}
+
 Uri _buildRequestUri(String baseUrl, String path) {
   final normalizedBaseUrl = baseUrl.replaceFirst(RegExp(r'/+$'), '');
   final normalizedPath = path.replaceFirst(RegExp(r'^/+'), '');
@@ -160,10 +318,12 @@ Future<Response<dynamic>> _requestWithFallback(
   required Map<String, String> headers,
   dynamic body,
   ResponseType? responseType,
+  FallbackPolicy fallbackPolicy = FallbackPolicy.networkErrors,
+  SessionCredential? credentialOverride,
 }) async {
   final urls = resolveUrls(path, settings);
   if (urls.isEmpty) {
-    throw ApiClientException(
+    throw MissingBackendUrlException(
       '$method $path failed: no backend URL configured',
     );
   }
@@ -179,11 +339,14 @@ Future<Response<dynamic>> _requestWithFallback(
         headers: headers,
         body: body,
         responseType: responseType,
+        credentialOverride: credentialOverride,
       );
     } on DioException catch (error) {
       lastError = error;
       final shouldTryFallback =
-          !identical(url, urls.last) && _isFallbackableNetworkError(error);
+          fallbackPolicy == FallbackPolicy.networkErrors &&
+          !identical(url, urls.last) &&
+          _isFallbackableNetworkError(error);
       if (!shouldTryFallback) {
         rethrow;
       }
@@ -193,9 +356,19 @@ Future<Response<dynamic>> _requestWithFallback(
           'trying fallback',
         );
       }
+    } on UnsupportedOriginException catch (error) {
+      // Not a transport failure — the fallback URL may still be usable, but
+      // this one is disqualified on principle, so never retry it.
+      lastError = error;
+      if (fallbackPolicy == FallbackPolicy.never || identical(url, urls.last)) {
+        rethrow;
+      }
+      if (kDebugMode) {
+        debugPrint('$method $url refused ($error), trying fallback');
+      }
     } on FormatException catch (error) {
       lastError = error;
-      if (identical(url, urls.last)) {
+      if (fallbackPolicy == FallbackPolicy.never || identical(url, urls.last)) {
         rethrow;
       }
       if (kDebugMode) {
@@ -215,111 +388,61 @@ Future<Response<dynamic>> _performRequest(
   String path, {
   required Map<String, String> headers,
   dynamic body,
-  bool allowAuthRetry = true,
   ResponseType? responseType,
+  SessionCredential? credentialOverride,
 }) async {
-  final requestUri = _buildRequestUri(baseUrl, path);
-  final requestHeaders = await _headersWithLatestAccessToken(
-    headers,
-    requestUri: requestUri,
-    path: path,
-  );
+  final credential = credentialOverride ?? _credentialReader?.call();
+  final refusal = describeUnsupportedOrigin(baseUrl, credential: credential);
+  if (refusal != null) {
+    throw UnsupportedOriginException(refusal);
+  }
+
+  // Captured before dispatch, not after: what matters is the state the request
+  // was issued under, so a response arriving after a login/logout is ignored.
+  final generation = _generationReader?.call() ?? 0;
 
   try {
-    final response = await _dio.requestUri<dynamic>(
-      requestUri,
+    return await _dio.requestUri<dynamic>(
+      _buildRequestUri(baseUrl, path),
       data: body,
       options: Options(
         method: method,
-        headers: requestHeaders,
+        headers: _headersWithCredentials(method, headers, credential),
         responseType: responseType,
+        // The browser adapter reads this per request; on other platforms it is
+        // inert. Set unconditionally so the cookie rides along on web without a
+        // conditional import just to configure the adapter.
+        extra: const {'withCredentials': true},
       ),
     );
-    await _rememberNativeRefreshCookieFromResponse(requestUri, response);
-    return response;
   } on DioException catch (error) {
-    await _rememberNativeRefreshCookieFromResponse(requestUri, error.response);
-    if (allowAuthRetry && await _shouldRetryAfterUnauthorized(error, headers)) {
-      return _performRequest(
-        method,
-        baseUrl,
-        path,
-        headers: headers,
-        body: body,
-        allowAuthRetry: false,
-        responseType: responseType,
-      );
-    }
+    _sessionEndReporter?.call(error, generation: generation);
     rethrow;
   }
 }
 
-Future<void> _rememberNativeRefreshCookieFromResponse(
-  Uri responseUri,
-  Response<dynamic>? response,
-) async {
-  await rememberNativeRefreshCookie(
-    responseUri,
-    response?.headers.map['set-cookie'] ??
-        response?.headers.map['Set-Cookie'] ??
-        const [],
-  );
-}
-
-Future<Map<String, String>> _headersWithLatestAccessToken(
-  Map<String, String> headers, {
-  required Uri requestUri,
-  required String path,
-}) async {
-  final updated = Map<String, String>.from(headers);
-  final currentAuthorization = headers['Authorization'];
-  if (currentAuthorization != null &&
-      currentAuthorization.startsWith('Bearer ')) {
-    final latestAccessToken = _accessTokenReader?.call();
-    if (latestAccessToken != null && latestAccessToken.isNotEmpty) {
-      updated['Authorization'] = 'Bearer $latestAccessToken';
-    }
-  }
-
-  final refreshCookie = await nativeRefreshCookieHeader(requestUri, path);
-  if (refreshCookie != null && refreshCookie.isNotEmpty) {
-    updated['Cookie'] = refreshCookie;
-  }
-  return updated;
-}
-
-Future<bool> _shouldRetryAfterUnauthorized(
-  DioException error,
+Map<String, String> _headersWithCredentials(
+  String method,
   Map<String, String> headers,
-) async {
-  final hasBearerToken =
-      headers['Authorization']?.startsWith('Bearer ') == true;
-  if (!hasBearerToken ||
-      error.type != DioExceptionType.badResponse ||
-      error.response?.statusCode != 401) {
-    return false;
+  SessionCredential? credential,
+) {
+  final result = <String, String>{...headers};
+
+  if (credential != null) {
+    result['Authorization'] = '$sessionAuthScheme ${credential.token}';
   }
 
-  final refreshedToken = await _refreshAccessTokenIfNeeded();
-  return refreshedToken != null && refreshedToken.isNotEmpty;
-}
-
-Future<String?> _refreshAccessTokenIfNeeded() async {
-  String? refreshedToken;
-  try {
-    refreshedToken = await _refreshAccessToken?.call();
-  } on Exception catch (error) {
-    if (kDebugMode) {
-      debugPrint('api_client._refreshAccessTokenIfNeeded: $error');
+  if (kIsWeb && !_csrfSafeMethods.contains(method.toUpperCase())) {
+    final csrfToken = readBrowserCookie(csrfCookieName);
+    if (csrfToken != null) {
+      result[csrfHeaderName] = csrfToken;
     }
+    // A missing token is not worth failing on locally: the server rejects the
+    // write with a 403 that names CSRF, which is a far more useful signal than
+    // a client-side guess about why the cookie is absent.
   }
 
-  if (refreshedToken == null || refreshedToken.isEmpty) {
-    await _authExpiredHandler?.call();
-    return null;
-  }
-
-  return refreshedToken;
+  return result;
 }
 
 bool _isFallbackableNetworkError(DioException error) {
@@ -337,39 +460,49 @@ bool _isFallbackableNetworkError(DioException error) {
   }
 }
 
+/// Whether a 401 is *this API* saying the session is over.
+///
+/// The header is the whole point: an edge, proxy or captive portal can return
+/// 401 for reasons that have nothing to do with the session, and signing the
+/// user out on those would make every flaky network a logout.
+bool isSessionChallenge(Response<dynamic>? response) {
+  if (response == null || response.statusCode != 401) {
+    return false;
+  }
+  final challenge = response.headers.value('www-authenticate');
+  return challenge != null &&
+      challenge.trim().toLowerCase().startsWith(
+        sessionAuthScheme.toLowerCase(),
+      );
+}
+
 /// Validates [response] is 200 and returns decoded JSON as `Map<String, dynamic>`.
 /// Throws a descriptive [Exception] on any non-200 status.
-Map<String, Object?> expectSuccessJson(
+Map<String, dynamic> expectSuccessJson(
   Response<dynamic> response,
   String context,
 ) {
-  return expectSuccessObject(response, context).object();
+  expectSuccessStatus(response, context, successCodes: const {200});
+  if (response.data is Map) {
+    return Map<String, dynamic>.from(response.data as Map);
+  }
+
+  throw Exception(
+    "$context failed: expected a JSON object but got "
+    "${_describeResponseShape(response.data)}.",
+  );
 }
 
-JsonCursor expectSuccessObject(
-  Response<dynamic> response,
-  String context, {
-  Set<int> successCodes = const {200},
-}) {
-  expectSuccessStatus(response, context, successCodes: successCodes);
-  final cursor = JsonCursor.root(endpoint: context, value: response.data);
-  cursor.object();
-  return cursor;
-}
+List<dynamic> expectSuccessList(Response<dynamic> response, String context) {
+  expectSuccessStatus(response, context, successCodes: const {200});
+  if (response.data is List) {
+    return List<dynamic>.from(response.data as List);
+  }
 
-List<Object?> expectSuccessList(Response<dynamic> response, String context) {
-  return expectSuccessArray(response, context).array();
-}
-
-JsonCursor expectSuccessArray(
-  Response<dynamic> response,
-  String context, {
-  Set<int> successCodes = const {200},
-}) {
-  expectSuccessStatus(response, context, successCodes: successCodes);
-  final cursor = JsonCursor.root(endpoint: context, value: response.data);
-  cursor.array();
-  return cursor;
+  throw Exception(
+    "$context failed: expected a JSON array but got "
+    "${_describeResponseShape(response.data)}.",
+  );
 }
 
 void expectSuccessStatus(
@@ -385,7 +518,21 @@ void expectSuccessStatus(
     return;
   }
 
-  throw ApiClientException(
-    "$context failed: (${response.statusCode}) ${response.data}",
+  throw Exception(
+    "$context failed: (${response.statusCode}) "
+    "${response.data}",
   );
+}
+
+String _describeResponseShape(dynamic value) {
+  if (value == null) {
+    return "no body";
+  }
+  if (value is Map) {
+    return "a JSON object";
+  }
+  if (value is List) {
+    return "a JSON array";
+  }
+  return value.runtimeType.toString();
 }

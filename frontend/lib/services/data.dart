@@ -1,12 +1,8 @@
-import 'dart:async';
-
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
-import 'package:notif/services/client_events.dart';
-import 'package:notif/services/failures.dart';
-import 'package:notif/services/json_contracts.dart';
 
 const String _jsonContentType = 'application/json';
 const String generalSelectorStrategy = 'GeneralSelectorStrategy';
@@ -22,23 +18,23 @@ class StrategyRecord {
     required this.data,
   });
 
-  factory StrategyRecord.fromJson(JsonCursor json) {
+  factory StrategyRecord.fromJson(Map<String, dynamic> json) {
     return StrategyRecord(
-      id: json.field('id').integer(),
-      className:
-          json.optionalField('strat_cls')?.string(allowEmpty: false) ??
-          generalSelectorStrategy,
-      data: json.optionalField('data')?.object() ?? const {},
+      id: _asInt(json['id']) ?? 0,
+      className: (json['strat_cls'] as String?)?.trim().isNotEmpty == true
+          ? json['strat_cls'] as String
+          : generalSelectorStrategy,
+      data: Map<String, dynamic>.from((json['data'] as Map?) ?? const {}),
     );
   }
 
   final int id;
   final String className;
-  final Map<String, Object?> data;
+  final Map<String, dynamic> data;
 
   List<String> get selectors {
     final raw = data['selectors'];
-    if (raw is! List<Object?>) {
+    if (raw is! List) {
       return const [];
     }
 
@@ -62,17 +58,17 @@ class Link {
   });
 
   factory Link.fromJson(
-    JsonCursor json,
+    Map<String, dynamic> json,
     Map<int, StrategyRecord> strategies,
   ) {
-    final strategyId = json.optionalField('strategy')?.nullableInteger();
+    final strategyId = _asInt(json['strategy']);
     final strategy = strategyId != null ? strategies[strategyId] : null;
 
     return Link(
-      id: json.field('id').integer(),
-      name: json.field('name').string(),
-      url: json.field('url').string(),
-      lastScraped: json.optionalField('last_scraped')?.nullableDateTime(),
+      id: _asInt(json['id']) ?? 0,
+      name: (json['name'] as String?)?.trim() ?? '',
+      url: (json['url'] as String?)?.trim() ?? '',
+      lastScraped: _parseDateTime(json['last_scraped']),
       strategyId: strategyId,
       strategyClass: strategy?.className ?? 'UnknownStrategy',
       selectors: strategy?.selectors ?? const [],
@@ -123,18 +119,19 @@ class NotificationItem {
     this.readAt,
   });
 
-  factory NotificationItem.fromJson(JsonCursor json) {
-    final update = json.field('update');
+  factory NotificationItem.fromJson(Map<String, dynamic> json) {
+    final update = Map<String, dynamic>.from(
+      (json['update'] as Map?) ?? const {},
+    );
+
     return NotificationItem(
-      id: json.field('id').integer(),
-      title: update.field('title').string(allowEmpty: false),
-      description: update.field('description').string(),
-      itemUrl: update.field('item_url').string(),
-      status: NotificationStatus.fromWire(
-        json.field('status').string(allowEmpty: false),
-      ),
-      createdAt: update.field('created_at').dateTime(),
-      readAt: json.optionalField('read_at')?.nullableDateTime(),
+      id: _asInt(json['id']) ?? 0,
+      title: (update['title'] as String?)?.trim() ?? 'Untitled update',
+      description: (update['description'] as String?)?.trim() ?? '',
+      itemUrl: (update['item_url'] as String?)?.trim() ?? '',
+      status: NotificationStatus.fromWire((json['status'] as String?)?.trim()),
+      createdAt: _parseDateTime(update['created_at']) ?? DateTime.now(),
+      readAt: _parseDateTime(json['read_at']),
     );
   }
 
@@ -222,7 +219,7 @@ class LinkService extends ChangeNotifier {
   ) {
     _settings = settings;
 
-    if (authService.jwt == null) {
+    if (!authService.isAuthenticated) {
       _resetState();
     }
   }
@@ -245,17 +242,17 @@ class LinkService extends ChangeNotifier {
   bool isDeletingLink(int id) => _deletingIds.contains(id);
 
   Future<void> ensureStrategyChoicesLoaded() async {
-    final jwt = _authService.jwt;
-    if (jwt == null) {
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn) {
       return;
     }
 
-    await _ensureStrategyChoicesLoaded(jwt, stateEpoch: _stateEpoch);
+    await _ensureStrategyChoicesLoaded(stateEpoch: _stateEpoch);
   }
 
   Future<void> fetchLinks() async {
-    final jwt = _authService.jwt;
-    if (jwt == null) {
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn) {
       _resetState();
       return;
     }
@@ -269,22 +266,25 @@ class LinkService extends ChangeNotifier {
 
     try {
       final strategies = await _ensureStrategiesLoaded(
-        jwt,
         stateEpoch: stateEpoch,
       );
-      await _ensureStrategyChoicesLoaded(jwt, stateEpoch: stateEpoch);
+      await _ensureStrategyChoicesLoaded(stateEpoch: stateEpoch);
 
       final response = await apiGet(
         '/monitoring/links/?page=1&page_size=100&ordering=${_ordering.apiValue}',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
       );
 
-      final body = expectSuccessObject(response, 'Fetch links');
-      final links = body
-          .field('results')
-          .items()
-          .map((item) => Link.fromJson(item, strategies))
+      final body = expectSuccessJson(response, 'Fetch links');
+      final results = (body['results'] as List?) ?? const [];
+      final links = results
+          .map(
+            (item) => Link.fromJson(
+              Map<String, dynamic>.from(item as Map),
+              strategies,
+            ),
+          )
           .toList(growable: false);
 
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
@@ -292,13 +292,12 @@ class LinkService extends ChangeNotifier {
       }
       _links = links;
       _currentPage = 1;
-      _hasMore = body.hasNonNullField('next');
-      _totalCount = body.field('count').integer();
+      _hasMore = body['next'] != null;
+      _totalCount = (body['count'] as int?) ?? links.length;
     } on Exception catch (error) {
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
         return;
       }
-      _recordFailure(error, endpoint: 'GET /monitoring/links/');
       _error = describeDataError(error);
     } finally {
       if (_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
@@ -317,8 +316,8 @@ class LinkService extends ChangeNotifier {
 
   /// Fetch a specific page and replace the current list entirely.
   Future<void> goToPage(int page) async {
-    final jwt = _authService.jwt;
-    if (jwt == null || page < 1) return;
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn || page < 1) return;
 
     final stateEpoch = _stateEpoch;
     final fetchEpoch = ++_linksFetchEpoch;
@@ -329,20 +328,23 @@ class LinkService extends ChangeNotifier {
 
     try {
       final strategies = await _ensureStrategiesLoaded(
-        jwt,
         stateEpoch: stateEpoch,
       );
       final response = await apiGet(
         '/monitoring/links/?page=$page&page_size=100&ordering=${_ordering.apiValue}',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
       );
 
-      final body = expectSuccessObject(response, 'Fetch links page $page');
-      final links = body
-          .field('results')
-          .items()
-          .map((item) => Link.fromJson(item, strategies))
+      final body = expectSuccessJson(response, 'Fetch links page $page');
+      final results = (body['results'] as List?) ?? const [];
+      final links = results
+          .map(
+            (item) => Link.fromJson(
+              Map<String, dynamic>.from(item as Map),
+              strategies,
+            ),
+          )
           .toList(growable: false);
 
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
@@ -350,13 +352,12 @@ class LinkService extends ChangeNotifier {
       }
       _links = links;
       _currentPage = page;
-      _hasMore = body.hasNonNullField('next');
-      _totalCount = body.field('count').integer();
+      _hasMore = body['next'] != null;
+      _totalCount = (body['count'] as int?) ?? links.length;
     } on Exception catch (error) {
       if (!_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
         return;
       }
-      _recordFailure(error, endpoint: 'GET /monitoring/links/');
       _error = describeDataError(error);
     } finally {
       if (_isCurrentLinksFetch(fetchEpoch, stateEpoch)) {
@@ -372,9 +373,7 @@ class LinkService extends ChangeNotifier {
     required String strategyClass,
     required String selectorsText,
   }) async {
-    final jwt = _authService.jwt;
-    final userId = _authService.currentUserId;
-    if (jwt == null || userId == null) {
+    if (!_authService.isAuthenticated) {
       _error = 'You need to sign in again before creating a link.';
       notifyListeners();
       return false;
@@ -389,7 +388,6 @@ class LinkService extends ChangeNotifier {
 
     try {
       strategyResolution = await _resolveStrategy(
-        jwt: jwt,
         strategyClass: strategyClass,
         selectorsText: selectorsText,
       );
@@ -397,11 +395,10 @@ class LinkService extends ChangeNotifier {
       final response = await apiPost(
         '/monitoring/links/',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
         body: {
           'name': name.trim(),
           'url': url.trim(),
-          'user': userId,
           'strategy': strategyResolution.id,
         },
       );
@@ -417,9 +414,8 @@ class LinkService extends ChangeNotifier {
       return true;
     } on Exception catch (error) {
       _error = describeDataError(error);
-      _recordFailure(error, endpoint: 'POST /monitoring/links/');
       if (!linkCreated && strategyResolution?.created == true) {
-        await _deleteStrategyIfUnused(jwt, strategyResolution!.id);
+        await _deleteStrategyIfUnused(strategyResolution!.id);
       }
       return false;
     } finally {
@@ -435,8 +431,8 @@ class LinkService extends ChangeNotifier {
     required String strategyClass,
     required String selectorsText,
   }) async {
-    final jwt = _authService.jwt;
-    if (jwt == null) {
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn) {
       _error = 'You need to sign in again before updating a link.';
       notifyListeners();
       return false;
@@ -459,7 +455,6 @@ class LinkService extends ChangeNotifier {
           strategyClass != link.strategyClass ||
           selectorsChanged) {
         strategyResolution = await _resolveStrategy(
-          jwt: jwt,
           strategyClass: strategyClass,
           selectorsText: selectorsText,
         );
@@ -469,7 +464,7 @@ class LinkService extends ChangeNotifier {
       final response = await apiPatch(
         '/monitoring/links/${link.id}/',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
         body: {'name': name.trim(), 'url': url.trim(), 'strategy': strategyId},
       );
 
@@ -477,16 +472,15 @@ class LinkService extends ChangeNotifier {
       linkUpdated = true;
 
       if (link.strategyId != null && link.strategyId != strategyId) {
-        await _deleteStrategyIfUnused(jwt, link.strategyId!);
+        await _deleteStrategyIfUnused(link.strategyId!);
       }
 
       await fetchLinks();
       return true;
     } on Exception catch (error) {
       _error = describeDataError(error);
-      _recordFailure(error, endpoint: 'PATCH /monitoring/links/{id}/');
       if (!linkUpdated && strategyResolution?.created == true) {
-        await _deleteStrategyIfUnused(jwt, strategyResolution!.id);
+        await _deleteStrategyIfUnused(strategyResolution!.id);
       }
       return false;
     } finally {
@@ -496,8 +490,8 @@ class LinkService extends ChangeNotifier {
   }
 
   Future<bool> deleteLink(Link link) async {
-    final jwt = _authService.jwt;
-    if (jwt == null) {
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn) {
       _error = 'You need to sign in again before deleting a link.';
       notifyListeners();
       return false;
@@ -511,12 +505,12 @@ class LinkService extends ChangeNotifier {
       final response = await apiDelete(
         '/monitoring/links/${link.id}/',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
       );
 
       expectSuccessStatus(response, 'Delete link');
       if (link.strategyId != null) {
-        await _deleteStrategyIfUnused(jwt, link.strategyId!);
+        await _deleteStrategyIfUnused(link.strategyId!);
       }
       // If we deleted the last item on this page and it's not page 1,
       // fall back to the previous page — the current page is now empty.
@@ -527,7 +521,6 @@ class LinkService extends ChangeNotifier {
       return true;
     } on Exception catch (error) {
       _error = describeDataError(error);
-      _recordFailure(error, endpoint: 'DELETE /monitoring/links/{id}/');
       return false;
     } finally {
       _deletingIds.remove(link.id);
@@ -536,8 +529,8 @@ class LinkService extends ChangeNotifier {
   }
 
   Future<String?> triggerScrape({int? linkId}) async {
-    final jwt = _authService.jwt;
-    if (jwt == null) {
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn) {
       _error = 'You need to sign in again before running a scrape.';
       notifyListeners();
       return null;
@@ -555,16 +548,15 @@ class LinkService extends ChangeNotifier {
       final response = await apiPost(
         '/monitoring/trigger-scrape/',
         settings: _settings,
-        headers: _authHeaders(jwt),
-        body: linkId == null ? const <String, Object?>{} : {'link_id': linkId},
+        headers: _authHeaders,
+        body: linkId == null ? const <String, dynamic>{} : {'link_id': linkId},
       );
 
-      final data = expectSuccessObject(response, 'Trigger scrape');
+      final data = expectSuccessJson(response, 'Trigger scrape');
       await fetchLinks();
       return _formatScrapeResult(data, linkId: linkId);
     } on Exception catch (error) {
       _error = describeDataError(error);
-      _recordFailure(error, endpoint: 'POST /monitoring/trigger-scrape/');
       return null;
     } finally {
       _scrapingAll = false;
@@ -576,14 +568,13 @@ class LinkService extends ChangeNotifier {
   }
 
   Future<int> _createStrategy({
-    required JWT jwt,
     required String strategyClass,
     required String selectorsText,
   }) async {
     final response = await apiPost(
       '/monitoring/strategies/',
       settings: _settings,
-      headers: _authHeaders(jwt),
+      headers: _authHeaders,
       body: {
         'strat_cls': strategyClass,
         'data': buildStrategyData(
@@ -598,13 +589,8 @@ class LinkService extends ChangeNotifier {
       'Create strategy',
       successCodes: const {200, 201},
     );
-    final strategy = StrategyRecord.fromJson(
-      expectSuccessObject(
-        response,
-        'Create strategy',
-        successCodes: const {200, 201},
-      ),
-    );
+    final json = Map<String, dynamic>.from(response.data as Map);
+    final strategy = StrategyRecord.fromJson(json);
     _strategies = Map<int, StrategyRecord>.from(_strategies)
       ..[strategy.id] = strategy;
     _strategiesFetchedAt = DateTime.now();
@@ -612,11 +598,10 @@ class LinkService extends ChangeNotifier {
   }
 
   Future<_StrategyResolution> _resolveStrategy({
-    required JWT jwt,
     required String strategyClass,
     required String selectorsText,
   }) async {
-    await _ensureStrategiesLoaded(jwt, stateEpoch: _stateEpoch);
+    await _ensureStrategiesLoaded(stateEpoch: _stateEpoch);
 
     final strategyData = buildStrategyData(
       strategyClass: strategyClass,
@@ -631,7 +616,6 @@ class LinkService extends ChangeNotifier {
     }
 
     final id = await _createStrategy(
-      jwt: jwt,
       strategyClass: strategyClass,
       selectorsText: selectorsText,
     );
@@ -640,7 +624,7 @@ class LinkService extends ChangeNotifier {
 
   StrategyRecord? _findMatchingStrategy({
     required String strategyClass,
-    required Map<String, Object?> strategyData,
+    required Map<String, dynamic> strategyData,
   }) {
     for (final strategy in _strategies.values) {
       if (strategy.className != strategyClass) {
@@ -669,12 +653,12 @@ class LinkService extends ChangeNotifier {
     return null;
   }
 
-  Future<void> _deleteStrategyIfUnused(JWT jwt, int strategyId) async {
+  Future<void> _deleteStrategyIfUnused(int strategyId) async {
     try {
       final response = await apiDelete(
         '/monitoring/strategies/$strategyId/',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
       );
 
       expectSuccessStatus(response, 'Delete strategy');
@@ -688,8 +672,7 @@ class LinkService extends ChangeNotifier {
     }
   }
 
-  Future<Map<int, StrategyRecord>> _ensureStrategiesLoaded(
-    JWT jwt, {
+  Future<Map<int, StrategyRecord>> _ensureStrategiesLoaded({
     required int stateEpoch,
     bool forceRefresh = false,
   }) async {
@@ -702,7 +685,7 @@ class LinkService extends ChangeNotifier {
       return existingLoad;
     }
 
-    final load = _fetchStrategies(jwt, stateEpoch: stateEpoch);
+    final load = _fetchStrategies(stateEpoch: stateEpoch);
     _strategiesLoad = load;
 
     try {
@@ -714,20 +697,21 @@ class LinkService extends ChangeNotifier {
     }
   }
 
-  Future<Map<int, StrategyRecord>> _fetchStrategies(
-    JWT jwt, {
+  Future<Map<int, StrategyRecord>> _fetchStrategies({
     required int stateEpoch,
   }) async {
     final response = await apiGet(
       '/monitoring/strategies/',
       settings: _settings,
-      headers: _authHeaders(jwt),
+      headers: _authHeaders,
     );
 
-    final strategies = expectSuccessArray(
-      response,
-      'Fetch strategies',
-    ).items().map(StrategyRecord.fromJson).toList(growable: false);
+    final strategies = expectSuccessList(response, 'Fetch strategies')
+        .map(
+          (item) =>
+              StrategyRecord.fromJson(Map<String, dynamic>.from(item as Map)),
+        )
+        .toList(growable: false);
 
     final nextStrategies = <int, StrategyRecord>{
       for (final strategy in strategies) strategy.id: strategy,
@@ -741,8 +725,7 @@ class LinkService extends ChangeNotifier {
     return nextStrategies;
   }
 
-  Future<void> _ensureStrategyChoicesLoaded(
-    JWT jwt, {
+  Future<void> _ensureStrategyChoicesLoaded({
     required int stateEpoch,
   }) async {
     if (_strategyChoicesLoaded) {
@@ -754,7 +737,7 @@ class LinkService extends ChangeNotifier {
       return existingLoad;
     }
 
-    final load = _fetchStrategyChoices(jwt, stateEpoch: stateEpoch);
+    final load = _fetchStrategyChoices(stateEpoch: stateEpoch);
     _strategyChoicesLoad = load;
 
     try {
@@ -766,17 +749,16 @@ class LinkService extends ChangeNotifier {
     }
   }
 
-  Future<void> _fetchStrategyChoices(JWT jwt, {required int stateEpoch}) async {
+  Future<void> _fetchStrategyChoices({required int stateEpoch}) async {
     try {
       final response = await apiGet(
         '/monitoring/strat-choices',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
       );
 
-      final choices = expectSuccessArray(response, 'Fetch strategy choices')
-          .items()
-          .map((value) => value.string(allowEmpty: false))
+      final choices = expectSuccessList(response, 'Fetch strategy choices')
+          .map((value) => value.toString().trim())
           .where((value) => value.isNotEmpty)
           .toList(growable: false);
 
@@ -859,16 +841,6 @@ class LinkService extends ChangeNotifier {
     _deletingIds.clear();
     notifyListeners();
   }
-
-  void _recordFailure(Object error, {required String endpoint}) {
-    unawaited(
-      reportClientFailure(
-        settings: _settings,
-        error: error,
-        endpoint: endpoint,
-      ),
-    );
-  }
 }
 
 enum NotifSort {
@@ -911,7 +883,7 @@ class NotificationService extends ChangeNotifier {
   ) {
     _settings = settings;
 
-    if (authService.jwt == null) {
+    if (!authService.isAuthenticated) {
       _resetState();
     }
   }
@@ -931,8 +903,8 @@ class NotificationService extends ChangeNotifier {
   bool isMarkingRead(int id) => _markingReadIds.contains(id);
 
   Future<void> fetchNotifications() async {
-    final jwt = _authService.jwt;
-    if (jwt == null) {
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn) {
       _resetState();
       return;
     }
@@ -950,14 +922,17 @@ class NotificationService extends ChangeNotifier {
       final response = await apiGet(
         '/monitoring/notifications/?page=1&page_size=$_pageSize&ordering=${_ordering.apiValue}',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
       );
 
-      final body = expectSuccessObject(response, 'Fetch notifications');
-      final notifications = body
-          .field('results')
-          .items()
-          .map(NotificationItem.fromJson)
+      final body = expectSuccessJson(response, 'Fetch notifications');
+      final results = (body['results'] as List?) ?? const [];
+      final notifications = results
+          .map(
+            (item) => NotificationItem.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
           .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
@@ -965,14 +940,13 @@ class NotificationService extends ChangeNotifier {
       }
       _notifications = notifications;
       _currentPage = 1;
-      _hasMore = body.hasNonNullField('next');
-      _totalCount = body.field('count').integer();
-      _totalUnreadCount = body.field('unread_count').integer();
+      _hasMore = body['next'] != null;
+      _totalCount = (body['count'] as int?) ?? 0;
+      _totalUnreadCount = (body['unread_count'] as int?) ?? 0;
     } on Exception catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
       }
-      _recordFailure(error, endpoint: 'GET /monitoring/notifications/');
       _error = describeDataError(error);
     } finally {
       if (_fetchEpoch == fetchEpoch) {
@@ -991,8 +965,8 @@ class NotificationService extends ChangeNotifier {
 
   /// Fetch a specific page and replace the current list entirely.
   Future<void> goToPage(int page) async {
-    final jwt = _authService.jwt;
-    if (jwt == null || page < 1) return;
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn || page < 1) return;
 
     final fetchEpoch = ++_fetchEpoch;
     _loadingMore = false;
@@ -1004,17 +978,20 @@ class NotificationService extends ChangeNotifier {
       final response = await apiGet(
         '/monitoring/notifications/?page=$page&page_size=$_pageSize&ordering=${_ordering.apiValue}',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
       );
 
-      final body = expectSuccessObject(
+      final body = expectSuccessJson(
         response,
         'Fetch notifications page $page',
       );
-      final notifications = body
-          .field('results')
-          .items()
-          .map(NotificationItem.fromJson)
+      final results = (body['results'] as List?) ?? const [];
+      final notifications = results
+          .map(
+            (item) => NotificationItem.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
           .toList(growable: false);
 
       if (_fetchEpoch != fetchEpoch) {
@@ -1022,15 +999,13 @@ class NotificationService extends ChangeNotifier {
       }
       _notifications = notifications;
       _currentPage = page;
-      _hasMore = body.hasNonNullField('next');
-      _totalCount = body.field('count').integer();
-      _totalUnreadCount =
-          body.optionalField('unread_count')?.integer() ?? _totalUnreadCount;
+      _hasMore = body['next'] != null;
+      _totalCount = (body['count'] as int?) ?? 0;
+      _totalUnreadCount = (body['unread_count'] as int?) ?? _totalUnreadCount;
     } on Exception catch (error) {
       if (_fetchEpoch != fetchEpoch) {
         return;
       }
-      _recordFailure(error, endpoint: 'GET /monitoring/notifications/');
       _error = describeDataError(error);
     } finally {
       if (_fetchEpoch == fetchEpoch) {
@@ -1041,12 +1016,12 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<bool> toggleRead(int id) async {
-    final jwt = _authService.jwt;
+    final signedIn = _authService.isAuthenticated;
     final notification = _notifications.cast<NotificationItem?>().firstWhere(
       (item) => item?.id == id,
       orElse: () => null,
     );
-    if (jwt == null || notification == null) {
+    if (!signedIn || notification == null) {
       return false;
     }
     // Only read↔unread is a valid flip. Dismissed and unknown states should
@@ -1070,7 +1045,7 @@ class NotificationService extends ChangeNotifier {
       final response = await apiPatch(
         '/monitoring/notifications/$id/',
         settings: _settings,
-        headers: _authHeaders(jwt),
+        headers: _authHeaders,
         body: {'status': wireStatus},
       );
 
@@ -1098,7 +1073,6 @@ class NotificationService extends ChangeNotifier {
       return true;
     } on Exception catch (error) {
       _error = describeDataError(error);
-      _recordFailure(error, endpoint: 'PATCH /monitoring/notifications/{id}/');
       return false;
     } finally {
       _markingReadIds.remove(id);
@@ -1118,8 +1092,8 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<void> markAllRead() async {
-    final jwt = _authService.jwt;
-    if (jwt == null || unreadCount == 0) {
+    final signedIn = _authService.isAuthenticated;
+    if (!signedIn || unreadCount == 0) {
       return;
     }
 
@@ -1131,8 +1105,8 @@ class NotificationService extends ChangeNotifier {
       final response = await apiPost(
         '/monitoring/notifications/mark_all_read/',
         settings: _settings,
-        headers: _authHeaders(jwt),
-        body: const <String, Object?>{},
+        headers: _authHeaders,
+        body: const <String, dynamic>{},
       );
 
       expectSuccessStatus(response, 'Mark all notifications as read');
@@ -1150,10 +1124,6 @@ class NotificationService extends ChangeNotifier {
       _totalUnreadCount = 0;
     } on Exception catch (error) {
       _error = describeDataError(error);
-      _recordFailure(
-        error,
-        endpoint: 'POST /monitoring/notifications/mark_all_read/',
-      );
     } finally {
       _markingAllRead = false;
       notifyListeners();
@@ -1188,27 +1158,17 @@ class NotificationService extends ChangeNotifier {
     _markingReadIds.clear();
     notifyListeners();
   }
-
-  void _recordFailure(Object error, {required String endpoint}) {
-    unawaited(
-      reportClientFailure(
-        settings: _settings,
-        error: error,
-        endpoint: endpoint,
-      ),
-    );
-  }
 }
 
-Map<String, Object?> buildStrategyData({
+Map<String, dynamic> buildStrategyData({
   required String strategyClass,
   required String selectorsText,
 }) {
   if (strategyClass == generalSelectorStrategy) {
-    return <String, Object?>{'selectors': normalizeSelectors(selectorsText)};
+    return <String, dynamic>{'selectors': normalizeSelectors(selectorsText)};
   }
 
-  return <String, Object?>{};
+  return <String, dynamic>{};
 }
 
 List<String> normalizeSelectors(String selectorsText) {
@@ -1245,14 +1205,36 @@ String formatStrategyClassName(String raw) {
 }
 
 String describeDataError(Object error) {
-  return AppFailure.from(error).userMessage;
+  if (error is DioException) {
+    final response = error.response;
+    final extracted = _extractErrorMessage(response?.data);
+    if (extracted != null && extracted.isNotEmpty) {
+      return extracted;
+    }
+
+    if (response?.statusCode != null) {
+      return 'Request failed with status ${response!.statusCode}.';
+    }
+
+    return error.message ?? 'The request could not be completed.';
+  }
+
+  final text = error.toString();
+  return text.startsWith('Exception: ') ? text.substring(11) : text;
 }
 
-Map<String, String> _authHeaders(JWT jwt) {
-  return <String, String>{
-    'Authorization': 'Bearer ${jwt.access}',
-    'Content-Type': _jsonContentType,
-  };
+/// Credentials are attached by the api_client (bearer header on native, the
+/// browser's cookie plus an X-CSRFToken echo on web), so callers only declare
+/// the payload shape.
+const Map<String, String> _authHeaders = <String, String>{
+  'Content-Type': _jsonContentType,
+};
+
+DateTime? _parseDateTime(dynamic value) {
+  if (value is! String || value.trim().isEmpty) {
+    return null;
+  }
+  return DateTime.tryParse(value)?.toLocal();
 }
 
 int _compareNotifications(NotificationItem left, NotificationItem right) {
@@ -1262,29 +1244,86 @@ int _compareNotifications(NotificationItem left, NotificationItem right) {
   return right.createdAt.compareTo(left.createdAt);
 }
 
-String _formatScrapeResult(JsonCursor data, {required int? linkId}) {
+int? _asInt(dynamic value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is String) {
+    return int.tryParse(value);
+  }
+  return null;
+}
+
+String? _extractErrorMessage(dynamic value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (value is String) {
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  if (value is List) {
+    final parts = value
+        .map(_extractErrorMessage)
+        .whereType<String>()
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    if (parts.isEmpty) {
+      return null;
+    }
+    return parts.join('\n');
+  }
+
+  if (value is Map) {
+    final detail = value['detail'] ?? value['message'] ?? value['error'];
+    final direct = _extractErrorMessage(detail);
+    if (direct != null && direct.isNotEmpty) {
+      return direct;
+    }
+
+    final parts = <String>[];
+    for (final entry in value.entries) {
+      final message = _extractErrorMessage(entry.value);
+      if (message != null && message.isNotEmpty) {
+        parts.add('${entry.key}: $message');
+      }
+    }
+    if (parts.isEmpty) {
+      return null;
+    }
+    return parts.join('\n');
+  }
+
+  return null;
+}
+
+String _formatScrapeResult(Map<String, dynamic> data, {required int? linkId}) {
   if (linkId != null) {
-    final status = data.field('status').string(allowEmpty: false);
+    final status = data['status'] as String?;
     if (status == 'ok') {
-      final updatesFound = data.optionalField('updates_found')?.integer() ?? 0;
+      final updatesFound = _asInt(data['updates_found']) ?? 0;
       return updatesFound == 0
           ? 'Scrape finished. No new updates were found.'
           : 'Scrape finished. Found $updatesFound new '
                 '${updatesFound == 1 ? 'update' : 'updates'}.';
     }
-    return extractErrorMessage(data.object()) ?? 'Scrape failed.';
+    return _extractErrorMessage(data) ?? 'Scrape failed.';
   }
 
   var okCount = 0;
   var totalUpdates = 0;
   var failedCount = 0;
 
-  for (final key in data.object().keys) {
-    final value = data.field(key);
-    final status = value.optionalField('status')?.string() ?? '';
+  for (final value in data.values) {
+    if (value is! Map) {
+      continue;
+    }
+    final status = value['status'] as String?;
     if (status == 'ok') {
       okCount += 1;
-      totalUpdates += value.optionalField('count')?.integer() ?? 0;
+      totalUpdates += _asInt(value['count']) ?? 0;
     } else {
       failedCount += 1;
     }

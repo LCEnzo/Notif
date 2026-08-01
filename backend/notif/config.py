@@ -46,6 +46,28 @@ class Settings(BaseSettings):
 	SQLITE_PATH: str = Field(default="db.sqlite3", min_length=1)
 	CADDY_ACCESS_LOG_PATH: str = Field(default="/app/caddy-logs/access.json", min_length=1)
 
+	# ── device sessions ────────────────────────────────────
+	# Deliberately absent from the .env files: the defaults are the intended
+	# values, and tuning a lifetime is a deploy-time knob rather than a code
+	# change. Both are bounded so a typo cannot mint an immortal session.
+	SESSION_IDLE_LIFETIME_DAYS: int = Field(
+		default=14,
+		ge=1,
+		le=365,
+		description="A session dies this long after its last use.",
+	)
+	SESSION_ABSOLUTE_LIFETIME_DAYS: int = Field(
+		default=90,
+		ge=1,
+		le=365,
+		description="A session dies this long after it was created, however actively it is used.",
+	)
+	# Flutter's web dev server and Django run on different ports, and Django's
+	# CSRF origin comparison is port-exact — so dev must pin the Flutter port
+	# (`flutter run -d chrome --web-port=<this>`) and trust exactly that origin.
+	# Ignored when DEBUG is false.
+	DEV_WEB_PORT: int = Field(default=5353, ge=1, le=65_535)
+
 	# ── static files ───────────────────────────────────────
 	STATIC_ROOT: str = Field(default="staticfiles", min_length=1)
 

@@ -6,7 +6,6 @@ import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/client_events.dart';
-import 'package:notif/services/json_contracts.dart';
 
 class SystemEvent {
   const SystemEvent({
@@ -19,15 +18,17 @@ class SystemEvent {
     required this.details,
   });
 
-  factory SystemEvent.fromJson(JsonCursor json) {
+  factory SystemEvent.fromJson(Map<String, dynamic> json) {
     return SystemEvent(
-      id: json.field('id').integer(),
-      createdAt: json.field('created_at').dateTime(),
-      level: json.field('level').string(allowEmpty: false),
-      source: json.field('source').string(allowEmpty: false),
-      kind: json.field('kind').string(allowEmpty: false),
-      message: json.field('message').string(),
-      details: json.optionalField('details')?.object() ?? const {},
+      id: json['id'] as int,
+      createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
+      level: json['level'] as String,
+      source: json['source'] as String,
+      kind: json['kind'] as String,
+      message: json['message'] as String,
+      details: json['details'] is Map
+          ? Map<String, dynamic>.from(json['details'] as Map)
+          : const {},
     );
   }
   final int id;
@@ -36,31 +37,25 @@ class SystemEvent {
   final String source;
   final String kind;
   final String message;
-  final Map<String, Object?> details;
+  final Map<String, dynamic> details;
 }
 
 class CaddyLogEntry {
   const CaddyLogEntry({required this.data});
-  final Map<String, Object?> data;
+  final Map<String, dynamic> data;
 
   String get method {
     final request = data['request'];
-    if (request is Map<Object?, Object?>) {
-      final method = request['method'];
-      if (method is String) {
-        return method.trim();
-      }
+    if (request is Map && request['method'] is String) {
+      return request['method'] as String;
     }
     return '';
   }
 
   String get uri {
     final request = data['request'];
-    if (request is Map<Object?, Object?>) {
-      final uri = request['uri'];
-      if (uri is String) {
-        return uri.trim();
-      }
+    if (request is Map && request['uri'] is String) {
+      return request['uri'] as String;
     }
     return data['uri']?.toString() ?? '';
   }
@@ -68,11 +63,8 @@ class CaddyLogEntry {
   String get status => data['status']?.toString() ?? '';
   String get remoteIp {
     final request = data['request'];
-    if (request is Map<Object?, Object?>) {
-      final remoteIp = request['remote_ip'];
-      if (remoteIp is String) {
-        return remoteIp.trim();
-      }
+    if (request is Map && request['remote_ip'] is String) {
+      return request['remote_ip'] as String;
     }
     return '';
   }
@@ -107,17 +99,16 @@ class OpsService extends ChangeNotifier {
     _settings = settings;
   }
 
+  /// The api_client attaches the credential itself; this only asserts that
+  /// there is one to attach, so an ops screen opened while signed out fails
+  /// with a sentence instead of a 401.
   Map<String, String> _authHeaders() {
-    final jwt = _authService.jwt;
-    if (jwt == null) {
+    if (!_authService.isAuthenticated) {
       throw const OpsException(
         'You need to sign in before viewing operations data.',
       );
     }
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ${jwt.access}',
-    };
+    return const {'Content-Type': 'application/json'};
   }
 
   Future<void> fetchEvents() async {
@@ -131,10 +122,18 @@ class OpsService extends ChangeNotifier {
         settings: _settings,
         headers: _authHeaders(),
       );
-      final data = expectSuccessObject(response, 'Fetch system events');
+      final data = expectSuccessJson(response, 'Fetch system events');
+      final rawResults = data['results'];
+      if (rawResults is! List) {
+        throw Exception('Fetch system events failed: missing results list.');
+      }
       _events
         ..clear()
-        ..addAll(data.field('results').items().map(SystemEvent.fromJson));
+        ..addAll(
+          rawResults.whereType<Map<String, dynamic>>().map(
+            (item) => SystemEvent.fromJson(Map<String, dynamic>.from(item)),
+          ),
+        );
     } on Exception catch (error) {
       _recordFailure(error, endpoint: 'GET /ops/events/');
       _error = error.toString();
@@ -155,14 +154,17 @@ class OpsService extends ChangeNotifier {
         settings: _settings,
         headers: _authHeaders(),
       );
-      final data = expectSuccessObject(response, 'Fetch Caddy logs');
+      final data = expectSuccessJson(response, 'Fetch Caddy logs');
+      final rawResults = data['results'];
+      if (rawResults is! List) {
+        throw Exception('Fetch Caddy logs failed: missing results list.');
+      }
       _caddyLogs
         ..clear()
         ..addAll(
-          data
-              .field('results')
-              .items()
-              .map((item) => CaddyLogEntry(data: item.object())),
+          rawResults.whereType<Map<String, dynamic>>().map(
+            (item) => CaddyLogEntry(data: Map<String, dynamic>.from(item)),
+          ),
         );
     } on Exception catch (error) {
       _recordFailure(error, endpoint: 'GET /ops/logs/caddy/');

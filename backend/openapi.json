@@ -35,7 +35,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     },
                     {}
                 ],
@@ -44,7 +47,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/TokenLogoutResponse"
+                                    "$ref": "#/components/schemas/StatusResponse"
                                 }
                             }
                         },
@@ -82,7 +85,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     },
                     {}
                 ],
@@ -91,7 +97,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/TokenLogoutResponse"
+                                    "$ref": "#/components/schemas/StatusResponse"
                                 }
                             }
                         },
@@ -108,7 +114,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -154,7 +163,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -190,7 +202,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -244,7 +259,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -297,7 +315,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -331,7 +352,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -370,7 +394,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -395,7 +422,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -438,7 +468,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -455,6 +488,192 @@
                 }
             }
         },
+        "/api/v1/auth/login/": {
+            "post": {
+                "operationId": "auth_login_create",
+                "description": "Exchange credentials for exactly one session on exactly one transport.\n\n``authentication_classes = []`` because DRF authenticates before permissions\nand rethrows failures: a stale cookie riding along must not 401 the request\nbefore the view ever runs. ``AllowAny`` because the project default is\n``IsAuthenticated``, which would reject the (necessarily anonymous) caller.",
+                "tags": [
+                    "auth"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LoginResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "Body was not JSON, or transport/credentials fields were missing or invalid."
+                    },
+                    "401": {
+                        "description": "Invalid credentials, or the account changed while the login was in flight."
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/logout/": {
+            "post": {
+                "operationId": "auth_logout_create",
+                "description": "End the presented session, idempotently, and clear the cookie regardless.\n\nAnonymous by construction (see LoginView), and tolerant: an expired, revoked\nor unknown credential is not an error — the caller wants to be signed out and\nalready is.",
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StatusResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "Body was not JSON."
+                    },
+                    "403": {
+                        "description": "A live cookie session was presented without a valid CSRF token."
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/sessions/": {
+            "get": {
+                "operationId": "auth_sessions_list",
+                "description": "Every signed-in device that can still authenticate for the requesting user, most recently used first. Revoked sessions, sessions idle past the idle lifetime, and sessions past the absolute lifetime are omitted. Strictly owner-scoped: a user never sees another user's sessions. Bounded by the per-user session cap, so it is never paginated.",
+                "summary": "List the caller's live sessions",
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/DeviceSession"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": "Authentication credentials were not provided."
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/sessions/{public_id}/": {
+            "delete": {
+                "operationId": "auth_sessions_destroy",
+                "description": "Revokes a single session by its public_id, signing that device out on its next request. Scoped to the caller's own live sessions, so another user's public_id resolves to 404 rather than revealing that it exists. Revoking the caller's own session is allowed — that is how you sign out a device you are holding.",
+                "summary": "Revoke one session",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "public_id",
+                        "schema": {
+                            "type": "string",
+                            "format": "uuid"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionRevokeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": "Authentication credentials were not provided."
+                    },
+                    "404": {
+                        "description": "No such live session for this user."
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/sessions/revoke_all/": {
+            "post": {
+                "operationId": "auth_sessions_revoke_all_create",
+                "description": "Signs the caller out on every device except the one making the request, matching what changing the password does. Returns how many sessions were revoked; already-revoked sessions are left untouched so their original reason and timestamp survive.",
+                "summary": "Revoke every other session",
+                "tags": [
+                    "auth"
+                ],
+                "security": [
+                    {
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SessionRevokeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "401": {
+                        "description": "Authentication credentials were not provided."
+                    }
+                }
+            }
+        },
         "/api/v1/client-events/": {
             "post": {
                 "operationId": "client_events_create",
@@ -467,23 +686,16 @@
                             "schema": {
                                 "$ref": "#/components/schemas/ClientEvent"
                             }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ClientEvent"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ClientEvent"
-                            }
                         }
                     },
                     "required": true
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     },
                     {}
                 ],
@@ -510,7 +722,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     },
                     {}
                 ],
@@ -566,7 +781,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -610,7 +828,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -647,7 +868,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -702,7 +926,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -756,7 +983,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -791,7 +1021,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -838,7 +1071,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -863,8 +1099,9 @@
                         "in": "path",
                         "name": "id",
                         "schema": {
-                            "type": "string"
+                            "type": "integer"
                         },
+                        "description": "A unique integer value identifying this notification.",
                         "required": true
                     }
                 ],
@@ -873,7 +1110,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -896,8 +1136,9 @@
                         "in": "path",
                         "name": "id",
                         "schema": {
-                            "type": "string"
+                            "type": "integer"
                         },
+                        "description": "A unique integer value identifying this notification.",
                         "required": true
                     }
                 ],
@@ -925,7 +1166,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -948,8 +1192,9 @@
                         "in": "path",
                         "name": "id",
                         "schema": {
-                            "type": "string"
+                            "type": "integer"
                         },
+                        "description": "A unique integer value identifying this notification.",
                         "required": true
                     }
                 ],
@@ -977,7 +1222,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1021,7 +1269,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1047,7 +1298,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     },
                     {}
                 ],
@@ -1077,13 +1331,18 @@
         },
         "/api/v1/monitoring/strat-choices": {
             "get": {
-                "operationId": "monitoring_strat_choices_retrieve",
+                "operationId": "monitoring_strat_choices_list",
+                "description": "The strategy class names a Link's Strategy may use, as a flat JSON array. Values match the StratClsEnum used by the Strategy endpoints.",
+                "summary": "List available scraping strategy names",
                 "tags": [
                     "monitoring"
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1091,13 +1350,17 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "additionalProperties": {},
-                                    "description": "Unspecified response body"
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/StratClsEnum"
+                                    }
                                 }
                             }
                         },
-                        "description": ""
+                        "description": "Available strategy class names."
+                    },
+                    "401": {
+                        "description": "Authentication credentials were not provided."
                     }
                 }
             }
@@ -1111,7 +1374,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1158,7 +1424,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1195,7 +1464,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1250,7 +1522,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1304,7 +1579,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1339,7 +1617,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1352,6 +1633,7 @@
         "/api/v1/monitoring/trigger-scrape/": {
             "post": {
                 "operationId": "monitoring_trigger_scrape_create",
+                "description": "Scrape one link, or every link the caller owns.\n\nSupply ``link_id`` to scrape a single link; omit it to scrape all of them. Both\nmodes answer with a top-level ``status``; scrape-all additionally returns a\n``results`` map keyed by stringified link id, whose entries use the same\n``updates_found``/``message`` field names as the single-link response.",
                 "tags": [
                     "monitoring"
                 ],
@@ -1376,7 +1658,10 @@
                 },
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1384,7 +1669,27 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/TriggerScrapeSingleResponse"
+                                    "$ref": "#/components/schemas/TriggerScrapeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TriggerScrapeResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/TriggerScrapeResponse"
                                 }
                             }
                         },
@@ -1401,7 +1706,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1456,7 +1764,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1492,7 +1803,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1517,7 +1831,10 @@
                 ],
                 "security": [
                     {
-                        "jwtAuth": []
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
                     }
                 ],
                 "responses": {
@@ -1526,153 +1843,6 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/CaddyAccessLogResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/token/": {
-            "post": {
-                "operationId": "token_create",
-                "description": "Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.\n\nSubclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.",
-                "tags": [
-                    "token"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenLoginRequest"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenLoginRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenLoginRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TokenAccessResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/token/logout/": {
-            "post": {
-                "operationId": "token_logout_create",
-                "description": "Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.\n\nSubclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.",
-                "tags": [
-                    "token"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {}
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TokenLogoutResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/token/refresh/": {
-            "post": {
-                "operationId": "token_refresh_create",
-                "description": "Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.\n\nSubclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.",
-                "parameters": [
-                    {
-                        "in": "header",
-                        "name": "X-Refresh-Request",
-                        "schema": {
-                            "type": "string"
-                        },
-                        "description": "Must be set to 1 for refresh requests.",
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "token"
-                ],
-                "security": [
-                    {
-                        "jwtAuth": []
-                    },
-                    {}
-                ],
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TokenAccessResponse"
-                                }
-                            }
-                        },
-                        "description": ""
-                    }
-                }
-            }
-        },
-        "/api/v1/token/verify/": {
-            "post": {
-                "operationId": "token_verify_create",
-                "description": "Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.\n\nSubclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.",
-                "tags": [
-                    "token"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenVerify"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenVerify"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/TokenVerify"
-                            }
-                        }
-                    },
-                    "required": true
-                },
-                "responses": {
-                    "200": {
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/TokenVerify"
                                 }
                             }
                         },
@@ -1784,6 +1954,63 @@
                     "status"
                 ]
             },
+            "DeviceSession": {
+                "type": "object",
+                "description": "One live session — in practice, one signed-in device.\n\n``public_id`` is the handle used to revoke a session; the row's integer\nprimary key and its ``token_hash`` are deliberately not exposed.",
+                "properties": {
+                    "public_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "readOnly": true
+                    },
+                    "device_label": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "transport": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/TransportEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "last_used_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "ip": {
+                        "type": "string",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "user_agent": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "current": {
+                        "type": "boolean",
+                        "readOnly": true,
+                        "description": "True for the session that made this request."
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "current",
+                    "device_label",
+                    "ip",
+                    "last_used_at",
+                    "public_id",
+                    "transport",
+                    "user_agent"
+                ]
+            },
             "HealthCheckResponse": {
                 "type": "object",
                 "properties": {
@@ -1827,8 +2054,7 @@
                         "readOnly": true
                     },
                     "strategy": {
-                        "type": "integer",
-                        "nullable": true
+                        "type": "integer"
                     },
                     "last_scraped": {
                         "type": "string",
@@ -1874,6 +2100,58 @@
                     "strategy",
                     "url",
                     "user"
+                ]
+            },
+            "LoginRequest": {
+                "type": "object",
+                "properties": {
+                    "username": {
+                        "type": "string"
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true
+                    },
+                    "transport": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/TransportEnum"
+                            }
+                        ],
+                        "description": "How this client will present the session. 'cookie' sets an HttpOnly cookie and returns no token; 'bearer' returns the raw token once and sets no cookie. The two are mutually exclusive, and a token presented through the other transport is rejected.\n\n* `cookie` - Cookie\n* `bearer` - Bearer"
+                    },
+                    "device_label": {
+                        "type": "string",
+                        "maxLength": 120
+                    }
+                },
+                "required": [
+                    "password",
+                    "transport",
+                    "username"
+                ]
+            },
+            "LoginResponse": {
+                "type": "object",
+                "properties": {
+                    "transport": {
+                        "$ref": "#/components/schemas/TransportEnum"
+                    },
+                    "public_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "Handle for this session in the sessions list."
+                    },
+                    "token": {
+                        "type": "string",
+                        "nullable": true,
+                        "description": "The raw session token, shown exactly once. Non-null only for transport=bearer; cookie clients get an HttpOnly cookie instead and never see a token."
+                    }
+                },
+                "required": [
+                    "public_id",
+                    "token",
+                    "transport"
                 ]
             },
             "Notification": {
@@ -2058,8 +2336,7 @@
                         "readOnly": true
                     },
                     "strategy": {
-                        "type": "integer",
-                        "nullable": true
+                        "type": "integer"
                     },
                     "last_scraped": {
                         "type": "string",
@@ -2162,6 +2439,23 @@
                     }
                 }
             },
+            "SessionRevokeResponse": {
+                "type": "object",
+                "description": "Result of revoking one session or all of them.",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    },
+                    "revoked": {
+                        "type": "integer",
+                        "description": "Number of sessions this call revoked."
+                    }
+                },
+                "required": [
+                    "revoked",
+                    "status"
+                ]
+            },
             "StatusCheckResponse": {
                 "type": "object",
                 "properties": {
@@ -2197,6 +2491,17 @@
                 ],
                 "type": "string",
                 "description": "* `unread` - Unread\n* `read` - Read\n* `dismissed` - Dismissed"
+            },
+            "StatusResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ]
             },
             "StratClsEnum": {
                 "enum": [
@@ -2277,62 +2582,33 @@
                     "source"
                 ]
             },
-            "TokenAccessResponse": {
-                "type": "object",
-                "properties": {
-                    "access": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "access"
-                ]
+            "TransportEnum": {
+                "enum": [
+                    "cookie",
+                    "bearer"
+                ],
+                "type": "string",
+                "description": "* `cookie` - Cookie\n* `bearer` - Bearer"
             },
-            "TokenLoginRequest": {
+            "TriggerScrapeLinkResult": {
                 "type": "object",
-                "properties": {
-                    "username": {
-                        "type": "string"
-                    },
-                    "password": {
-                        "type": "string",
-                        "writeOnly": true
-                    },
-                    "remember_me": {
-                        "type": "boolean",
-                        "default": true
-                    },
-                    "device_label": {
-                        "type": "string",
-                        "maxLength": 120
-                    }
-                },
-                "required": [
-                    "password",
-                    "username"
-                ]
-            },
-            "TokenLogoutResponse": {
-                "type": "object",
+                "description": "Outcome for one link inside a scrape-all response.",
                 "properties": {
                     "status": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "\"ok\" or \"error\"."
+                    },
+                    "updates_found": {
+                        "type": "integer",
+                        "description": "Present when status is \"ok\"."
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Present when status is \"error\"."
                     }
                 },
                 "required": [
                     "status"
-                ]
-            },
-            "TokenVerify": {
-                "type": "object",
-                "properties": {
-                    "token": {
-                        "type": "string",
-                        "writeOnly": true
-                    }
-                },
-                "required": [
-                    "token"
                 ]
             },
             "TriggerScrapeRequest": {
@@ -2344,17 +2620,28 @@
                     }
                 }
             },
-            "TriggerScrapeSingleResponse": {
+            "TriggerScrapeResponse": {
                 "type": "object",
+                "description": "The single response shape for POST /monitoring/trigger-scrape/.\n\nEvery response, at every status code, carries ``status``. A single-link call\n(``link_id`` supplied) adds ``updates_found`` on success or ``message`` on\nfailure. A scrape-all call adds ``results``: a ``{\"<link_id>\": {...}}`` map whose\nentries reuse the same field names.\n\nThis replaces the previous pair of serializers. The two request modes genuinely\nreturn different payloads, and drf-spectacular 0.29 cannot express that as a\nunion without a discriminator — ``PolymorphicProxySerializer`` breaks client\ngeneration — so the honest declaration is one component whose only guaranteed\nmember is ``status``, which is exactly what the endpoint promises.",
                 "properties": {
                     "status": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "\"ok\" or \"error\"."
                     },
                     "updates_found": {
-                        "type": "integer"
+                        "type": "integer",
+                        "description": "Single-link success only: number of updates created."
                     },
                     "message": {
-                        "type": "string"
+                        "type": "string",
+                        "description": "Error detail."
+                    },
+                    "results": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/TriggerScrapeLinkResult"
+                        },
+                        "description": "Scrape-all only: per-link outcome keyed by stringified link id."
                     }
                 },
                 "required": [
@@ -2451,10 +2738,16 @@
             }
         },
         "securitySchemes": {
-            "jwtAuth": {
+            "sessionBearer": {
                 "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT"
+                "scheme": "session",
+                "description": "Opaque session token issued by POST /api/v1/auth/login/ with transport=bearer, sent as `Authorization: Session <token>`. Native clients only."
+            },
+            "sessionCookie": {
+                "type": "apiKey",
+                "in": "cookie",
+                "name": "notif_session",
+                "description": "HttpOnly session cookie set by POST /api/v1/auth/login/ with transport=cookie. Browser clients only; unsafe methods must also send the csrftoken value in X-CSRFToken."
             }
         }
     }

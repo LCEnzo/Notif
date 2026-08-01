@@ -42,7 +42,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='refreshsessionfamily',
-            index=models.Index(fields=['user', '-last_used_at'], name='accounts_rsf_user_last_used_idx'),
+            index=models.Index(fields=['user', '-last_used_at'], name='accounts_rsf_user_lastused_idx'),
         ),
         migrations.AddIndex(
             model_name='refreshsessionfamily',

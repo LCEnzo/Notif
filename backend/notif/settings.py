@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
 import sys
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -39,10 +38,31 @@ DEV_BOOTSTRAP_EMAIL = settings.DEV_BOOTSTRAP_EMAIL
 DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 
 ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]
-CORS_ALLOW_ALL_ORIGINS = settings.DEBUG
+# Never allow every origin, not even in DEBUG. Combined with CORS_ALLOW_CREDENTIALS
+# below, "*" would hand any page a developer happens to visit credentialed access to
+# the dev API — and DEV_BOOTSTRAP_LOGIN_ENABLED defaults to DEBUG with a password
+# committed to the repo, so that page could log itself in as the dev user.
+CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
+# Dev allowlist: loopback only. A regex rather than a literal list because the
+# Flutter web dev server picks a random port on every `flutter run`.
+CORS_ALLOWED_ORIGIN_REGEXES = [r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$"] if DEBUG else []
 CORS_ALLOW_CREDENTIALS = True
+# The frontend distinguishes our session rejection from an edge-generated 401
+# by this challenge. Browsers hide non-safelisted response headers unless CORS
+# exposes them explicitly.
+CORS_EXPOSE_HEADERS = ["WWW-Authenticate"]
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in settings.CSRF_TRUSTED_ORIGINS.split(",") if origin.strip()]
+if DEBUG:
+	# Django's CSRF origin comparison is port-exact, and CORS_ALLOWED_ORIGIN_REGEXES
+	# above does not feed it — so the loopback wildcard that lets the Flutter dev
+	# server talk to us is not enough to let it POST. Pin the dev web port
+	# (`flutter run -d chrome --web-port=$DEV_WEB_PORT`) and trust exactly that.
+	CSRF_TRUSTED_ORIGINS += [
+		f"http://localhost:{settings.DEV_WEB_PORT}",
+		f"http://127.0.0.1:{settings.DEV_WEB_PORT}",
+	]
+DEV_WEB_PORT = settings.DEV_WEB_PORT
 
 
 # Application definition
@@ -56,7 +76,6 @@ INSTALLED_APPS = [
 	"django.contrib.staticfiles",
 	"corsheaders",
 	"rest_framework",
-	"rest_framework_simplejwt",
 	"drf_spectacular",
 	"accounts",
 	"monitoring",
@@ -109,6 +128,30 @@ DATABASES = {
 	"default": {
 		"ENGINE": "django.db.backends.sqlite3",
 		"NAME": settings.SQLITE_PATH,
+		# SQLite reports has_select_for_update = False, and Django's compiler
+		# silently drops the FOR UPDATE clause rather than raising - so row
+		# locks cannot be relied on here, and concurrent writers can both read
+		# the same row before either writes.
+		#
+		# In the default DEFERRED mode a transaction reads first, holding only a
+		# SHARED lock, and asks for a write lock at its first UPDATE. SQLite
+		# refuses that upgrade with SQLITE_BUSY *immediately* when another
+		# transaction holds the write lock - the busy timeout is not honoured,
+		# because waiting could only deadlock. The loser raises "database is
+		# locked" (a 500) instead of reaching the grace-window branch that exists
+		# for exactly this multi-tab case.
+		#
+		# IMMEDIATE takes the write lock when the transaction opens, so the
+		# second writer waits out the timeout and then finds used_at already set
+		# - the conditional-update path the grace window is built on. The cost is
+		# that write transactions serialise, which on a single-instance
+		# deployment is the right trade. WAL additionally lets reads proceed
+		# during a write.
+		"OPTIONS": {
+			"transaction_mode": "IMMEDIATE",
+			"timeout": 20,
+			"init_command": "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;",
+		},
 	}
 	# 'default': {
 	# 	'ENGINE': 'django.db.backends.postgresql',
@@ -182,9 +225,11 @@ _REST_THROTTLE_RATES = {
 	"anon": "60/min",
 	"login": "5/min",
 	"register": "3/min",
-	"token_refresh": "10/min",
-	"token_verify": "20/min",
-	"token_logout": "20/min",
+	# Logout is anonymous (it authenticates by presented token, not by DRF), so
+	# this scope keys on the client IP. It has to be generous enough that a
+	# NAT full of users signing out does not start 429-ing — a throttled logout
+	# leaves a live session behind, which is the failure mode worth avoiding.
+	"logout": "20/min",
 	"client_events": "30/min",
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
@@ -195,7 +240,7 @@ REST_FRAMEWORK = {
 		"rest_framework.permissions.IsAuthenticated",
 	],
 	"DEFAULT_AUTHENTICATION_CLASSES": [
-		"rest_framework_simplejwt.authentication.JWTAuthentication",
+		"accounts.authentication.SessionTokenAuthentication",
 	],
 	"DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 	"DEFAULT_THROTTLE_CLASSES": []
@@ -295,24 +340,30 @@ if not DEBUG:
 	CSRF_COOKIE_SECURE = True
 
 
-# https://django-rest-framework-simplejwt.readthedocs.io/en/latest/settings.html
-SIMPLE_JWT = {
-	"ACCESS_TOKEN_LIFETIME": timedelta(minutes=20 if not DEBUG else 48 * 60),
-	"REFRESH_TOKEN_LIFETIME": timedelta(hours=72),
-	"LEEWAY": 0,
-	"AUTH_HEADER_TYPES": ("Bearer", "JWT", ""),
-	"AUTH_HEADER_NAME": "HTTP_AUTHORIZATION",
-	"USER_ID_FIELD": "id",
-	"USER_ID_CLAIM": "user_id",
-	"SLIDING_TOKEN_REFRESH_EXP_CLAIM": "refresh_exp",
-	"SLIDING_TOKEN_LIFETIME": timedelta(minutes=20),
-	"SLIDING_TOKEN_REFRESH_LIFETIME": timedelta(hours=30),
-}
+# ── device sessions ──────────────────────────────────────────
+# Lifetimes are derived from config rather than written onto rows, so retuning
+# one takes effect on the next request instead of needing a data migration.
+SESSION_IDLE_LIFETIME_DAYS = settings.SESSION_IDLE_LIFETIME_DAYS
+SESSION_ABSOLUTE_LIFETIME_DAYS = settings.SESSION_ABSOLUTE_LIFETIME_DAYS
 
-JWT_REFRESH_COOKIE_NAME = "notif_refresh"
-JWT_REFRESH_COOKIE_PATH = "/api/v1/token/"
-JWT_REFRESH_COOKIE_SAMESITE = "Lax"
-JWT_REFRESH_COOKIE_SECURE = not DEBUG
+SESSION_TOKEN_COOKIE_NAME = "notif_session"
+# Every authenticated API call lives under this prefix, and nothing else does.
+SESSION_TOKEN_COOKIE_PATH = "/api/v1/"
+# Strict, not Lax: web auth is declared same-origin-only (the Caddyfile serves the
+# SPA and the API from one host), so no legitimate cross-site navigation ever
+# needs to carry this cookie.
+SESSION_TOKEN_COOKIE_SAMESITE = "Strict"
+# Unconditional, including local dev: Chromium treats loopback as a trustworthy
+# origin and accepts Secure cookies over plain HTTP there. Making the flag
+# conditional on DEBUG would mean the deployed configuration is one nobody ever
+# runs before deploying.
+SESSION_TOKEN_COOKIE_SECURE = True
+
+# Until the cutover ages out, login and logout also expire the JWT-era refresh
+# cookie. It sat at a path the new cookie's deletion does not reach, so without
+# this it would linger in browsers until its own Max-Age ran out.
+LEGACY_REFRESH_COOKIE_NAME = "notif_refresh"
+LEGACY_REFRESH_COOKIE_PATH = "/api/v1/token/"
 
 # Email
 EMAIL_BACKEND = settings.EMAIL_BACKEND or (

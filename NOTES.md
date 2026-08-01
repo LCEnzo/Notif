@@ -306,7 +306,6 @@ Ordered roughly by impact within each section.
 **Low impact / housekeeping**
 - Remove `misc/secrets.json` + `misc/*.ipynb`
 - Delete dead `IsOwner` permission — subsumed by `IsOwnerOrAdmin`, never imported
-- Remove unused `TriggerScrapeAllResponseSerializer`
 - Remove unused `lxml` dependency
 - Remove unused `Notification.Status.DISMISSED`
 - `UserMinimalReadSerializer` list view missing `name` / `email`
@@ -331,3 +330,35 @@ Ordered roughly by impact within each section.
 - Inline `_KVText` (kv.dart), `_StaticText` (about.dart), `_AccountTextField` (account.dart)
 - Extract pagination window algorithm from `homescreen.dart` to a pure function (test duplicates it)
 - Test coverage: `AuthService`, `LinkService`, `NotificationService`, `OpsService`, `account.dart`, `forgot_password.dart`, `reset_password.dart`
+
+---
+
+## API error format unification (noted 2026-07-28)
+
+The API currently speaks two error dialects:
+
+- DRF's default shape — a field→messages dict from `is_valid(raise_exception=True)`
+  (client-events, token views) or `{"detail": "..."}` from auth/throttle failures.
+- The bespoke `{"status": "error", "message": "..."}` envelope on `trigger_scrape`,
+  kept there because the declared schema promises it and the FE contract test
+  parses it.
+
+The FE tolerates both today: `extractErrorMessage` walks strings/lists/maps
+generically, and failure *classification* keys on the HTTP status, not the body.
+But two dialects means the schema documents two shapes and every new endpoint
+has to pick one.
+
+Plan: unify on one machine-readable contract when generating the FE API client
+from openapi.json. Candidate: **drf-standardized-errors** — swaps DRF's
+exception handler for one emitting
+`{"type": ..., "errors": [{"code", "detail", "attr"}]}` on every endpoint,
+with drf-spectacular integration so the schema documents error responses
+truthfully. That direction (exception handler, not middleware) is the right
+lever: DRF renders error responses before Django middleware could reshape them
+reliably, and a response-rewriting middleware would fight content negotiation.
+
+Migration order: adopt the handler backend-side (schema updates in the same
+change, drift check keeps it honest) → teach `failures.dart` the structured
+shape (per-field `attr` enables mapping validation errors onto form fields,
+`code` enables non-string matching) → delete the `trigger_scrape` envelope and
+`_request_error_message`.
