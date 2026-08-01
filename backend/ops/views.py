@@ -59,8 +59,8 @@ _CLIENT_EVENT_SOURCE = "frontend"
 # attacker their own diagnostics, not ours - other sources' rows are untouched.
 _CLIENT_EVENT_MAX_ROWS = 5000
 _SECRET_PATTERNS = [
-	re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
-	re.compile(r"(notif_refresh=)[^;\s]+", re.IGNORECASE),
+	re.compile(r"(?:Bearer|Session)\s+[A-Za-z0-9._~+/=-]+", re.IGNORECASE),
+	re.compile(r"(notif_session=|notif_refresh=)[^;\s]+", re.IGNORECASE),
 	re.compile(r"([?&](?:access|refresh|token|password)=)[^&\s]+", re.IGNORECASE),
 	re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
 ]

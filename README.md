@@ -79,12 +79,12 @@ python manage.py regenerate_secret_key
 
 ## Current status (v0.3.0)
 
-**Backend** — Django REST API with JWT auth, 5 scraping strategies, in-app notifications, OpenAPI docs, rate limiting, and production Docker + compose setup. 73 tests passing.
+**Backend** — Django REST API with opaque device-session auth, 5 scraping strategies, in-app notifications, OpenAPI docs, rate limiting, and production Docker + compose setup. 73 tests passing.
 
 **Frontend** — Flutter app with login/registration, link/strategy management, notification list, and an About screen.
 
 ### Done
-- [x] User auth (JWT, registration, dev bootstrap)
+- [x] User auth (opaque device sessions, registration, dev bootstrap)
 - [x] Link CRUD with owner-scoped querysets
 - [x] 5 scraping strategies (feed, CSS selectors, forum threadmarks, Kemono, QQ Alerts)
 - [x] In-app notifications (unread/read/dismissed, mark-all-read)

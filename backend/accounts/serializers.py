@@ -5,15 +5,15 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
-from accounts.models import RefreshSessionFamily, User
+from accounts.models import DeviceSession, User
 
 if TYPE_CHECKING:
 	_UserModelSerializer = ModelSerializer[User]
-	_RefreshSessionModelSerializer = ModelSerializer[RefreshSessionFamily]
+	_DeviceSessionModelSerializer = ModelSerializer[DeviceSession]
 	_AnySerializer = serializers.Serializer[Any]
 else:
 	_UserModelSerializer = ModelSerializer
-	_RefreshSessionModelSerializer = ModelSerializer
+	_DeviceSessionModelSerializer = ModelSerializer
 	_AnySerializer = serializers.Serializer
 
 
@@ -66,6 +66,9 @@ class UserFullReadSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = [
+			# An opaque session token carries no claims, so this is where the
+			# client learns its own id - which the link API needs as an owner.
+			"id",
 			"name",
 			"email",
 			"username",
@@ -83,52 +86,69 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 		fields = ["username", "date_created"]
 
 
-# ── token auth ───────────────────────────────────────────────
+# ── device sessions ──────────────────────────────────────────
 
 
-class TokenLoginRequestSerializer(_AnySerializer):
+class LoginRequestSerializer(_AnySerializer):
 	username = serializers.CharField()
 	password = serializers.CharField(write_only=True)
-	remember_me = serializers.BooleanField(default=True, required=False)
+	transport = serializers.ChoiceField(
+		choices=DeviceSession.Transport.choices,
+		help_text=(
+			"How this client will present the session. 'cookie' sets an HttpOnly cookie and returns no token; "
+			"'bearer' returns the raw token once and sets no cookie. The two are mutually exclusive, and a "
+			"token presented through the other transport is rejected."
+		),
+	)
 	device_label = serializers.CharField(max_length=120, required=False, allow_blank=True)
 
 
-class TokenAccessResponseSerializer(_AnySerializer):
-	access = serializers.CharField()
+class LoginResponseSerializer(_AnySerializer):
+	transport = serializers.ChoiceField(choices=DeviceSession.Transport.choices)
+	public_id = serializers.UUIDField(help_text="Handle for this session in the sessions list.")
+	token = serializers.CharField(
+		allow_null=True,
+		help_text=(
+			"The raw session token, shown exactly once. Non-null only for transport=bearer; "
+			"cookie clients get an HttpOnly cookie instead and never see a token."
+		),
+	)
 
 
-class TokenRefreshRequestSerializer(_AnySerializer):
-	pass
-
-
-class TokenLogoutResponseSerializer(_AnySerializer):
+class StatusResponseSerializer(_AnySerializer):
 	status = serializers.CharField()
 
 
-# ── refresh sessions ─────────────────────────────────────────
+class DeviceSessionSerializer(_DeviceSessionModelSerializer):
+	"""One live session — in practice, one signed-in device.
 
-
-class RefreshSessionSerializer(_RefreshSessionModelSerializer):
-	"""One active refresh session — in practice, one signed-in device.
-
-	``family_id`` is the public handle used to revoke a session; the row's integer
-	primary key is deliberately not exposed.
+	``public_id`` is the handle used to revoke a session; the row's integer
+	primary key and its ``token_hash`` are deliberately not exposed.
 	"""
 
+	current = serializers.SerializerMethodField(help_text="True for the session that made this request.")
+
 	class Meta:
-		model = RefreshSessionFamily
+		model = DeviceSession
 		fields = [
-			"family_id",
+			"public_id",
+			"device_label",
+			"transport",
 			"created_at",
 			"last_used_at",
-			"device_label",
 			"ip",
 			"user_agent",
+			"current",
 		]
 		read_only_fields = fields
 
+	def get_current(self, obj: DeviceSession) -> bool:
+		request = self.context.get("request")
+		caller = getattr(request, "auth", None)
+		return isinstance(caller, DeviceSession) and caller.pk == obj.pk
 
-class RefreshSessionRevokeResponseSerializer(_AnySerializer):
+
+class SessionRevokeResponseSerializer(_AnySerializer):
 	"""Result of revoking one session or all of them."""
 
 	status = serializers.CharField()

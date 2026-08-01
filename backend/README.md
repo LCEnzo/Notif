@@ -41,15 +41,23 @@ uv run mypy .
 
 
 ### User Login:
-  - Route: `api/v1/token/`
-  - Method: `POST`
-  - Body: 
+  - Route: `api/v1/auth/login/`
+  - Method: `POST` (JSON only)
+  - Body:
     ```json
     {
         "username": "new_user",
-        "password": "securepassword123 securepassword123"
+        "password": "securepassword123 securepassword123",
+        "transport": "bearer",
+        "device_label": "Pixel 8"
     }
     ```
+  - `transport: "bearer"` returns the opaque session token once, in the body; send it
+    back as `Authorization: Session <token>`. `transport: "cookie"` sets an HttpOnly
+    `notif_session` cookie instead and returns no token — browsers only, and unsafe
+    methods must then echo the `csrftoken` cookie in `X-CSRFToken`.
+  - Sign out with `POST api/v1/auth/login/`'s counterpart, `api/v1/auth/logout/`;
+    list and revoke devices under `api/v1/auth/sessions/`.
   
 ## Docker
 

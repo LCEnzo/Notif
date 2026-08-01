@@ -1,6 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- allowBackup/fullBackupContent are false because the session token lives
+         in the keystore: an auto-backup could carry a live credential onto
+         another device, where nothing the app does could revoke it. -->
     <application
         android:label="Notif"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -6,6 +6,8 @@ import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/auth_test_harness.dart';
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -22,7 +24,12 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => AppSettingsController()),
-          ChangeNotifierProvider(create: (_) => AuthService()),
+          ChangeNotifierProvider(
+            create: (_) => AuthService(
+              store: InMemorySessionStore(),
+              transport: SessionTransport.bearer,
+            ),
+          ),
           ChangeNotifierProvider(
             create: (context) => UserDataService(context.read<AuthService>()),
           ),
@@ -30,6 +37,9 @@ void main() {
         child: const App(),
       ),
     );
+    // The cold-start probe resolves to Anonymous (empty keystore, no request),
+    // and the router leaves /starting only once it has.
+    await tester.pumpAndSettle();
 
     expect(find.text('Log in'), findsOneWidget);
     expect(find.text('Create account'), findsOneWidget);
@@ -47,7 +57,12 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (_) => AppSettingsController()),
-          ChangeNotifierProvider(create: (_) => AuthService()),
+          ChangeNotifierProvider(
+            create: (_) => AuthService(
+              store: InMemorySessionStore(),
+              transport: SessionTransport.bearer,
+            ),
+          ),
           ChangeNotifierProvider(
             create: (context) => UserDataService(context.read<AuthService>()),
           ),
@@ -55,6 +70,7 @@ void main() {
         child: const App(),
       ),
     );
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('FORGOT PASSWORD?'));
     await tester.pumpAndSettle();

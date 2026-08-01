@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
 from django.contrib.auth.validators import UnicodeUsernameValidator
-from django.db import models
+from django.db import models, router, transaction
 from django.db.models.query import QuerySet
 from django.utils import timezone
 
@@ -88,15 +88,44 @@ class User(AbstractBaseUser, PermissionsMixin):
 	EMAIL_FIELD = "email"
 	REQUIRED_FIELDS = [EMAIL_FIELD]
 
+	def save(self, *args: Any, **kwargs: Any) -> None:
+		"""Keep account deactivation and session revocation atomic.
+
+		Admin and ordinary application code deactivate users through ``save()``,
+		not the soft-delete method. Enforcing the transition here prevents an
+		inactive account's old credentials from becoming live after reactivation.
+		"""
+		update_fields = kwargs.get("update_fields")
+		writes_is_active = update_fields is None or "is_active" in update_fields
+		if self.pk is None or self.is_active or not writes_is_active:
+			super().save(*args, **kwargs)
+			return
+
+		from accounts.device_sessions import revoke_all_sessions_for_user
+		from accounts.models.device_session import DeviceSession
+
+		using = kwargs.get("using") or router.db_for_write(type(self), instance=self)
+		kwargs["using"] = using
+		with transaction.atomic(using=using):
+			was_active = type(self)._base_manager.using(using).filter(pk=self.pk, is_active=True).exists()
+			super().save(*args, **kwargs)
+			if was_active:
+				revoke_all_sessions_for_user(
+					self,
+					reason=DeviceSession.RevokeReason.USER_DEACTIVATED,
+					using=using,
+				)
+
 	# Soft delete by default
 	def delete(
 		self,
 		using: Any | None = None,
 		keep_parents: bool = False,
 	) -> tuple[int, dict[str, int]]:
-		self.date_deleted = timezone.now()
-		self.is_active = False
-		self.save(using=using, update_fields=["date_deleted", "is_active", "date_modified"])
+		with transaction.atomic(using=using):
+			self.date_deleted = timezone.now()
+			self.is_active = False
+			self.save(using=using, update_fields=["date_deleted", "is_active", "date_modified"])
 		return (1, {self._meta.label: 1})
 
 	def actually_delete(

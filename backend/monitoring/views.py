@@ -64,6 +64,12 @@ class LinkViewSet(OwnerOrAdminQuerysetMixin, _LinkModelViewSet):
 		# OrderingFilter applies ordering on top of this scoped base queryset.
 		return self._scoped_queryset(Link.objects.all())
 
+	def perform_create(self, serializer: BaseSerializer[Link]) -> None:
+		"""Derive ownership from authentication, never from client input."""
+		user = self.request.user
+		assert isinstance(user, User), "link creation requires an application User"
+		serializer.save(user=user)
+
 
 class StrategyViewSet(OwnerOrAdminQuerysetMixin, _StrategyModelViewSet):
 	permission_classes = [IsAuthenticated]

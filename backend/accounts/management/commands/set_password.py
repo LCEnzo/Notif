@@ -6,8 +6,8 @@ from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from accounts.models import RefreshSessionFamily, User
-from accounts.refresh_sessions import revoke_all_refresh_families_for_user
+from accounts.device_sessions import revoke_all_sessions_for_user
+from accounts.models import DeviceSession, User
 
 
 class Command(BaseCommand):
@@ -46,7 +46,5 @@ class Command(BaseCommand):
 		with transaction.atomic():
 			user.set_password(password)
 			user.save(update_fields=["password", "date_modified"])
-			revoked = revoke_all_refresh_families_for_user(
-				user, reason=RefreshSessionFamily.RevokeReason.PASSWORD_CHANGE
-			)
+			revoked = revoke_all_sessions_for_user(user, reason=DeviceSession.RevokeReason.PASSWORD_CHANGE)
 		self.stdout.write(self.style.SUCCESS(f"Password set for '{username}', {revoked} session(s) revoked"))

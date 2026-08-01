@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
+import 'package:notif/services/session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -86,16 +87,16 @@ void main() {
 
       await expectLater(
         () => apiPost(
-          '/token/',
+          '/auth/login/',
           settings: settings,
           headers: const {'Content-Type': 'application/json'},
           body: '{}',
         ),
         throwsA(
-          isA<ApiClientException>().having(
+          isA<MissingBackendUrlException>().having(
             (error) => error.message,
             'message',
-            contains('POST /token/ failed: no backend URL configured'),
+            contains('POST /auth/login/ failed: no backend URL configured'),
           ),
         ),
       );
@@ -245,6 +246,97 @@ void main() {
         () => expectSuccessStatus(response, 'Test'),
         throwsA(isA<Exception>()),
       );
+    });
+  });
+
+  group('origin rules', () {
+    const nativeToken = SessionCredential(
+      token: 'tok',
+      origin: 'https://notif.example.com',
+    );
+
+    test('a bearer token may only go to the origin that issued it', () {
+      expect(
+        describeUnsupportedOrigin(
+          'https://notif.example.com/api/v1',
+          credential: nativeToken,
+        ),
+        isNull,
+      );
+      expect(
+        describeUnsupportedOrigin(
+          'https://other.example.com/api/v1',
+          credential: nativeToken,
+        ),
+        contains('will not be sent'),
+      );
+    });
+
+    test('a long-lived token never travels over plaintext', () {
+      expect(
+        describeUnsupportedOrigin('http://notif.example.com/api/v1'),
+        contains('require HTTPS'),
+      );
+    });
+
+    test('loopback is the documented development exception', () {
+      expect(
+        describeUnsupportedOrigin('http://localhost:8000/api/v1'),
+        isNull,
+      );
+      expect(
+        describeUnsupportedOrigin('http://127.0.0.1:8000/api/v1'),
+        isNull,
+      );
+    });
+
+    test('same loopback scheme and host may use different dev ports', () {
+      const devCredential = SessionCredential(
+        token: 'tok',
+        origin: 'http://localhost:8000',
+      );
+
+      expect(
+        describeUnsupportedOrigin(
+          'http://localhost:5353/api/v1',
+          credential: devCredential,
+        ),
+        isNull,
+      );
+    });
+
+    test('loopback aliases are distinct credential origins', () {
+      const devCredential = SessionCredential(
+        token: 'tok',
+        origin: 'http://localhost:8000',
+      );
+
+      expect(
+        describeUnsupportedOrigin(
+          'http://127.0.0.1:5353/api/v1',
+          credential: devCredential,
+        ),
+        contains('will not be sent'),
+      );
+    });
+
+    test('loopback schemes are distinct credential origins', () {
+      const devCredential = SessionCredential(
+        token: 'tok',
+        origin: 'http://localhost:8000',
+      );
+
+      expect(
+        describeUnsupportedOrigin(
+          'https://localhost:8000/api/v1',
+          credential: devCredential,
+        ),
+        contains('will not be sent'),
+      );
+    });
+
+    test('a garbled backend URL is refused before any request', () {
+      expect(describeUnsupportedOrigin('not a url'), contains('not a usable'));
     });
   });
 }

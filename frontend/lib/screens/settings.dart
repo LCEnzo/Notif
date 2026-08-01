@@ -4,6 +4,7 @@ import 'package:notif/commons/components/primitives.dart';
 import 'package:notif/commons/dither_overlay.dart';
 import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
+import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
@@ -184,7 +185,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           const SizedBox(height: 16),
                           _UnderlineInput(
                             controller: _backendUrlController,
-                            hint: 'http://192.168.1.50:42069/api/v1',
+                            hint: 'https://notif.example.com/api/v1',
                             errorText: _backendUrlError,
                             onChanged: _setCustomBackendUrl,
                           ),
@@ -229,6 +230,18 @@ class _SettingsPageState extends State<SettingsPage> {
         if (!mounted) return;
         setState(() {
           _backendUrlError = 'Custom backend URL must be http(s) or empty';
+        });
+        return;
+      }
+      // The same rule the client enforces before every request (same-origin
+      // on web, HTTPS on native), surfaced here so a URL this build would
+      // refuse to talk to is never persisted. Deliberately credential-free:
+      // switching backends is legitimate, it just means signing in again.
+      final refusal = describeUnsupportedOrigin(trimmed);
+      if (refusal != null) {
+        if (!mounted) return;
+        setState(() {
+          _backendUrlError = refusal;
         });
         return;
       }

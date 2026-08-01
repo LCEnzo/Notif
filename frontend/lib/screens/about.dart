@@ -50,7 +50,7 @@ class _AboutPageState extends State<AboutPage> {
 
     final appSettings = context.watch<AppSettingsController?>();
     final ditheringEnabled = appSettings?.designDitheringEnabled ?? true;
-    final loggedIn = context.watch<AuthService?>()?.jwt != null;
+    final loggedIn = context.watch<AuthService?>()?.isAuthenticated ?? false;
 
     return Scaffold(
       backgroundColor: tokens.bg1,

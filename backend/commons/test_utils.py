@@ -14,15 +14,23 @@ from monitoring.models import Link, Strategy
 
 
 def login_client(api_client: APIClient, username: str, password: str = password) -> APIClient:
+	"""Sign ``api_client`` in over the bearer transport.
+
+	Bearer rather than cookie so tests exercise the same path the native app
+	does, and so no test accidentally depends on ambient cookie credentials
+	(which would also have to carry a CSRF token on every write).
+	"""
 	login_response = api_client.post(
-		path=reverse("token_obtain_pair"), data={"username": username, "password": password}, format="json"
+		path=reverse("auth-login"),
+		data={"username": username, "password": password, "transport": "bearer"},
+		format="json",
 	)
 	assert login_response.status_code == status.HTTP_200_OK
 
-	jwt = login_response.data.get("access")
-	assert jwt is not None
+	token = login_response.data.get("token")
+	assert token is not None
 
-	api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {jwt}")
+	api_client.credentials(HTTP_AUTHORIZATION=f"Session {token}")
 	return api_client
 
 

@@ -8,6 +8,8 @@ import 'package:notif/services/auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/auth_test_harness.dart';
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({
@@ -25,7 +27,12 @@ void main() {
       MultiProvider(
         providers: [
           ChangeNotifierProvider.value(value: settings),
-          ChangeNotifierProvider(create: (_) => AuthService()),
+          ChangeNotifierProvider(
+            create: (_) => AuthService(
+              store: InMemorySessionStore(),
+              transport: SessionTransport.bearer,
+            ),
+          ),
         ],
         child: MaterialApp(
           theme: buildNotifTheme(

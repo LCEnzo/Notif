@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +10,7 @@ import 'package:notif/commons/notif_tokens.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/data.dart';
+import 'package:notif/services/device_sessions.dart';
 import 'package:notif/services/ops.dart';
 import 'package:notif/services/router.dart';
 import 'package:provider/provider.dart';
@@ -51,6 +54,16 @@ void main() {
           create: (context) => NotificationService(context.read<AuthService>()),
           update: (_, auth, settings, notificationService) =>
               notificationService!..updateDependencies(auth, settings),
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthService,
+          AppSettingsController,
+          DeviceSessionService
+        >(
+          create: (context) =>
+              DeviceSessionService(context.read<AuthService>()),
+          update: (_, auth, settings, sessions) =>
+              sessions!..updateDependencies(auth, settings),
         ),
         ChangeNotifierProxyProvider2<
           AuthService,
@@ -108,7 +121,12 @@ class _AppState extends State<App> {
   @override
   void initState() {
     super.initState();
-    _router = createRouter(context.read<AuthService>());
+    final auth = context.read<AuthService>();
+    _router = createRouter(auth);
+    // The cold-start probe. Deliberately fire-and-forget: the router follows
+    // the resulting state change, and there is nothing here that could
+    // usefully handle a failure the state machine has not already classified.
+    unawaited(auth.restore());
   }
 
   @override

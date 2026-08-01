@@ -238,6 +238,9 @@ class _FormContentState extends State<_FormContent> {
         await authService.login(
           usernameController.text.trim(),
           passwordController.text,
+          // Labels the row in the devices list, which is the whole answer to
+          // "I signed in somewhere I should not have" — revoke that one.
+          deviceLabel: defaultDeviceLabel(),
         );
         return true;
       } on Exception catch (e) {
