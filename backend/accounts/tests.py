@@ -127,6 +127,64 @@ class UserViewSetTestCase(ViewSetMixin):
 		)
 
 
+class UserSerializerSelectionTestCase(TestCase):
+	"""get_serializer_class must only reveal PII (email, privilege flags) on a
+	user's own row. Everyone else — including another authenticated user
+	listing or fetching *other* users — gets the minimal serializer.
+	"""
+
+	user: User
+	other_user: User
+
+	@classmethod
+	def setUpTestData(cls) -> None:
+		cls.user = User.objects.create_user(
+			username="serializer-selection-user",
+			email="serializer-selection-user@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+		cls.other_user = User.objects.create_user(
+			username="serializer-selection-other",
+			email="serializer-selection-other@example.com",
+			password=_ALTERNATE_VALID_TEST_PASSWORD,
+		)
+
+	def setUp(self) -> None:
+		self.client_for_user = login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD)
+
+	def test_list_does_not_leak_other_users_pii(self):
+		response = self.client_for_user.get(reverse("users-list"))
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		others = [row for row in response.data if row["username"] == self.other_user.username]
+		self.assertEqual(len(others), 1)
+		self.assertNotIn("email", others[0])
+		self.assertNotIn("is_staff", others[0])
+		self.assertNotIn("is_superuser", others[0])
+
+	def test_retrieving_another_users_detail_returns_minimal_fields_only(self):
+		response = self.client_for_user.get(reverse("users-detail", kwargs={"pk": self.other_user.pk}))
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(set(response.data.keys()), {"username", "date_created"})
+
+	def test_retrieving_own_detail_returns_full_fields(self):
+		response = self.client_for_user.get(reverse("users-detail", kwargs={"pk": self.user.pk}))
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["email"], self.user.email)
+		self.assertIn("is_staff", response.data)
+		self.assertIn("is_superuser", response.data)
+
+	def test_get_my_info_returns_full_fields(self):
+		response = self.client_for_user.get(reverse("users-get-my-info"))
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data["email"], self.user.email)
+		self.assertIn("is_staff", response.data)
+		self.assertIn("is_superuser", response.data)
+
+
 class LoginViewTestCase(TestCase):
 	"""Credential exchange: transports, replacement, and the in-transaction guard."""
 

@@ -449,10 +449,18 @@ class UserViewSet(_UserModelViewSet):
 		requester_pk = self.request.user.pk if not self.request.user.is_anonymous else None
 		wanted_pk = self.kwargs.get("pk", None)
 
+		# wanted_pk is a bare name in the case pattern below, which makes it a
+		# *capture* pattern rather than a comparison against the local of the
+		# same name - it rebinds to whatever the match subject holds there
+		# (requester_pk), shadowing the assignment above. That previously made
+		# the guard test requester_pk instead of wanted_pk, so every
+		# authenticated GET - including the list endpoint - matched and got the
+		# full serializer. Comparing under a different name, and as strings
+		# since kwargs["pk"] is a string, keeps this a real equality check.
 		match (self.request.method, requester_pk):
 			case ("POST" | "PUT" | "PATCH", _):
 				return UserCreationSerializer
-			case ("GET", wanted_pk) if wanted_pk is not None:
+			case ("GET", requester) if requester is not None and wanted_pk is not None and str(requester) == wanted_pk:
 				return UserFullReadSerializer
 			case _:
 				return UserMinimalReadSerializer
