@@ -129,10 +129,9 @@ DATABASES = {
 		"ENGINE": "django.db.backends.sqlite3",
 		"NAME": settings.SQLITE_PATH,
 		# SQLite reports has_select_for_update = False, and Django's compiler
-		# silently drops the FOR UPDATE clause rather than raising - so the
-		# select_for_update() in accounts.refresh_sessions takes no row lock
-		# here. Two restored tabs can both read the same unused refresh record
-		# before either writes.
+		# silently drops the FOR UPDATE clause rather than raising - so row
+		# locks cannot be relied on here, and concurrent writers can both read
+		# the same row before either writes.
 		#
 		# In the default DEFERRED mode a transaction reads first, holding only a
 		# SHARED lock, and asks for a write lock at its first UPDATE. SQLite
