@@ -2054,8 +2054,7 @@
                         "readOnly": true
                     },
                     "strategy": {
-                        "type": "integer",
-                        "nullable": true
+                        "type": "integer"
                     },
                     "last_scraped": {
                         "type": "string",
@@ -2337,8 +2336,7 @@
                         "readOnly": true
                     },
                     "strategy": {
-                        "type": "integer",
-                        "nullable": true
+                        "type": "integer"
                     },
                     "last_scraped": {
                         "type": "string",
