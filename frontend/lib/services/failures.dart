@@ -12,8 +12,7 @@ enum FailureCategory {
   corruptLocalState('corrupt_local_state'),
   sourceBlockedDegraded('source_blocked_degraded'),
   serverError('server_error'),
-  unexpectedFailure('unexpected_failure')
-  ;
+  unexpectedFailure('unexpected_failure');
 
   const FailureCategory(this.wireName);
 
@@ -31,10 +30,7 @@ class AppFailure implements Exception {
     this.cause,
   });
 
-  factory AppFailure.from(
-    Object error, {
-    String? endpoint,
-  }) {
+  factory AppFailure.from(Object error, {String? endpoint}) {
     if (error is ContractViolation) {
       return AppFailure(
         category: FailureCategory.contractViolation,

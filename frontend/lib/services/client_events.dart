@@ -15,10 +15,7 @@ Future<void> reportClientFailure({
   String? route,
   String? endpoint,
 }) async {
-  final failure = AppFailure.from(
-    error,
-    endpoint: endpoint,
-  );
+  final failure = AppFailure.from(error, endpoint: endpoint);
   final packageInfo = await _loadPackageInfo();
   final contract = error is ContractViolation ? error : null;
 

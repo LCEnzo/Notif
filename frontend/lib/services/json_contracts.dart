@@ -110,11 +110,7 @@ class JsonCursor {
     final values = array();
     return [
       for (var i = 0; i < values.length; i += 1)
-        JsonCursor._(
-          endpoint: endpoint,
-          path: '$path[$i]',
-          value: values[i],
-        ),
+        JsonCursor._(endpoint: endpoint, path: '$path[$i]', value: values[i]),
     ];
   }
 
