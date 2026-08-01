@@ -485,8 +485,13 @@ class UserViewSet(_UserModelViewSet):
 		user = request.user
 		assert isinstance(user, User)
 
-		current_password = request.data.get("current_password")
-		new_password = request.data.get("new_password")
+		# DRF types request.data as dict | list; this endpoint requires a JSON
+		# object body, so narrow before reading individual fields.
+		body = request.data
+		assert isinstance(body, dict)
+
+		current_password = body.get("current_password")
+		new_password = body.get("new_password")
 
 		if not current_password or not new_password:
 			return Response(
