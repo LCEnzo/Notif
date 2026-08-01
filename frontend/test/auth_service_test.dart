@@ -201,6 +201,93 @@ void main() {
     });
   });
 
+  group('configuration errors', () {
+    test(
+      'a credential pinned to another origin is a config error, not an outage',
+      () async {
+        final store = InMemorySessionStore(
+          initial: const SessionCredential(
+            token: 'stored-token',
+            origin: 'https://elsewhere.example.com',
+          ),
+        );
+        final auth = AuthService(
+          store: store,
+          transport: SessionTransport.bearer,
+          maxRecoveryProbes: 2,
+          recoveryInitialDelay: Duration.zero,
+          recoveryMaxDelay: Duration.zero,
+        );
+
+        await auth.restore();
+        await pumpEventQueue(times: 30);
+
+        expect(auth.state, isA<AuthConfigError>());
+        expect(
+          (auth.state as AuthConfigError).reason,
+          contains('elsewhere.example.com'),
+        );
+        // The refusal is computed before any request goes out, and no
+        // recovery timer burns its probe budget repeating it.
+        expect(adapter.requests, isEmpty);
+        expect(store.record, isNotNull);
+        auth.dispose();
+      },
+    );
+
+    test('custom-only mode with no URL set is a config error', () async {
+      final settings = AppSettingsController();
+      await settings.initialized;
+      await settings.setBackendUrlMode(BackendUrlMode.customOnly);
+      final auth = cookieService()..updateSettings(settings);
+
+      await auth.restore();
+
+      expect(auth.state, isA<AuthConfigError>());
+      expect(adapter.requests, isEmpty);
+    });
+
+    test('retryNow exits the config error once settings are fixed', () async {
+      final settings = AppSettingsController();
+      await settings.initialized;
+      await settings.setBackendUrlMode(BackendUrlMode.customOnly);
+      adapter.enqueue(
+        '/get_my_info/',
+        const FakeReply(statusCode: 200, body: fakeUserJson),
+      );
+      final auth = cookieService()..updateSettings(settings);
+
+      await auth.restore();
+      expect(auth.state, isA<AuthConfigError>());
+
+      await settings.setBackendUrlMode(BackendUrlMode.builtin);
+      await auth.retryNow();
+
+      expect(auth.state, isA<AuthAuthenticated>());
+    });
+
+    test(
+      'a web logout blocked by configuration is a config error, '
+      'not a manufactured sign-out',
+      () async {
+        adapter.enqueue(
+          '/get_my_info/',
+          const FakeReply(statusCode: 200, body: fakeUserJson),
+        );
+        final settings = AppSettingsController();
+        await settings.initialized;
+        final auth = cookieService()..updateSettings(settings);
+        await auth.restore();
+        expect(auth.state, isA<AuthAuthenticated>());
+
+        await settings.setBackendUrlMode(BackendUrlMode.customOnly);
+        await auth.logout();
+
+        expect(auth.state, isA<AuthConfigError>());
+      },
+    );
+  });
+
   group('login', () {
     test('bearer login stores the token and probes with it', () async {
       final store = InMemorySessionStore();

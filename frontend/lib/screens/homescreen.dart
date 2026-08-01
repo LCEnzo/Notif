@@ -134,7 +134,7 @@ class _HomePageState extends State<HomePage> {
     switch (auth.state) {
       case AuthAnonymous() || AuthExpired():
         context.go('/login');
-      case AuthUnavailable(:final reason):
+      case AuthUnavailable(:final reason) || AuthConfigError(:final reason):
         _showMessage(reason);
       case AuthAuthenticated() || AuthLoggingOut() || AuthRestoring():
         break;

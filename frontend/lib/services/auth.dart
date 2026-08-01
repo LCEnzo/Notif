@@ -95,6 +95,16 @@ class AuthUnavailable extends AuthState {
   final String reason;
 }
 
+/// The app's own configuration prevents asking the server anything: no backend
+/// URL is set, or the configured one is refused before a request goes out.
+/// Distinct from [AuthUnavailable] because retrying cannot heal it — the only
+/// exit is a settings change, so the UI must offer a way to make one.
+class AuthConfigError extends AuthState {
+  const AuthConfigError(this.reason);
+
+  final String reason;
+}
+
 /// The server told us, on a request we meant to authenticate, that the session
 /// is over. The only path from Authenticated to signed-out that is not a
 /// deliberate logout.
@@ -197,13 +207,15 @@ class AuthService extends ChangeNotifier {
   bool get isAuthenticated => _state is AuthAuthenticated;
   bool get isRestoring => _state is AuthRestoring;
 
-  /// Auth state is not yet known — a probe is in flight, or the server could
-  /// not be reached to answer one. Deliberately *not* the same as anonymous:
-  /// the credential may be perfectly good, and rendering a login form here
-  /// would assert something no one has established.
+  /// Auth state is not yet known — a probe is in flight, the server could not
+  /// be reached to answer one, or the app's configuration prevents asking.
+  /// Deliberately *not* the same as anonymous: the credential may be perfectly
+  /// good, and rendering a login form here would assert something no one has
+  /// established.
   bool get isUndecided =>
       _state is AuthRestoring ||
       _state is AuthUnavailable ||
+      _state is AuthConfigError ||
       _state is AuthLoggingOut;
   UserData? get userData => switch (_state) {
     AuthAuthenticated(:final user) => user,
@@ -312,6 +324,10 @@ class AuthService extends ChangeNotifier {
       );
     } on Exception catch (error) {
       if (generation != _generation) return;
+      if (_isConfigError(error)) {
+        _enterConfigError(_describe(error));
+        return;
+      }
       _enterUnavailable(
         _describe(error),
         startRecovery: startRecoveryOnFailure,
@@ -324,6 +340,14 @@ class AuthService extends ChangeNotifier {
     if (startRecovery) {
       _startRecovery();
     }
+  }
+
+  void _enterConfigError(String reason) {
+    // The refusal is computed locally and deterministic; a recovery timer
+    // would burn its whole probe budget repeating it. Only a settings change
+    // exits this state, so any pending recovery dies here too.
+    _stopRecovery(resetAttempts: true);
+    _transitionTo(AuthConfigError(reason));
   }
 
   void _startRecovery() {
@@ -371,7 +395,7 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> retryNow() async {
-    if (_state is! AuthUnavailable) {
+    if (_state is! AuthUnavailable && _state is! AuthConfigError) {
       return;
     }
     await restore();
@@ -523,6 +547,10 @@ class AuthService extends ChangeNotifier {
             'The server refused sign-out: ${_describe(serverError)}.',
           );
         }
+        if (_isConfigError(serverError)) {
+          _enterConfigError(_describe(serverError));
+          return;
+        }
         _enterUnavailable(
           'Could not sign out: ${_describe(serverError)}. The session is '
           'still active — recovery will verify it when the server is '
@@ -659,6 +687,12 @@ class AuthService extends ChangeNotifier {
     final status = error.response?.statusCode;
     return status != null && status >= 400 && status < 500;
   }
+
+  /// Failures the api client raises before any request goes out, because the
+  /// configuration itself is unusable. Permanent until settings change.
+  static bool _isConfigError(Object error) =>
+      error is UnsupportedOriginException ||
+      error is MissingBackendUrlException;
 }
 
 class UserDataService extends ChangeNotifier {

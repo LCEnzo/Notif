@@ -93,7 +93,7 @@ void main() {
           body: '{}',
         ),
         throwsA(
-          isA<ApiClientException>().having(
+          isA<MissingBackendUrlException>().having(
             (error) => error.message,
             'message',
             contains('POST /auth/login/ failed: no backend URL configured'),

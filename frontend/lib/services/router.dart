@@ -22,7 +22,13 @@ GoRouter createRouter(AuthService authService) {
           state.matchedLocation == '/register' ||
           state.matchedLocation == '/forgot-password' ||
           state.matchedLocation == '/reset-password';
-      final isPublicRoute = state.matchedLocation == '/about';
+      // Settings is reachable in every auth state: it holds only local
+      // preferences, and it is where a broken backend URL gets fixed. Locking
+      // it behind auth — or behind an undecided probe that the broken URL
+      // itself blocks — would wall off the only exit from a misconfiguration.
+      final isPublicRoute =
+          state.matchedLocation == '/about' ||
+          state.matchedLocation == '/settings';
 
       // Restoring and Unavailable are neither signed in nor signed out, and
       // must not be rendered as either. Showing the login form would flash it
@@ -30,7 +36,10 @@ GoRouter createRouter(AuthService authService) {
       // sign-out the server never performed (web logout against a dead
       // backend). /starting is the honest screen for "we do not know yet".
       if (authService.isUndecided) {
-        return state.matchedLocation == '/starting' ? null : '/starting';
+        final allowed =
+            state.matchedLocation == '/starting' ||
+            state.matchedLocation == '/settings';
+        return allowed ? null : '/starting';
       }
       if (state.matchedLocation == '/starting') {
         return loggedIn ? '/home' : '/login';

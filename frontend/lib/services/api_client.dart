@@ -81,6 +81,18 @@ class UnsupportedOriginException implements Exception {
   String toString() => message;
 }
 
+/// No backend URL is configured for the current mode (custom-only with an
+/// empty custom URL). A configuration problem, not an outage: retrying cannot
+/// heal it, only a settings change can, and callers classify it accordingly.
+class MissingBackendUrlException implements Exception {
+  const MissingBackendUrlException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 SessionCredentialReader? _credentialReader;
 AuthGenerationReader? _generationReader;
 SessionEndReporter? _sessionEndReporter;
@@ -311,7 +323,7 @@ Future<Response<dynamic>> _requestWithFallback(
 }) async {
   final urls = resolveUrls(path, settings);
   if (urls.isEmpty) {
-    throw ApiClientException(
+    throw MissingBackendUrlException(
       '$method $path failed: no backend URL configured',
     );
   }
