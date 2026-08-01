@@ -74,6 +74,96 @@ select = [
 	"T201",  # use of print, can leak secrets in logs
 	"PTH",
 	"RUF100",# unused-noqa
+	"ISC004",  # implicit str concat in collection literals (missing-comma typo)
+	"LOG004",  # .exception() outside an except handler
+	"PLE0304", # __bool__ returning non-bool
+	"PLR1708", # raise StopIteration inside a generator (PEP 479 RuntimeError)
+	"RUF036",  # None goes last in unions
+	"RUF063",  # fragile __dict__ annotations access under PEP 649 (py3.14)
+	"RUF068",  # duplicate entries in __all__
+	"FURB164", # Decimal/Fraction .from_float() over constructor
+	"FURB192", # sorted(x)[0] instead of min/max
+	# pylint errors (PLE), bug-class, adopted wholesale
+	"PLE0100", # yield/yield from in `__init__` turns it into a generator
+	"PLE0101", # `__init__` must not return a value
+	"PLE0115", # name declared both `nonlocal` and `global`
+	"PLE0116", # `continue` inside a `finally` block
+	"PLE0117", # `nonlocal` name without an enclosing binding
+	"PLE0118", # name used before its `global` declaration
+	"PLE0237", # assignment to attribute not defined in `__slots__`
+	"PLE0241", # duplicate base class in a class definition
+	"PLE0302", # special method with an unexpected signature
+	"PLE0303", # `__len__` must return a non-negative integer
+	"PLE0305", # `__index__` must return an integer
+	"PLE0307", # `__str__` must return a `str`
+	"PLE0308", # `__bytes__` must return `bytes`
+	"PLE0309", # `__hash__` must return an integer
+	"PLE0604", # invalid object in `__all__`
+	"PLE0605", # invalid assignment to `__all__`
+	"PLE0643", # hard-coded sequence access known to be out of bounds
+	"PLE0704", # bare `raise` outside an exception handler
+	"PLE1132", # repeated keyword argument in a function call
+	"PLE1142", # `await` used outside an `async` function
+	"PLE1205", # too many positional args for a logging format string
+	"PLE1206", # too few positional args for a logging format string
+	"PLE1300", # unsupported format type in a format string
+	"PLE1307", # mismatched argument type in an old-style format string
+	"PLE1310", # duplicate characters in a `str.strip` call
+	"PLE1507", # `os.getenv` call with an invalid `key` argument
+	"PLE1519", # method decorated with `@singledispatch`
+	"PLE1520", # function decorated with `@singledispatchmethod`
+	"PLE1700", # `yield from` inside an async function
+	"PLE2502", # bidirectional unicode formatting characters
+	"PLE2510", # string containing the raw control character `BS`
+	"PLE2512", # string containing the raw control character `SUB`
+	"PLE2513", # string containing the raw control character `ESC`
+	"PLE2514", # string containing the raw control character `NUL`
+	"PLE2515", # string containing the zero width space character
+	# pylint warnings (PLW), probable-mistake class, adopted wholesale
+	"PLW0108", # lambda wrapping a function call with the same arguments
+	"PLW0120", # `else` clause on a loop without `break`
+	"PLW0127", # variable assigned to itself
+	"PLW0128", # same name assigned multiple times in one statement
+	"PLW0129", # `assert` on a string literal (always true)
+	"PLW0131", # named expression replaceable by a plain assignment
+	"PLW0133", # exception created but never raised
+	"PLW0177", # comparison against NaN (always false)
+	"PLW0211", # staticmethod using `self`/`cls` as first arg
+	"PLW0245", # `super` used without parentheses
+	"PLW0406", # module importing itself
+	"PLW0602", # `global` name not assigned in current scope
+	"PLW0603", # use of `global` to update an identifier
+	"PLW0604", # `global` keyword at module level
+	"PLW0642", # assignment to `self` or `cls`
+	"PLW0711", # `except` with `and`/`or` instead of a tuple
+	"PLW1501", # invalid `mode` argument in `open` calls
+	"PLW1507", # shallow copy of `os.environ`
+	"PLW1508", # `os.getenv` call with an invalid default
+	"PLW1509", # `subprocess.Popen` with `preexec_fn`
+	"PLW1510", # `subprocess.run` without explicit `check`
+	"PLW1641", # `__eq__` without a matching `__hash__`
+	"PLW2101", # lock created and discarded in a `with` statement
+	"PLW2901", # loop variable overwritten inside the loop body
+	"PLW3301", # nested `min`/`max` calls
+	# pylint refactor (PLR), bug-class and clear simplifiers only
+	"PLR0124", # name compared to itself
+	"PLR0133", # comparison between two constants
+	"PLR0206", # property defined with extra parameters
+	"PLR1704", # loop/try/with variable shadows a function parameter
+	"PLR1711", # function ending in a bare `return None`
+	"PLR1714", # repeated equality comparison (use `in`)
+	"PLR1722", # `exit()`/`quit()` instead of `sys.exit`
+	"PLR5501", # `else` block that is just an `if` (use `elif`)
+	# pylint conventions (PLC), cherry-picked
+	"PLC0105", # type name not matching its parameter variance
+	"PLC0131", # `TypeVar` both covariant and contravariant
+	"PLC0132", # `TypeVar` name arg not matching assigned variable
+	"PLC0205", # single string assigned to `__slots__`
+	"PLC0206", # dict iteration using `d[k]` instead of `.items()`
+	"PLC0208", # iteration over a set literal of literal values
+	"PLC2401", # non-ASCII characters in variable names
+	"PLC2403", # non-ASCII characters in import statements
+	"PLC3002", # unnecessary direct call to a lambda
 ]
 ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118", "W191"]
 
