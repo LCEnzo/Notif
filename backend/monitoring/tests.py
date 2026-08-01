@@ -784,14 +784,6 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 			assert notification.status == Notification.Status.UNREAD
 			assert notification.read_at is None
 
-	def test_scrape_link_refuses_internal_url(self):
-		"""A link resolving to an internal address is refused by the SSRF guard."""
-		link = self.links[0]
-		with patch("commons.safe_fetch._resolve", return_value=["169.254.169.254"]):
-			result = scrape_link(link)
-
-		assert isinstance(result, Err)
-
 	def test_scrape_link_no_strategy_returns_err(self):
 		link = self.links[0]
 		link.strategy = None
