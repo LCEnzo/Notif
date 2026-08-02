@@ -517,10 +517,3 @@ ufw enable
 In production Compose, only Caddy publishes public ports. In bare-metal mode, gunicorn binds to `127.0.0.1:8000`, so it is not reachable from outside. Only Caddy (80/443) and SSH (22) should be exposed.
 
 ---
-
-## Monitoring (free, optional)
-
-| Service | What it monitors | Setup |
-|---------|-----------------|-------|
-| [UptimeRobot](https://uptimerobot.com) | `GET /api/v1/monitoring/status/` every 5 min | 2 min, free tier |
-| [Healthchecks.io](https://healthchecks.io) | Scheduled `run_due_tasks` jobs — alerts if a run is missed | 2 min, free tier |
