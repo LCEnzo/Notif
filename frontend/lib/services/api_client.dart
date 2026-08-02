@@ -164,16 +164,22 @@ Future<Response<dynamic>> apiPostWithoutSession(
   required Map<String, String> headers,
   required dynamic body,
   String? baseUrl,
-}) => _requestWithFallback(
-  'POST',
-  path,
-  settings: settings,
-  headers: headers,
-  body: body,
-  fallbackPolicy: FallbackPolicy.never,
-  baseUrlsOverride: baseUrl == null ? null : [baseUrl],
-  sendCredentials: false,
-);
+}) async {
+  final baseUrls = baseUrl == null ? resolveUrls(path, settings) : [baseUrl];
+  if (baseUrls.isEmpty) {
+    throw MissingBackendUrlException(
+      'POST $path failed: no backend URL configured',
+    );
+  }
+  return _performRequest(
+    'POST',
+    baseUrls.first,
+    path,
+    headers: headers,
+    body: body,
+    sendCredentials: false,
+  );
+}
 
 /// Recover the configured API base that issued [error], if it is a Dio error.
 /// This keeps best-effort diagnostics on the same service boundary even when
@@ -372,10 +378,9 @@ Future<Response<dynamic>> _requestWithFallback(
   ResponseType? responseType,
   FallbackPolicy fallbackPolicy = FallbackPolicy.networkErrors,
   SessionCredential? credentialOverride,
-  List<String>? baseUrlsOverride,
   bool sendCredentials = true,
 }) async {
-  final urls = baseUrlsOverride ?? resolveUrls(path, settings);
+  final urls = resolveUrls(path, settings);
   if (urls.isEmpty) {
     throw MissingBackendUrlException(
       '$method $path failed: no backend URL configured',

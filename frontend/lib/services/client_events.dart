@@ -4,7 +4,6 @@ import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/failures.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-const _jsonHeaders = {'Content-Type': 'application/json'};
 const String _gitHash = String.fromEnvironment('GIT_HASH', defaultValue: '');
 
 Future<void> reportClientFailure({
@@ -22,7 +21,7 @@ Future<void> reportClientFailure({
       '/client-events/',
       settings: settings,
       baseUrl: apiBaseUrlForError(error, settings),
-      headers: _jsonHeaders,
+      headers: jsonHeaders,
       body: {
         'category': failure.category.wireName,
         'route': route ?? '',
