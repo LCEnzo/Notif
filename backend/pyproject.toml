@@ -28,6 +28,7 @@ dev = [
 	"hypothesis>=6.152,<7.0",
 	"ipython>=9.2,<10.0",
 	"mypy>=2.3,<3.0",
+	"openapi-core>=0.23.1,<1.0",
 	"pytest>=9.0.3,<10.0",
 	"pytest-cov>=7.0,<8.0",
 	"pytest-django>=4.11,<5.0",
@@ -219,6 +220,7 @@ markers = [
     "slow: marks tests that use real downloaded fixtures (deselect with -m 'not slow')",
     "feed: marks tests specific to FeedStrategy",
     "e2e: end-to-end tests using real downloaded feeds — most directly test parsing correctness",
+    "conformance: live-HTTP response validation against the committed openapi.json schema",
     "property: Hypothesis property-based tests that verify invariants across generated inputs",
 ]
 

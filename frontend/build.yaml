@@ -1,0 +1,22 @@
+# Configures swagger_dart_code_generator (via build_runner).
+#
+# Input: frontend/swagger/openapi.json — a copy of backend/openapi.json,
+# refreshed by frontend/scripts/refresh_contract.py (the backend file is the
+# single source of truth, kept honest by the backend drift check).
+# Output: frontend/lib/generated/ — committed; CI verifies it is current.
+#
+# build_only_models: emit model classes only (no chopper/dio API classes), so
+# the generated code stays inside the FE's parsing boundary and the
+# architecture test's dio rule keeps holding.
+targets:
+  $default:
+    sources:
+      - $package$
+      - lib/**
+      - swagger/**
+    builders:
+      swagger_dart_code_generator:
+        options:
+          input_folder: 'swagger'
+          output_folder: 'lib/generated'
+          build_only_models: true
