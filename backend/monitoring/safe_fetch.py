@@ -158,6 +158,11 @@ class PublicOnlyHTTPAdapter(HTTPAdapter):
 		cert: bytes | str | tuple[bytes | str, bytes | str] | None = None,
 		proxies: Mapping[str, str] | None = None,
 	) -> requests.Response:
+		if proxies:
+			# An explicit proxy would move the connection outside this
+			# adapter's validated-address boundary; refuse rather than
+			# silently unpin.
+			raise NonPublicHostError("proxy routing is disabled for SSRF-guarded fetches")
 		host = urlsplit(request.url or "").hostname
 		if host is not None:
 			_reject_literal_private_host(host)
@@ -188,6 +193,11 @@ def _reject_literal_private_host(host: str) -> None:
 def guarded_session() -> requests.Session:
 	"""A Session whose http/https connections are pinned to public hosts."""
 	session = requests.Session()
+	# Environment proxies would route the connection through the proxy pool
+	# instead of the pinned connection classes below, silently bypassing the
+	# SSRF guard — so guarded fetches never inherit them. Operators should
+	# enforce any required egress proxy separately.
+	session.trust_env = False
 	session.mount("https://", PublicOnlyHTTPAdapter())
 	session.mount("http://", PublicOnlyHTTPAdapter())
 	return session
