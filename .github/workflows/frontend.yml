@@ -8,11 +8,16 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend.yml'
+      # The contract-freshness step tracks the backend schema; without this
+      # path a backend-only schema change would skip the gate entirely and
+      # merge with stale generated models.
+      - 'backend/openapi.json'
   pull_request:
     branches: [master]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend.yml'
+      - 'backend/openapi.json'
 
 permissions:
   contents: read
