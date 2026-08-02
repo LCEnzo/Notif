@@ -15,6 +15,29 @@ void main() {
       );
     });
 
+    test('unknown strategy class passes through instead of coercing', () {
+      // The generated enum is a closed set frozen at build time. A strategy
+      // class the backend added later must keep its wire name — coercing it
+      // to the general default would misidentify it in the UI and feed the
+      // edit flow's class-change detection with a lie.
+      final record = StrategyRecord.fromJson(const <String, dynamic>{
+        'id': 2,
+        'strat_cls': 'BrandNewStrategy',
+        'data': <String, dynamic>{},
+      });
+
+      expect(record.className, 'BrandNewStrategy');
+    });
+
+    test('missing strategy class still falls back to the general default', () {
+      final record = StrategyRecord.fromJson(const <String, dynamic>{
+        'id': 3,
+        'data': <String, dynamic>{},
+      });
+
+      expect(record.className, generalSelectorStrategy);
+    });
+
     test('complete payload parses and projects', () {
       final link = Link.fromJson(
         const <String, dynamic>{

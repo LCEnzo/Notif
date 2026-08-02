@@ -44,9 +44,18 @@ class StrategyRecord {
     // come from backend/openapi.json, not from a hand-rolled parser that can
     // silently drift from the contract.
     final parsed = _parseContract(() => api.Strategy.fromJson(json));
+    // The generated enum is a closed set frozen at build time; a class the
+    // backend added later parses as swaggerGeneratedUnknown (value == null).
+    // Keep the raw wire name then: coercing to the general default would
+    // misidentify the strategy in the UI, and the edit flow's class-change
+    // detection would treat that misread as truth when rewriting server-side.
+    final rawClass = json['strat_cls'];
+    final rawClassName = rawClass is String ? rawClass.trim() : '';
     return StrategyRecord(
       id: parsed.id ?? 0,
-      className: parsed.stratCls.value ?? generalSelectorStrategy,
+      className:
+          parsed.stratCls.value ??
+          (rawClassName.isEmpty ? generalSelectorStrategy : rawClassName),
       data: parsed.data is Map
           ? Map<String, dynamic>.from(parsed.data as Map)
           : const {},
