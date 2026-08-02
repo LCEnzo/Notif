@@ -67,7 +67,36 @@ For the backend, use `uv` with Python 3.13.
 	```
 
 By default, Django listens on `http://localhost:8000`. For a local override, set `BACKEND_PORT` in `backend/.env`.
- 
+
+### OpenAPI contract generation
+
+The FE's data models (`frontend/lib/generated/`) are generated from the
+backend's OpenAPI schema (`backend/openapi.json`) with
+`swagger_dart_code_generator`. Regenerate them after any backend API change:
+
+1. Regenerate the backend schema from code (only needed when the API changed):
+
+	```bash
+	cd backend
+	uv run python scripts/check_openapi_drift.py --write
+	```
+
+2. Refresh the FE models (copies the schema into `frontend/swagger/`, runs
+   the code generator, formats the output):
+
+	```bash
+	python frontend/scripts/refresh_contract.py
+	```
+
+	This is the one command to run day-to-day; it is idempotent when the
+	schema is unchanged. It needs `dart` (or a Flutter SDK) on `PATH` and can
+	be run from anywhere in the repo.
+
+Commit the generated files with the change that produced them. CI enforces
+both halves — `backend.yml` fails on schema drift, `frontend.yml` fails if the
+committed generated models don't match the schema — so a PR that changes the
+API contract without regenerating will not merge.
+
 ## Misc
 
 ### Secret Key Gen

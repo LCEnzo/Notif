@@ -83,7 +83,7 @@ class ScrapedUpdate(NamedTuple):
 
 # A scrape result payload: the normalized updates a strategy found for one source.
 type NotifData = list[ScrapedUpdate]
-type JsonScalar = None | bool | int | float | str
+type JsonScalar = bool | int | float | str | None
 type JsonValue = JsonScalar | Sequence[JsonValue] | Mapping[str, JsonValue]
 type ComparisonState = dict[str, JsonValue]
 type ComparisonStateUpdate = ComparisonState | None
