@@ -48,11 +48,13 @@ class OwnedStrategyField(_StrategyRelatedField):
 		user = getattr(request, "user", None)
 		if user is None or user.is_anonymous:
 			return queryset.none()
+		if user.is_staff or user.is_superuser:
+			return queryset
 		return queryset.filter(user=user)
 
 
 class LinkSerializer(_LinkModelSerializer):
-	strategy = OwnedStrategyField(queryset=Strategy.objects.all())
+	strategy = OwnedStrategyField(queryset=Strategy.objects.all(), allow_null=True)
 
 	class Meta:
 		model = Link

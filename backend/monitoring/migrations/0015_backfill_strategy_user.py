@@ -6,10 +6,13 @@ from django.db import migrations
 def backfill_strategy_user(apps, schema_editor):
     """Assign an owner to every existing strategy before ``user`` becomes non-null.
 
-    A strategy's owner is the user of any link that references it. Orphan
-    strategies (no links) fall back to the first superuser, then the first user.
-    Any strategy left without a possible owner (empty user table) is deleted so
-    the subsequent non-null AlterField cannot fail.
+    A strategy referenced by one owner is assigned to that owner. If links from
+    multiple owners reference the same strategy, clone its configuration once
+    per additional owner and repoint that owner's links so the migration cannot
+    preserve the cross-owner pivot this schema change is intended to close.
+    Orphan strategies fall back to the first superuser, then the first user. Any
+    strategy left without a possible owner is deleted so the subsequent
+    non-null AlterField cannot fail.
     """
     Strategy = apps.get_model("monitoring", "Strategy")
     User = apps.get_model("accounts", "User")
@@ -17,13 +20,29 @@ def backfill_strategy_user(apps, schema_editor):
     fallback = User.objects.filter(is_superuser=True).order_by("pk").first() or User.objects.order_by("pk").first()
 
     for strategy in Strategy.objects.filter(user__isnull=True):
-        link = strategy.link_set.order_by("pk").first()
-        owner = link.user if link is not None else fallback
-        if owner is None:
-            strategy.delete()
+        owner_ids = list(strategy.link_set.order_by("user_id").values_list("user_id", flat=True).distinct())
+        if not owner_ids:
+            if fallback is None:
+                strategy.delete()
+                continue
+            strategy.user_id = fallback.pk
+            strategy.save(update_fields=["user"])
             continue
-        strategy.user = owner
+
+        strategy.user_id = owner_ids[0]
         strategy.save(update_fields=["user"])
+        for owner_id in owner_ids[1:]:
+            owner_strategy = Strategy.objects.create(
+                user_id=owner_id,
+                strat_cls=strategy.strat_cls,
+                data=strategy.data,
+            )
+            strategy.link_set.filter(user_id=owner_id).update(strategy=owner_strategy)
+
+        if strategy.link_set.exclude(user_id=strategy.user_id).exists():
+            # Defensive fail-closed guard for unexpected legacy rows. Do not
+            # silently complete a security migration with mixed ownership.
+            raise RuntimeError(f"strategy {strategy.pk} still has cross-owner links after backfill")
 
 
 class Migration(migrations.Migration):

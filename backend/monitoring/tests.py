@@ -479,6 +479,35 @@ class LinkViewSetTestCase(ViewSetMixin):
 	def test_update_link(self):
 		self._test_update_object()
 
+	def test_update_link_allows_null_strategy(self):
+		response = self.api_client.patch(
+			reverse("links-detail", kwargs={"pk": self.links[0].pk}),
+			{"strategy": None},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.links[0].refresh_from_db()
+		self.assertIsNone(self.links[0].strategy)
+
+	def test_admin_can_assign_strategy_owned_by_another_user(self):
+		secondary_strategy = Strategy.objects.create(
+			user=self.secondary_user,
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["body"]},
+		)
+		admin_client = login_client(APIClient(), self.superuser.get_username())
+
+		response = admin_client.patch(
+			reverse("links-detail", kwargs={"pk": self.links[0].pk}),
+			{"strategy": secondary_strategy.pk},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.links[0].refresh_from_db()
+		self.assertEqual(self.links[0].strategy_id, secondary_strategy.pk)
+
 	def test_delete_link(self):
 		self._test_delete_object(
 			create_fields={
