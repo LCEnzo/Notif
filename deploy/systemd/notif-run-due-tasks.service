@@ -1,0 +1,10 @@
+[Unit]
+Description=Run due Notif maintenance and scrape tasks
+Requires=notif-compose.service
+After=notif-compose.service docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/notif/notif-compose.env
+ExecStart=/bin/sh -c 'cd "$NOTIF_DEPLOY_DIR" && exec docker compose -f "$NOTIF_COMPOSE_FILE" --profile "$NOTIF_COMPOSE_PROFILE" exec -T backend python manage.py run_due_tasks'
+TimeoutStartSec=300

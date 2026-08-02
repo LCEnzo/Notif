@@ -1,0 +1,12 @@
+[Unit]
+Description=Run due Notif tasks every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+RandomizedDelaySec=30s
+Unit=notif-run-due-tasks.service
+
+[Install]
+WantedBy=timers.target
