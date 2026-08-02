@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/failures.dart';
-import 'package:notif/services/json_contracts.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 const _jsonHeaders = {'Content-Type': 'application/json'};
@@ -17,20 +16,20 @@ Future<void> reportClientFailure({
 }) async {
   final failure = AppFailure.from(error, endpoint: endpoint);
   final packageInfo = await _loadPackageInfo();
-  final contract = error is ContractViolation ? error : null;
 
   try {
-    await apiPost(
+    await apiPostWithoutSession(
       '/client-events/',
       settings: settings,
+      baseUrl: apiBaseUrlForError(error, settings),
       headers: _jsonHeaders,
       body: {
         'category': failure.category.wireName,
         'route': route ?? '',
         'endpoint': failure.endpoint ?? endpoint ?? '',
-        'contract_path': failure.contractPath ?? contract?.path ?? '',
-        'expected': failure.expected ?? contract?.expected ?? '',
-        'actual': failure.actual ?? contract?.actual ?? '',
+        'contract_path': failure.contractPath ?? '',
+        'expected': failure.expected ?? '',
+        'actual': failure.actual ?? '',
         'app_version': packageInfo,
         'git_hash': _gitHash,
         'browser': _browserSummary(),
