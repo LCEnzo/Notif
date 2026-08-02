@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:notif/generated/openapi.swagger.dart' as api;
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
@@ -19,12 +20,16 @@ class StrategyRecord {
   });
 
   factory StrategyRecord.fromJson(Map<String, dynamic> json) {
+    // Parse through the schema-generated type first: field names and types
+    // come from backend/openapi.json, not from a hand-rolled parser that can
+    // silently drift from the contract.
+    final parsed = api.Strategy.fromJson(json);
     return StrategyRecord(
-      id: _asInt(json['id']) ?? 0,
-      className: (json['strat_cls'] as String?)?.trim().isNotEmpty == true
-          ? json['strat_cls'] as String
-          : generalSelectorStrategy,
-      data: Map<String, dynamic>.from((json['data'] as Map?) ?? const {}),
+      id: parsed.id ?? 0,
+      className: parsed.stratCls.value ?? generalSelectorStrategy,
+      data: parsed.data is Map
+          ? Map<String, dynamic>.from(parsed.data as Map)
+          : const {},
     );
   }
 
@@ -61,14 +66,16 @@ class Link {
     Map<String, dynamic> json,
     Map<int, StrategyRecord> strategies,
   ) {
-    final strategyId = _asInt(json['strategy']);
+    // Parse through the schema-generated type first (see StrategyRecord).
+    final parsed = api.Link.fromJson(json);
+    final strategyId = parsed.strategy;
     final strategy = strategyId != null ? strategies[strategyId] : null;
 
     return Link(
-      id: _asInt(json['id']) ?? 0,
-      name: (json['name'] as String?)?.trim() ?? '',
-      url: (json['url'] as String?)?.trim() ?? '',
-      lastScraped: _parseDateTime(json['last_scraped']),
+      id: parsed.id ?? 0,
+      name: parsed.name.trim(),
+      url: parsed.url.trim(),
+      lastScraped: parsed.lastScraped,
       strategyId: strategyId,
       strategyClass: strategy?.className ?? 'UnknownStrategy',
       selectors: strategy?.selectors ?? const [],
@@ -120,18 +127,19 @@ class NotificationItem {
   });
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
-    final update = Map<String, dynamic>.from(
-      (json['update'] as Map?) ?? const {},
-    );
+    // Parse through the schema-generated type first (see StrategyRecord).
+    final parsed = api.Notification.fromJson(json);
+    final update = parsed.update;
+    final title = update?.title?.trim() ?? '';
 
     return NotificationItem(
-      id: _asInt(json['id']) ?? 0,
-      title: (update['title'] as String?)?.trim() ?? 'Untitled update',
-      description: (update['description'] as String?)?.trim() ?? '',
-      itemUrl: (update['item_url'] as String?)?.trim() ?? '',
-      status: NotificationStatus.fromWire((json['status'] as String?)?.trim()),
-      createdAt: _parseDateTime(update['created_at']) ?? DateTime.now(),
-      readAt: _parseDateTime(json['read_at']),
+      id: parsed.id ?? 0,
+      title: title.isEmpty ? 'Untitled update' : title,
+      description: update?.description?.trim() ?? '',
+      itemUrl: update?.itemUrl?.trim() ?? '',
+      status: NotificationStatus.fromWire(parsed.status?.value),
+      createdAt: update?.createdAt ?? DateTime.now(),
+      readAt: parsed.readAt,
     );
   }
 
@@ -1229,13 +1237,6 @@ String describeDataError(Object error) {
 const Map<String, String> _authHeaders = <String, String>{
   'Content-Type': _jsonContentType,
 };
-
-DateTime? _parseDateTime(dynamic value) {
-  if (value is! String || value.trim().isEmpty) {
-    return null;
-  }
-  return DateTime.tryParse(value)?.toLocal();
-}
 
 int _compareNotifications(NotificationItem left, NotificationItem right) {
   if (left.isUnread != right.isUnread) {
