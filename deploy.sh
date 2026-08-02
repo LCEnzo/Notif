@@ -62,9 +62,25 @@ sync_host_config() {
 
 remove_legacy_cron_entry() {
     legacy_command="docker compose -f compose.yaml exec -T backend python manage.py run_due_tasks"
-    if crontab -l 2>/dev/null | grep -F "$legacy_command" >/dev/null; then
-        echo "=== Removing legacy run_due_tasks crontab entry ==="
-        crontab -l | grep -Fv "$legacy_command" | crontab -
+    if [ "$(id -u)" -eq 0 ]; then
+        deploy_user=$(stat -c '%U' "$SCRIPT_DIR")
+        if [ -z "$deploy_user" ] || [ "$deploy_user" = "UNKNOWN" ]; then
+            echo "ERROR: Could not determine the deploy checkout owner for cron cleanup." >&2
+            exit 1
+        fi
+        current_crontab=$(crontab -u "$deploy_user" -l 2>/dev/null || true)
+    else
+        deploy_user=$(id -un)
+        current_crontab=$(crontab -l 2>/dev/null || true)
+    fi
+
+    if printf '%s\n' "$current_crontab" | grep -F "$legacy_command" >/dev/null; then
+        echo "=== Removing legacy run_due_tasks crontab entry for $deploy_user ==="
+        if [ "$(id -u)" -eq 0 ]; then
+            printf '%s\n' "$current_crontab" | grep -Fv "$legacy_command" | crontab -u "$deploy_user" -
+        else
+            printf '%s\n' "$current_crontab" | grep -Fv "$legacy_command" | crontab -
+        fi
     fi
 }
 
