@@ -65,6 +65,9 @@ jobs:
       - name: Missing migrations
         run: uv run python manage.py makemigrations --check --dry-run
 
+      - name: Migration regressions
+        run: uv run pytest -q -n 0 --migrations --create-db monitoring/test_migrations.py
+
       - name: OpenAPI schema drift
         run: uv run python scripts/check_openapi_drift.py
 

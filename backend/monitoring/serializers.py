@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any
 
+from django.db.models import QuerySet
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
@@ -11,21 +12,50 @@ if TYPE_CHECKING:
 	_UpdateModelSerializer = ModelSerializer[Update]
 	_NotificationModelSerializer = ModelSerializer[Notification]
 	_AnySerializer = serializers.Serializer[Any]
+	_StrategyRelatedField = serializers.PrimaryKeyRelatedField[Strategy]
 else:
 	_StrategyModelSerializer = ModelSerializer
 	_LinkModelSerializer = ModelSerializer
 	_UpdateModelSerializer = ModelSerializer
 	_NotificationModelSerializer = ModelSerializer
 	_AnySerializer = serializers.Serializer
+	_StrategyRelatedField = serializers.PrimaryKeyRelatedField
 
 
 class StrategySerializer(_StrategyModelSerializer):
 	class Meta:
 		model = Strategy
-		fields = "__all__"
+		# Explicit field list (not "__all__"): ownership is server-assigned and
+		# read-only, and `data` may hold third-party credentials, so the field set
+		# is stated deliberately rather than derived.
+		fields = ["id", "user", "strat_cls", "data"]
+		read_only_fields = ["id", "user"]
+
+
+class OwnedStrategyField(_StrategyRelatedField):
+	"""A strategy reference scoped to the requester's own strategies.
+
+	get_queryset is DRF's per-request extension point for related-field
+	validation, so a link can only ever reference a strategy its owner owns — a
+	caller cannot point their link at (and thereby exercise) another user's
+	strategy and stored credentials.
+	"""
+
+	def get_queryset(self) -> QuerySet[Strategy]:
+		queryset = super().get_queryset()
+		assert queryset is not None, "OwnedStrategyField is always constructed with a base queryset"
+		request = self.context.get("request")
+		user = getattr(request, "user", None)
+		if user is None or user.is_anonymous:
+			return queryset.none()
+		if user.is_staff or user.is_superuser:
+			return queryset
+		return queryset.filter(user=user)
 
 
 class LinkSerializer(_LinkModelSerializer):
+	strategy = OwnedStrategyField(queryset=Strategy.objects.all(), allow_null=True)
+
 	class Meta:
 		model = Link
 

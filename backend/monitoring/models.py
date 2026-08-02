@@ -14,9 +14,14 @@ class Strategy(models.Model):
 	"""
 	A instance of a class contains 2 things. A reference to a strategy class, and data.
 	The data is configuration, like a CSS selector. This data is why the model exists.
-	In principle, this could all be part of the Link model.
+	In principle, this could all be part of the Link model (see docs/TODO.md, Option A).
 	"""
 
+	# Each strategy belongs to exactly one user; access is scoped by owner. A
+	# strategy's ``data`` may hold third-party credentials, so cross-user reads
+	# must be impossible. Named ``user`` (not ``owner``) to reuse the shared
+	# ownership machinery (OwnerOrAdminQuerysetMixin, IsOwnerOrAdmin).
+	user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="strategies")
 	data = models.JSONField(
 		encoder=DjangoJSONEncoder,
 		default=dict,

@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Any, cast
 
 from django.core.paginator import Page
-from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -65,21 +64,27 @@ class LinkViewSet(OwnerOrAdminQuerysetMixin, _LinkModelViewSet):
 		return self._scoped_queryset(Link.objects.all())
 
 	def perform_create(self, serializer: BaseSerializer[Link]) -> None:
-		"""Derive ownership from authentication, never from client input."""
+		# Ownership is server-assigned, never client-supplied: `user` is read-only
+		# on the serializer, so a caller cannot plant a link in another account.
 		user = self.request.user
-		assert isinstance(user, User), "link creation requires an application User"
+		assert isinstance(user, User), "authenticated link creation requires an application User"
 		serializer.save(user=user)
 
 
 class StrategyViewSet(OwnerOrAdminQuerysetMixin, _StrategyModelViewSet):
-	permission_classes = [IsAuthenticated]
+	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = StrategySerializer
 
 	def get_queryset(self) -> QuerySet[Strategy]:
-		return self._scoped_queryset(
-			Strategy.objects.all(),
-			user_filter=lambda qs, u: qs.filter(Q(link_set__user=u) | Q(link_set__isnull=True)).distinct(),
-		)
+		# Strategies are strictly owner-scoped (no shared/global strategies): the
+		# mixin's default filter is `user=request.user`, so a user only ever sees
+		# or mutates their own.
+		return self._scoped_queryset(Strategy.objects.all())
+
+	def perform_create(self, serializer: BaseSerializer[Strategy]) -> None:
+		user = self.request.user
+		assert isinstance(user, User), "authenticated strategy creation requires an application User"
+		serializer.save(user=user)
 
 	def perform_destroy(self, instance: Strategy) -> None:
 		if instance.link_set.exists():
