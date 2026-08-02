@@ -1,12 +1,13 @@
 from typing import TYPE_CHECKING, Any, cast
 
+from django.conf import settings as django_settings
 from django.core.paginator import Page
 from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status as http_status
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
@@ -15,6 +16,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from accounts.models import User
@@ -76,10 +78,20 @@ class StrategyViewSet(OwnerOrAdminQuerysetMixin, _StrategyModelViewSet):
 	serializer_class = StrategySerializer
 
 	def get_queryset(self) -> QuerySet[Strategy]:
+		# Strategies belong to their owner (or, for legacy rows, to whoever's
+		# links reference them). "link_set__isnull=True" is *not* public: an
+		# ownerless orphan would otherwise be readable by every user — and its
+		# `data` field can hold third-party credentials.
 		return self._scoped_queryset(
 			Strategy.objects.all(),
-			user_filter=lambda qs, u: qs.filter(Q(link_set__user=u) | Q(link_set__isnull=True)).distinct(),
+			user_filter=lambda qs, u: qs.filter(Q(owner=u) | Q(link_set__user=u)).distinct(),
 		)
+
+	def perform_create(self, serializer: BaseSerializer[Strategy]) -> None:
+		"""Ownership comes from authentication, never from client input."""
+		user = self.request.user
+		assert isinstance(user, User), "strategy creation requires an application User"
+		serializer.save(owner=user)
 
 	def perform_destroy(self, instance: Strategy) -> None:
 		if instance.link_set.exists():
@@ -183,13 +195,18 @@ def _request_error_message(errors: dict[str, Any]) -> str:
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([UserRateThrottle, ScopedRateThrottle])
 def trigger_scrape(request: Request) -> Response:
 	"""Scrape one link, or every link the caller owns.
 
 	Supply ``link_id`` to scrape a single link; omit it to scrape all of them. Both
-	modes answer with a top-level ``status``; scrape-all additionally returns a
-	``results`` map keyed by stringified link id, whose entries use the same
+	modes answer with a top-level ``status``; scrape-all additionally answers with
+	a ``results`` map keyed by stringified link id, whose entries use the same
 	``updates_found``/``message`` field names as the single-link response.
+
+	Throttled by the ``scrape`` scope (see ``_REST_THROTTLE_RATES``): scraping
+	fans out to outbound fetches, so an endpoint budget prevents a client from
+	using it as an unbounded request cannon.
 	"""
 	user = request.user
 	assert isinstance(user, User), "authenticated scrape trigger requires an application User"
@@ -236,6 +253,15 @@ def trigger_scrape(request: Request) -> Response:
 				},
 			}
 		)
+
+
+# @api_view copies the decorator attributes onto the generated view class; the
+# module-level name is only the as_view() result, so scope and the test-mode
+# bypass must be set on the class itself.
+if django_settings.TESTING:
+	trigger_scrape.cls.throttle_classes = []
+else:
+	trigger_scrape.cls.throttle_scope = "scrape"  # type: ignore[attr-defined]
 
 
 @extend_schema(

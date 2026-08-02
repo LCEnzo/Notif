@@ -233,6 +233,9 @@ _REST_THROTTLE_RATES = {
 	"client_events": "30/min",
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
+	# trigger-scrape fans out to real outbound fetches; keep its budget tight
+	# enough that a client cannot use it as an unbounded request cannon.
+	"scrape": "30/min",
 }
 
 REST_FRAMEWORK = {

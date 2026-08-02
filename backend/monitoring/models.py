@@ -25,6 +25,17 @@ class Strategy(models.Model):
 		max_length=256,
 		choices=choices_dict_to_tuple(),
 	)
+	# Strategies carry per-user configuration (including third-party
+	# credentials for QQ/Kemono), so they belong to exactly one user.
+	# Null only for legacy rows that predate ownership (e.g. a strategy whose
+	# owner was deleted) — those are visible to nobody through the API.
+	owner = models.ForeignKey(
+		User,
+		null=True,
+		blank=True,
+		on_delete=models.SET_NULL,
+		related_name="strategies",
+	)
 
 	def __str__(self) -> str:
 		return f"Strategy {self.pk}: {self.strat_cls}"

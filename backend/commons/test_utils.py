@@ -40,6 +40,7 @@ class SetupMixin:
 	secondary_user: User
 	superuser: User
 	strat: Strategy
+	secondary_strat: Strategy
 	links: list[Link]
 
 	@classmethod
@@ -67,7 +68,8 @@ class SetupMixin:
 		assert cls.strat is not None
 		assert len(cls.links) > 0
 
-		_, links = create_strat_and_links(cls.secondary_user)
+		cls.secondary_strat, links = create_strat_and_links(cls.secondary_user)
+		assert cls.secondary_strat is not None
 		assert len(links) > 0
 		cls.links += links
 

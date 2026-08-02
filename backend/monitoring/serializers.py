@@ -1,9 +1,13 @@
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
+from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
+from monitoring import safe_fetch
 from monitoring.models import Link, Notification, Strategy, Update
+from monitoring.safe_fetch import NonPublicHostError
 
 if TYPE_CHECKING:
 	_StrategyModelSerializer = ModelSerializer[Strategy]
@@ -23,6 +27,7 @@ class StrategySerializer(_StrategyModelSerializer):
 	class Meta:
 		model = Strategy
 		fields = "__all__"
+		read_only_fields = ["owner"]
 
 
 class LinkSerializer(_LinkModelSerializer):
@@ -59,6 +64,41 @@ class LinkSerializer(_LinkModelSerializer):
 			"url": {"required": True},
 			"strategy": {"required": True},
 		}
+
+	def get_fields(self) -> dict[str, Any]:
+		"""Restrict the selectable strategies to the caller's own.
+
+		Without this, any authenticated user could attach a link to someone
+		else's strategy — and once a link references it, that strategy enters
+		the attacker's scoped queryset with full read/modify/delete rights,
+		including its stored third-party credentials.
+		"""
+		fields = super().get_fields()
+		request = self.context.get("request")
+		user = getattr(request, "user", None)
+		if user is not None and user.is_authenticated:
+			fields["strategy"] = serializers.PrimaryKeyRelatedField(
+				queryset=Strategy.objects.filter(Q(owner=user) | Q(link_set__user=user)).distinct(),
+				required=True,
+			)
+		return fields
+
+	def validate_url(self, value: str) -> str:
+		"""Reject URLs that are structurally internal before they are stored.
+
+		This is a fast, no-DNS first line of defence and a good error message;
+		the real enforcement happens at scrape time in ``safe_fetch``, which
+		resolves the host and refuses non-public addresses on every hop.
+
+		Looked up on the module (not bound at import) so tests can patch
+		``safe_fetch.resolve_public_host`` and so a stale binding can never
+		survive a re-import order change.
+		"""
+		try:
+			safe_fetch.resolve_public_host(urlsplit(value).hostname or "")
+		except NonPublicHostError as exc:
+			raise serializers.ValidationError(str(exc)) from exc
+		return value
 
 
 class UpdateSerializer(_UpdateModelSerializer):

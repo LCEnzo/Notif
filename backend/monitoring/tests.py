@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import socket
 import xml.sax.saxutils
 from datetime import UTC, date, datetime, time
 from pathlib import Path
@@ -22,11 +23,14 @@ from hypothesis.extra.django import TestCase as HypothesisTestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from accounts.models import User
 from commons import Err, Ok
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client
-from commons.utils import create_notification
+from commons.utils import create_notification, password
+from monitoring import safe_fetch
 from monitoring.models import Link, Notification, Strategy, Update
 from monitoring.rss_content_backfill import backfill_rss_update_content
+from monitoring.safe_fetch import MAX_RESPONSE_BYTES, NonPublicHostError, ResponseTooLargeError
 from monitoring.services import scrape_link
 from monitoring.strategies import (
 	STRATEGY_CHOICES,
@@ -151,6 +155,132 @@ class TestSelectorStratErr(TestCase):
 
 		assert isinstance(result, Err)
 		assert "Request failed" in result.error
+
+
+class SSRFGuardTestCase(TestCase):
+	"""The link API and the fetch layer refuse non-public targets.
+
+	conftest.py neutralizes the DNS resolution for the mocked-network suite;
+	these tests restore the real resolver (``_unpatched_resolver``) so the
+	guard itself is exercised. All targets below are literal addresses or
+	``localhost``, so no real DNS is involved.
+	"""
+
+	def setUp(self) -> None:
+		self.user = User.objects.create_user(
+			username="ssrf-user",
+			email="ssrf@example.com",
+			password=password,
+		)
+		self.strategy = Strategy.objects.create(
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["body"]},
+			owner=self.user,
+		)
+		self.client = login_client(APIClient(), "ssrf-user")
+
+	def _real_resolver(self):
+		return getattr(safe_fetch, "_unpatched_resolver")  # noqa: B009 — module stash set by conftest
+
+	def _create_link(self, url: str) -> Any:
+		return self.client.post(
+			reverse("links-list"),
+			{"name": "nope", "url": url, "strategy": self.strategy.pk},
+			format="json",
+		)
+
+	def test_link_api_rejects_internal_targets(self):
+		for url in [
+			"http://127.0.0.1/",
+			"http://localhost/",
+			"http://[::1]/",
+			"http://10.0.0.1/",
+			"http://192.168.1.1/",
+			"http://172.16.0.1/",
+			"http://169.254.169.254/latest/meta-data/",
+			"http://2130706433/",  # decimal encoding of 127.0.0.1
+		]:
+			with self.subTest(url=url):
+				with patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()):
+					response = self._create_link(url)
+				self.assertEqual(
+					response.status_code,
+					400,
+					msg=f"{url} -> {response.status_code} {getattr(response, 'data', None)}",
+				)
+
+	def test_link_api_accepts_public_target(self):
+		with patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()):
+			response = self._create_link("https://example.com/feed")
+		self.assertEqual(response.status_code, 201)
+
+	def test_address_classifier(self):
+		for private in [
+			"127.0.0.1",
+			"10.0.0.1",
+			"172.16.0.1",
+			"192.168.1.1",
+			"169.254.169.254",
+			"0.0.0.0",
+			"::1",
+			"fe80::1",
+			"fc00::1",
+			"ff02::1",
+		]:
+			with self.subTest(address=private):
+				self.assertFalse(safe_fetch._address_is_public(private))
+		for public in ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2606:4700::1111"]:
+			with self.subTest(address=public):
+				self.assertTrue(safe_fetch._address_is_public(public))
+		self.assertFalse(safe_fetch._address_is_public("not-an-ip"))
+
+	def test_resolve_public_host_rejects_mixed_records(self):
+		"""A host with one public and one private record is a rebinding setup."""
+		with (
+			patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()),
+			patch(
+				"monitoring.safe_fetch.socket.getaddrinfo",
+				return_value=[
+					(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+					(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.5", 0)),
+				],
+			),
+			self.assertRaises(NonPublicHostError),
+		):
+			safe_fetch.resolve_public_host("rebinding.example.com")
+
+	def test_resolve_public_host_accepts_public_records(self):
+		with (
+			patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()),
+			patch(
+				"monitoring.safe_fetch.socket.getaddrinfo",
+				return_value=[
+					(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+				],
+			),
+		):
+			safe_fetch.resolve_public_host("example.com")  # must not raise
+
+	def test_fetch_refuses_private_address_before_any_network(self):
+		with (
+			patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()),
+			self.assertRaises(NonPublicHostError),
+		):
+			safe_fetch.fetch("http://127.0.0.1/", timeout=2)
+
+	def test_fetch_caps_response_size(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get("https://example.com/huge", text="x" * (MAX_RESPONSE_BYTES + 1))
+			with self.assertRaises(ResponseTooLargeError):
+				safe_fetch.fetch("https://example.com/huge", timeout=5)
+
+	def test_scrape_of_internal_url_fails_closed(self):
+		"""Even a link that slipped through validation cannot scrape internals."""
+		strat = GeneralSelectorStrategy()
+		url = URL("http://127.0.0.1/")
+		with patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()):
+			result = strat(url, {"selectors": ["body"]}, {})
+		assert isinstance(result, Err)
 
 
 class RateLimiterTestCase(TestCase):
@@ -486,7 +616,7 @@ class LinkViewSetTestCase(ViewSetMixin):
 			"name": "Skitterdoc on Spacebattles",
 			"url": "http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1",
 			"user": f"{self.regular_user.pk}",
-			"strategy": self.strat.pk,
+			"strategy": self.secondary_strat.pk,
 		}
 		update_fields = {"name": "Maria"}
 		permissions = {"list": True, "retrieve": False, "create": True, "update": False, "delete": False}
@@ -500,22 +630,45 @@ class LinkViewSetTestCase(ViewSetMixin):
 
 
 class StrategyViewSetTestCase(SetupMixin, TestCase):
-	def test_list_includes_orphaned_strategies(self):
-		orphan = Strategy.objects.create(
+	def _orphan(self, **kwargs: Any) -> Strategy:
+		return Strategy.objects.create(
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["body"]},
+			**kwargs,
 		)
+
+	def test_list_includes_own_strategies(self):
+		# self.strat is owned by regular_user (create_strat_and_links sets owner).
+		response = self.api_client.get(reverse("strategies-list"))
+
+		self.assertEqual(response.status_code, 200)
+		ids = [item["id"] for item in response.data]
+		self.assertIn(self.strat.pk, ids)
+
+	def test_list_excludes_ownerless_orphaned_strategies(self):
+		"""An ownerless strategy is nobody's — its data may hold credentials."""
+		orphan = self._orphan()
 
 		response = self.api_client.get(reverse("strategies-list"))
 
 		self.assertEqual(response.status_code, 200)
 		ids = [item["id"] for item in response.data]
-		self.assertIn(orphan.pk, ids)
+		self.assertNotIn(orphan.pk, ids)
 
-	def test_list_excludes_other_users_non_orphaned_strategies(self):
+	def test_list_includes_own_orphaned_strategies(self):
+		own_orphan = self._orphan(owner=self.regular_user)
+
+		response = self.api_client.get(reverse("strategies-list"))
+
+		self.assertEqual(response.status_code, 200)
+		ids = [item["id"] for item in response.data]
+		self.assertIn(own_orphan.pk, ids)
+
+	def test_list_excludes_other_users_strategies(self):
 		other_only_strategy = Strategy.objects.create(
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["article.post-card"]},
+			owner=self.secondary_user,
 		)
 		Link.objects.create(
 			name="Other user's private strategy",
@@ -530,16 +683,66 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 		ids = [item["id"] for item in response.data]
 		self.assertNotIn(other_only_strategy.pk, ids)
 
-	def test_delete_orphaned_strategy(self):
-		orphan = Strategy.objects.create(
-			strat_cls="GeneralSelectorStrategy",
-			data={"selectors": ["body"]},
+	def test_ownerless_strategy_is_not_retrievable(self):
+		orphan = self._orphan()
+
+		response = self.api_client.get(reverse("strategies-detail", kwargs={"pk": orphan.pk}))
+
+		self.assertEqual(response.status_code, 404)
+
+	def test_create_strategy_assigns_owner_from_auth(self):
+		response = self.api_client.post(
+			reverse("strategies-list"),
+			{"strat_cls": "GeneralSelectorStrategy", "data": {"selectors": ["body"]}},
+			format="json",
 		)
+
+		self.assertEqual(response.status_code, 201)
+		strategy = Strategy.objects.get(pk=response.data["id"])
+		self.assertEqual(strategy.owner, self.regular_user)
+
+	def test_delete_own_orphaned_strategy(self):
+		own_orphan = self._orphan(owner=self.regular_user)
+
+		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": own_orphan.pk}))
+
+		self.assertEqual(response.status_code, 204)
+		self.assertFalse(Strategy.objects.filter(pk=own_orphan.pk).exists())
+
+	def test_cannot_delete_ownerless_orphaned_strategy(self):
+		orphan = self._orphan()
 
 		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": orphan.pk}))
 
-		self.assertEqual(response.status_code, 204)
-		self.assertFalse(Strategy.objects.filter(pk=orphan.pk).exists())
+		self.assertEqual(response.status_code, 404)
+		self.assertTrue(Strategy.objects.filter(pk=orphan.pk).exists())
+
+	def test_cannot_attach_link_to_another_users_strategy(self):
+		other = Strategy.objects.create(
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["article.post-card"]},
+			owner=self.secondary_user,
+		)
+
+		response = self.api_client.post(
+			reverse("links-list"),
+			{"name": "Sneaky", "url": "https://example.com/sneaky", "strategy": other.pk},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 400)
+		self.assertFalse(Link.objects.filter(name="Sneaky").exists())
+
+	def test_other_users_strategy_credentials_are_not_readable(self):
+		other = Strategy.objects.create(
+			strat_cls="QQAlertsStrategy",
+			data={"username": "victim", "password": "secret"},  # pragma: allowlist secret — test fixture
+			owner=self.secondary_user,
+		)
+
+		response = self.api_client.get(reverse("strategies-detail", kwargs={"pk": other.pk}))
+
+		self.assertEqual(response.status_code, 404)
 
 	def test_delete_strategy_still_in_use(self):
 		"""Deleting a strategy with active links returns 400."""

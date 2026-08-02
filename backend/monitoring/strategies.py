@@ -23,6 +23,7 @@ from bs4.element import AttributeValueList, ResultSet, Tag
 from django.utils import timezone
 
 from commons.result import Err, Ok, Result
+from monitoring.safe_fetch import fetch, guarded_session
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ def _string_attr_value(value: str | AttributeValueList | None) -> str | None:
 
 def _fetch_url_content(url: URL) -> str | None:
 	try:
-		response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+		response = fetch(url, timeout=REQUEST_TIMEOUT_SECONDS)
 	except requests.RequestException:
 		return None
 	if response.status_code == requests.codes.ok:
@@ -347,7 +348,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		req_url = self._get_threadmarks_url(url)
 
 		try:
-			response = requests.get(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = fetch(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
 		except requests.RequestException as exc:
 			return Err(f"Request failed: {exc}")
 		marks = self._extract_threadmarks(response)
@@ -636,7 +637,7 @@ class QQAlertsStrategy(BaseStrategy):
 			"Origin": f"{parsed_url.scheme}://{parsed_url.netloc}",
 		}
 
-		with requests.Session() as session:
+		with guarded_session() as session:
 			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
 			get_response.raise_for_status()
 			session_cookie = get_response.cookies.get(session_cookie_name)
@@ -940,7 +941,7 @@ class FeedStrategy(BaseStrategy):
 		**kwargs: Any,
 	) -> ScrapeResult:
 		try:
-			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = fetch(url, timeout=REQUEST_TIMEOUT_SECONDS)
 			response.raise_for_status()
 		except requests.RequestException as exc:
 			return Err(f"Feed fetch failed: {exc}")

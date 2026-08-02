@@ -12,6 +12,10 @@ const String builtinApiUrl = String.fromEnvironment(
 const Duration connectTimeout = Duration(seconds: 10);
 const Duration receiveTimeout = Duration(seconds: 15);
 
+/// Redirect hops _performRequest will follow before giving up. Bounded: a
+/// redirect loop must not spin forever, and each hop re-sends the credential.
+const int _maxRedirectHops = 5;
+
 /// The scheme the backend challenges with, and the one we answer it with.
 const String sessionAuthScheme = 'Session';
 
@@ -29,6 +33,16 @@ final Dio _dio =
         BaseOptions(
           connectTimeout: connectTimeout,
           receiveTimeout: receiveTimeout,
+          // Redirects are handled manually in _performRequest, where every
+          // hop is checked against the origin gate before the credential
+          // follows it. Dio's default behaviour re-sends the Authorization
+          // header to whatever host a 3xx points at, which would leak the
+          // session token to a redirect target we never validated.
+          followRedirects: false,
+          // With redirects disabled, 3xx responses are data, not errors:
+          // _performRequest decides what to do with them.
+          validateStatus: (status) =>
+              status != null && status >= 200 && status < 400,
         ),
       )
       ..interceptors.addAll([
@@ -226,14 +240,31 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
 
   switch (mode) {
     case BackendUrlMode.builtin:
-      return [builtinApiUrl];
+      return [_absolutizeBackendUrl(builtinApiUrl)];
     case BackendUrlMode.customWithFallback:
-      if (custom.isEmpty) return [builtinApiUrl];
-      return [custom, builtinApiUrl];
+      if (custom.isEmpty) return [_absolutizeBackendUrl(builtinApiUrl)];
+      return [
+        _absolutizeBackendUrl(custom),
+        _absolutizeBackendUrl(builtinApiUrl),
+      ];
     case BackendUrlMode.customOnly:
       if (custom.isEmpty) return [];
-      return [custom];
+      return [_absolutizeBackendUrl(custom)];
   }
+}
+
+/// Makes a configured backend URL usable on the platform it runs on.
+///
+/// Production web builds inject a same-origin relative path
+/// (`--dart-define=API_URL=/api/v1`), which is only meaningful against the
+/// page origin — resolve it there so the origin gate can judge it. On native
+/// a relative URL has no base and remains rejected as unusable.
+String _absolutizeBackendUrl(String baseUrl) {
+  final parsed = Uri.tryParse(baseUrl);
+  if (kIsWeb && parsed != null && !parsed.hasScheme) {
+    return Uri.base.resolve(baseUrl).toString();
+  }
+  return baseUrl;
 }
 
 /// Whether the app is allowed to send credentials to [baseUrl].
@@ -401,24 +432,74 @@ Future<Response<dynamic>> _performRequest(
   // was issued under, so a response arriving after a login/logout is ignored.
   final generation = _generationReader?.call() ?? 0;
 
-  try {
-    return await _dio.requestUri<dynamic>(
-      _buildRequestUri(baseUrl, path),
-      data: body,
-      options: Options(
-        method: method,
-        headers: _headersWithCredentials(method, headers, credential),
-        responseType: responseType,
-        // The browser adapter reads this per request; on other platforms it is
-        // inert. Set unconditionally so the cookie rides along on web without a
-        // conditional import just to configure the adapter.
-        extra: const {'withCredentials': true},
-      ),
+  var uri = _buildRequestUri(baseUrl, path);
+  var currentMethod = method;
+  var currentBody = body;
+
+  // Manual redirect handling: with followRedirects disabled every hop lands
+  // here, where the target must pass the same origin gate as the initial URL
+  // before the credential (Authorization header / cookie) is re-sent to it.
+  // The hop count is bounded so a redirect loop cannot spin forever.
+  for (var hop = 0; hop <= _maxRedirectHops; hop++) {
+    final Response<dynamic> response;
+    try {
+      response = await _dio.requestUri<dynamic>(
+        uri,
+        data: currentBody,
+        options: Options(
+          method: currentMethod,
+          headers: _headersWithCredentials(currentMethod, headers, credential),
+          responseType: responseType,
+          // The browser adapter reads this per request; on other platforms it is
+          // inert. Set unconditionally so the cookie rides along on web without a
+          // conditional import just to configure the adapter.
+          extra: const {'withCredentials': true},
+        ),
+      );
+    } on DioException catch (error) {
+      _sessionEndReporter?.call(error, generation: generation);
+      rethrow;
+    }
+
+    if (!response.isRedirect) {
+      return response;
+    }
+    if (hop == _maxRedirectHops) {
+      throw ApiClientException('$method $path failed: too many redirects');
+    }
+
+    final location = response.headers.value('location');
+    if (location == null) {
+      throw DioException.badResponse(
+        statusCode: response.statusCode ?? 0,
+        requestOptions: response.requestOptions,
+        response: response,
+      );
+    }
+
+    final target = uri.resolve(location);
+    final targetRefusal = describeUnsupportedOrigin(
+      target.toString(),
+      credential: credential,
     );
-  } on DioException catch (error) {
-    _sessionEndReporter?.call(error, generation: generation);
-    rethrow;
+    if (targetRefusal != null) {
+      // A redirect must never carry the credential to a host the origin gate
+      // refuses. UnsupportedOriginException is a configuration-class failure,
+      // so the fallback logic never retries the redirect target.
+      throw UnsupportedOriginException(targetRefusal);
+    }
+
+    // RFC semantics: 303 always becomes GET; 301/302 drop the body (browsers
+    // turn POST into GET); 307/308 preserve method and body.
+    if (response.statusCode == 303 ||
+        (response.statusCode != 307 && response.statusCode != 308)) {
+      currentMethod = 'GET';
+      currentBody = null;
+    }
+    uri = target;
   }
+
+  throw ApiClientException('$method $path failed: redirect limit exceeded');
 }
 
 Map<String, String> _headersWithCredentials(

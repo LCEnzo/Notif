@@ -87,7 +87,11 @@ def create_admin() -> User:
 def create_strat_and_links(user: User) -> tuple[Strategy, list[Link]]:
 	assert user is not None and user.__class__ == User
 
-	strat = Strategy.objects.create(strat_cls="GeneralSelectorStrategy", data={"selectors": ["body"]})
+	strat = Strategy.objects.create(
+		strat_cls="GeneralSelectorStrategy",
+		data={"selectors": ["body"]},
+		owner=user,
+	)
 	link1 = Link.objects.create(name="Google", url="www.google.com", user=user, strategy=strat)
 	link2 = Link.objects.create(name="Bing", url="bing.com", user=user, strategy=strat)
 
