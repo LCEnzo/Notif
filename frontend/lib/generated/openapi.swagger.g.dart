@@ -324,15 +324,17 @@ Map<String, dynamic> _$PatchedNotificationToJson(
 PatchedStrategy _$PatchedStrategyFromJson(Map<String, dynamic> json) =>
     PatchedStrategy(
       id: (json['id'] as num?)?.toInt(),
-      data: json['data'],
+      user: (json['user'] as num?)?.toInt(),
       stratCls: stratClsEnumNullableFromJson(json['strat_cls']),
+      data: json['data'],
     );
 
 Map<String, dynamic> _$PatchedStrategyToJson(PatchedStrategy instance) =>
     <String, dynamic>{
       'id': instance.id,
-      'data': instance.data,
+      'user': instance.user,
       'strat_cls': stratClsEnumNullableToJson(instance.stratCls),
+      'data': instance.data,
     };
 
 PatchedUserCreation _$PatchedUserCreationFromJson(Map<String, dynamic> json) =>
@@ -390,14 +392,16 @@ Map<String, dynamic> _$StatusResponseToJson(StatusResponse instance) =>
 
 Strategy _$StrategyFromJson(Map<String, dynamic> json) => Strategy(
   id: (json['id'] as num?)?.toInt(),
-  data: json['data'],
+  user: (json['user'] as num?)?.toInt(),
   stratCls: stratClsEnumFromJson(json['strat_cls']),
+  data: json['data'],
 );
 
 Map<String, dynamic> _$StrategyToJson(Strategy instance) => <String, dynamic>{
   'id': instance.id,
-  'data': instance.data,
+  'user': instance.user,
   'strat_cls': stratClsEnumToJson(instance.stratCls),
+  'data': instance.data,
 };
 
 SystemEvent _$SystemEventFromJson(Map<String, dynamic> json) => SystemEvent(
