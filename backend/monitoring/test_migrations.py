@@ -33,14 +33,27 @@ class StrategyOwnerMigrationTestCase(TransactionTestCase):
 			email="migration-second@example.com",
 			password="!",
 		)
+		fallback_superuser = User.objects.create(
+			username="migration-superuser",
+			email="migration-superuser@example.com",
+			password="!",
+			is_staff=True,
+			is_superuser=True,
+		)
 		strategy = Strategy.objects.create(
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["article"]},
+		)
+		orphan_strategy = Strategy.objects.create(
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["orphan"]},
 		)
 		Link.objects.create(name="first", url="https://example.com/first", user=first, strategy=strategy)
 		Link.objects.create(name="second", url="https://example.com/second", user=second, strategy=strategy)
 		self.first_id = first.pk
 		self.second_id = second.pk
+		self.fallback_superuser_id = fallback_superuser.pk
+		self.orphan_strategy_id = orphan_strategy.pk
 
 		executor = MigrationExecutor(connection)
 		to_targets = [self.migrate_to, *other_app_leaves]
@@ -61,3 +74,9 @@ class StrategyOwnerMigrationTestCase(TransactionTestCase):
 		self.assertEqual(len({link.strategy_id for link in links}), 2)
 		for link in links:
 			self.assertEqual(Strategy.objects.get(pk=link.strategy_id).user_id, link.user_id)
+
+	def test_orphan_strategy_prefers_superuser_fallback(self) -> None:
+		Strategy = self.apps.get_model("monitoring", "Strategy")
+		orphan_strategy = Strategy.objects.get(pk=self.orphan_strategy_id)
+
+		self.assertEqual(orphan_strategy.user_id, self.fallback_superuser_id)

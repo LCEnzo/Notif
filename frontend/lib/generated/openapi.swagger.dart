@@ -1599,7 +1599,7 @@ extension $PatchedNotificationExtension on PatchedNotification {
 
 @JsonSerializable(explicitToJson: true)
 class PatchedStrategy {
-  const PatchedStrategy({this.id, this.data, this.stratCls});
+  const PatchedStrategy({this.id, this.user, this.stratCls, this.data});
 
   factory PatchedStrategy.fromJson(Map<String, dynamic> json) =>
       _$PatchedStrategyFromJson(json);
@@ -1609,14 +1609,16 @@ class PatchedStrategy {
 
   @JsonKey(name: 'id')
   final int? id;
-  @JsonKey(name: 'data')
-  final dynamic data;
+  @JsonKey(name: 'user')
+  final int? user;
   @JsonKey(
     name: 'strat_cls',
     toJson: stratClsEnumNullableToJson,
     fromJson: stratClsEnumNullableFromJson,
   )
   final enums.StratClsEnum? stratCls;
+  @JsonKey(name: 'data')
+  final dynamic data;
   static const fromJsonFactory = _$PatchedStrategyFromJson;
 
   @override
@@ -1625,13 +1627,15 @@ class PatchedStrategy {
         (other is PatchedStrategy &&
             (identical(other.id, id) ||
                 const DeepCollectionEquality().equals(other.id, id)) &&
-            (identical(other.data, data) ||
-                const DeepCollectionEquality().equals(other.data, data)) &&
+            (identical(other.user, user) ||
+                const DeepCollectionEquality().equals(other.user, user)) &&
             (identical(other.stratCls, stratCls) ||
                 const DeepCollectionEquality().equals(
                   other.stratCls,
                   stratCls,
-                )));
+                )) &&
+            (identical(other.data, data) ||
+                const DeepCollectionEquality().equals(other.data, data)));
   }
 
   @override
@@ -1640,33 +1644,38 @@ class PatchedStrategy {
   @override
   int get hashCode =>
       const DeepCollectionEquality().hash(id) ^
-      const DeepCollectionEquality().hash(data) ^
+      const DeepCollectionEquality().hash(user) ^
       const DeepCollectionEquality().hash(stratCls) ^
+      const DeepCollectionEquality().hash(data) ^
       runtimeType.hashCode;
 }
 
 extension $PatchedStrategyExtension on PatchedStrategy {
   PatchedStrategy copyWith({
     int? id,
-    dynamic data,
+    int? user,
     enums.StratClsEnum? stratCls,
+    dynamic data,
   }) {
     return PatchedStrategy(
       id: id ?? this.id,
-      data: data ?? this.data,
+      user: user ?? this.user,
       stratCls: stratCls ?? this.stratCls,
+      data: data ?? this.data,
     );
   }
 
   PatchedStrategy copyWithWrapped({
     Wrapped<int?>? id,
-    Wrapped<dynamic>? data,
+    Wrapped<int?>? user,
     Wrapped<enums.StratClsEnum?>? stratCls,
+    Wrapped<dynamic>? data,
   }) {
     return PatchedStrategy(
       id: (id != null ? id.value : this.id),
-      data: (data != null ? data.value : this.data),
+      user: (user != null ? user.value : this.user),
       stratCls: (stratCls != null ? stratCls.value : this.stratCls),
+      data: (data != null ? data.value : this.data),
     );
   }
 }
@@ -1954,7 +1963,7 @@ extension $StatusResponseExtension on StatusResponse {
 
 @JsonSerializable(explicitToJson: true)
 class Strategy {
-  const Strategy({this.id, this.data, required this.stratCls});
+  const Strategy({this.id, this.user, required this.stratCls, this.data});
 
   factory Strategy.fromJson(Map<String, dynamic> json) =>
       _$StrategyFromJson(json);
@@ -1964,14 +1973,16 @@ class Strategy {
 
   @JsonKey(name: 'id')
   final int? id;
-  @JsonKey(name: 'data')
-  final dynamic data;
+  @JsonKey(name: 'user')
+  final int? user;
   @JsonKey(
     name: 'strat_cls',
     toJson: stratClsEnumToJson,
     fromJson: stratClsEnumFromJson,
   )
   final enums.StratClsEnum stratCls;
+  @JsonKey(name: 'data')
+  final dynamic data;
   static const fromJsonFactory = _$StrategyFromJson;
 
   @override
@@ -1980,13 +1991,15 @@ class Strategy {
         (other is Strategy &&
             (identical(other.id, id) ||
                 const DeepCollectionEquality().equals(other.id, id)) &&
-            (identical(other.data, data) ||
-                const DeepCollectionEquality().equals(other.data, data)) &&
+            (identical(other.user, user) ||
+                const DeepCollectionEquality().equals(other.user, user)) &&
             (identical(other.stratCls, stratCls) ||
                 const DeepCollectionEquality().equals(
                   other.stratCls,
                   stratCls,
-                )));
+                )) &&
+            (identical(other.data, data) ||
+                const DeepCollectionEquality().equals(other.data, data)));
   }
 
   @override
@@ -1995,29 +2008,38 @@ class Strategy {
   @override
   int get hashCode =>
       const DeepCollectionEquality().hash(id) ^
-      const DeepCollectionEquality().hash(data) ^
+      const DeepCollectionEquality().hash(user) ^
       const DeepCollectionEquality().hash(stratCls) ^
+      const DeepCollectionEquality().hash(data) ^
       runtimeType.hashCode;
 }
 
 extension $StrategyExtension on Strategy {
-  Strategy copyWith({int? id, dynamic data, enums.StratClsEnum? stratCls}) {
+  Strategy copyWith({
+    int? id,
+    int? user,
+    enums.StratClsEnum? stratCls,
+    dynamic data,
+  }) {
     return Strategy(
       id: id ?? this.id,
-      data: data ?? this.data,
+      user: user ?? this.user,
       stratCls: stratCls ?? this.stratCls,
+      data: data ?? this.data,
     );
   }
 
   Strategy copyWithWrapped({
     Wrapped<int?>? id,
-    Wrapped<dynamic>? data,
+    Wrapped<int?>? user,
     Wrapped<enums.StratClsEnum>? stratCls,
+    Wrapped<dynamic>? data,
   }) {
     return Strategy(
       id: (id != null ? id.value : this.id),
-      data: (data != null ? data.value : this.data),
+      user: (user != null ? user.value : this.user),
       stratCls: (stratCls != null ? stratCls.value : this.stratCls),
+      data: (data != null ? data.value : this.data),
     );
   }
 }
