@@ -1,15 +1,17 @@
 """Outbound HTTP with SSRF guardrails: public-address-only + bounded bodies.
 
-Every fetch the monitoring app makes must go through this module. Two
-enforcements, both defense-in-depth layers rather than UX checks:
+Every fetch the monitoring app makes must go through this module. Three
+enforcements, all defense-in-depth layers rather than UX checks:
 
-* ``PublicOnlyHTTPAdapter`` refuses to connect to any address that is not
-  globally routable. It runs per-hop (including redirects, because requests
-  resolves each Location through the same adapter), and resolves the hostname
-  immediately before connecting, so the DNS-rebinding window is as small as
-  the library allows.
-* ``fetch`` streams the response body and aborts past ``MAX_RESPONSE_BYTES``,
-  so a hostile or misbehaving endpoint cannot hold unbounded memory.
+* Connections are **DNS-pinned**: the socket connects to an address that was
+  resolved and validated in the same call, so a rebinding DNS server cannot
+  answer "public" to the validator and "private" to the connector. The Host
+  header, TLS SNI and certificate verification all keep using the hostname.
+* **Redirects are followed by hand**, each hop re-validated by the pinned
+  adapter and each hop's body read under ``MAX_RESPONSE_BYTES`` — a hostile
+  302 cannot smuggle an unbounded body past the cap.
+* ``fetch`` uses a **fresh session per call**, so cookies set by one target
+  never leak into another user's scrape of the same host.
 
 ``NonPublicHostError`` and ``ResponseTooLargeError`` subclass
 ``requests.RequestException`` so existing call sites that already translate
@@ -21,18 +23,19 @@ from __future__ import annotations
 import ipaddress
 import socket
 from collections.abc import Mapping
-from urllib.parse import urlsplit
+from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import requests
 from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.poolmanager import PoolManager
+from urllib3.util.connection import create_connection
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
+MAX_REDIRECTS = 5
 _CHUNK_SIZE = 64 * 1024
-
-# Hostnames that are structurally internal, checked before any DNS lookup.
-# Literal addresses are judged by ``ipaddress`` instead (below), which also
-# covers decimal/octal/hex encodings that no suffix list could catch.
-_INTERNAL_HOSTNAME_SUFFIXES = (".local", ".internal", ".lan", ".home.arpa", ".localhost")
 
 
 class NonPublicHostError(requests.RequestException):
@@ -58,14 +61,14 @@ def _address_is_public(address: str) -> bool:
 	return ip.is_global and not ip.is_multicast
 
 
-def resolve_public_host(host: str) -> None:
-	"""Raise ``NonPublicHostError`` unless every A/AAAA record for ``host`` is public.
+def resolve_public_host(host: str) -> list[str]:
+	"""Validate ``host`` and return its public addresses.
 
-	Rejects the host outright if *any* resolved address is non-public: a host
-	with one public and one private record is exactly what a rebinding setup
-	looks like. Raises ``NonPublicHostError`` also when the hostname does not
-	resolve at all (``requests`` would fail anyway, and failing here keeps the
-	error class uniform).
+	Raises ``NonPublicHostError`` unless *every* A/AAAA record is public: a
+	host with one public and one private record is exactly what a rebinding
+	setup looks like. Also raises when the hostname does not resolve at all
+	(``requests`` would fail anyway, and failing here keeps the error class
+	uniform). The returned addresses are what connections are pinned to.
 	"""
 	if not host:
 		raise NonPublicHostError("URL has no host.")
@@ -75,21 +78,76 @@ def resolve_public_host(host: str) -> None:
 		raise NonPublicHostError(f"Host {host!r} does not resolve.") from exc
 	if not infos:
 		raise NonPublicHostError(f"Host {host!r} does not resolve.")
-	for info in infos:
-		if not _address_is_public(str(info[4][0])):
-			raise NonPublicHostError(
-				f"Host {host!r} resolves to a non-public address ({info[4][0]}), which is refused."
-			)
+	addresses = [info[4][0] for info in infos]
+	for address in addresses:
+		if not _address_is_public(str(address)):
+			raise NonPublicHostError(f"Host {host!r} resolves to a non-public address ({address}), which is refused.")
+	return [str(address) for address in addresses]
+
+
+class _PublicOnlyHTTPConnection(HTTPConnection):
+	"""HTTPConnection that connects only to a pre-validated public address.
+
+	``_new_conn`` resolves the hostname, validates every answer, and connects
+	to one of the validated addresses — the exact resolution the validator
+	saw, not a fresh lookup. ``self.host`` is untouched, so the Host header,
+	TLS SNI and certificate verification keep using the real hostname.
+	"""
+
+	def _new_conn(self) -> socket.socket:
+		addresses = resolve_public_host(self._dns_host)
+		return create_connection(
+			(addresses[0], self.port),
+			self.timeout,
+			source_address=self.source_address,
+			socket_options=self.socket_options,
+		)
+
+
+class _PublicOnlyHTTPSConnection(_PublicOnlyHTTPConnection, HTTPSConnection):
+	"""HTTPS variant: same pinned connect, TLS handshake against the hostname."""
+
+
+class _PublicOnlyConnectionPool(HTTPConnectionPool):
+	ConnectionCls = _PublicOnlyHTTPConnection
+
+
+class _PublicOnlyHTTPSConnectionPool(HTTPSConnectionPool):
+	ConnectionCls = _PublicOnlyHTTPSConnection
+
+
+class _PublicOnlyPoolManager(PoolManager):
+	pool_classes_by_scheme = {
+		"http": _PublicOnlyConnectionPool,
+		"https": _PublicOnlyHTTPSConnectionPool,
+	}
 
 
 class PublicOnlyHTTPAdapter(HTTPAdapter):
-	"""HTTPAdapter that refuses to send to non-public addresses.
+	"""HTTPAdapter whose connections are DNS-pinned to public addresses.
 
-	``send`` is called for the initial request *and* for every redirect hop,
-	so a redirect from a public host to an internal one is caught here. The
-	resolution happens immediately before the connection is opened, which
-	keeps the DNS-rebinding race as narrow as requests allows.
+	``send`` keeps a cheap no-DNS fast path for literal private addresses so
+	they fail before any pool work; the real enforcement is in the connection
+	class, which runs for the initial request *and* every redirect hop.
 	"""
+
+	def __init__(self, **kwargs: Any) -> None:
+		# requests' HTTPAdapter defaults (10 pools, 10 max, no blocking);
+		# mirrored here because the stub types do not expose DEFAULT_POOLSIZE.
+		pool_connections = kwargs.pop("pool_connections", 10)
+		pool_maxsize = kwargs.pop("pool_maxsize", 10)
+		pool_block = kwargs.pop("pool_block", False)
+		super().__init__(
+			pool_connections=pool_connections,
+			pool_maxsize=pool_maxsize,
+			pool_block=pool_block,
+			**kwargs,
+		)
+		self.poolmanager = _PublicOnlyPoolManager(
+			num_pools=pool_connections,
+			maxsize=pool_maxsize,
+			block=pool_block,
+		)
 
 	def send(
 		self,
@@ -101,7 +159,8 @@ class PublicOnlyHTTPAdapter(HTTPAdapter):
 		proxies: Mapping[str, str] | None = None,
 	) -> requests.Response:
 		host = urlsplit(request.url or "").hostname
-		resolve_public_host(host if host is not None else "")
+		if host is not None:
+			_reject_literal_private_host(host)
 		return super().send(
 			request,
 			stream=stream,
@@ -112,40 +171,70 @@ class PublicOnlyHTTPAdapter(HTTPAdapter):
 		)
 
 
+def _reject_literal_private_host(host: str) -> None:
+	"""Fast, no-DNS rejection of plain private IP literals.
+
+	Encoded forms (decimal/hex, ``localhost``, single-label names) fall
+	through to the pinned resolver, which handles them.
+	"""
+	try:
+		ipaddress.ip_address(host)
+	except ValueError:
+		return
+	if not _address_is_public(host):
+		raise NonPublicHostError(f"Host {host!r} is a non-public address, which is refused.")
+
+
 def guarded_session() -> requests.Session:
-	"""A Session whose http/https traffic is refused to non-public hosts."""
+	"""A Session whose http/https connections are pinned to public hosts."""
 	session = requests.Session()
 	session.mount("https://", PublicOnlyHTTPAdapter())
 	session.mount("http://", PublicOnlyHTTPAdapter())
 	return session
 
 
-_session = guarded_session()
+def _read_bounded(response: requests.Response) -> bytes:
+	chunks: list[bytes] = []
+	total = 0
+	for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
+		if not chunk:
+			continue
+		total += len(chunk)
+		if total > MAX_RESPONSE_BYTES:
+			raise ResponseTooLargeError(f"Response exceeded the {MAX_RESPONSE_BYTES}-byte cap; refusing to buffer it.")
+		chunks.append(chunk)
+	return b"".join(chunks)
+
+
+def read_body_capped(response: requests.Response) -> bytes:
+	"""Read a response body under the cap, for call sites that manage their
+	own session (the QQ/Kemono login flows). Populates ``_content`` so
+	``.text``/``.content`` work as usual afterwards."""
+	content = _read_bounded(response)
+	response._content = content
+	return content
 
 
 def fetch(url: str, *, timeout: float) -> requests.Response:
 	"""GET ``url`` with the SSRF guard and a bounded body.
 
 	Returns the response with ``_content`` populated (so ``.text``/``.content``
-	work as usual) and the stream already consumed. Raises
-	``requests.RequestException`` subclasses — including ``NonPublicHostError``
-	and ``ResponseTooLargeError`` — on any failure.
+	work as usual) and the stream already consumed. Redirects are followed by
+	hand (up to ``MAX_REDIRECTS``), with every hop validated by the pinned
+	adapter and read under the cap. A fresh session per call means cookies do
+	not survive across fetches. Raises ``requests.RequestException``
+	subclasses — including ``NonPublicHostError``, ``ResponseTooLargeError``
+	and ``requests.TooManyRedirects`` — on any failure.
 	"""
-	with _session.get(url, timeout=timeout, stream=True) as response:
-		chunks: list[bytes] = []
-		total = 0
-		for chunk in response.iter_content(chunk_size=_CHUNK_SIZE):
-			if not chunk:
+	with guarded_session() as session:
+		current = url
+		for _hop in range(MAX_REDIRECTS + 1):
+			with session.get(current, timeout=timeout, stream=True, allow_redirects=False) as response:
+				content = _read_bounded(response)
+			location = response.headers.get("Location")
+			if response.is_redirect and location:
+				current = urljoin(current, location)
 				continue
-			total += len(chunk)
-			if total > MAX_RESPONSE_BYTES:
-				raise ResponseTooLargeError(
-					f"Response exceeded the {MAX_RESPONSE_BYTES}-byte cap; refusing to buffer it."
-				)
-			chunks.append(chunk)
-		content = b"".join(chunks)
-	# requests buffers eagerly on first attribute access; we consumed the
-	# stream manually, so hand the bytes back so .content/.text behave as if
-	# the response had been read normally.
-	response._content = content
-	return response
+			response._content = content
+			return response
+	raise requests.TooManyRedirects(f"Exceeded {MAX_REDIRECTS} redirects fetching {url}.")

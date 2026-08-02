@@ -470,10 +470,14 @@ Future<Response<dynamic>> _performRequest(
 
     final location = response.headers.value('location');
     if (location == null) {
-      throw DioException.badResponse(
-        statusCode: response.statusCode ?? 0,
-        requestOptions: response.requestOptions,
-        response: response,
+      // On web the browser adapter follows redirects itself and only reports
+      // isRedirect after the fact (via responseURL) — the intermediate
+      // Location is gone and the redirect target was never validated. Fail
+      // closed: the API must answer directly, so a redirected web request is
+      // an error rather than an unvalidated follow.
+      throw ApiClientException(
+        '$method $path failed: the request was redirected on web, which is '
+        'not supported — the API must answer directly.',
       );
     }
 

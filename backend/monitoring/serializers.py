@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 
-from django.db.models import Q
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
@@ -71,14 +70,16 @@ class LinkSerializer(_LinkModelSerializer):
 		Without this, any authenticated user could attach a link to someone
 		else's strategy — and once a link references it, that strategy enters
 		the attacker's scoped queryset with full read/modify/delete rights,
-		including its stored third-party credentials.
+		including its stored third-party credentials. Owner-only: the 0014
+		backfill duplicates legacy shared rows per user, so a user's links
+		always reference strategies they own.
 		"""
 		fields = super().get_fields()
 		request = self.context.get("request")
 		user = getattr(request, "user", None)
 		if user is not None and user.is_authenticated:
 			fields["strategy"] = serializers.PrimaryKeyRelatedField(
-				queryset=Strategy.objects.filter(Q(owner=user) | Q(link_set__user=user)).distinct(),
+				queryset=Strategy.objects.filter(owner=user),
 				required=True,
 			)
 		return fields

@@ -6,17 +6,35 @@ from django.db import migrations, models
 
 
 def backfill_owners(apps, schema_editor):
-    """Adopt existing strategies: the owner is the user of the first link
-    that references the strategy. Truly orphaned strategies (no links) stay
-    ownerless and become invisible through the API — their `data` field may
-    hold third-party credentials, so nobody gets them by default."""
+    """Adopt existing strategies and split shared ones.
+
+    Every strategy becomes owner-only: the owner is the user of the first
+    referencing link. If *other* users also reference the strategy, each of
+    them gets their own copy (same class + data) and their links are
+    re-pointed to it — so nobody keeps read/update access to somebody else's
+    stored credentials. Truly orphaned strategies (no links) stay ownerless
+    and are visible to nobody."""
     Strategy = apps.get_model("monitoring", "Strategy")
     Link = apps.get_model("monitoring", "Link")
-    for strategy in Strategy.objects.filter(owner__isnull=True).iterator():
-        first_link = Link.objects.filter(strategy=strategy).order_by("pk").first()
-        if first_link is not None:
-            strategy.owner = first_link.user
-            strategy.save(update_fields=["owner"])
+    for strategy in Strategy.objects.filter(owner__isnull=True).order_by("pk").iterator():
+        user_ids = list(
+            Link.objects.filter(strategy=strategy)
+            .order_by("user_id")
+            .values_list("user_id", flat=True)
+            .distinct()
+        )
+        if not user_ids:
+            continue
+        primary, *others = user_ids
+        strategy.owner_id = primary
+        strategy.save(update_fields=["owner"])
+        for user_id in others:
+            copy = Strategy.objects.create(
+                strat_cls=strategy.strat_cls,
+                data=strategy.data,
+                owner_id=user_id,
+            )
+            Link.objects.filter(strategy=strategy, user_id=user_id).update(strategy=copy)
 
 
 class Migration(migrations.Migration):

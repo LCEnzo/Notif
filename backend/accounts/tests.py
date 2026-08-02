@@ -3,7 +3,6 @@ from typing import Any
 from unittest.mock import patch
 
 from django.conf import settings
-from django.core.cache import cache
 from django.core.management import call_command
 from django.db.models import Model
 from django.test import TestCase
@@ -1312,13 +1311,12 @@ class PasswordResetTestCase(TestCase):
 		cls.confirm_url = reverse("password-reset-confirm")
 
 	def setUp(self):
-		# The per-email budgets are cache-backed; the locmem cache survives
-		# across tests in the process, so each test starts with a fresh budget.
-		cache.clear()
-		# A per-test client: pytest-django's _pre_setup resets cls.client to a
-		# plain django Client, wiping any setUpTestData assignment. The
-		# instance attribute shadows that, and the reset endpoints are
-		# JSON-only (cross-site form gate), so default to JSON rendering.
+		# Budgets are database rows now; each test's transaction rollback gives
+		# it a fresh budget automatically. A per-test client: pytest-django's
+		# _pre_setup resets cls.client to a plain django Client, wiping any
+		# setUpTestData assignment. The instance attribute shadows that, and the
+		# reset endpoints are JSON-only (cross-site form gate), so default to
+		# JSON rendering.
 		self.client = APIClient()
 		self.client.default_format = "json"
 

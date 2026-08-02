@@ -3,16 +3,17 @@ import hashlib
 import logging
 import threading
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import check_password, make_password
-from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models.query import QuerySet
 from django.middleware.csrf import rotate_token
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication, get_authorization_header
@@ -39,6 +40,7 @@ from accounts.device_sessions import (
 	session_for_token,
 )
 from accounts.models import DeviceSession, User
+from accounts.models.password_reset import PasswordResetBudget
 from accounts.serializers import (
 	DeviceSessionSerializer,
 	LoginRequestSerializer,
@@ -70,14 +72,18 @@ SessionCookieSameSite = Literal["Lax", "Strict", "None", False]
 # time a new code is minted, so without a budget that survives code refresh an
 # attacker rotating IPs could grind the 10^6 space. These budgets key on the
 # *email*, not the IP, which also caps cross-site form POSTs from victims'
-# browsers. Cache-backed (locmem on the single-instance deployment), fixed
-# window, TTL-bounded.
+# browsers. Database-backed (see PasswordResetBudget) so the limits are shared
+# across all gunicorn workers and survive worker recycling; each counter is a
+# fixed window reset on first use after the window elapses.
 _PASSWORD_RESET_REQUEST_BUDGET = (5, 60 * 60)  # (mints per hour, window seconds)
 _PASSWORD_RESET_CONFIRM_BUDGET = (10, 60 * 60)  # (guesses per hour, window seconds)
 
 
 # ── timing-parity plumbing ───────────────────────────────────────
-_dummy_password_hash: str | None = None
+# A module-level mutable holder instead of a bare global, so ruff's
+# PLW0603 (global-statement) stays quiet while the hash is still computed
+# once and reused across calls.
+_dummy_password_hash: dict[str, str] = {}
 
 
 def _burn_password_hash_cost(password: str) -> None:
@@ -90,29 +96,35 @@ def _burn_password_hash_cost(password: str) -> None:
 	computed once with whatever hasher is active, so the cost matches the
 	users created under the same configuration.
 	"""
-	global _dummy_password_hash
-	if _dummy_password_hash is None:
-		_dummy_password_hash = make_password("dummy-password-for-timing-parity")
-	check_password(password, _dummy_password_hash)
+	if not _dummy_password_hash:
+		_dummy_password_hash["hash"] = make_password("dummy-password-for-timing-parity")
+	check_password(password, _dummy_password_hash["hash"])
 
 
 def _email_budget_allows(kind: str, email: str, limit: int, window_seconds: int) -> bool:
 	"""True when this email may still perform a password-reset action.
 
-	The email is hashed into the cache key so plaintext addresses do not
-	reappear in the cache. First use in a window opens the window; later uses
-	increment until the limit is hit; the key expires and the budget resets.
+	The email is stored hashed so plaintext addresses never hit the database.
+	The window opens on first use after the previous window elapsed; each
+	allowed use increments the matching counter under a row lock, so concurrent
+	requests (and multiple gunicorn workers) share one budget.
 	"""
-	cache_key = f"password-reset:{kind}:{hashlib.sha256(email.lower().encode()).hexdigest()}"
-	if cache.add(cache_key, 1, window_seconds):
+	field = "mint_count" if kind == "request" else "guess_count"
+	email_hash = hashlib.sha256(email.lower().encode()).hexdigest()
+	now = timezone.now()
+	with transaction.atomic():
+		row, _ = PasswordResetBudget.objects.select_for_update().get_or_create(
+			email_hash=email_hash,
+			defaults={"window_started_at": now},
+		)
+		if row.window_started_at < now - timedelta(seconds=window_seconds):
+			row.window_started_at = now
+			setattr(row, field, 0)
+		if getattr(row, field) >= limit:
+			return False
+		setattr(row, field, getattr(row, field) + 1)
+		row.save(update_fields=[field, "window_started_at"])
 		return True
-	try:
-		count = cache.incr(cache_key)
-	except ValueError:
-		# Expired between add and incr; reopen the window.
-		cache.set(cache_key, 1, window_seconds)
-		return True
-	return count <= limit
 
 
 def _send_reset_email_in_background(to_email: str, code: str) -> None:

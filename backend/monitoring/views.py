@@ -2,7 +2,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 from django.conf import settings as django_settings
 from django.core.paginator import Page
-from django.db.models import Q
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -78,13 +77,13 @@ class StrategyViewSet(OwnerOrAdminQuerysetMixin, _StrategyModelViewSet):
 	serializer_class = StrategySerializer
 
 	def get_queryset(self) -> QuerySet[Strategy]:
-		# Strategies belong to their owner (or, for legacy rows, to whoever's
-		# links reference them). "link_set__isnull=True" is *not* public: an
-		# ownerless orphan would otherwise be readable by every user — and its
-		# `data` field can hold third-party credentials.
+		# Strategies belong to exactly one user. Owner-only, deliberately: a
+		# legacy row shared across users is duplicated by the 0014 backfill, so
+		# ``link_set__user`` visibility would only re-open cross-user access to
+		# stored third-party credentials. Ownerless orphans are nobody's.
 		return self._scoped_queryset(
 			Strategy.objects.all(),
-			user_filter=lambda qs, u: qs.filter(Q(owner=u) | Q(link_set__user=u)).distinct(),
+			user_filter=lambda qs, u: qs.filter(owner=u),
 		)
 
 	def perform_create(self, serializer: BaseSerializer[Strategy]) -> None:

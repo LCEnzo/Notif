@@ -282,6 +282,48 @@ class SSRFGuardTestCase(TestCase):
 			result = strat(url, {"selectors": ["body"]}, {})
 		assert isinstance(result, Err)
 
+	def test_fetch_caps_redirect_bodies(self):
+		"""A hostile 302 must not smuggle an unbounded body past the cap."""
+		with requests_mock.Mocker() as mocker:
+			mocker.get(
+				"https://example.com/sneaky",
+				status_code=302,
+				headers={"Location": "https://example.com/final"},
+				text="x" * (MAX_RESPONSE_BYTES + 1),
+			)
+			with self.assertRaises(ResponseTooLargeError):
+				safe_fetch.fetch("https://example.com/sneaky", timeout=5)
+
+	def test_adapter_send_rejects_private_literal(self):
+		"""The adapter refuses a private target before any connection, and that
+		check runs for every hop including redirect targets."""
+		adapter = safe_fetch.PublicOnlyHTTPAdapter()
+		request = requests.Request("GET", "http://127.0.0.1/").prepare()
+		with self.assertRaises(NonPublicHostError):
+			adapter.send(request, timeout=2)
+
+	def test_fetch_bounds_redirect_chain(self):
+		"""A redirect loop cannot spin forever."""
+		with requests_mock.Mocker() as mocker:
+			mocker.get(
+				requests_mock.ANY,
+				status_code=302,
+				headers={"Location": "https://example.com/loop"},
+				text="",
+			)
+			with self.assertRaises(requests.TooManyRedirects):
+				safe_fetch.fetch("https://example.com/start", timeout=5)
+
+	def test_fetch_does_not_share_cookies_across_calls(self):
+		"""A fresh session per fetch: cookies planted by one call must not ride
+		along on the next call to the same host."""
+		with requests_mock.Mocker() as mocker:
+			mocker.get("https://example.com/sets-cookie", cookies={"sid": "attacker-controlled"})
+			mocker.get("https://example.com/reads-cookie", text="ok")
+			safe_fetch.fetch("https://example.com/sets-cookie", timeout=5)
+			safe_fetch.fetch("https://example.com/reads-cookie", timeout=5)
+			self.assertNotIn("Cookie", mocker.last_request.headers)
+
 
 class RateLimiterTestCase(TestCase):
 	def test_same_domain_waits(self):
@@ -741,6 +783,26 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 		)
 
 		response = self.api_client.get(reverse("strategies-detail", kwargs={"pk": other.pk}))
+
+		self.assertEqual(response.status_code, 404)
+
+	def test_legacy_strategy_referenced_by_links_is_still_owner_only(self):
+		"""Even a legacy ownerless strategy that a user's links reference is not
+		reachable through the API: ownership is the only axis, and the 0014
+		backfill duplicates shared rows per user."""
+		legacy = Strategy.objects.create(
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["body"]},
+			owner=None,
+		)
+		Link.objects.create(
+			name="Owns a reference, not the strategy",
+			url="https://example.com/legacy",
+			user=self.regular_user,
+			strategy=legacy,
+		)
+
+		response = self.api_client.get(reverse("strategies-detail", kwargs={"pk": legacy.pk}))
 
 		self.assertEqual(response.status_code, 404)
 
