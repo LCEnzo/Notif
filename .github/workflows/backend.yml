@@ -27,6 +27,11 @@ jobs:
     env:
       DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod
       DJANGO_SETTINGS_MODULE: notif.settings
+      # The suite is a dev-configuration suite (and CI used to inherit this
+      # from the old DEBUG=true default). DEBUG=false would enable
+      # SECURE_SSL_REDIRECT and 301 every test request; declare the intent
+      # explicitly now that DEBUG defaults to false.
+      DEBUG: "true"
 
     steps:
       - uses: actions/checkout@v6
