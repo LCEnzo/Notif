@@ -16,6 +16,7 @@ cannot merge silently.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -27,20 +28,20 @@ FRONTEND_SPEC = REPO_ROOT / "frontend" / "swagger" / "openapi.json"
 FRONTEND_DIR = REPO_ROOT / "frontend"
 
 
+def _run(args: list[str]) -> int:
+    # On Windows, `dart` resolves to dart.bat, which CreateProcess cannot
+    # execute directly — route through the shell there, plain exec elsewhere.
+    return subprocess.run(args, cwd=FRONTEND_DIR, shell=os.name == "nt").returncode
+
+
 def main() -> int:
     shutil.copyfile(BACKEND_SPEC, FRONTEND_SPEC)
-    build = subprocess.run(
-        ["dart", "run", "build_runner", "build"],
-        cwd=FRONTEND_DIR,
-    )
-    if build.returncode != 0:
-        return build.returncode
+    build = _run(["dart", "run", "build_runner", "build"])
+    if build != 0:
+        return build
     # The generator's output is not always dart-format-clean; CI diffs the
     # committed artifacts, so the pipeline formats what it generates.
-    return subprocess.run(
-        ["dart", "format", "lib/generated"],
-        cwd=FRONTEND_DIR,
-    ).returncode
+    return _run(["dart", "format", "lib/generated"])
 
 
 if __name__ == "__main__":
