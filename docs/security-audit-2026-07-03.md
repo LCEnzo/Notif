@@ -1,11 +1,33 @@
 # Notif security & deploy audit — 2026-07-03
 
+> **Historical snapshot, not a current security-status page.** This records the
+> code and host state examined on 2026-07-03, immediately before remediation
+> commits `f0044c8`, `2b8581d`, and `e24f2bb`. Current master uses opaque
+> `DeviceSession` credentials rather than the refresh-family JWT design discussed
+> below. Revalidate every open item against current code and production before
+> acting on it. The status table below covers only findings revalidated while
+> importing this snapshot; every unlisted finding remains unverified.
+
+## Import status — 2026-08-02
+
+| Finding | Current disposition |
+| --- | --- |
+| A1 · outbound-request SSRF | Proposed remediation in PR #76; open until reviewed and merged. |
+| A2 · writable Link owner | Fixed on current master. |
+| A3 · password changes leave sessions valid | Superseded by the opaque `DeviceSession` implementation; current password/session revocation tests pass. |
+| A4 · strategy ownership and plaintext credentials | Ownership isolation is proposed in PR #77; encryption of stored third-party credentials remains open. |
+| D3 · sudo deploy misses the user's cron | Proposed remediation in PR #75; open until reviewed and merged. |
+
+PR #78 reports client failures to the existing client-events sink, but it is not
+treated as remediation for one of the findings below. Each proposed PR still
+requires its own review, tests, and deployment verification.
+
 Branch `deploy-config`. Four parallel auditors (backend auth, backend authz/API,
 frontend auth, deploy config) plus lead verification of every HIGH claim against
 the code and, where possible, the live VPS. Findings deduplicated and ranked by
 real blast radius, not by the reporting agent's local severity.
 
-**Live-box facts established during the audit** (VPS `65.21.185.210`, up 55 days,
+**Live-box facts established during the audit** (origin IP redacted, up 55 days,
 containers up 7 weeks):
 
 - Host is healthy: load ~0.02, 6.7 GiB RAM free, no miner, no failed units, only
@@ -142,8 +164,9 @@ plaintext credential that then fails `check_password`.
 *Fix:* register with `django.contrib.auth.admin.UserAdmin` (or a subclass).
 
 ### A8 · Committed dev-bootstrap credential — MEDIUM (personal-hygiene HIGH), confirmed
-`notif/config.py:72-73` — `DEV_BOOTSTRAP_PASSWORD="1ukacolic"`, user `LCEnzo`.
-A leetified form of your real name, committed, and the repo is on GitHub. Prod has
+`notif/config.py:72-73` contained a human-chosen bootstrap credential tied to the
+developer account; the credential itself is deliberately not reproduced here.
+It was committed while the repo was on GitHub. Prod has
 `DEBUG=false` so the auto-create/resurrect path (`accounts/views.py:65-87`) is
 **off live**; residual risk is repo exposure + password reuse elsewhere.
 *Fix:* rotate the password out of your personal rotation; move the default to a
@@ -250,9 +273,11 @@ prints nothing afterward.
 
 ---
 
-## What the auditors agreed is done *right* (calibrated)
+## What the auditors agreed was done *right* at the audited commit (calibrated)
 
-The refresh-token subsystem is genuinely well built and shouldn't be touched
+This subsection describes the historical refresh-token implementation, not the
+opaque `DeviceSession` system on current master. At the audited commit, the
+refresh-token subsystem was genuinely well built and shouldn't be touched
 casually: family-based rotation with reuse detection, `select_for_update` +
 atomic compare-and-set on `used_at`, whole-family revocation on both replay and
 unknown-jti, no usable tokens at rest (only jti/family UUIDs persisted). CSRF
@@ -271,7 +296,9 @@ rotation, `chmod 600` gitignored secrets, random admin path, anti-spoof
 
 ## Test-coverage gaps worth closing alongside fixes
 
-`change_password` has zero tests; the 401→refresh→retry→expired path is entirely
+These gaps were recorded on 2026-07-03 and are not assertions about current
+coverage. At that point, `change_password` had zero tests and the
+401→refresh→retry→expired path was entirely
 untested (incl. F3 race and the single-flight/epoch guards); no logout test on
 either platform; no router-guard test; throttling is disabled under tests so A5
 has no regression guard; the `UNKNOWN_TOKEN` revocation branch and the
