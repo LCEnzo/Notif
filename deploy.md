@@ -159,8 +159,11 @@ Caddy serves the Flutter web app at `/`, the API at `/api/*`, and Django static 
 
 ### A4. Boot services and scheduled work
 
-`./deploy.sh` installs and enables the checked-in host units on each deploy. For
-first-time setup or manual repair, the equivalent commands are:
+`./deploy.sh` installs and enables the checked-in host units on each deploy,
+then activates the built stack through systemd with
+`systemctl reload-or-restart notif-compose.service`. The script does not invoke
+`docker compose up` directly. For first-time setup or manual repair, the
+equivalent commands are:
 
 ```bash
 sudo install -d -m 0755 /etc/notif
@@ -175,11 +178,13 @@ sudo install -m 0644 deploy/systemd/notif-run-due-tasks.service /etc/systemd/sys
 sudo install -m 0644 deploy/systemd/notif-run-due-tasks.timer /etc/systemd/system/notif-run-due-tasks.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now docker.service
-sudo systemctl enable --now notif-compose.service
-sudo systemctl enable --now notif-run-due-tasks.timer
+sudo systemctl enable notif-compose.service notif-run-due-tasks.timer
+sudo systemctl reload-or-restart notif-compose.service
+sudo systemctl start notif-run-due-tasks.timer
 ```
 
-This makes systemd the explicit boot owner for the Compose stack. The timer runs
+This makes systemd the explicit boot and deployment lifecycle owner for the
+Compose stack. The timer runs
 `python manage.py run_due_tasks` every five minutes inside the backend
 container. `./deploy.sh` removes the legacy user crontab entry for that exact
 command if it is still present, so systemd remains the only production

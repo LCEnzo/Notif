@@ -30,8 +30,10 @@ If the checkout moves, update only `NOTIF_DEPLOY_DIR`.
 
 ## Boot Services
 
-`./deploy.sh` installs and enables the repo-managed units on every deploy. For
-manual repair, run:
+`./deploy.sh` installs and enables the repo-managed units on every deploy, then
+activates the built stack through systemd with
+`systemctl reload-or-restart notif-compose.service`. The script does not invoke
+`docker compose up` directly. For manual repair, run:
 
 ```bash
 cd /home/luka/notif
@@ -40,13 +42,15 @@ sudo install -m 0644 deploy/systemd/notif-run-due-tasks.service /etc/systemd/sys
 sudo install -m 0644 deploy/systemd/notif-run-due-tasks.timer /etc/systemd/system/notif-run-due-tasks.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now docker.service
-sudo systemctl enable --now notif-compose.service
-sudo systemctl enable --now notif-run-due-tasks.timer
+sudo systemctl enable notif-compose.service notif-run-due-tasks.timer
+sudo systemctl reload-or-restart notif-compose.service
+sudo systemctl start notif-run-due-tasks.timer
 ```
 
 `notif-compose.service` starts the Compose stack on boot and reloads by running
 `docker compose up -d --remove-orphans`. The backend and Caddy containers also
-use Docker restart policies, but systemd is the explicit boot owner.
+use Docker restart policies, but systemd is the explicit boot and deployment
+lifecycle owner.
 
 The timer replaces host crontab entries for routine app work:
 
