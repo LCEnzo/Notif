@@ -1599,7 +1599,7 @@ extension $PatchedNotificationExtension on PatchedNotification {
 
 @JsonSerializable(explicitToJson: true)
 class PatchedStrategy {
-  const PatchedStrategy({this.id, this.data, this.stratCls});
+  const PatchedStrategy({this.id, this.data, this.stratCls, this.owner});
 
   factory PatchedStrategy.fromJson(Map<String, dynamic> json) =>
       _$PatchedStrategyFromJson(json);
@@ -1617,6 +1617,8 @@ class PatchedStrategy {
     fromJson: stratClsEnumNullableFromJson,
   )
   final enums.StratClsEnum? stratCls;
+  @JsonKey(name: 'owner')
+  final int? owner;
   static const fromJsonFactory = _$PatchedStrategyFromJson;
 
   @override
@@ -1631,7 +1633,9 @@ class PatchedStrategy {
                 const DeepCollectionEquality().equals(
                   other.stratCls,
                   stratCls,
-                )));
+                )) &&
+            (identical(other.owner, owner) ||
+                const DeepCollectionEquality().equals(other.owner, owner)));
   }
 
   @override
@@ -1642,6 +1646,7 @@ class PatchedStrategy {
       const DeepCollectionEquality().hash(id) ^
       const DeepCollectionEquality().hash(data) ^
       const DeepCollectionEquality().hash(stratCls) ^
+      const DeepCollectionEquality().hash(owner) ^
       runtimeType.hashCode;
 }
 
@@ -1650,11 +1655,13 @@ extension $PatchedStrategyExtension on PatchedStrategy {
     int? id,
     dynamic data,
     enums.StratClsEnum? stratCls,
+    int? owner,
   }) {
     return PatchedStrategy(
       id: id ?? this.id,
       data: data ?? this.data,
       stratCls: stratCls ?? this.stratCls,
+      owner: owner ?? this.owner,
     );
   }
 
@@ -1662,11 +1669,13 @@ extension $PatchedStrategyExtension on PatchedStrategy {
     Wrapped<int?>? id,
     Wrapped<dynamic>? data,
     Wrapped<enums.StratClsEnum?>? stratCls,
+    Wrapped<int?>? owner,
   }) {
     return PatchedStrategy(
       id: (id != null ? id.value : this.id),
       data: (data != null ? data.value : this.data),
       stratCls: (stratCls != null ? stratCls.value : this.stratCls),
+      owner: (owner != null ? owner.value : this.owner),
     );
   }
 }
@@ -1954,7 +1963,7 @@ extension $StatusResponseExtension on StatusResponse {
 
 @JsonSerializable(explicitToJson: true)
 class Strategy {
-  const Strategy({this.id, this.data, required this.stratCls});
+  const Strategy({this.id, this.data, required this.stratCls, this.owner});
 
   factory Strategy.fromJson(Map<String, dynamic> json) =>
       _$StrategyFromJson(json);
@@ -1972,6 +1981,8 @@ class Strategy {
     fromJson: stratClsEnumFromJson,
   )
   final enums.StratClsEnum stratCls;
+  @JsonKey(name: 'owner')
+  final int? owner;
   static const fromJsonFactory = _$StrategyFromJson;
 
   @override
@@ -1986,7 +1997,9 @@ class Strategy {
                 const DeepCollectionEquality().equals(
                   other.stratCls,
                   stratCls,
-                )));
+                )) &&
+            (identical(other.owner, owner) ||
+                const DeepCollectionEquality().equals(other.owner, owner)));
   }
 
   @override
@@ -1997,15 +2010,22 @@ class Strategy {
       const DeepCollectionEquality().hash(id) ^
       const DeepCollectionEquality().hash(data) ^
       const DeepCollectionEquality().hash(stratCls) ^
+      const DeepCollectionEquality().hash(owner) ^
       runtimeType.hashCode;
 }
 
 extension $StrategyExtension on Strategy {
-  Strategy copyWith({int? id, dynamic data, enums.StratClsEnum? stratCls}) {
+  Strategy copyWith({
+    int? id,
+    dynamic data,
+    enums.StratClsEnum? stratCls,
+    int? owner,
+  }) {
     return Strategy(
       id: id ?? this.id,
       data: data ?? this.data,
       stratCls: stratCls ?? this.stratCls,
+      owner: owner ?? this.owner,
     );
   }
 
@@ -2013,11 +2033,13 @@ extension $StrategyExtension on Strategy {
     Wrapped<int?>? id,
     Wrapped<dynamic>? data,
     Wrapped<enums.StratClsEnum>? stratCls,
+    Wrapped<int?>? owner,
   }) {
     return Strategy(
       id: (id != null ? id.value : this.id),
       data: (data != null ? data.value : this.data),
       stratCls: (stratCls != null ? stratCls.value : this.stratCls),
+      owner: (owner != null ? owner.value : this.owner),
     );
   }
 }

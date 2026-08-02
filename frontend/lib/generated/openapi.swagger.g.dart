@@ -326,6 +326,7 @@ PatchedStrategy _$PatchedStrategyFromJson(Map<String, dynamic> json) =>
       id: (json['id'] as num?)?.toInt(),
       data: json['data'],
       stratCls: stratClsEnumNullableFromJson(json['strat_cls']),
+      owner: (json['owner'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$PatchedStrategyToJson(PatchedStrategy instance) =>
@@ -333,6 +334,7 @@ Map<String, dynamic> _$PatchedStrategyToJson(PatchedStrategy instance) =>
       'id': instance.id,
       'data': instance.data,
       'strat_cls': stratClsEnumNullableToJson(instance.stratCls),
+      'owner': instance.owner,
     };
 
 PatchedUserCreation _$PatchedUserCreationFromJson(Map<String, dynamic> json) =>
@@ -392,12 +394,14 @@ Strategy _$StrategyFromJson(Map<String, dynamic> json) => Strategy(
   id: (json['id'] as num?)?.toInt(),
   data: json['data'],
   stratCls: stratClsEnumFromJson(json['strat_cls']),
+  owner: (json['owner'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$StrategyToJson(Strategy instance) => <String, dynamic>{
   'id': instance.id,
   'data': instance.data,
   'strat_cls': stratClsEnumToJson(instance.stratCls),
+  'owner': instance.owner,
 };
 
 SystemEvent _$SystemEventFromJson(Map<String, dynamic> json) => SystemEvent(

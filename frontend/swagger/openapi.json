@@ -19,16 +19,6 @@
                             "schema": {
                                 "$ref": "#/components/schemas/PasswordResetRequest"
                             }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetRequest"
-                            }
                         }
                     },
                     "required": true
@@ -66,16 +56,6 @@
                 "requestBody": {
                     "content": {
                         "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetConfirm"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetConfirm"
-                            }
-                        },
-                        "multipart/form-data": {
                             "schema": {
                                 "$ref": "#/components/schemas/PasswordResetConfirm"
                             }
@@ -1633,7 +1613,7 @@
         "/api/v1/monitoring/trigger-scrape/": {
             "post": {
                 "operationId": "monitoring_trigger_scrape_create",
-                "description": "Scrape one link, or every link the caller owns.\n\nSupply ``link_id`` to scrape a single link; omit it to scrape all of them. Both\nmodes answer with a top-level ``status``; scrape-all additionally returns a\n``results`` map keyed by stringified link id, whose entries use the same\n``updates_found``/``message`` field names as the single-link response.",
+                "description": "Scrape one link, or every link the caller owns.\n\nSupply ``link_id`` to scrape a single link; omit it to scrape all of them. Both\nmodes answer with a top-level ``status``; scrape-all additionally answers with\na ``results`` map keyed by stringified link id, whose entries use the same\n``updates_found``/``message`` field names as the single-link response.\n\nThrottled by the ``scrape`` scope (see ``_REST_THROTTLE_RATES``): scraping\nfans out to outbound fetches, so an endpoint budget prevents a client from\nusing it as an unbounded request cannon.",
                 "tags": [
                     "monitoring"
                 ],
@@ -2410,6 +2390,11 @@
                     "data": {},
                     "strat_cls": {
                         "$ref": "#/components/schemas/StratClsEnum"
+                    },
+                    "owner": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true
                     }
                 }
             },
@@ -2522,10 +2507,16 @@
                     "data": {},
                     "strat_cls": {
                         "$ref": "#/components/schemas/StratClsEnum"
+                    },
+                    "owner": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true
                     }
                 },
                 "required": [
                     "id",
+                    "owner",
                     "strat_cls"
                 ]
             },
