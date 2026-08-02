@@ -56,8 +56,9 @@ sync_host_config() {
 
     sudo_cmd systemctl daemon-reload
     sudo_cmd systemctl enable --now docker.service
-    sudo_cmd systemctl enable --now notif-compose.service
-    sudo_cmd systemctl enable --now notif-run-due-tasks.timer
+    sudo_cmd systemctl enable notif-compose.service notif-run-due-tasks.timer
+    sudo_cmd systemctl reload-or-restart notif-compose.service
+    sudo_cmd systemctl start notif-run-due-tasks.timer
 }
 
 remove_legacy_cron_entry() {
@@ -91,9 +92,7 @@ set_env_value GIT_HASH "$GIT_HASH" backend/.env
 # Build with build arg so the image ENV has the hash as fallback.
 docker compose -f compose.yaml build --build-arg GIT_HASH="$GIT_HASH"
 
-# Start backend + Caddy (prod profile enables Caddy).
-docker compose -f compose.yaml --profile prod up -d
-
+# Install host configuration, then let systemd own the Compose lifecycle.
 sync_host_config
 remove_legacy_cron_entry
 
