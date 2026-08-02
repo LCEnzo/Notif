@@ -17,7 +17,7 @@ def backfill_strategy_user(apps, schema_editor):
     Strategy = apps.get_model("monitoring", "Strategy")
     User = apps.get_model("accounts", "User")
 
-    fallback = User.objects.filter(is_superuser=True).order_by("pk").first() or User.objects.order_by("pk").first()
+    fallback = User.objects.order_by("-is_superuser", "pk").first()
 
     for strategy in Strategy.objects.filter(user__isnull=True):
         owner_ids = list(strategy.link_set.order_by("user_id").values_list("user_id", flat=True).distinct())
