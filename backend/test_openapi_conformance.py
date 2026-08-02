@@ -1,13 +1,20 @@
 """Response-conformance trial: real HTTP responses validated against openapi.json.
 
 Deliberately ONE test. It proves the pipeline end to end — Django's live
-server, real HTTP, response bytes, openapi-core validation — and exercises the
-Strategy contract, which is the exact class of bug where hand-rolled parsing
-and the schema drift apart silently (see docs/plan-openapi-fe-contract.md).
+server, real HTTP, response bytes, openapi-core validation — as a create/read
+round trip driven entirely through the documented API: POST a Strategy, then
+GET the list that must contain it. Both responses are validated, and the GET
+is asserted non-empty so the item schema is genuinely exercised (an empty
+list validates vacuously). Strategy is the exact class of bug where
+hand-rolled parsing and the schema drift apart silently (see
+docs/plan-openapi-fe-contract.md).
 
-If the wire ever stops matching the documented schema (a serializer drops a
-field, a shape changes), this test fails where unit tests and the backend
-drift-check cannot see it.
+Scope, precisely: this catches documented fields dropping, changing type, or
+violating their enum on the wire. It does NOT catch the backend *adding*
+undocumented fields — drf-spectacular does not emit additionalProperties:
+false, so extra keys validate fine. Additive drift is the codegen half's job
+(the regenerated models pick the new field up, and the freshness gate forces
+the regeneration into the PR).
 
 Run with: uv run pytest -q test_openapi_conformance.py
 """
@@ -28,9 +35,29 @@ OPENAPI = OpenAPI.from_dict(json.loads((BACKEND_ROOT / "openapi.json").read_text
 pytestmark = [pytest.mark.conformance]
 
 
+def _assert_conforms(response: requests.Response, host_url: str, method: str, path: str) -> None:
+	"""Validate a real HTTP response's bytes against the committed schema.
+
+	Raises (failing the test) if the bytes diverge from what openapi.json
+	documents for this operation; a clean return means the wire matches.
+	"""
+	request = MockRequest(
+		host_url=host_url,
+		method=method,
+		path=path,
+		headers=dict(response.request.headers) if response.request else {},
+	)
+	mock_response = MockResponse(
+		data=response.content,
+		status_code=response.status_code,
+		headers={key: value for key, value in response.headers.items() if key.lower() == "content-type"},
+	)
+	OPENAPI.validate_response(request, mock_response)
+
+
 @pytest.mark.django_db(transaction=True)
 @override_settings(SESSION_TOKEN_COOKIE_SECURE=False)
-def test_strategies_list_conforms_to_openapi(
+def test_strategy_round_trip_conforms_to_openapi(
 	live_server: Any,
 	django_user_model: Any,
 ) -> None:
@@ -55,20 +82,20 @@ def test_strategies_list_conforms_to_openapi(
 	)
 	assert login.status_code == 200, login.text
 
-	response = session.get(f"{live_server.url}/api/v1/monitoring/strategies/")
-	assert response.status_code == 200, response.text
+	# Cookie-transport writes enforce CSRF; login hands out a readable
+	# csrftoken cookie exactly so clients can echo it back in X-CSRFToken.
+	created = session.post(
+		f"{live_server.url}/api/v1/monitoring/strategies/",
+		json={"strat_cls": "FeedStrategy", "data": {}},
+		headers={"X-CSRFToken": session.cookies["csrftoken"]},
+	)
+	assert created.status_code == 201, created.text
+	_assert_conforms(created, live_server.url, "POST", "/api/v1/monitoring/strategies/")
 
-	request = MockRequest(
-		host_url=live_server.url,
-		method="GET",
-		path="/api/v1/monitoring/strategies/",
-		headers=dict(response.request.headers) if response.request else {},
-	)
-	mock_response = MockResponse(
-		data=response.content,
-		status_code=response.status_code,
-		headers={key: value for key, value in response.headers.items() if key.lower() == "content-type"},
-	)
-	# Raises OpenAPIResponseError (fails the test) if the bytes diverge from
-	# the documented schema; a clean return means the wire matches.
-	OPENAPI.validate_response(request, mock_response)
+	listed = session.get(f"{live_server.url}/api/v1/monitoring/strategies/")
+	assert listed.status_code == 200, listed.text
+	# Guard against the vacuous pass: [] validates against any item schema.
+	body = listed.json()
+	assert body, "strategies list is empty — the item schema was never exercised"
+	assert any(item.get("id") == created.json()["id"] for item in body)
+	_assert_conforms(listed, live_server.url, "GET", "/api/v1/monitoring/strategies/")
