@@ -25,7 +25,7 @@ from openapi_core.testing import MockRequest, MockResponse
 BACKEND_ROOT = Path(__file__).resolve().parent
 OPENAPI = OpenAPI.from_dict(json.loads((BACKEND_ROOT / "openapi.json").read_text(encoding="utf-8")))
 
-pytestmark = [pytest.mark.e2e]
+pytestmark = [pytest.mark.conformance]
 
 
 @pytest.mark.django_db(transaction=True)

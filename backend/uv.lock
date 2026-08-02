@@ -802,7 +802,7 @@ dev = [
     { name = "hypothesis", specifier = ">=6.152,<7.0" },
     { name = "ipython", specifier = ">=9.2,<10.0" },
     { name = "mypy", specifier = ">=2.3,<3.0" },
-    { name = "openapi-core", specifier = ">=0.23.1" },
+    { name = "openapi-core", specifier = ">=0.23.1,<1.0" },
     { name = "pytest", specifier = ">=9.0.3,<10.0" },
     { name = "pytest-cov", specifier = ">=7.0,<8.0" },
     { name = "pytest-django", specifier = ">=4.11,<5.0" },

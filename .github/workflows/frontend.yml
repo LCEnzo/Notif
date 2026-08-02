@@ -38,11 +38,14 @@ jobs:
         run: flutter pub get
 
       # The generated Dart models must track backend/openapi.json. The refresh
-      # script re-copies the schema and regenerates; a diff means the committed
-      # artifacts are stale and this PR/commit must include them.
+      # script re-copies the schema and regenerates; a diff (including
+      # untracked files via intent-to-add, in case a generator version emits a
+      # new file) means the committed artifacts are stale and this PR/commit
+      # must include them.
       - name: Contract freshness (generated models match backend schema)
         run: |
           python3 scripts/refresh_contract.py
+          git add -N .
           git diff --exit-code
 
       - name: Analyze

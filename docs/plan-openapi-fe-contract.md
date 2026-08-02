@@ -1,6 +1,6 @@
 # Plan: OpenAPI schema → FE contract, plus response-conformance trial
 
-Status: **draft, awaiting approval** · Date: 2026-08-02
+Status: **implemented — PR #81 (`impl/openapi-fe-contract`)** · Date: 2026-08-02
 
 ## Why
 
@@ -29,13 +29,15 @@ bytes match the schema with a single trial test.
   `very_good_analysis`. `openapi-generator`'s Dart output is the dated
   "Dart 1.x" client style, and its strengths (multi-language, huge config) are
   irrelevant here. No docker/Java needed.
-- **Feed the generator a components-only schema (paths stripped).**
-  `swagger_dart_code_generator` emits models *and* dio-based API classes
-  together by default. The architecture test (`frontend/test/architecture_test.dart`)
-  bans `package:dio` outside `api_client`/`auth`/`data`/`failures`. Stripping
-  `paths` makes it emit models only — dio-free, architecture-test-clean. The
-  strip script is a small repo-owned Python tool, next to
-  `scripts/check_openapi_drift.py`.
+- **`build_only_models: true` on the generator, fed the committed schema
+  copy.** `swagger_dart_code_generator` emits models *and* chopper/dio API
+  classes together by default. The architecture test
+  (`frontend/test/architecture_test.dart`) bans `package:dio` outside
+  `api_client`/`auth`/`data`/`failures`. `build_only_models` makes it emit
+  models only — dio-free, architecture-test-clean — so no schema surgery is
+  needed (the plan's earlier "strip `paths`" idea was superseded by this
+  native flag). The generator reads `frontend/swagger/openapi.json`, a copy
+  of the backend file refreshed by `frontend/scripts/refresh_contract.py`.
 - **Generated code is committed** so FE builds/CI never need codegen to run.
   CI regenerates and fails on diff (mirrors the backend drift check).
 - **Adoption starts with `Strategy`/`Link` in `data.dart`** — the exact models
@@ -67,10 +69,11 @@ bytes match the schema with a single trial test.
 - Fetch latest master; `git worktree add .claude/worktrees/openapi-fe-contract
   -b impl/openapi-fe-contract origin/master`
 - Add `swagger_dart_code_generator` + `build_runner` to `frontend/pubspec.yaml`
-  dev deps; add `build.yaml` with `input_folder: ../backend` (openapi.json is
-  committed there) and output to `lib/generated/`
-- Add `backend/scripts/emit_models_schema.py`: read `openapi.json`, strip
-  `paths`, write a components-only schema the FE generator consumes
+  dev deps; add `build.yaml` with `input_folder: swagger` (a committed copy of
+  `backend/openapi.json`) and output to `lib/generated/`, plus
+  `build_only_models: true`
+- Add `frontend/scripts/refresh_contract.py`: copies `backend/openapi.json` →
+  `frontend/swagger/openapi.json`, runs build_runner, formats the output
 - First `dart run build_runner build` → generated models into
   `frontend/lib/generated/` with a DO NOT EDIT header; commit the output
 - Verify `flutter analyze` passes, including the dio-boundary architecture test
