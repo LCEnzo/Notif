@@ -44,7 +44,7 @@ RUN mkdir -p /app/staticfiles \
 
 # ── volume permissions (directory must exist before chown) ─────────
 RUN mkdir -p /app/data /app/staticfiles \
-    && chmod +x /app/scripts/*.sh \
+    && chmod +x /app/scripts/*.sh /app/docker-entrypoint.sh \
     && useradd --create-home appuser \
     && chown -R appuser:appuser /app
 
