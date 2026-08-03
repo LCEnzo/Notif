@@ -16,6 +16,46 @@ void main() {
     return settings;
   }
 
+  group('resolveBuiltinApiUrl', () {
+    final page = Uri.parse('https://notif.example.com/#/login');
+
+    test('relative URL on web resolves against the page origin', () {
+      final resolved = resolveBuiltinApiUrl('/api/v1', isWeb: true, page: page);
+
+      expect(resolved, 'https://notif.example.com/api/v1');
+    });
+
+    test('page port and scheme survive resolution', () {
+      final resolved = resolveBuiltinApiUrl(
+        '/api/v1',
+        isWeb: true,
+        page: Uri.parse('http://localhost:5353/#/login'),
+      );
+
+      expect(resolved, 'http://localhost:5353/api/v1');
+    });
+
+    test('absolute URL on web passes through unchanged', () {
+      final resolved = resolveBuiltinApiUrl(
+        'https://api.example.com/api/v1',
+        isWeb: true,
+        page: page,
+      );
+
+      expect(resolved, 'https://api.example.com/api/v1');
+    });
+
+    test('relative URL off web passes through unchanged', () {
+      final resolved = resolveBuiltinApiUrl(
+        '/api/v1',
+        isWeb: false,
+        page: page,
+      );
+
+      expect(resolved, '/api/v1');
+    });
+  });
+
   group('resolveUrls', () {
     test('null settings returns builtin base URL only', () {
       final urls = resolveUrls('/auth/login', null);

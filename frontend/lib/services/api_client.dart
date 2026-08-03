@@ -9,6 +9,30 @@ const String builtinApiUrl = String.fromEnvironment(
   defaultValue: 'http://localhost:8000/api/v1',
 );
 
+/// Resolve the built-in API URL into a usable request base.
+///
+/// Production web builds ship a relative `API_URL` (`/api/v1`): the app is
+/// served and backed by one origin, and a relative URL keeps the image free of
+/// a baked-in hostname. Relative means same-origin by construction, so on web
+/// it resolves against the serving [page] here — before
+/// [describeUnsupportedOrigin], which deliberately keeps requiring absolute
+/// http(s) URLs for anything entered by hand. Native builds have no page
+/// origin: the value passes through unchanged and the absolute-URL validation
+/// applies to it as-is.
+String resolveBuiltinApiUrl(
+  String builtin, {
+  required bool isWeb,
+  required Uri page,
+}) {
+  if (!isWeb) return builtin;
+  final parsed = Uri.tryParse(builtin);
+  if (parsed == null || parsed.hasScheme) return builtin;
+  return page.resolveUri(parsed).toString();
+}
+
+String get _effectiveBuiltinApiUrl =>
+    resolveBuiltinApiUrl(builtinApiUrl, isWeb: kIsWeb, page: Uri.base);
+
 const Duration connectTimeout = Duration(seconds: 10);
 const Duration receiveTimeout = Duration(seconds: 15);
 
@@ -226,10 +250,10 @@ List<String> resolveUrls(String path, AppSettingsController? settings) {
 
   switch (mode) {
     case BackendUrlMode.builtin:
-      return [builtinApiUrl];
+      return [_effectiveBuiltinApiUrl];
     case BackendUrlMode.customWithFallback:
-      if (custom.isEmpty) return [builtinApiUrl];
-      return [custom, builtinApiUrl];
+      if (custom.isEmpty) return [_effectiveBuiltinApiUrl];
+      return [custom, _effectiveBuiltinApiUrl];
     case BackendUrlMode.customOnly:
       if (custom.isEmpty) return [];
       return [custom];
