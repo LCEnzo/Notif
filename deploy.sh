@@ -71,6 +71,18 @@ sync_caddy_config() {
     if docker compose -f compose.yaml --profile prod exec -T caddy cat /etc/caddy/Caddyfile 2>/dev/null | cmp -s - Caddyfile; then
         return
     fi
+
+    # Restarting swaps a running (good) proxy for one loading the checkout's
+    # config, so refuse to restart onto a config that doesn't even adapt.
+    # `adapt` checks syntax/structure without loading TLS certs, so it can't
+    # false-fail on the origin-cert bind mount the way `validate` would; the
+    # env-var defaults in the Caddyfile make it self-contained. Fail closed:
+    # leave the working proxy on its current config and abort the deploy.
+    if ! docker run --rm -i caddy:2 caddy adapt --config /dev/stdin --adapter caddyfile <Caddyfile >/dev/null 2>&1; then
+        echo "ERROR: Caddyfile in the checkout is invalid; leaving the running proxy untouched." >&2
+        exit 1
+    fi
+
     echo "=== Caddy config drifted from checkout; restarting caddy to rebind the mount ==="
     docker compose -f compose.yaml --profile prod restart caddy
 }
