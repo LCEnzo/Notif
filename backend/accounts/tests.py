@@ -1292,6 +1292,16 @@ class PasswordResetTestCase(TestCase):
 		cls.reset_url = reverse("password-reset")
 		cls.confirm_url = reverse("password-reset-confirm")
 
+	def setUp(self):
+		# Budgets are database rows now; each test's transaction rollback gives
+		# it a fresh budget automatically. A per-test client: pytest-django's
+		# _pre_setup resets cls.client to a plain django Client, wiping any
+		# setUpTestData assignment. The instance attribute shadows that, and the
+		# reset endpoints are JSON-only (cross-site form gate), so default to
+		# JSON rendering.
+		self.client = APIClient()
+		self.client.default_format = "json"
+
 	# ── request ────────────────────────────────────────────
 
 	def test_request_creates_code_for_existing_user(self):
@@ -1370,6 +1380,50 @@ class PasswordResetTestCase(TestCase):
 			response = self.client.post(self.reset_url, {"email": "nobody@example.com"})
 			self.assertEqual(response.status_code, status.HTTP_200_OK)
 			mock_send.assert_not_called()
+
+	def test_request_rejects_form_encoded_bodies(self):
+		"""A cross-site HTML form could forge this endpoint — form bodies are refused."""
+		response = self.client.post(self.reset_url, {"email": "reset@example.com"}, format="multipart")
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertEqual(PasswordResetCode.objects.count(), 0)
+
+	def test_request_is_budgeted_per_email(self):
+		"""Minting codes is capped per email so refresh-the-lockout loops die."""
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			for _ in range(6):
+				response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+		# The first 5 mints go through; the 6th is silently dropped.
+		self.assertEqual(mock_send.call_count, 5)
+		self.assertEqual(PasswordResetCode.objects.count(), 1)
+
+	@override_settings(TESTING=False)
+	def test_request_spawns_background_thread_when_not_testing(self):
+		"""Outside tests the reset email is sent off the request thread.
+
+		The synchronous ``settings.TESTING`` branch is what the other reset
+		tests exercise; this covers the production branch, asserting the daemon
+		thread is spawned exactly once, targeting the background sender with the
+		user's email. ``threading.Thread`` is patched, so no real thread starts
+		and the assertions stay deterministic.
+		"""
+		with (
+			patch("accounts.views.threading.Thread") as mock_thread,
+			patch("commons.email.send_password_reset_email") as mock_send,
+		):
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		mock_thread.assert_called_once()
+		thread_kwargs = mock_thread.call_args.kwargs
+		self.assertEqual(thread_kwargs["target"].__name__, "_send_reset_email_in_background")
+		self.assertEqual(thread_kwargs["args"][0], self.user.email)
+		self.assertTrue(thread_kwargs["daemon"])
+		# The mock replaced Thread, so .start() ran on the mock, not a real thread,
+		# and the synchronous sender was therefore never invoked inline.
+		mock_thread.return_value.start.assert_called_once()
+		mock_send.assert_not_called()
 
 	# ── confirm ──────────────────────────────────────────
 
@@ -1500,6 +1554,51 @@ class PasswordResetTestCase(TestCase):
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password("oldpassword123!"))
+
+	def test_confirm_rejects_form_encoded_bodies(self):
+		"""Cross-site form POSTs must not be able to burn guesses from a victim's browser."""
+		PasswordResetCode.create_for_user(user=self.user, code="654321")
+
+		response = self.client.post(
+			self.confirm_url,
+			{
+				"email": "reset@example.com",
+				"code": "654321",
+				"new_password": "NewSecurePass123!",
+			},
+			format="multipart",
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		code = PasswordResetCode.objects.get(user=self.user)
+		self.assertEqual(code.failed_attempts, 0)
+
+	def test_confirm_is_budgeted_per_email(self):
+		"""Guessing is capped per email regardless of code refresh or IP rotation."""
+		PasswordResetCode.create_for_user(user=self.user, code="654321")
+
+		for _ in range(11):
+			response = self.client.post(
+				self.confirm_url,
+				{
+					"email": "reset@example.com",
+					"code": "000000",
+					"new_password": "NewSecurePass123!",
+				},
+			)
+			self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+		# Budget exhausted: even the correct code is refused, and it is not consumed.
+		response = self.client.post(
+			self.confirm_url,
+			{
+				"email": "reset@example.com",
+				"code": "654321",
+				"new_password": "NewSecurePass123!",
+			},
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 		self.user.refresh_from_db()
 		self.assertTrue(self.user.check_password("oldpassword123!"))
 
