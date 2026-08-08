@@ -27,6 +27,9 @@ jobs:
     env:
       DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod
       DJANGO_SETTINGS_MODULE: notif.settings
+      # This is a dev-configuration suite; DEBUG now defaults to false, so
+      # declare the dev intent explicitly rather than relying on the default.
+      DEBUG: "true"
 
     steps:
       - uses: actions/checkout@v6

@@ -182,7 +182,8 @@ def _user_agent(request: Request) -> str:
 def _ensure_dev_user(username: str, password: str) -> None:
 	"""Create (or reanimate) the dev bootstrap account on first dev login.
 
-	Guarded by DEV_BOOTSTRAP_LOGIN_ENABLED, which defaults to DEBUG. The
+	Guarded by DEV_BOOTSTRAP_LOGIN_ENABLED, an explicit opt-in that is only
+	legal in a local DEBUG environment (enforced in notif.config). The
 	credentials must match exactly, so this never turns a failed login for a real
 	account into an account creation.
 	"""

@@ -467,6 +467,7 @@ class LoginViewTestCase(TestCase):
 		self.assertEqual(legacy["path"], settings.LEGACY_REFRESH_COOKIE_PATH)
 
 
+@override_settings(DEV_BOOTSTRAP_LOGIN_ENABLED=True)
 class DevBootstrapLoginTestCase(TestCase):
 	def test_dev_login_bootstraps_user_when_missing(self):
 		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())
