@@ -2,6 +2,7 @@ import socket
 from typing import Any
 from unittest.mock import patch
 
+import pytest
 import requests
 import requests_mock
 from django.test import TestCase
@@ -18,13 +19,15 @@ from monitoring.safe_fetch import MAX_RESPONSE_BYTES, NonPublicHostError, Respon
 from monitoring.strategies import URL, GeneralSelectorStrategy
 
 
+@pytest.mark.real_ssrf
 class SSRFGuardTestCase(TestCase):
 	"""The link API and the fetch layer refuse non-public targets.
 
-	conftest.py neutralizes the DNS resolution for the mocked-network suite;
-	these tests restore the real resolver (``_unpatched_resolver``) so the
-	guard itself is exercised. All targets below are literal addresses or
-	``localhost``, so no real DNS is involved.
+	This class carries the ``real_ssrf`` marker, so conftest exempts it from the
+	suite-wide resolver bypass: these tests run against the real SSRF guard by
+	default, and a new guard test cannot silently pass against a disabled guard
+	by forgetting to restore it. All targets below are literal addresses,
+	``localhost``, or have their ``getaddrinfo`` patched, so no real DNS runs.
 	"""
 
 	def setUp(self) -> None:
@@ -62,8 +65,7 @@ class SSRFGuardTestCase(TestCase):
 			"http://2130706433/",  # decimal encoding of 127.0.0.1
 		]:
 			with self.subTest(url=url):
-				with patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()):
-					response = self._create_link(url)
+				response = self._create_link(url)
 				self.assertEqual(
 					response.status_code,
 					400,
@@ -71,7 +73,10 @@ class SSRFGuardTestCase(TestCase):
 				)
 
 	def test_link_api_accepts_public_target(self) -> None:
-		with patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()):
+		with patch(
+			"monitoring.safe_fetch.socket.getaddrinfo",
+			return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))],
+		):
 			response = self._create_link("https://example.com/feed")
 		self.assertEqual(response.status_code, 201)
 
@@ -98,7 +103,6 @@ class SSRFGuardTestCase(TestCase):
 	def test_resolve_public_host_rejects_mixed_records(self) -> None:
 		"""A host with one public and one private record is a rebinding setup."""
 		with (
-			patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()),
 			patch(
 				"monitoring.safe_fetch.socket.getaddrinfo",
 				return_value=[
@@ -111,22 +115,16 @@ class SSRFGuardTestCase(TestCase):
 			safe_fetch.resolve_public_host("rebinding.example.com")
 
 	def test_resolve_public_host_accepts_public_records(self) -> None:
-		with (
-			patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()),
-			patch(
-				"monitoring.safe_fetch.socket.getaddrinfo",
-				return_value=[
-					(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
-				],
-			),
+		with patch(
+			"monitoring.safe_fetch.socket.getaddrinfo",
+			return_value=[
+				(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+			],
 		):
 			safe_fetch.resolve_public_host("example.com")  # must not raise
 
 	def test_fetch_refuses_private_address_before_any_network(self) -> None:
-		with (
-			patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()),
-			self.assertRaises(NonPublicHostError),
-		):
+		with self.assertRaises(NonPublicHostError):
 			safe_fetch.fetch("http://127.0.0.1/", timeout=2)
 
 	def test_fetch_caps_response_size(self) -> None:
@@ -139,8 +137,7 @@ class SSRFGuardTestCase(TestCase):
 		"""Even a link that slipped through validation cannot scrape internals."""
 		strat = GeneralSelectorStrategy()
 		url = URL("http://127.0.0.1/")
-		with patch("monitoring.safe_fetch.resolve_public_host", self._real_resolver()):
-			result = strat(url, {"selectors": ["body"]}, {})
+		result = strat(url, {"selectors": ["body"]}, {})
 		assert isinstance(result, Err)
 
 	def test_fetch_caps_redirect_bodies(self) -> None:
