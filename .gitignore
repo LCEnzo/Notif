@@ -5,6 +5,9 @@
 .codex/
 .cursor/
 .hermes/
+reasonix.toml
+.reasonix
+codex/
 
 # Python
 .venv/
