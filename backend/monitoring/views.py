@@ -1,11 +1,12 @@
 from typing import TYPE_CHECKING, Any, cast
 
+from django.conf import settings as django_settings
 from django.core.paginator import Page
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status as http_status
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
@@ -14,6 +15,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
+from rest_framework.throttling import ScopedRateThrottle, UserRateThrottle
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from accounts.models import User
@@ -188,6 +190,7 @@ def _request_error_message(errors: dict[str, Any]) -> str:
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_classes([UserRateThrottle, ScopedRateThrottle])
 def trigger_scrape(request: Request) -> Response:
 	"""Scrape one link, or every link the caller owns.
 
@@ -241,6 +244,15 @@ def trigger_scrape(request: Request) -> Response:
 				},
 			}
 		)
+
+
+# @api_view copies the decorator attributes onto the generated view class; the
+# module-level name is only the as_view() result, so scope and the test-mode
+# bypass must be set on the class itself.
+if django_settings.TESTING:
+	trigger_scrape.cls.throttle_classes = []
+else:
+	trigger_scrape.cls.throttle_scope = "scrape"  # type: ignore[attr-defined]
 
 
 @extend_schema(

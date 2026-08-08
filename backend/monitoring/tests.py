@@ -11,6 +11,7 @@ from unittest.mock import patch
 import pytest
 import requests
 import requests_mock
+from django.conf import settings as django_settings
 from django.core.management import call_command
 from django.db.models import Model
 from django.test import TestCase
@@ -42,6 +43,7 @@ from monitoring.strategies import (
 	ScrapeResult,
 	ScrapeSuccess,
 )
+from monitoring.views import trigger_scrape
 
 logger = logging.getLogger(__name__)
 
@@ -1079,6 +1081,12 @@ class TriggerScrapeViewTestCase(SetupMixin, TestCase):
 			# Renamed from "count" so one field name means one thing everywhere.
 			self.assertIn("updates_found", entry)
 			self.assertNotIn("count", entry)
+
+	def test_scrape_throttle_scope_is_wired(self):
+		# Documents the wiring rather than exercising it: real throttling stays off
+		# under TESTING, so we assert the scope exists and the class opts out here.
+		self.assertIn("scrape", django_settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"])
+		self.assertEqual(trigger_scrape.cls.throttle_classes, [])
 
 
 class StratChoicesViewTestCase(SetupMixin, TestCase):
