@@ -60,6 +60,17 @@
 	# Docker default: /app/frontend
 	handle {
 		root * {$FRONTEND_ROOT:/app/frontend}
+
+		# Flutter's entry files change on every build but live at fixed,
+		# unhashed URLs. Without Cache-Control, Cloudflare's default edge
+		# TTL (4h for .js) can serve a stale bundle — or a service worker
+		# mismatched with its main.dart.js — long after a deploy. no-cache
+		# means store-but-revalidate: with the etag file_server already
+		# emits, an unchanged file costs a 304, and a deploy is visible on
+		# the next request.
+		@mutable_entry path / /index.html /flutter_bootstrap.js /flutter.js /main.dart.js /flutter_service_worker.js /version.json /manifest.json
+		header @mutable_entry Cache-Control "no-cache"
+
 		try_files {path} /index.html
 		file_server
 	}

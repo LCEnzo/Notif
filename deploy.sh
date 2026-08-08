@@ -61,6 +61,20 @@ sync_host_config() {
     sudo_cmd systemctl start notif-run-due-tasks.timer
 }
 
+sync_caddy_config() {
+    # The Caddyfile is a single-file bind mount. git pull replaces files by
+    # rename, so a running container keeps reading the old inode — even
+    # `caddy reload` re-reads that stale content. Compare what the container
+    # actually sees against the checkout and restart to rebind when they
+    # differ. exec stderr is discarded on purpose: a stopped container makes
+    # the probe differ, and the restart below is the remedy either way.
+    if docker compose -f compose.yaml --profile prod exec -T caddy cat /etc/caddy/Caddyfile 2>/dev/null | cmp -s - Caddyfile; then
+        return
+    fi
+    echo "=== Caddy config drifted from checkout; restarting caddy to rebind the mount ==="
+    docker compose -f compose.yaml --profile prod restart caddy
+}
+
 remove_legacy_cron_entry() {
     legacy_command="docker compose -f compose.yaml exec -T backend python manage.py run_due_tasks"
     if [ "$(id -u)" -eq 0 ]; then
@@ -94,6 +108,7 @@ docker compose -f compose.yaml build --build-arg GIT_HASH="$GIT_HASH"
 
 # Install host configuration, then let systemd own the Compose lifecycle.
 sync_host_config
+sync_caddy_config
 remove_legacy_cron_entry
 
 echo ""
