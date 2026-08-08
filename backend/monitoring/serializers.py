@@ -1,10 +1,13 @@
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit
 
 from django.db.models import QuerySet
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
+from monitoring import safe_fetch
 from monitoring.models import Link, Notification, Strategy, Update
+from monitoring.safe_fetch import NonPublicHostError
 
 if TYPE_CHECKING:
 	_StrategyModelSerializer = ModelSerializer[Strategy]
@@ -89,6 +92,23 @@ class LinkSerializer(_LinkModelSerializer):
 			"url": {"required": True},
 			"strategy": {"required": True},
 		}
+
+	def validate_url(self, value: str) -> str:
+		"""Reject URLs that are structurally internal before they are stored.
+
+		This is a fast, no-DNS first line of defence and a good error message;
+		the real enforcement happens at scrape time in ``safe_fetch``, which
+		resolves the host and refuses non-public addresses on every hop.
+
+		Looked up on the module (not bound at import) so tests can patch
+		``safe_fetch.resolve_public_host`` and so a stale binding can never
+		survive a re-import order change.
+		"""
+		try:
+			safe_fetch.resolve_public_host(urlsplit(value).hostname or "")
+		except NonPublicHostError as exc:
+			raise serializers.ValidationError(str(exc)) from exc
+		return value
 
 
 class UpdateSerializer(_UpdateModelSerializer):
