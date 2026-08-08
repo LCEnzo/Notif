@@ -30,7 +30,10 @@ class Settings(BaseSettings):
 	NOTIF_ENV: Environment = Environment.LOCAL
 
 	# ── core ──────────────────────────────────────────────
-	DEBUG: bool = True
+	# DEBUG defaults to False: a missed env var must fail closed (no silk,
+	# no MD5 hashers, no dev bootstrap) rather than expose dev conveniences.
+	# Local development sets DEBUG=true explicitly via .env.
+	DEBUG: bool = False
 	DJANGO_SECRET_KEY: str = Field(min_length=1)
 	ALLOWED_HOSTS: str = Field(default="localhost,127.0.0.1,[::1]", min_length=1)
 	CORS_ALLOWED_ORIGINS: str = Field(default="", description="Comma-separated origins, e.g. https://notif.lcenzo.com")
@@ -90,7 +93,10 @@ class Settings(BaseSettings):
 	CONFIRM_REDIRECT_URL: str = Field(default="https://notif.lcenzo.com")
 
 	# ── dev bootstrap ─────────────────────────────────────
-	DEV_BOOTSTRAP_LOGIN_ENABLED: bool | None = None
+	# Explicit opt-in only. Never derived from DEBUG: a DEBUG=true staging
+	# box must not silently gain an account-creation login with credentials
+	# that are public in this repository.
+	DEV_BOOTSTRAP_LOGIN_ENABLED: bool = False
 	DEV_BOOTSTRAP_USERNAME: str = Field(default="LCEnzo", min_length=1)
 	DEV_BOOTSTRAP_PASSWORD: str = Field(default="1ukacolic", min_length=1)
 	DEV_BOOTSTRAP_EMAIL: str = Field(default="lcenzo@notif.local", min_length=1)
@@ -106,17 +112,16 @@ class Settings(BaseSettings):
 
 	@model_validator(mode="after")
 	def _resolve_conditional_defaults(self) -> Settings:
-		"""Defaults that depend on other fields.
+		"""Defaults that depend on other fields, plus environment invariants.
 
-		* DEV_BOOTSTRAP_LOGIN_ENABLED defaults to ``DEBUG`` when not set.
 		* DEV_BOOTSTRAP_NAME defaults to DEV_BOOTSTRAP_USERNAME when empty.
 		* Empty email secrets are coerced to None.
 		* RESEND_API_KEY is accepted as a backward-compatible alias for
 			EMAIL_HOST_PASSWORD because Resend SMTP uses the API key as the
 			SMTP password.
+		* Fail-closed invariants: production never runs with DEBUG on, and the
+			dev bootstrap login is only legal in a local DEBUG environment.
 		"""
-		if self.DEV_BOOTSTRAP_LOGIN_ENABLED is None:
-			self.DEV_BOOTSTRAP_LOGIN_ENABLED = self.DEBUG
 		if not self.DEV_BOOTSTRAP_NAME:
 			self.DEV_BOOTSTRAP_NAME = self.DEV_BOOTSTRAP_USERNAME
 		if self.EMAIL_HOST_PASSWORD == "":
@@ -127,6 +132,24 @@ class Settings(BaseSettings):
 			self.RESEND_API_KEY = None
 		if self.EMAIL_HOST_PASSWORD is None:
 			self.EMAIL_HOST_PASSWORD = self.RESEND_API_KEY
+
+		if self.NOTIF_ENV == Environment.PRODUCTION and self.DEBUG:
+			raise ValueError(
+				"NOTIF_ENV=production with DEBUG=true is not allowed: it would enable the "
+				"dev bootstrap login, MD5 password hashing, and the silk profiler in "
+				"production. Set DEBUG=false (the default) or NOTIF_ENV=staging/local."
+			)
+		if self.DEV_BOOTSTRAP_LOGIN_ENABLED and not self.DEBUG:
+			raise ValueError(
+				"DEV_BOOTSTRAP_LOGIN_ENABLED requires DEBUG=true: the bootstrap login "
+				"creates an account with repository-public credentials and must never "
+				"run outside an explicit local debug environment."
+			)
+		if self.DEV_BOOTSTRAP_LOGIN_ENABLED and self.NOTIF_ENV != Environment.LOCAL:
+			raise ValueError(
+				"DEV_BOOTSTRAP_LOGIN_ENABLED requires NOTIF_ENV=local: the bootstrap "
+				"login is a local-development convenience, not a staging feature."
+			)
 		return self
 
 	@property
