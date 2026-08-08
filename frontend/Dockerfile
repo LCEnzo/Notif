@@ -35,6 +35,5 @@ FROM alpine:3.21
 
 COPY --from=build /app/build/web /image-dist
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
