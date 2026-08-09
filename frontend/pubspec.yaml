@@ -57,7 +57,7 @@ dev_dependencies:
   # output is committed (see frontend/scripts/refresh_contract.py).
   swagger_dart_code_generator: ^4.1.1
   # url_launcher_platform_interface lets tests swap UrlLauncherPlatform.instance
-  # for a recording fake, so url_launcher_helper's scheme allowlist can be
+  # for a recording fake, so url_launcher_helper's scheme whitelist can be
   # exercised without hitting a real OS launcher channel.
   url_launcher_platform_interface: ^2.3.2
 
