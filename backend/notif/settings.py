@@ -10,14 +10,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.0/ref/settings/
 """
 
-import sys
 from pathlib import Path
 from typing import Any
 
 from notif.config import settings
 
-# Disable throttling during test runs — rate limits would break the test suite.
-TESTING = "test" in sys.argv or "pytest" in sys.modules
+# Serving mode. The test settings module (notif.settings_test) flips this to True
+# and overrides the serving-only defaults; base always configures for serving.
+TESTING = False
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -243,9 +243,7 @@ REST_FRAMEWORK = {
 		"accounts.authentication.SessionTokenAuthentication",
 	],
 	"DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
-	"DEFAULT_THROTTLE_CLASSES": []
-	if TESTING
-	else [
+	"DEFAULT_THROTTLE_CLASSES": [
 		"rest_framework.throttling.UserRateThrottle",
 		"rest_framework.throttling.AnonRateThrottle",
 	],
@@ -278,11 +276,9 @@ _log_handlers: dict[str, Any] = {
 		"level": "WARNING",
 	},
 }
-_root_handlers: list[str] = ["console"]
-if not TESTING:
-	_root_handlers.append("system_event")
+_root_handlers: list[str] = ["console", "system_event"]
 
-if DEBUG and not TESTING:
+if DEBUG:
 	_LOG_DIR = BASE_DIR / "logs"
 	_LOG_DIR.mkdir(exist_ok=True)
 	_log_handlers["file"] = {

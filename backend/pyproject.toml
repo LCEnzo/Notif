@@ -33,6 +33,7 @@ dev = [
 	"pytest-cov>=7.0,<8.0",
 	"pytest-django>=4.11,<5.0",
 	"pytest-randomly>=4.0,<5.0",
+	"pytest-socket>=0.7,<0.8",
 	"pytest-timeout>=2.3,<3.0",
 	"pytest-xdist>=3.8,<4.0",
 	"requests-mock>=1.11,<2.0",
@@ -202,7 +203,7 @@ warn_required_dynamic_aliases = true
 django_settings_module = "notif.settings"
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "notif.settings"
+DJANGO_SETTINGS_MODULE = "notif.settings_test"
 pythonpath = ["."]
 python_files = ["tests.py", "test_*.py", "*_test.py"]
 addopts = [
@@ -212,6 +213,11 @@ addopts = [
 	"--tb=short",
 	"--reuse-db",
 	"--nomigrations",
+	"--disable-socket",
+	"--allow-unix-socket",
+	# Loopback only: the live-server conformance test needs a local socket, but
+	# any un-mocked external call must still fail loudly instead of flaking.
+	"--allow-hosts=127.0.0.1,::1",
 	"--timeout=30",
 	"-n",
 	"4",

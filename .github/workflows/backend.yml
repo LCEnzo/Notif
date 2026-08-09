@@ -26,7 +26,10 @@ jobs:
 
     env:
       DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod
-      DJANGO_SETTINGS_MODULE: notif.settings
+      # No DJANGO_SETTINGS_MODULE here on purpose: it would override the pytest
+      # ini and run the suite under serving settings. manage.py self-defaults to
+      # notif.settings for the check/migration/schema steps; pytest selects
+      # notif.settings_test from pyproject.
 
     steps:
       - uses: actions/checkout@v6

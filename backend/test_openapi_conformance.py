@@ -56,17 +56,18 @@ def _assert_conforms(response: requests.Response, host_url: str, method: str, pa
 
 
 @pytest.mark.django_db(transaction=True)
-@override_settings(SESSION_TOKEN_COOKIE_SECURE=False)
+@override_settings(SESSION_TOKEN_COOKIE_SECURE=False, CSRF_COOKIE_SECURE=False)
 def test_strategy_round_trip_conforms_to_openapi(
 	live_server: Any,
 	django_user_model: Any,
 ) -> None:
 	# transaction=True is required: live_server serves from a separate thread
 	# and connection, so the user must be committed for the login to see it.
-	# SESSION_TOKEN_COOKIE_SECURE=False: the session cookie is Secure=True by
-	# design, and Python's requests honours that strictly over plain HTTP
-	# (unlike Chromium's loopback exception), so the login cookie would never
-	# be sent back. The flag is read from settings at response time.
+	# The session and CSRF cookies are Secure=True in a prod-shaped test
+	# configuration, and Python's requests honours that strictly over plain HTTP
+	# (unlike Chromium's loopback exception), so neither would be sent back;
+	# clear both flags for this live-HTTP round trip. Read from settings at
+	# response time.
 	username = "conformance"
 	password = "conformance-pass-123"
 	django_user_model.objects.create_user(
