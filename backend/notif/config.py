@@ -30,9 +30,6 @@ class Settings(BaseSettings):
 	NOTIF_ENV: Environment = Environment.LOCAL
 
 	# ── core ──────────────────────────────────────────────
-	# DEBUG defaults to False: a missed env var must fail closed (no silk,
-	# no MD5 hashers, no dev bootstrap) rather than expose dev conveniences.
-	# Local development sets DEBUG=true explicitly via .env.
 	DEBUG: bool = False
 	DJANGO_SECRET_KEY: str = Field(min_length=1)
 	ALLOWED_HOSTS: str = Field(default="localhost,127.0.0.1,[::1]", min_length=1)
