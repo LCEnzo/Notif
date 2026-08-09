@@ -19,16 +19,6 @@
                             "schema": {
                                 "$ref": "#/components/schemas/PasswordResetRequest"
                             }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetRequest"
-                            }
                         }
                     },
                     "required": true
@@ -66,16 +56,6 @@
                 "requestBody": {
                     "content": {
                         "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetConfirm"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetConfirm"
-                            }
-                        },
-                        "multipart/form-data": {
                             "schema": {
                                 "$ref": "#/components/schemas/PasswordResetConfirm"
                             }

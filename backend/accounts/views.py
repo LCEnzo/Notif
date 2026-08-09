@@ -1,5 +1,9 @@
+import contextlib
+import hashlib
 import logging
-from collections.abc import Sequence
+import threading
+from collections.abc import Callable, Sequence
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
@@ -8,6 +12,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models.query import QuerySet
 from django.middleware.csrf import rotate_token
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication, get_authorization_header
@@ -34,6 +39,7 @@ from accounts.device_sessions import (
 	session_for_token,
 )
 from accounts.models import DeviceSession, User
+from accounts.models.password_reset import PasswordResetBudget
 from accounts.serializers import (
 	DeviceSessionSerializer,
 	LoginRequestSerializer,
@@ -48,6 +54,7 @@ from accounts.serializers import (
 )
 from commons.network import client_ip
 from commons.permissions import IsRequestingThemselves, ReadOnly
+from commons.types import Email
 
 if TYPE_CHECKING:
 	_UserModelViewSet = ModelViewSet[User]
@@ -59,6 +66,76 @@ else:
 logger = logging.getLogger(__name__)
 
 SessionCookieSameSite = Literal["Lax", "Strict", "None", False]
+
+# ── password-reset per-email budgets ────────────────────────────
+# The reset code is 6 digits and the on-disk lockout (5 failures) resets every
+# time a new code is minted, so without a budget that survives code refresh an
+# attacker rotating IPs could grind the 10^6 space. These budgets key on the
+# *email*, not the IP, which also caps cross-site form POSTs from victims'
+# browsers. Database-backed (see PasswordResetBudget) so the limits are shared
+# across all gunicorn workers and survive worker recycling; both counters share
+# one fixed window, reset together on first use after the window elapses.
+_PASSWORD_RESET_REQUEST_BUDGET = (5, 60 * 60)  # (mints per hour, window seconds)
+_PASSWORD_RESET_CONFIRM_BUDGET = (10, 60 * 60)  # (guesses per hour, window seconds)
+
+BudgetKind = Literal["request", "confirm"]
+
+
+def _email_budget_allows(kind: BudgetKind, email: Email, limit: int, window_seconds: int) -> bool:
+	"""True when this email may still perform a password-reset action.
+
+	The email is stored hashed so plaintext addresses never hit the database.
+	The window opens on first use after the previous window elapsed and is
+	shared by both counters, so its expiry zeroes both; each allowed use
+	increments the matching counter under a row lock, so concurrent requests
+	(and multiple gunicorn workers) share one budget.
+	"""
+	field = "mint_count" if kind == "request" else "guess_count"
+	email_hash = hashlib.sha256(email.lower().encode()).hexdigest()
+	now = timezone.now()
+	with transaction.atomic():
+		row, _ = PasswordResetBudget.objects.select_for_update().get_or_create(
+			email_hash=email_hash,
+			defaults={"window_started_at": now},
+		)
+		if row.window_started_at < now - timedelta(seconds=window_seconds):
+			row.window_started_at = now
+			row.mint_count = 0
+			row.guess_count = 0
+		if getattr(row, field) >= limit:
+			return False
+		setattr(row, field, getattr(row, field) + 1)
+		row.save(update_fields=["mint_count", "guess_count", "window_started_at"])
+		return True
+
+
+def _send_reset_email_in_background(to_email: Email, code: str) -> None:
+	"""Send a reset email off the request thread.
+
+	The SMTP round-trip only happens for existing accounts; doing it inline
+	made wall-clock time an account-existence oracle on the reset endpoint.
+	Bounded: the per-IP throttle (3/min) and the per-email budget (5/hour)
+	above cap how many of these threads can ever exist.
+	"""
+	# Imported at call time so tests can patch commons.email.send_password_reset_email.
+	from commons.email import send_password_reset_email
+
+	# send_password_reset_email already logs failures with the address attached;
+	# the daemon thread must not die with a traceback.
+	with contextlib.suppress(Exception):
+		send_password_reset_email(to_email, code)
+
+
+def _spawn_reset_email_thread(to_email: Email, code: str) -> None:
+	threading.Thread(
+		target=_send_reset_email_in_background,
+		args=(to_email, code),
+		daemon=True,
+	).start()
+
+
+# Module-level seam: tests monkeypatch this with the synchronous sender.
+_send_reset_email: Callable[[Email, str], None] = _spawn_reset_email_thread
 
 
 class AuthThrottleMixin:
@@ -552,6 +629,7 @@ class PasswordResetRequestView(APIView):
 	"""
 
 	permission_classes = [AllowAny]
+	parser_classes = [JSONParser]
 	throttle_scope = "password_reset"
 
 	def get_throttles(self) -> list[BaseThrottle]:
@@ -564,15 +642,25 @@ class PasswordResetRequestView(APIView):
 		responses={status.HTTP_200_OK: StatusResponseSerializer},
 	)
 	def post(self, request: Request) -> Response:
+		# Same cross-site form gate as login/logout: without it, any webpage
+		# could POST form-encoded resets from the victim's browser — minting
+		# codes (invalidating the victim's own), flooding their inbox, and
+		# spending the per-IP throttle budget from the victim's IP.
+		_require_json_request(request)
 		from accounts.models.password_reset import PasswordResetCode
-		from commons.email import send_password_reset_email
 
 		serializer = PasswordResetRequestSerializer(data=request.data)
 		if not serializer.is_valid():
 			# Return 200 to prevent enumeration via validation errors
 			return Response({"status": "ok"})
 
-		email = serializer.validated_data["email"]
+		email = Email(serializer.validated_data["email"])
+		if not _email_budget_allows("request", email, *_PASSWORD_RESET_REQUEST_BUDGET):
+			# Budget exhausted: answer identically and silently. This per-email
+			# cap is what makes the mint-new-code-to-reset-the-lockout loop
+			# useless: a fresh code cannot buy more guesses than the budget.
+			return Response({"status": "ok"})
+
 		user = User._base_manager.filter(email__iexact=email, is_active=True).first()
 
 		if user is not None:
@@ -583,11 +671,12 @@ class PasswordResetRequestView(APIView):
 			PasswordResetCode.issue_for_user(user=user, code=code)
 
 			try:
-				send_password_reset_email(user.email, code)
+				_send_reset_email(Email(user.email), code)
 			except Exception:
-				logger.exception("Failed to send reset email to %s", email)
-				# Always return 200 - even a send failure during an email
-				# outage must not become an email-enumeration oracle.
+				# The silent 200 is the anti-enumeration contract: a dispatch
+				# failure must not surface as a 500 that only existing accounts
+				# can trigger.
+				logger.exception("Password reset email dispatch failed for %s", user.email)
 
 		return Response({"status": "ok"})
 
@@ -596,6 +685,7 @@ class PasswordResetConfirmView(APIView):
 	"""Validate a reset code and set a new password."""
 
 	permission_classes = [AllowAny]
+	parser_classes = [JSONParser]
 	throttle_scope = "password_reset_confirm"
 
 	def get_throttles(self) -> list[BaseThrottle]:
@@ -608,15 +698,27 @@ class PasswordResetConfirmView(APIView):
 		responses={status.HTTP_200_OK: StatusResponseSerializer},
 	)
 	def post(self, request: Request) -> Response:
+		# JSON-only, like the request endpoint: form-encoded cross-site POSTs
+		# must not be able to burn guesses against the victim's code from the
+		# victim's browser.
+		_require_json_request(request)
 		from accounts.models.password_reset import PasswordResetCode
 
 		serializer = PasswordResetConfirmSerializer(data=request.data)
 		if not serializer.is_valid():
 			return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-		email = serializer.validated_data["email"]
+		email = Email(serializer.validated_data["email"])
 		code = serializer.validated_data["code"]
 		new_password = serializer.validated_data["new_password"]
+
+		if not _email_budget_allows("confirm", email, *_PASSWORD_RESET_CONFIRM_BUDGET):
+			# Budget exhausted: the same error as a wrong code, so the endpoint
+			# never advertises that guesses are being counted.
+			return Response(
+				{"error": "Invalid or expired reset code."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
 
 		user = User._base_manager.filter(email__iexact=email, is_active=True).first()
 		if user is None:
