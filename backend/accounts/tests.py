@@ -1358,6 +1358,17 @@ class PasswordResetTestCase(TestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, {"status": "ok"})
 
+	def test_request_returns_200_when_dispatch_raises(self):
+		"""A dispatcher failure is logged and the silent 200 still holds."""
+		with (
+			patch("accounts.views._send_reset_email", side_effect=RuntimeError("cannot start thread")),
+			self.assertLogs("accounts.views", level="ERROR") as logs,
+		):
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, {"status": "ok"})
+		self.assertTrue(any("dispatch failed" in line for line in logs.output))
+
 	def test_request_replaces_existing_code(self):
 		"""New request invalidates any previous code for the same user."""
 		old_code = PasswordResetCode.create_for_user(user=self.user, code="111111")

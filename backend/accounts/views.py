@@ -4,7 +4,7 @@ import logging
 import threading
 from collections.abc import Callable, Sequence
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, NewType, cast
 
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -77,8 +77,14 @@ SessionCookieSameSite = Literal["Lax", "Strict", "None", False]
 _PASSWORD_RESET_REQUEST_BUDGET = (5, 60 * 60)  # (mints per hour, window seconds)
 _PASSWORD_RESET_CONFIRM_BUDGET = (10, 60 * 60)  # (guesses per hour, window seconds)
 
+BudgetKind = Literal["request", "confirm"]
 
-def _email_budget_allows(kind: str, email: str, limit: int, window_seconds: int) -> bool:
+# A validated email address. Constructed where a value crosses into the reset
+# flow: from the serializer's EmailField or from the User row's email column.
+Email = NewType("Email", str)
+
+
+def _email_budget_allows(kind: BudgetKind, email: Email, limit: int, window_seconds: int) -> bool:
 	"""True when this email may still perform a password-reset action.
 
 	The email is stored hashed so plaintext addresses never hit the database.
@@ -106,7 +112,7 @@ def _email_budget_allows(kind: str, email: str, limit: int, window_seconds: int)
 		return True
 
 
-def _send_reset_email_in_background(to_email: str, code: str) -> None:
+def _send_reset_email_in_background(to_email: Email, code: str) -> None:
 	"""Send a reset email off the request thread.
 
 	The SMTP round-trip only happens for existing accounts; doing it inline
@@ -123,7 +129,7 @@ def _send_reset_email_in_background(to_email: str, code: str) -> None:
 		send_password_reset_email(to_email, code)
 
 
-def _spawn_reset_email_thread(to_email: str, code: str) -> None:
+def _spawn_reset_email_thread(to_email: Email, code: str) -> None:
 	threading.Thread(
 		target=_send_reset_email_in_background,
 		args=(to_email, code),
@@ -132,7 +138,7 @@ def _spawn_reset_email_thread(to_email: str, code: str) -> None:
 
 
 # Module-level seam: tests monkeypatch this with the synchronous sender.
-_send_reset_email: Callable[[str, str], None] = _spawn_reset_email_thread
+_send_reset_email: Callable[[Email, str], None] = _spawn_reset_email_thread
 
 
 class AuthThrottleMixin:
@@ -651,7 +657,7 @@ class PasswordResetRequestView(APIView):
 			# Return 200 to prevent enumeration via validation errors
 			return Response({"status": "ok"})
 
-		email = serializer.validated_data["email"]
+		email = Email(serializer.validated_data["email"])
 		if not _email_budget_allows("request", email, *_PASSWORD_RESET_REQUEST_BUDGET):
 			# Budget exhausted: answer identically and silently. This per-email
 			# cap is what makes the mint-new-code-to-reset-the-lockout loop
@@ -667,7 +673,13 @@ class PasswordResetRequestView(APIView):
 
 			PasswordResetCode.issue_for_user(user=user, code=code)
 
-			_send_reset_email(user.email, code)
+			try:
+				_send_reset_email(Email(user.email), code)
+			except Exception:
+				# The silent 200 is the anti-enumeration contract: a dispatch
+				# failure must not surface as a 500 that only existing accounts
+				# can trigger.
+				logger.exception("Password reset email dispatch failed for %s", user.email)
 
 		return Response({"status": "ok"})
 
@@ -699,7 +711,7 @@ class PasswordResetConfirmView(APIView):
 		if not serializer.is_valid():
 			return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-		email = serializer.validated_data["email"]
+		email = Email(serializer.validated_data["email"])
 		code = serializer.validated_data["code"]
 		new_password = serializer.validated_data["new_password"]
 
