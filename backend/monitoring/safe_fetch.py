@@ -27,7 +27,7 @@ from typing import Any
 from urllib.parse import urljoin, urlsplit
 
 import requests
-from requests.adapters import HTTPAdapter
+from requests.adapters import DEFAULT_POOLBLOCK, HTTPAdapter
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
 from urllib3.poolmanager import PoolManager
@@ -85,6 +85,19 @@ def resolve_public_host(host: str) -> list[str]:
 	return [str(address) for address in addresses]
 
 
+class _NonPublicHostBlockedError(Exception):
+	"""Internal signal that the pinned connection refused a non-public host.
+
+	Deliberately *not* a ``NonPublicHostError``: that class subclasses
+	``requests.RequestException``, which is an ``OSError``, and urllib3's pool
+	machinery catches ``OSError`` around the connect path — the refusal would
+	be wrapped into ``ProtocolError``, fed to retry accounting, and surface as
+	a generic ``requests.ConnectionError`` with the real cause buried three
+	wrappers deep. A plain ``Exception`` subclass passes through urllib3 and
+	requests untouched; ``PublicOnlyHTTPAdapter.send`` translates it back.
+	"""
+
+
 class _PublicOnlyHTTPConnection(HTTPConnection):
 	"""HTTPConnection that connects only to a pre-validated public address.
 
@@ -95,7 +108,10 @@ class _PublicOnlyHTTPConnection(HTTPConnection):
 	"""
 
 	def _new_conn(self) -> socket.socket:
-		addresses = resolve_public_host(self._dns_host)
+		try:
+			addresses = resolve_public_host(self._dns_host)
+		except NonPublicHostError as exc:
+			raise _NonPublicHostBlockedError(str(exc)) from exc
 		return create_connection(
 			(addresses[0], self.port),
 			self.timeout,
@@ -117,10 +133,20 @@ class _PublicOnlyHTTPSConnectionPool(HTTPSConnectionPool):
 
 
 class _PublicOnlyPoolManager(PoolManager):
-	pool_classes_by_scheme = {
-		"http": _PublicOnlyConnectionPool,
-		"https": _PublicOnlyHTTPSConnectionPool,
-	}
+	"""PoolManager whose pools build the pinned connection classes.
+
+	urllib3's ``PoolManager.__init__`` assigns ``self.pool_classes_by_scheme``
+	as an *instance* attribute, so a class-level override here would be
+	silently shadowed and stock, unpinned pools would run. The override must
+	be assigned after ``super().__init__()``.
+	"""
+
+	def __init__(self, *args: Any, **kwargs: Any) -> None:
+		super().__init__(*args, **kwargs)
+		self.pool_classes_by_scheme = {
+			"http": _PublicOnlyConnectionPool,
+			"https": _PublicOnlyHTTPSConnectionPool,
+		}
 
 
 class PublicOnlyHTTPAdapter(HTTPAdapter):
@@ -131,22 +157,21 @@ class PublicOnlyHTTPAdapter(HTTPAdapter):
 	class, which runs for the initial request *and* every redirect hop.
 	"""
 
-	def __init__(self, **kwargs: Any) -> None:
-		# requests' HTTPAdapter defaults (10 pools, 10 max, no blocking);
-		# mirrored here because the stub types do not expose DEFAULT_POOLSIZE.
-		pool_connections = kwargs.pop("pool_connections", 10)
-		pool_maxsize = kwargs.pop("pool_maxsize", 10)
-		pool_block = kwargs.pop("pool_block", False)
-		super().__init__(
-			pool_connections=pool_connections,
-			pool_maxsize=pool_maxsize,
-			pool_block=pool_block,
-			**kwargs,
-		)
+	def init_poolmanager(
+		self,
+		connections: int,
+		maxsize: int,
+		block: bool = DEFAULT_POOLBLOCK,
+		**pool_kwargs: Any,
+	) -> None:
+		# The canonical requests extension point: HTTPAdapter.__init__ *and*
+		# __setstate__ both route through here, so the pinned pool manager
+		# survives construction and unpickling alike.
 		self.poolmanager = _PublicOnlyPoolManager(
-			num_pools=pool_connections,
-			maxsize=pool_maxsize,
-			block=pool_block,
+			num_pools=connections,
+			maxsize=maxsize,
+			block=block,
+			**pool_kwargs,
 		)
 
 	def send(
@@ -166,14 +191,17 @@ class PublicOnlyHTTPAdapter(HTTPAdapter):
 		host = urlsplit(request.url or "").hostname
 		if host is not None:
 			_reject_literal_private_host(host)
-		return super().send(
-			request,
-			stream=stream,
-			timeout=timeout,
-			verify=verify,
-			cert=cert,
-			proxies=proxies,
-		)
+		try:
+			return super().send(
+				request,
+				stream=stream,
+				timeout=timeout,
+				verify=verify,
+				cert=cert,
+				proxies=proxies,
+			)
+		except _NonPublicHostBlockedError as blocked:
+			raise NonPublicHostError(str(blocked), request=request) from blocked
 
 
 def _reject_literal_private_host(host: str) -> None:

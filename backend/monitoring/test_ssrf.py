@@ -43,9 +43,6 @@ class SSRFGuardTestCase(TestCase):
 		)
 		self.client = login_client(APIClient(), "ssrf-user")
 
-	def _real_resolver(self) -> Any:
-		return getattr(safe_fetch, "_unpatched_resolver")  # noqa: B009 — module stash set by conftest
-
 	def _create_link(self, url: str) -> Any:
 		return self.client.post(
 			reverse("links-list"),
@@ -151,6 +148,39 @@ class SSRFGuardTestCase(TestCase):
 			)
 			with self.assertRaises(ResponseTooLargeError):
 				safe_fetch.fetch("https://example.com/sneaky", timeout=5)
+
+	def test_guarded_session_pools_use_pinned_connection_classes(self) -> None:
+		"""The pool manager must actually build the pinned connection classes.
+
+		Regression: urllib3's ``PoolManager.__init__`` assigns
+		``pool_classes_by_scheme`` as an *instance* attribute, so a class-level
+		override is silently shadowed and stock, unpinned connections run —
+		turning the DNS-pinning layer into dead code."""
+		with safe_fetch.guarded_session() as session:
+			for url, expected in [
+				("http://example.com/", safe_fetch._PublicOnlyHTTPConnection),
+				("https://example.com/", safe_fetch._PublicOnlyHTTPSConnection),
+			]:
+				with self.subTest(url=url):
+					adapter = session.get_adapter(url)
+					assert isinstance(adapter, safe_fetch.PublicOnlyHTTPAdapter)
+					pool = adapter.poolmanager.connection_from_url(url)
+					self.assertIs(pool.ConnectionCls, expected)
+
+	def test_hostname_resolving_private_is_blocked_at_connect_time(self) -> None:
+		"""A hostname whose DNS answer is private is refused by the pinned
+		connection before any socket is opened — the rebinding / TOCTOU case
+		(resolve-public at validation, resolve-private at fetch)."""
+		with (
+			patch("monitoring.safe_fetch.create_connection") as connect,
+			patch(
+				"monitoring.safe_fetch.socket.getaddrinfo",
+				return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", 0))],
+			),
+			self.assertRaises(NonPublicHostError),
+		):
+			safe_fetch.fetch("http://metadata.example.test/", timeout=2)
+		connect.assert_not_called()
 
 	def test_adapter_send_rejects_private_literal(self) -> None:
 		"""The adapter refuses a private target before any connection, and that
