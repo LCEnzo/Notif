@@ -26,7 +26,7 @@ jobs:
 
     env:
       DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod
-      DJANGO_SETTINGS_MODULE: notif.settings
+      DJANGO_SETTINGS_MODULE: notif.settings_prod
 
     steps:
       - uses: actions/checkout@v6

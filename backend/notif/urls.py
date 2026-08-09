@@ -14,6 +14,7 @@ Including another URLconf
 	2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
@@ -43,7 +44,7 @@ urlpatterns = [
 	path("api/v1/redoc/", SpectacularRedocView.as_view(permission_classes=[AllowAny], url_name="schema"), name="redoc"),
 ]
 
-if app_settings.DEBUG:
+if settings.DEBUG:
 	urlpatterns += [
 		path("silk/", include("silk.urls", namespace="silk")),
 	]
