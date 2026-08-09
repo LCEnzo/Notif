@@ -249,6 +249,7 @@ REST_FRAMEWORK = {
 	else [
 		"rest_framework.throttling.UserRateThrottle",
 		"rest_framework.throttling.AnonRateThrottle",
+		"rest_framework.throttling.ScopedRateThrottle",
 	],
 	"DEFAULT_THROTTLE_RATES": _REST_THROTTLE_RATES,
 }
