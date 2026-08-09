@@ -13,7 +13,7 @@ def main() -> None:
 	if len(sys.argv) == 2 and sys.argv[1] == "runserver" and settings.BACKEND_PORT:
 		sys.argv.append(f"{settings.RUNSERVER_HOST}:{settings.BACKEND_PORT}")
 
-	os.environ.setdefault("DJANGO_SETTINGS_MODULE", "notif.settings")
+	os.environ.setdefault("DJANGO_SETTINGS_MODULE", "notif.settings_dev")
 	try:
 		from django.core.management import execute_from_command_line
 	except ImportError as exc:
