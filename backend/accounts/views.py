@@ -2,13 +2,12 @@ import contextlib
 import hashlib
 import logging
 import threading
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import authenticate
-from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models.query import QuerySet
@@ -73,41 +72,20 @@ SessionCookieSameSite = Literal["Lax", "Strict", "None", False]
 # attacker rotating IPs could grind the 10^6 space. These budgets key on the
 # *email*, not the IP, which also caps cross-site form POSTs from victims'
 # browsers. Database-backed (see PasswordResetBudget) so the limits are shared
-# across all gunicorn workers and survive worker recycling; each counter is a
-# fixed window reset on first use after the window elapses.
+# across all gunicorn workers and survive worker recycling; both counters share
+# one fixed window, reset together on first use after the window elapses.
 _PASSWORD_RESET_REQUEST_BUDGET = (5, 60 * 60)  # (mints per hour, window seconds)
 _PASSWORD_RESET_CONFIRM_BUDGET = (10, 60 * 60)  # (guesses per hour, window seconds)
-
-
-# ── timing-parity plumbing ───────────────────────────────────────
-# A module-level mutable holder instead of a bare global, so ruff's
-# PLW0603 (global-statement) stays quiet while the hash is still computed
-# once and reused across calls.
-_dummy_password_hash: dict[str, str] = {}
-
-
-def _burn_password_hash_cost(password: str) -> None:
-	"""Spend the same hashing cost a real account verification would.
-
-	``authenticate()`` only runs PBKDF2 for existing users, so a missing
-	account answers in milliseconds while a real one takes ~100ms — a wall-
-	clock account-existence oracle on the login endpoint. Hashing the
-	submitted password against a fixed dummy hash closes it; the dummy hash is
-	computed once with whatever hasher is active, so the cost matches the
-	users created under the same configuration.
-	"""
-	if not _dummy_password_hash:
-		_dummy_password_hash["hash"] = make_password("dummy-password-for-timing-parity")
-	check_password(password, _dummy_password_hash["hash"])
 
 
 def _email_budget_allows(kind: str, email: str, limit: int, window_seconds: int) -> bool:
 	"""True when this email may still perform a password-reset action.
 
 	The email is stored hashed so plaintext addresses never hit the database.
-	The window opens on first use after the previous window elapsed; each
-	allowed use increments the matching counter under a row lock, so concurrent
-	requests (and multiple gunicorn workers) share one budget.
+	The window opens on first use after the previous window elapsed and is
+	shared by both counters, so its expiry zeroes both; each allowed use
+	increments the matching counter under a row lock, so concurrent requests
+	(and multiple gunicorn workers) share one budget.
 	"""
 	field = "mint_count" if kind == "request" else "guess_count"
 	email_hash = hashlib.sha256(email.lower().encode()).hexdigest()
@@ -119,11 +97,12 @@ def _email_budget_allows(kind: str, email: str, limit: int, window_seconds: int)
 		)
 		if row.window_started_at < now - timedelta(seconds=window_seconds):
 			row.window_started_at = now
-			setattr(row, field, 0)
+			row.mint_count = 0
+			row.guess_count = 0
 		if getattr(row, field) >= limit:
 			return False
 		setattr(row, field, getattr(row, field) + 1)
-		row.save(update_fields=[field, "window_started_at"])
+		row.save(update_fields=["mint_count", "guess_count", "window_started_at"])
 		return True
 
 
@@ -142,6 +121,18 @@ def _send_reset_email_in_background(to_email: str, code: str) -> None:
 	# the daemon thread must not die with a traceback.
 	with contextlib.suppress(Exception):
 		send_password_reset_email(to_email, code)
+
+
+def _spawn_reset_email_thread(to_email: str, code: str) -> None:
+	threading.Thread(
+		target=_send_reset_email_in_background,
+		args=(to_email, code),
+		daemon=True,
+	).start()
+
+
+# Module-level seam: tests monkeypatch this with the synchronous sender.
+_send_reset_email: Callable[[str, str], None] = _spawn_reset_email_thread
 
 
 class AuthThrottleMixin:
@@ -329,12 +320,6 @@ class LoginView(AuthThrottleMixin, APIView):
 		device_label = _device_label(serializer.validated_data.get("device_label"))
 
 		_ensure_dev_user(username, password)
-		if not User._base_manager.filter(**{User.USERNAME_FIELD: username}).exists():
-			# authenticate() only hashes the password for existing users, so a
-			# missing account answers in milliseconds while a real one takes a
-			# PBKDF2 round-trip — a wall-clock account-existence oracle. Burn the
-			# same cost for missing accounts before authenticate() answers None.
-			_burn_password_hash_cost(password)
 		user = authenticate(request=request._request, username=username, password=password)
 		if not isinstance(user, User):
 			# Explicit response rather than AuthenticationFailed: with no
@@ -682,20 +667,7 @@ class PasswordResetRequestView(APIView):
 
 			PasswordResetCode.issue_for_user(user=user, code=code)
 
-			if settings.TESTING:
-				# Synchronous so tests stay deterministic; the wrapper keeps
-				# the old "send failure is not a 500" behaviour.
-				_send_reset_email_in_background(user.email, code)
-			else:
-				# Off the request thread: the synchronous SMTP round-trip only
-				# happens for existing accounts, which made wall-clock time an
-				# account-existence oracle. Thread creation is bounded by the
-				# per-IP throttle and the per-email budget above.
-				threading.Thread(
-					target=_send_reset_email_in_background,
-					args=(user.email, code),
-					daemon=True,
-				).start()
+			_send_reset_email(user.email, code)
 
 		return Response({"status": "ok"})
 

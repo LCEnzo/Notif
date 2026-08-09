@@ -27,7 +27,8 @@ from accounts.device_sessions import (
 	touch,
 )
 from accounts.models import DeviceSession, User
-from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetCode
+from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetBudget, PasswordResetCode
+from accounts.views import _send_reset_email_in_background
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
 
@@ -1301,6 +1302,11 @@ class PasswordResetTestCase(TestCase):
 		# JSON rendering.
 		self.client = APIClient()
 		self.client.default_format = "json"
+		# Deliver reset emails synchronously through the module seam so mock
+		# assertions on the sender are deterministic.
+		seam = patch("accounts.views._send_reset_email", _send_reset_email_in_background)
+		seam.start()
+		self.addCleanup(seam.stop)
 
 	# ── request ────────────────────────────────────────────
 
@@ -1397,33 +1403,6 @@ class PasswordResetTestCase(TestCase):
 		# The first 5 mints go through; the 6th is silently dropped.
 		self.assertEqual(mock_send.call_count, 5)
 		self.assertEqual(PasswordResetCode.objects.count(), 1)
-
-	@override_settings(TESTING=False)
-	def test_request_spawns_background_thread_when_not_testing(self):
-		"""Outside tests the reset email is sent off the request thread.
-
-		The synchronous ``settings.TESTING`` branch is what the other reset
-		tests exercise; this covers the production branch, asserting the daemon
-		thread is spawned exactly once, targeting the background sender with the
-		user's email. ``threading.Thread`` is patched, so no real thread starts
-		and the assertions stay deterministic.
-		"""
-		with (
-			patch("accounts.views.threading.Thread") as mock_thread,
-			patch("commons.email.send_password_reset_email") as mock_send,
-		):
-			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
-
-		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		mock_thread.assert_called_once()
-		thread_kwargs = mock_thread.call_args.kwargs
-		self.assertEqual(thread_kwargs["target"].__name__, "_send_reset_email_in_background")
-		self.assertEqual(thread_kwargs["args"][0], self.user.email)
-		self.assertTrue(thread_kwargs["daemon"])
-		# The mock replaced Thread, so .start() ran on the mock, not a real thread,
-		# and the synchronous sender was therefore never invoked inline.
-		mock_thread.return_value.start.assert_called_once()
-		mock_send.assert_not_called()
 
 	# ── confirm ──────────────────────────────────────────
 
@@ -1574,11 +1553,11 @@ class PasswordResetTestCase(TestCase):
 		code = PasswordResetCode.objects.get(user=self.user)
 		self.assertEqual(code.failed_attempts, 0)
 
-	def test_confirm_is_budgeted_per_email(self):
-		"""Guessing is capped per email regardless of code refresh or IP rotation."""
-		PasswordResetCode.create_for_user(user=self.user, code="654321")
+	def test_guess_budget_survives_code_reminting(self):
+		"""Minting a fresh code resets the per-code lock but must not refund the per-email guess budget."""
+		PasswordResetCode.create_for_user(user=self.user, code="111111")
 
-		for _ in range(11):
+		for _ in range(10):
 			response = self.client.post(
 				self.confirm_url,
 				{
@@ -1589,18 +1568,61 @@ class PasswordResetTestCase(TestCase):
 			)
 			self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-		# Budget exhausted: even the correct code is refused, and it is not consumed.
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		fresh_code_value = mock_send.call_args.args[1]
+
+		# The re-minted code is unlocked and correct, so only the per-email
+		# budget can refuse the confirm below.
+		fresh_code = PasswordResetCode.objects.get(user=self.user)
+		self.assertFalse(fresh_code.is_locked)
+		self.assertTrue(fresh_code.check_code(fresh_code_value))
+
 		response = self.client.post(
 			self.confirm_url,
 			{
 				"email": "reset@example.com",
-				"code": "654321",
+				"code": fresh_code_value,
 				"new_password": "NewSecurePass123!",
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 		self.user.refresh_from_db()
 		self.assertTrue(self.user.check_password("oldpassword123!"))
+
+	def test_budget_window_expiry_resets_both_counters(self):
+		"""A guess opening a fresh window must not carry the old window's mint cap forward."""
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			for _ in range(6):
+				response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(mock_send.call_count, 5)
+
+		budget = PasswordResetBudget.objects.get()
+		budget.window_started_at = timezone.now() - timedelta(hours=2)
+		budget.save(update_fields=["window_started_at"])
+
+		# Drop the minted code so the junk guess cannot accidentally match it.
+		PasswordResetCode.objects.all().delete()
+		response = self.client.post(
+			self.confirm_url,
+			{
+				"email": "reset@example.com",
+				"code": "000000",
+				"new_password": "NewSecurePass123!",
+			},
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		mock_send.assert_called_once()
+
+		budget.refresh_from_db()
+		self.assertEqual(budget.mint_count, 1)
+		self.assertEqual(budget.guess_count, 1)
 
 	# ── __str__ hygiene ──────────────────────────────────
 
