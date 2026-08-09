@@ -439,10 +439,9 @@ class UserViewSet(_UserModelViewSet):
 	queryset = User.objects.all()
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		"""Apply stricter 'register' throttle on account creation."""
-		if self.action == "create" and not settings.TESTING:
+		"""Apply the stricter 'register' scope on account creation."""
+		if self.action == "create":
 			self.throttle_scope = "register"
-			return [*super().get_throttles(), ScopedRateThrottle()]
 		return super().get_throttles()
 
 	def get_serializer_class(self) -> type[BaseSerializer[User]]:

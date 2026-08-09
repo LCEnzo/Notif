@@ -233,6 +233,7 @@ _REST_THROTTLE_RATES = {
 	"client_events": "30/min",
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
+	"scrape": "12/min",
 }
 
 REST_FRAMEWORK = {
@@ -248,6 +249,7 @@ REST_FRAMEWORK = {
 	else [
 		"rest_framework.throttling.UserRateThrottle",
 		"rest_framework.throttling.AnonRateThrottle",
+		"rest_framework.throttling.ScopedRateThrottle",
 	],
 	"DEFAULT_THROTTLE_RATES": _REST_THROTTLE_RATES,
 }

@@ -243,6 +243,11 @@ def trigger_scrape(request: Request) -> Response:
 		)
 
 
+# @api_view exposes the generated view class as .cls; the default ScopedRateThrottle
+# reads the scrape scope from it. Disabled in tests via the empty test throttle set.
+trigger_scrape.cls.throttle_scope = "scrape"  # type: ignore[attr-defined]
+
+
 @extend_schema(
 	# Renamed from the auto-generated ..._retrieve: this returns a collection.
 	operation_id="monitoring_strat_choices_list",
