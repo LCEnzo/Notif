@@ -30,8 +30,7 @@ DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
 ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]
 # Never allow every origin, not even in dev. Combined with CORS_ALLOW_CREDENTIALS
 # below, "*" would hand any page a developer happens to visit credentialed access to
-# the dev API — and DEV_BOOTSTRAP_LOGIN_ENABLED defaults to DEBUG with a password
-# committed to the repo, so that page could log itself in as the dev user.
+# the dev API — including the dev bootstrap login whenever notif.config enables it.
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in settings.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()]
 CORS_ALLOWED_ORIGIN_REGEXES: list[str] = []
