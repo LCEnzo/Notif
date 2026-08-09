@@ -8,14 +8,14 @@ import 'package:url_launcher/url_launcher.dart';
 /// schemes). Launching those without a user-visible confirmation can fire
 /// deep links into other apps or be abused as phishing, so only plain web
 /// and mail links are ever launched.
-const Set<String> _allowedUriSchemes = {'http', 'https', 'mailto'};
+const Set<String> _uriSchemeWhitelist = {'http', 'https', 'mailto'};
 
 Future<void> openUriSafely(
   BuildContext context,
   Uri uri, {
   bool newTab = false,
 }) async {
-  if (!_allowedUriSchemes.contains(uri.scheme.toLowerCase())) {
+  if (!_uriSchemeWhitelist.contains(uri.scheme.toLowerCase())) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(

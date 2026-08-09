@@ -53,26 +53,46 @@ void main() {
     UrlLauncherPlatform.instance = original;
   });
 
-  testWidgets('refuses a disallowed scheme without launching', (tester) async {
-    await tester.pumpWidget(_launchHost(Uri.parse('javascript:alert(1)')));
-    await tester.tap(find.byType(ElevatedButton));
-    await tester.pump();
+  const blockedUrls = <String>[
+    'foo:bar',
+    'intent://scan/#Intent;end',
+    'javascript:alert(1)',
+    'file:///etc/passwd',
+  ];
 
-    expect(launcher.launchedUrls, isEmpty);
-    expect(
-      find.text('Cannot open javascript: links from here'),
-      findsOneWidget,
-    );
-  });
+  for (final url in blockedUrls) {
+    testWidgets('refuses non-whitelisted $url without launching', (
+      tester,
+    ) async {
+      final uri = Uri.parse(url);
+      await tester.pumpWidget(_launchHost(uri));
+      await tester.tap(find.byType(ElevatedButton));
+      await tester.pump();
 
-  testWidgets('launches an allowed https URL through the platform', (
-    tester,
-  ) async {
-    await tester.pumpWidget(_launchHost(Uri.parse('https://example.com')));
-    await tester.tap(find.byType(ElevatedButton));
-    await tester.pump();
+      expect(launcher.launchedUrls, isEmpty, reason: '$url must not launch');
+      expect(
+        find.text('Cannot open ${uri.scheme}: links from here'),
+        findsOneWidget,
+      );
+    });
+  }
 
-    expect(launcher.launchedUrls, <String>['https://example.com']);
-    expect(find.textContaining('Cannot open'), findsNothing);
-  });
+  const whitelistedUrls = <String>[
+    'https://example.com',
+    'http://example.com',
+    'mailto:a@b.c',
+  ];
+
+  for (final url in whitelistedUrls) {
+    testWidgets('launches whitelisted $url through the platform', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_launchHost(Uri.parse(url)));
+      await tester.tap(find.byType(ElevatedButton));
+      await tester.pump();
+
+      expect(launcher.launchedUrls, <String>[url]);
+      expect(find.textContaining('Cannot open'), findsNothing);
+    });
+  }
 }
