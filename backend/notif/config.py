@@ -90,9 +90,6 @@ class Settings(BaseSettings):
 	CONFIRM_REDIRECT_URL: str = Field(default="https://notif.lcenzo.com")
 
 	# ── dev bootstrap ─────────────────────────────────────
-	# Explicit opt-in only. Never derived from DEBUG: a DEBUG=true staging
-	# box must not silently gain an account-creation login with credentials
-	# that are public in this repository.
 	DEV_BOOTSTRAP_LOGIN_ENABLED: bool = False
 	DEV_BOOTSTRAP_USERNAME: str = Field(default="LCEnzo", min_length=1)
 	DEV_BOOTSTRAP_PASSWORD: str = Field(default="1ukacolic", min_length=1)
