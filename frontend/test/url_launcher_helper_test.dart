@@ -53,46 +53,86 @@ void main() {
     UrlLauncherPlatform.instance = original;
   });
 
-  const blockedUrls = <String>[
-    'foo:bar',
-    'intent://scan/#Intent;end',
-    'javascript:alert(1)',
-    'file:///etc/passwd',
+  // Snackbar text is a literal per case (not derived from Uri.parse like the
+  // implementation does) so a message regression cannot cancel out in both
+  // places. The empty and relative entries parse to an empty scheme: default
+  // deny must hold even when there is no scheme to match.
+  const blockedUrls = <({String url, String snackbar})>[
+    (url: 'foo:bar', snackbar: 'Cannot open foo: links from here'),
+    (
+      url: 'intent://scan/#Intent;end',
+      snackbar: 'Cannot open intent: links from here',
+    ),
+    (
+      url: 'javascript:alert(1)',
+      snackbar: 'Cannot open javascript: links from here',
+    ),
+    (
+      url: 'file:///etc/passwd',
+      snackbar: 'Cannot open file: links from here',
+    ),
+    (
+      url: 'data:text/html,<h1>hi</h1>',
+      snackbar: 'Cannot open data: links from here',
+    ),
+    (url: '', snackbar: 'Cannot open : links from here'),
+    (url: '/relative/path?q=1', snackbar: 'Cannot open : links from here'),
   ];
 
-  for (final url in blockedUrls) {
-    testWidgets('refuses non-whitelisted $url without launching', (
+  for (final c in blockedUrls) {
+    testWidgets('refuses non-whitelisted "${c.url}" without launching', (
       tester,
     ) async {
-      final uri = Uri.parse(url);
-      await tester.pumpWidget(_launchHost(uri));
+      await tester.pumpWidget(_launchHost(Uri.parse(c.url)));
       await tester.tap(find.byType(ElevatedButton));
       await tester.pump();
 
-      expect(launcher.launchedUrls, isEmpty, reason: '$url must not launch');
       expect(
-        find.text('Cannot open ${uri.scheme}: links from here'),
-        findsOneWidget,
+        launcher.launchedUrls,
+        isEmpty,
+        reason: '"${c.url}" must not launch',
       );
+      expect(find.text(c.snackbar), findsOneWidget);
     });
   }
 
-  const whitelistedUrls = <String>[
-    'https://example.com',
-    'http://example.com',
-    'mailto:a@b.c',
+  // `launched` is the exact string the platform must receive. Schemes are
+  // case-insensitive (RFC 3986): Dart's Uri normalizes them to lowercase at
+  // construction and the helper lowercases defensively, so uppercase and
+  // mixed-case web URLs stay whitelisted. A trailing space never reaches the
+  // scheme: it is percent-encoded into the launched URL.
+  const whitelistedUrls = <({String url, String launched})>[
+    (url: 'https://example.com', launched: 'https://example.com'),
+    (url: 'http://example.com', launched: 'http://example.com'),
+    (url: 'mailto:a@b.c', launched: 'mailto:a@b.c'),
+    (url: 'HTTPS://EXAMPLE.COM/Path', launched: 'https://example.com/Path'),
+    (url: 'HtTpS://example.com', launched: 'https://example.com'),
+    (url: 'https://example.com ', launched: 'https://example.com%20'),
+    (
+      url: 'mailto:someone@example.com?subject=Hello',
+      launched: 'mailto:someone@example.com?subject=Hello',
+    ),
   ];
 
-  for (final url in whitelistedUrls) {
-    testWidgets('launches whitelisted $url through the platform', (
+  for (final c in whitelistedUrls) {
+    testWidgets('launches whitelisted "${c.url}" through the platform', (
       tester,
     ) async {
-      await tester.pumpWidget(_launchHost(Uri.parse(url)));
+      await tester.pumpWidget(_launchHost(Uri.parse(c.url)));
       await tester.tap(find.byType(ElevatedButton));
       await tester.pump();
 
-      expect(launcher.launchedUrls, <String>[url]);
-      expect(find.textContaining('Cannot open'), findsNothing);
+      expect(launcher.launchedUrls, <String>[c.launched]);
+      expect(find.byType(SnackBar), findsNothing);
     });
   }
+
+  // Leading whitespace cannot even construct a Uri (Uri.parse throws), so it
+  // can never reach openUriSafely's Uri-typed boundary. Pinned here so an SDK
+  // behavior change would surface as a failure instead of a silent new path
+  // into the launcher.
+  test('leading-whitespace URLs never parse into a launchable Uri', () {
+    expect(Uri.tryParse(' https://example.com'), isNull);
+    expect(Uri.tryParse(' https://example.com '), isNull);
+  });
 }
