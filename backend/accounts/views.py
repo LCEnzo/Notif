@@ -4,7 +4,7 @@ import logging
 import threading
 from collections.abc import Callable, Sequence
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, Literal, NewType, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import authenticate
@@ -54,6 +54,7 @@ from accounts.serializers import (
 )
 from commons.network import client_ip
 from commons.permissions import IsRequestingThemselves, ReadOnly
+from commons.types import Email
 
 if TYPE_CHECKING:
 	_UserModelViewSet = ModelViewSet[User]
@@ -78,10 +79,6 @@ _PASSWORD_RESET_REQUEST_BUDGET = (5, 60 * 60)  # (mints per hour, window seconds
 _PASSWORD_RESET_CONFIRM_BUDGET = (10, 60 * 60)  # (guesses per hour, window seconds)
 
 BudgetKind = Literal["request", "confirm"]
-
-# A validated email address. Constructed where a value crosses into the reset
-# flow: from the serializer's EmailField or from the User row's email column.
-Email = NewType("Email", str)
 
 
 def _email_budget_allows(kind: BudgetKind, email: Email, limit: int, window_seconds: int) -> bool:
