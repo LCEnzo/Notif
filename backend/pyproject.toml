@@ -274,7 +274,23 @@ pytest_add_cli_args = ["-n", "0", "-p", "no:randomly", "-q", "--no-cov"]
 # reason. Excluding them is a throughput decision, not a coverage compromise:
 # they assert schema conformance, which mutating Python cannot meaningfully
 # perturb anyway.
-pytest_add_cli_args_test_selection = ["-m", "not slow and not e2e and not conformance and not fuzz"]
+# --ignore, not `-m "not conformance and not fuzz"`: both modules build their
+# OpenAPI schema at *import* time, and pytest imports a module before it can
+# evaluate that module's markers. Marker deselection therefore still triggers
+# the import, which fails inside mutants/ and takes the whole baseline run with
+# it. --ignore prevents collection outright. The markers stay useful for humans.
+pytest_add_cli_args_test_selection = [
+    "--ignore=test_openapi_conformance.py",
+    "--ignore=test_api_fuzz.py",
+    # drf-spectacular introspects every serializer and view to build the schema.
+    # mutmut rewrites each source file into a mutant-dispatch shape, and
+    # generation then emits a node PyYAML refuses to serialize. The test asserts
+    # a property of the real tree, not of any mutant, so it cannot be part of a
+    # mutation oracle.
+    "--deselect=ops/tests.py::OpsApiTestCase::test_openapi_schema_generates",
+    "-m",
+    "not slow and not e2e",
+]
 # Only mutate lines the suite actually executes. Mutants on unreached lines
 # always survive and drown the real signal.
 mutate_only_covered_lines = true
