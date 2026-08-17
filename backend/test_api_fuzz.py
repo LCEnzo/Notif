@@ -194,6 +194,7 @@ def fuzz_session(live_server: Any, django_user_model: Any) -> Iterator[requests.
 )
 @pytest.mark.timeout(TIMEOUT_SECONDS)
 @pytest.mark.django_db(transaction=True)
+@pytest.mark.fuzz
 def test_operation_survives_generated_input(
 	case: Case[Any],
 	live_server: Any,

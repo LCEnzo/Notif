@@ -228,6 +228,7 @@ markers = [
     "conformance: live-HTTP response validation against the committed openapi.json schema",
     "property: Hypothesis property-based tests that verify invariants across generated inputs",
     "real_ssrf: exercises the real SSRF resolver; exempt from the conftest resolver bypass",
+    "fuzz: Schemathesis fuzzing driven by the committed openapi.json against a live server",
 ]
 
 [tool.mutmut]
@@ -266,10 +267,18 @@ do_not_mutate = [
 # makes "was this mutant killed?" nondeterministic, and coverage is irrelevant
 # to a mutation verdict. Override all three.
 pytest_add_cli_args = ["-n", "0", "-p", "no:randomly", "-q", "--no-cov"]
+# The oracle for a mutation run is the fast unit suite, not the whole thing.
+# The live-server tests (conformance, fuzz) take tens of seconds *per run* and
+# mutmut runs the suite once per mutant, which turns a multi-hour sweep into a
+# multi-week one; `slow` and `e2e` pull real downloaded fixtures for the same
+# reason. Excluding them is a throughput decision, not a coverage compromise:
+# they assert schema conformance, which mutating Python cannot meaningfully
+# perturb anyway.
+pytest_add_cli_args_test_selection = ["-m", "not slow and not e2e and not conformance and not fuzz"]
 # Only mutate lines the suite actually executes. Mutants on unreached lines
 # always survive and drown the real signal.
 mutate_only_covered_lines = true
-also_copy = ["manage.py", "openapi.json", "pytest.ini", ".env"]
+also_copy = ["manage.py", "openapi.json", ".env"]
 
 [tool.coverage.run]
 source = ["."]
