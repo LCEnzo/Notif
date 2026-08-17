@@ -37,6 +37,7 @@ dev = [
 	"pytest-xdist>=3.8,<4.0",
 	"requests-mock>=1.11,<2.0",
 	"ruff>=0.16.1,<0.17.0",
+	"schemathesis>=4.24,<5.0",
 	"types-requests>=2.32.4.20260107,<3.0",
 ]
 
