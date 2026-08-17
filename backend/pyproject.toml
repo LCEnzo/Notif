@@ -200,13 +200,14 @@ init_forbid_extra = true
 warn_required_dynamic_aliases = true
 
 [tool.django-stubs]
-django_settings_module = "notif.settings"
+django_settings_module = "notif.settings_prod"
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "notif.settings"
+DJANGO_SETTINGS_MODULE = "notif.settings_test"
 pythonpath = ["."]
 python_files = ["tests.py", "test_*.py", "*_test.py"]
 addopts = [
+	"--ds=notif.settings_test",
 	"-ra",
 	"--strict-markers",
 	"--strict-config",

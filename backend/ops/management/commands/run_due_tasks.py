@@ -13,8 +13,10 @@ from django.utils import timezone
 
 from accounts.device_sessions import cleanup_device_sessions
 from accounts.models.password_reset import (
+	PASSWORD_RESET_BUDGET_TTL,
 	PASSWORD_RESET_CODE_MAX_ATTEMPTS,
 	PASSWORD_RESET_CODE_TTL,
+	PasswordResetBudget,
 	PasswordResetCode,
 )
 from commons.result import Err, Ok
@@ -82,6 +84,7 @@ class Command(BaseCommand):
 		now = timezone.now()
 		summary = {
 			"password_reset_codes_deleted": 0,
+			"password_reset_budgets_deleted": 0,
 			"device_sessions_deleted": 0,
 			"links_considered": 0,
 			"scrape_ok": 0,
@@ -96,6 +99,7 @@ class Command(BaseCommand):
 
 		try:
 			summary["password_reset_codes_deleted"] = _cleanup_password_reset_codes(now)
+			summary["password_reset_budgets_deleted"] = _cleanup_password_reset_budgets(now)
 			summary["device_sessions_deleted"] = cleanup_device_sessions(now=now).sessions_deleted
 			rss_backfill = _run_pending_rss_content_backfill(
 				max_links=rss_content_backfill_max_links,
@@ -137,6 +141,7 @@ class Command(BaseCommand):
 					f"{summary['scrape_ok']} scrape(s) ok, "
 					f"{summary['scrape_error']} error(s), "
 					f"{summary['password_reset_codes_deleted']} reset code(s) deleted, "
+					f"{summary['password_reset_budgets_deleted']} budget row(s) deleted, "
 					f"{summary['device_sessions_deleted']} dead device session(s) deleted, "
 					f"{summary['rss_content_backfill_updates_updated']} RSS description(s) backfilled."
 				),
@@ -148,6 +153,7 @@ class Command(BaseCommand):
 				f"{summary['scrape_error']} error(s), "
 				f"{summary['updates_found']} update(s), "
 				f"{summary['password_reset_codes_deleted']} reset code(s) deleted, "
+				f"{summary['password_reset_budgets_deleted']} budget row(s) deleted, "
 				f"{summary['device_sessions_deleted']} dead device session(s) deleted, "
 				f"{summary['rss_content_backfill_updates_updated']} RSS description(s) backfilled."
 			)
@@ -175,6 +181,13 @@ def _cleanup_password_reset_codes(now: datetime) -> int:
 	deleted, _ = PasswordResetCode.objects.filter(
 		Q(created_at__lt=expired_before) | Q(failed_attempts__gte=PASSWORD_RESET_CODE_MAX_ATTEMPTS)
 	).delete()
+	return deleted
+
+
+def _cleanup_password_reset_budgets(now: datetime) -> int:
+	"""Prune budget rows whose window has been idle past the retention bound."""
+	expired_before = now - PASSWORD_RESET_BUDGET_TTL
+	deleted, _ = PasswordResetBudget.objects.filter(window_started_at__lt=expired_before).delete()
 	return deleted
 
 
