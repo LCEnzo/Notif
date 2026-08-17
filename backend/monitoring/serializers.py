@@ -94,11 +94,13 @@ class LinkSerializer(_LinkModelSerializer):
 		}
 
 	def validate_url(self, value: str) -> str:
-		"""Reject URLs that are structurally internal before they are stored.
+		"""Reject URLs whose host resolves to a non-public address, at write time.
 
-		This is a fast, no-DNS first line of defence and a good error message;
-		the real enforcement happens at scrape time in ``safe_fetch``, which
-		resolves the host and refuses non-public addresses on every hop.
+		This resolves the host — a real, blocking DNS lookup on the request path —
+		so a bad target is refused when the Link is saved, with an error the client
+		can act on. It is not the authoritative check: ``safe_fetch`` re-resolves
+		and pins every hop at scrape time, because the answer can change between
+		write and fetch.
 
 		Looked up on the module (not bound at import) so tests can patch
 		``safe_fetch.resolve_public_host`` and so a stale binding can never
