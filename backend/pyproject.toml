@@ -40,6 +40,9 @@ dev = [
 	"schemathesis>=4.24,<5.0",
 	"types-requests>=2.32.4.20260107,<3.0",
 ]
+mutation = [
+    "mutmut>=3.7,<4.0",
+]
 
 [tool.uv]
 package = false
@@ -226,6 +229,47 @@ markers = [
     "property: Hypothesis property-based tests that verify invariants across generated inputs",
     "real_ssrf: exercises the real SSRF resolver; exempt from the conftest resolver bypass",
 ]
+
+[tool.mutmut]
+# Mutation testing. Deliberately outside the merge path: nothing here runs in
+# backend.yml, because a mutation run costs hours and its result is a score to
+# read, not a gate to pass. It runs from .github/workflows/deep-sweeps.yml on a
+# weekly schedule (and only when enough has changed), or by hand:
+#
+#     uv run --group mutation mutmut run
+#     uv run --group mutation mutmut results
+#
+# Linux only. mutmut rewrites sources into a `mutants/` tree and drives pytest
+# subprocesses against it; that is not exercised on Windows here.
+source_paths = ["accounts", "commons", "monitoring", "notif", "ops"]
+do_not_mutate = [
+    # Tests cannot meaningfully be mutated — they are the oracle.
+    "*/tests.py",
+    "*/tests/*",
+    "*/test_*.py",
+    "*_test.py",
+    "conftest.py",
+    # Generated or declarative: a mutant here is noise, not a missing assertion.
+    "*/migrations/*",
+    "notif/settings*.py",
+    "notif/asgi.py",
+    "notif/wsgi.py",
+    "notif/urls.py",
+    # Mutating settings/config breaks module import, which fails every test at
+    # once. mutmut scores that as "killed" and the number flatters us for the
+    # wrong reason, so leave config.py's validation to test_config.py instead.
+    "notif/config.py",
+]
+# The suite's own addopts assume an interactive full run: xdist spawns four
+# workers per mutant (pure overhead when mutmut already parallelises across
+# mutants), pytest-randomly reseeds ordering and Hypothesis on every run, which
+# makes "was this mutant killed?" nondeterministic, and coverage is irrelevant
+# to a mutation verdict. Override all three.
+pytest_add_cli_args = ["-n", "0", "-p", "no:randomly", "-q", "--no-cov"]
+# Only mutate lines the suite actually executes. Mutants on unreached lines
+# always survive and drown the real signal.
+mutate_only_covered_lines = true
+also_copy = ["manage.py", "openapi.json", "pytest.ini", ".env"]
 
 [tool.coverage.run]
 source = ["."]
