@@ -29,6 +29,17 @@ Dart / Flutter commands run from `frontend/`.
 - Tests: `flutter test --no-pub` for the full suite. Architecture tests in `test/architecture_test.dart` run as part of this.
 - Web build (smoke): `flutter build web --no-pub` after touching web-only code paths.
 
+## Worktrees & Scratch Space
+
+Everything this repo generates stays inside this repo. Nothing is written to `C:\tmp\`, `%TEMP%`, `/tmp`, the home directory, or any sibling folder.
+
+- **Worktrees live in `.claude/worktrees/<name>/`.** Create them with `git worktree add .claude/worktrees/<name> -b <branch> origin/master`. Never target a path outside the repository root.
+- **Scratch and temporary output lives in `.claude/tmp/`.** This includes pytest's `--basetemp`, generated reports, downloaded fixtures, one-off scripts, and any other working file that is not a deliverable. Create the directory on demand.
+- **`.claude/` is gitignored**, so neither worktrees nor scratch files can reach a commit. That is the point: the isolation is structural, not a habit anyone has to remember.
+- **Clean up when the branch is done:** `git worktree remove .claude/worktrees/<name> --force` (`--force` because `.venv`, `.env`, and the SQLite file are untracked), then `git branch -D <branch>` if abandoned.
+
+The rule exists because out-of-tree worktrees rot silently. They keep gitignored secrets (`backend/.env`) and multi-hundred-megabyte virtualenvs alive long after their branch has merged, they are invisible to every cleanup path that walks the repo, and nothing about the repository's own state hints that they exist. Keeping them under `.claude/` makes `git worktree list` the complete inventory.
+
 ## Coding Style & Naming Conventions
 
 Backend code targets Python 3.14 and Django 6. Ruff owns formatting with tabs and a 120-column line length; use `snake_case` for functions, `PascalCase` for classes, and typed shared boundaries. Frontend code follows `very_good_analysis`; use Dart `lowerCamelCase` for members and `UpperCamelCase` for types/widgets. Prefer composition, validate input at boundaries, do not swallow errors, and keep retries, payloads, timeouts, and pagination explicitly bounded.
