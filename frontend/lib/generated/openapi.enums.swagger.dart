@@ -27,8 +27,7 @@ enum CategoryEnum {
   @JsonValue('server_error')
   serverError('server_error'),
   @JsonValue('unexpected_failure')
-  unexpectedFailure('unexpected_failure')
-  ;
+  unexpectedFailure('unexpected_failure');
 
   final String? value;
 
@@ -48,8 +47,7 @@ enum LevelEnum {
   @JsonValue('error')
   error('error'),
   @JsonValue('critical')
-  critical('critical')
-  ;
+  critical('critical');
 
   final String? value;
 
@@ -65,8 +63,7 @@ enum StatusEnum {
   @JsonValue('read')
   read('read'),
   @JsonValue('dismissed')
-  dismissed('dismissed')
-  ;
+  dismissed('dismissed');
 
   final String? value;
 
@@ -86,8 +83,7 @@ enum StratClsEnum {
   @JsonValue('KemonoFavouritesStrategy')
   kemonofavouritesstrategy('KemonoFavouritesStrategy'),
   @JsonValue('FeedStrategy')
-  feedstrategy('FeedStrategy')
-  ;
+  feedstrategy('FeedStrategy');
 
   final String? value;
 
@@ -101,8 +97,7 @@ enum TransportEnum {
   @JsonValue('cookie')
   cookie('cookie'),
   @JsonValue('bearer')
-  bearer('bearer')
-  ;
+  bearer('bearer');
 
   final String? value;
 
