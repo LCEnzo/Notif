@@ -23,6 +23,7 @@ from bs4.element import AttributeValueList, ResultSet, Tag
 from django.utils import timezone
 
 from commons.result import Err, Ok, Result
+from monitoring.safe_fetch import fetch, guarded_session, read_body_capped
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +123,7 @@ def _string_attr_value(value: str | AttributeValueList | None) -> str | None:
 
 def _fetch_url_content(url: URL) -> str | None:
 	try:
-		response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+		response = fetch(url, timeout=REQUEST_TIMEOUT_SECONDS)
 	except requests.RequestException:
 		return None
 	if response.status_code == requests.codes.ok:
@@ -347,7 +348,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		req_url = self._get_threadmarks_url(url)
 
 		try:
-			response = requests.get(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = fetch(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
 		except requests.RequestException as exc:
 			return Err(f"Request failed: {exc}")
 		marks = self._extract_threadmarks(response)
@@ -636,9 +637,10 @@ class QQAlertsStrategy(BaseStrategy):
 			"Origin": f"{parsed_url.scheme}://{parsed_url.netloc}",
 		}
 
-		with requests.Session() as session:
+		with guarded_session() as session:
 			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
 			get_response.raise_for_status()
+			read_body_capped(get_response)
 			session_cookie = get_response.cookies.get(session_cookie_name)
 			login_headers["Cookie"] = f"{session_cookie_name}={session_cookie}"
 
@@ -649,6 +651,7 @@ class QQAlertsStrategy(BaseStrategy):
 			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
 			response = session.post(QQAlertsStrategy.login_url, data=payload, timeout=REQUEST_TIMEOUT_SECONDS)
 			response.raise_for_status()
+			read_body_capped(response)
 			session.close()
 
 		return response
@@ -890,14 +893,16 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			"password": f"{password}",
 		}
 
-		with requests.session() as session:
+		with guarded_session() as session:
 			login_response = session.post(
 				KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS
 			)
 			login_response.raise_for_status()
+			read_body_capped(login_response)
 
 			fav_response = session.get(KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS)
 			fav_response.raise_for_status()
+			read_body_capped(fav_response)
 
 			session.close()
 
@@ -940,7 +945,7 @@ class FeedStrategy(BaseStrategy):
 		**kwargs: Any,
 	) -> ScrapeResult:
 		try:
-			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = fetch(url, timeout=REQUEST_TIMEOUT_SECONDS)
 			response.raise_for_status()
 		except requests.RequestException as exc:
 			return Err(f"Feed fetch failed: {exc}")
