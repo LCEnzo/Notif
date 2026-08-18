@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:notif/commons/notif_text_theme.dart';
 import 'package:notif/commons/notif_tokens.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:notif/services/persistence.dart';
 
 enum AuthCardStyle { glass, framed }
 
@@ -18,7 +18,7 @@ enum BackendUrlMode {
   customOnly,
 }
 
-/// Thrown when SharedPreferences read/write fails. The controller surfaces
+/// Thrown when preference read/write fails. The controller surfaces
 /// failures via [AppSettingsController.persistenceError] so UI can show a
 /// diagnostic rather than silently losing user changes.
 class AppSettingsPersistenceException implements Exception {
@@ -73,60 +73,51 @@ class AppSettingsController extends ChangeNotifier {
     Object? loadError;
     StackTrace? loadStackTrace;
 
-    T? readPref<T>(SharedPreferences prefs, String key) {
-      final value = prefs.get(key);
-      if (value == null) {
-        return null;
-      }
-      if (value is T) {
-        return value as T;
-      }
-
-      loadError ??= StateError(
-        'Could not read "$key": expected $T but found ${value.runtimeType}',
-      );
-      loadStackTrace ??= StackTrace.current;
-      if (kDebugMode) {
-        debugPrint(
-          'AppSettings._load failed for $key: expected $T but found '
-          '${value.runtimeType}',
-        );
+    T? readPref<T extends Object>(PreferenceStore store, String key) {
+      try {
+        return store.read<T>(key);
+      } on CorruptLocalStateException catch (error, stackTrace) {
+        loadError ??= error;
+        loadStackTrace ??= stackTrace;
+        if (kDebugMode) {
+          debugPrint('AppSettings._load failed for $key: $error');
+        }
       }
       return null;
     }
 
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final store = await PreferenceStore.load();
 
       final designDitheringEnabled =
-          readPref<bool>(prefs, _ditheringKey) ?? true;
+          readPref<bool>(store, _ditheringKey) ?? true;
       final authCardStyle = _parseEnum(
-        readPref<String>(prefs, _authCardStyleKey),
+        readPref<String>(store, _authCardStyleKey),
         AuthCardStyle.values,
         AuthCardStyle.framed,
       );
       final backendUrlMode = _parseEnum(
-        readPref<String>(prefs, _backendUrlModeKey),
+        readPref<String>(store, _backendUrlModeKey),
         BackendUrlMode.values,
         BackendUrlMode.builtin,
       );
       final colorway = _parseEnum(
-        readPref<String>(prefs, _colorwayKey),
+        readPref<String>(store, _colorwayKey),
         NotifColorway.values,
         NotifColorway.dusk1,
       );
       final fontSet = _parseEnum(
-        readPref<String>(prefs, _fontSetKey),
+        readPref<String>(store, _fontSetKey),
         NotifFontSet.values,
         NotifFontSet.current,
       );
       final homeDensity = _parseEnum(
-        readPref<String>(prefs, _homeDensityKey),
+        readPref<String>(store, _homeDensityKey),
         HomeDensity.values,
         HomeDensity.compact,
       );
       final customBackendUrl =
-          readPref<String>(prefs, _customBackendUrlKey) ?? '';
+          readPref<String>(store, _customBackendUrlKey) ?? '';
 
       _designDitheringEnabled = designDitheringEnabled;
       _authCardStyle = authCardStyle;
@@ -158,14 +149,11 @@ class AppSettingsController extends ChangeNotifier {
   /// the future — the error is observable via [persistenceError].
   Future<void> _write(
     String operation,
-    Future<bool> Function(SharedPreferences prefs) writer,
+    Future<void> Function(PreferenceStore store) writer,
   ) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final ok = await writer(prefs);
-      if (!ok) {
-        throw Exception('SharedPreferences refused the write');
-      }
+      final store = await PreferenceStore.load();
+      await writer(store);
       if (_persistenceError != null) {
         _persistenceError = null;
         notifyListeners();
@@ -183,7 +171,7 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
     await _write(
       'setDesignDitheringEnabled',
-      (prefs) => prefs.setBool(_ditheringKey, enabled),
+      (store) => store.writeBool(_ditheringKey, enabled),
     );
   }
 
@@ -193,7 +181,7 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
     await _write(
       'setAuthCardStyle',
-      (prefs) => prefs.setString(_authCardStyleKey, style.name),
+      (store) => store.writeString(_authCardStyleKey, style.name),
     );
   }
 
@@ -203,7 +191,7 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
     await _write(
       'setBackendUrlMode',
-      (prefs) => prefs.setString(_backendUrlModeKey, mode.name),
+      (store) => store.writeString(_backendUrlModeKey, mode.name),
     );
   }
 
@@ -226,7 +214,7 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
     await _write(
       'setCustomBackendUrl',
-      (prefs) => prefs.setString(_customBackendUrlKey, trimmed),
+      (store) => store.writeString(_customBackendUrlKey, trimmed),
     );
   }
 
@@ -238,7 +226,7 @@ class AppSettingsController extends ChangeNotifier {
 
     await _write(
       'setColorway',
-      (prefs) => prefs.setString(_colorwayKey, colorway.name),
+      (store) => store.writeString(_colorwayKey, colorway.name),
     );
   }
 
@@ -248,7 +236,7 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
     await _write(
       'setFontSet',
-      (prefs) => prefs.setString(_fontSetKey, set.name),
+      (store) => store.writeString(_fontSetKey, set.name),
     );
   }
 
@@ -258,7 +246,7 @@ class AppSettingsController extends ChangeNotifier {
     notifyListeners();
     await _write(
       'setHomeDensity',
-      (prefs) => prefs.setString(_homeDensityKey, density.name),
+      (store) => store.writeString(_homeDensityKey, density.name),
     );
   }
 

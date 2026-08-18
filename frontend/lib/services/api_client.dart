@@ -176,6 +176,64 @@ Future<Response<dynamic>> apiPost(
   fallbackPolicy: fallbackPolicy,
 );
 
+/// POST to a deliberately anonymous endpoint without ambient cookies, bearer
+/// credentials, auth-state side effects, or cross-origin fallback.
+///
+/// [baseUrl] pins diagnostics to the API origin that produced the failure. If
+/// it is absent, the first configured origin is used and is still never
+/// retried elsewhere.
+Future<Response<dynamic>> apiPostWithoutSession(
+  String path, {
+  required AppSettingsController? settings,
+  required Map<String, String> headers,
+  required dynamic body,
+  String? baseUrl,
+}) async {
+  final baseUrls = baseUrl == null ? resolveUrls(path, settings) : [baseUrl];
+  if (baseUrls.isEmpty) {
+    throw MissingBackendUrlException(
+      'POST $path failed: no backend URL configured',
+    );
+  }
+  return _performRequest(
+    'POST',
+    baseUrls.first,
+    path,
+    headers: headers,
+    body: body,
+    sendCredentials: false,
+  );
+}
+
+/// Recover the configured API base that issued [error], if it is a Dio error.
+/// This keeps best-effort diagnostics on the same service boundary even when
+/// custom-with-fallback mode has more than one candidate origin.
+String? apiBaseUrlForError(
+  Object error,
+  AppSettingsController? settings,
+) {
+  if (error is! DioException) {
+    return null;
+  }
+  final requestUri = error.requestOptions.uri;
+  final candidates =
+      resolveUrls('', settings)
+          .map(Uri.tryParse)
+          .whereType<Uri>()
+          .where(
+            (candidate) =>
+                candidate.hasScheme &&
+                candidate.host.isNotEmpty &&
+                candidate.scheme == requestUri.scheme &&
+                candidate.host == requestUri.host &&
+                candidate.port == requestUri.port &&
+                _pathContains(candidate.path, requestUri.path),
+          )
+          .toList(growable: false)
+        ..sort((left, right) => right.path.length.compareTo(left.path.length));
+  return candidates.isEmpty ? null : candidates.first.toString();
+}
+
 /// Revoke a bearer session that was issued but could not be stored durably.
 ///
 /// The credential is explicit because installing it as the app's current
@@ -344,6 +402,7 @@ Future<Response<dynamic>> _requestWithFallback(
   ResponseType? responseType,
   FallbackPolicy fallbackPolicy = FallbackPolicy.networkErrors,
   SessionCredential? credentialOverride,
+  bool sendCredentials = true,
 }) async {
   final urls = resolveUrls(path, settings);
   if (urls.isEmpty) {
@@ -364,6 +423,7 @@ Future<Response<dynamic>> _requestWithFallback(
         body: body,
         responseType: responseType,
         credentialOverride: credentialOverride,
+        sendCredentials: sendCredentials,
       );
     } on DioException catch (error) {
       lastError = error;
@@ -414,8 +474,11 @@ Future<Response<dynamic>> _performRequest(
   dynamic body,
   ResponseType? responseType,
   SessionCredential? credentialOverride,
+  bool sendCredentials = true,
 }) async {
-  final credential = credentialOverride ?? _credentialReader?.call();
+  final credential = sendCredentials
+      ? credentialOverride ?? _credentialReader?.call()
+      : null;
   final refusal = describeUnsupportedOrigin(baseUrl, credential: credential);
   if (refusal != null) {
     throw UnsupportedOriginException(refusal);
@@ -431,16 +494,22 @@ Future<Response<dynamic>> _performRequest(
       data: body,
       options: Options(
         method: method,
-        headers: _headersWithCredentials(method, headers, credential),
+        headers: _headersWithCredentials(
+          method,
+          headers,
+          credential,
+          sendCredentials: sendCredentials,
+        ),
         responseType: responseType,
         // The browser adapter reads this per request; on other platforms it is
-        // inert. Set unconditionally so the cookie rides along on web without a
-        // conditional import just to configure the adapter.
-        extra: const {'withCredentials': true},
+        // inert. Anonymous diagnostics explicitly disable ambient cookies.
+        extra: {'withCredentials': sendCredentials},
       ),
     );
   } on DioException catch (error) {
-    _sessionEndReporter?.call(error, generation: generation);
+    if (sendCredentials) {
+      _sessionEndReporter?.call(error, generation: generation);
+    }
     rethrow;
   }
 }
@@ -448,15 +517,18 @@ Future<Response<dynamic>> _performRequest(
 Map<String, String> _headersWithCredentials(
   String method,
   Map<String, String> headers,
-  SessionCredential? credential,
-) {
+  SessionCredential? credential, {
+  required bool sendCredentials,
+}) {
   final result = <String, String>{...headers};
 
   if (credential != null) {
     result['Authorization'] = '$sessionAuthScheme ${credential.token}';
   }
 
-  if (kIsWeb && !_csrfSafeMethods.contains(method.toUpperCase())) {
+  if (sendCredentials &&
+      kIsWeb &&
+      !_csrfSafeMethods.contains(method.toUpperCase())) {
     final csrfToken = readBrowserCookie(csrfCookieName);
     if (csrfToken != null) {
       result[csrfHeaderName] = csrfToken;
@@ -467,6 +539,13 @@ Map<String, String> _headersWithCredentials(
   }
 
   return result;
+}
+
+bool _pathContains(String basePath, String requestPath) {
+  final normalized = basePath.replaceFirst(RegExp(r'/+$'), '');
+  return normalized.isEmpty ||
+      requestPath == normalized ||
+      requestPath.startsWith('$normalized/');
 }
 
 bool _isFallbackableNetworkError(DioException error) {
