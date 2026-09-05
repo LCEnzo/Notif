@@ -11,7 +11,7 @@
 # the frontend and backend share a single domain in production.
 # ──────────────────────────────────────────────────────────────────
 
-FROM ghcr.io/cirruslabs/flutter:stable AS build
+FROM ghcr.io/cirruslabs/flutter:3.44.0 AS build
 
 ARG GIT_HASH=dev
 
