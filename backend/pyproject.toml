@@ -223,6 +223,7 @@ markers = [
     "e2e: end-to-end tests using real downloaded feeds — most directly test parsing correctness",
     "conformance: live-HTTP response validation against the committed openapi.json schema",
     "property: Hypothesis property-based tests that verify invariants across generated inputs",
+    "real_ssrf: exercises the real SSRF resolver; exempt from the conftest resolver bypass",
 ]
 
 [tool.coverage.run]
