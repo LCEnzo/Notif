@@ -59,6 +59,12 @@ jobs:
       - name: Type check (mypy)
         run: uv run mypy .
 
+      # Ceilings pinned just above where the tree already sits, so the gate is
+      # green on master today. See AGENTS.md for the numbers and the caveat
+      # that code can still get worse without leaving its band.
+      - name: Complexity gate (xenon)
+        run: uv run xenon . --max-absolute C --max-average A --max-average-num 3.0 --max-modules B --exclude "*/migrations/*"
+
       - name: Django system check
         run: uv run python manage.py check
 
