@@ -139,7 +139,7 @@ _send_reset_email: Callable[[Email, str], None] = _spawn_reset_email_thread
 
 
 class AuthThrottleMixin:
-	"""Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.
+	"""Applies UserRateThrottle + ScopedRateThrottle.
 
 	Subclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.
 	"""
@@ -147,8 +147,6 @@ class AuthThrottleMixin:
 	throttle_scope: str
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		if settings.TESTING:
-			return []
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 
@@ -259,7 +257,7 @@ def _user_agent(request: Request) -> str:
 def _ensure_dev_user(username: str, password: str) -> None:
 	"""Create (or reanimate) the dev bootstrap account on first dev login.
 
-	Guarded by DEV_BOOTSTRAP_LOGIN_ENABLED, which defaults to DEBUG. The
+	Guarded by DEV_BOOTSTRAP_LOGIN_ENABLED, which defaults to off. The
 	credentials must match exactly, so this never turns a failed login for a real
 	account into an account creation.
 	"""
@@ -517,7 +515,7 @@ class UserViewSet(_UserModelViewSet):
 
 	def get_throttles(self) -> list[BaseThrottle]:
 		"""Apply stricter 'register' throttle on account creation."""
-		if self.action == "create" and not settings.TESTING:
+		if self.action == "create":
 			self.throttle_scope = "register"
 			return [*super().get_throttles(), ScopedRateThrottle()]
 		return super().get_throttles()
@@ -633,8 +631,6 @@ class PasswordResetRequestView(APIView):
 	throttle_scope = "password_reset"
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		if settings.TESTING:
-			return []
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 	@extend_schema(
@@ -689,8 +685,6 @@ class PasswordResetConfirmView(APIView):
 	throttle_scope = "password_reset_confirm"
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		if settings.TESTING:
-			return []
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 	@extend_schema(
