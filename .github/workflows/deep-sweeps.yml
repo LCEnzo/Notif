@@ -1,0 +1,187 @@
+name: Deep Test Sweeps
+
+# Neither sweep here gates a merge. Both cost minutes-to-hours and produce a
+# report to read rather than a pass/fail signal, so they live outside
+# backend.yml entirely: weekly on a schedule, or on demand.
+#
+# The schedule is change-gated. Running a multi-hour mutation sweep over a week
+# where nothing was touched burns runner time to re-print last week's number, so
+# the `gate` job measures how much backend source actually moved and the sweeps
+# skip themselves when it is not worth it. Manual runs can force past the gate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner to execute on'
+        type: choice
+        default: 'ubuntu-latest'
+        options: ['ubuntu-latest', 'self-hosted']
+      sweeps:
+        description: 'Which sweeps to run'
+        type: choice
+        default: 'both'
+        options: ['both', 'fuzz', 'mutation']
+      force:
+        description: 'Run even if little has changed'
+        type: boolean
+        default: true
+  schedule:
+    # Mondays, 03:00 UTC. Deliberately not on push.
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: read
+
+env:
+  # Lines of non-test backend source that must have changed in the window for a
+  # scheduled sweep to be worth running.
+  CHANGE_THRESHOLD: 200
+  CHANGE_WINDOW: '7 days ago'
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      changed_lines: ${{ steps.check.outputs.changed_lines }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The gate diffs against a commit from a week ago, which a shallow
+          # clone does not contain.
+          fetch-depth: 0
+
+      - name: Measure backend churn in the window
+        id: check
+        run: |
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "changed_lines=forced" >> "$GITHUB_OUTPUT"
+            echo "Manual run with force enabled; skipping the churn gate."
+            exit 0
+          fi
+
+          base="$(git rev-list -1 --before="$CHANGE_WINDOW" HEAD || true)"
+          if [ -z "$base" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "changed_lines=unknown" >> "$GITHUB_OUTPUT"
+            echo "No commit older than $CHANGE_WINDOW; running rather than skipping silently."
+            exit 0
+          fi
+
+          # Mutation and fuzz results only move when non-test source moves, so
+          # tests, migrations and generated artifacts are excluded from the count.
+          changed="$(
+            git diff --numstat "$base" HEAD -- \
+              backend/accounts backend/commons backend/monitoring backend/notif backend/ops \
+            | grep -vE '(/migrations/|/tests/|/tests\.py$|/test_[^/]*\.py$|_test\.py$)' \
+            | awk '{ added += $1; removed += $2 } END { print added + removed + 0 }'
+          )"
+
+          echo "changed_lines=$changed" >> "$GITHUB_OUTPUT"
+          echo "Backend source churn since $base ($CHANGE_WINDOW): $changed lines (threshold $CHANGE_THRESHOLD)."
+
+          if [ "$changed" -ge "$CHANGE_THRESHOLD" ]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "Below threshold — skipping this week's sweeps."
+          fi
+
+  fuzz-deep:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'fuzz')
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod  # pragma: allowlist secret
+      DJANGO_SETTINGS_MODULE: notif.settings_test
+      NOTIF_FUZZ_PROFILE: deep
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # continue-on-error is the point, not an oversight: the deep profile runs
+      # every Schemathesis check, and the ones it currently reports are schema
+      # documentation gaps rather than runtime faults. The run is a report; the
+      # artifact below is the deliverable. Making it red weekly would just train
+      # everyone to ignore it.
+      - name: Deep schema fuzz
+        continue-on-error: true
+        run: uv run pytest -q test_api_fuzz.py --junitxml=../fuzz-report.xml | tee ../fuzz-report.txt
+
+      - name: Upload fuzz report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-fuzz-report
+          path: |
+            fuzz-report.txt
+            fuzz-report.xml
+          retention-days: 30
+
+  mutation:
+    needs: gate
+    if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'mutation')
+    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    # A full sweep over ~6k lines of source is hours, not minutes. The cap is
+    # explicit so a pathological run cannot sit on a runner indefinitely.
+    timeout-minutes: 360
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod  # pragma: allowlist secret
+      DJANGO_SETTINGS_MODULE: notif.settings_test
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: uv sync --frozen --group mutation
+
+      # mutmut exits non-zero when mutants survive, which is the normal state of
+      # a codebase that has never been mutation tested. The score is the output,
+      # not the exit code.
+      - name: Mutation sweep
+        continue-on-error: true
+        run: uv run --group mutation mutmut run
+
+      - name: Collect results
+        if: always()
+        continue-on-error: true
+        run: uv run --group mutation mutmut results | tee ../mutation-results.txt
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: mutation-results.txt
+          retention-days: 30
