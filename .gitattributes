@@ -23,3 +23,5 @@
 
 *.png binary
 *.ico binary
+
+/.secrets.baseline merge=secrets-baseline text eol=lf
