@@ -86,12 +86,14 @@ class FakeReply {
 }
 
 class RecordedRequest {
-  RecordedRequest(this.method, this.path, this.headers, this.body);
+  RecordedRequest(this.method, this.uri, this.headers, this.body);
 
   final String method;
-  final String path;
+  final Uri uri;
   final Map<String, dynamic> headers;
   final Object? body;
+
+  String get path => uri.path;
 
   String? get authorization => headers['Authorization'] as String?;
 }
@@ -122,7 +124,7 @@ class FakeApiAdapter implements HttpClientAdapter {
     requests.add(
       RecordedRequest(
         options.method,
-        options.uri.path,
+        options.uri,
         Map<String, dynamic>.from(options.headers),
         options.data,
       ),

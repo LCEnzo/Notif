@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:notif/commons/download_helper.dart';
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/client_events.dart';
 
 class SystemEvent {
   const SystemEvent({
@@ -132,6 +135,7 @@ class OpsService extends ChangeNotifier {
           ),
         );
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/events/');
       _error = error.toString();
     } finally {
       _loading = false;
@@ -163,6 +167,7 @@ class OpsService extends ChangeNotifier {
           ),
         );
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/logs/caddy/');
       _error = error.toString();
     } finally {
       _caddyLogsLoading = false;
@@ -196,6 +201,7 @@ class OpsService extends ChangeNotifier {
         mimeType: 'application/vnd.sqlite3',
       );
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/backup/sqlite/');
       _error = error.toString();
     } finally {
       _downloading = false;
@@ -209,4 +215,14 @@ class OpsService extends ChangeNotifier {
   bool get caddyLogsLoading => _caddyLogsLoading;
   bool get downloading => _downloading;
   String? get error => _error;
+
+  void _recordFailure(Object error, {required String endpoint}) {
+    unawaited(
+      reportClientFailure(
+        settings: _settings,
+        error: error,
+        endpoint: endpoint,
+      ),
+    );
+  }
 }
