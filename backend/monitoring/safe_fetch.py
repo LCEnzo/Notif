@@ -417,10 +417,12 @@ def request_capped(
 	being checked after requests has already read everything. The body is in
 	``.content``/``.text`` and the connection is released on return.
 
-	With ``allow_redirects=True`` requests follows redirects itself and reads
+	With ``allow_redirects=True`` requests follows redirects itself: it reads
 	each intermediate hop's body into memory uncapped (every hop is still
-	pinned by the adapter). Only the hard-coded first-party login flows do
-	that; ``fetch`` follows redirects by hand instead.
+	pinned by the adapter), and on a 307/308 it resends a POST body,
+	credentials included, to the new location, even on another host. Only
+	hard-coded first-party flows that need the redirect (QQ's login) should
+	do that; ``fetch`` follows redirects by hand instead.
 	"""
 	with session.request(
 		method, url, data=data, timeout=timeout, allow_redirects=allow_redirects, stream=True

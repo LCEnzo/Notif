@@ -901,13 +901,16 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		}
 
 		with guarded_session() as session:
+			# Not following the login's redirect: on a 307/308 requests would resend
+			# the credentials to wherever it points. The session cookie is set by the
+			# redirect response itself, and the favourites page is fetched next anyway.
 			login_response = request_capped(
 				session,
 				"POST",
 				KemonoFavouritesStrategy.login_url,
 				data=data,
 				timeout=REQUEST_TIMEOUT_SECONDS,
-				allow_redirects=True,
+				allow_redirects=False,
 			)
 			login_response.raise_for_status()
 

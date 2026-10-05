@@ -606,6 +606,35 @@ class GuardedLoginFlowTestCase(_LoopbackTransportTestCase):
 		self.assertEqual(response.text, "<html>favourites</html>")
 		self.assertEqual(cookies, ["session=k3m0n0"])
 
+	def test_kemono_login_does_not_resend_credentials_on_redirect(self) -> None:
+		"""requests replays a POST body on a 307/308, even to another host; the
+		login stops at the redirect and keeps the cookie it set."""
+		replayed: list[str] = []
+		cookies: list[str] = []
+
+		def collect(handler: BaseHTTPRequestHandler) -> None:
+			replayed.append(handler.rfile.read(int(handler.headers["Content-Length"])).decode())
+			_respond(200, b"thanks")(handler)
+
+		def favourites_route(handler: BaseHTTPRequestHandler) -> None:
+			cookies.append(handler.headers.get("Cookie", ""))
+			_respond(200, b"<html>favourites</html>")(handler)
+
+		self.server.routes[("POST", "/account/login")] = _respond(
+			307, headers={"Location": "http://other.example.test/collect", "Set-Cookie": "session=k3m0n0; Path=/"}
+		)
+		self.server.routes[("POST", "/collect")] = collect
+		self.server.routes[("GET", "/favorites")] = favourites_route
+		with (
+			self._network(),
+			patch.object(KemonoFavouritesStrategy, "login_url", "http://public.example.test/account/login"),
+			patch.object(KemonoFavouritesStrategy, "fav_url", "http://public.example.test/favorites"),
+		):
+			response = KemonoFavouritesStrategy._get_favourites_html("reader", "pw")
+		self.assertEqual(replayed, [])
+		self.assertEqual(cookies, ["session=k3m0n0"])
+		self.assertEqual(response.text, "<html>favourites</html>")
+
 	def test_oversized_login_flow_responses_are_refused(self) -> None:
 		cap = 1024
 		oversized = _respond(200, b"x" * (cap + 1))
