@@ -406,6 +406,50 @@ class SSRFGuardTestCase(TestCase):
 		with self.assertRaises(NonPublicHostError):
 			adapter.send(request, timeout=2, proxies={"https": "http://proxy.example.com:3128"})
 
+	def test_literal_check_fails_closed_on_unparseable_urls(self) -> None:
+		"""A URL urllib3 cannot parse is refused with the guard's own error class,
+		which the link serializer turns into a 400 — not any other exception."""
+		for url in ["http://[::1]./", "http://[/", "http://exa mple.com/"]:
+			with self.subTest(url=url), self.assertRaises(NonPublicHostError):
+				safe_fetch.reject_non_public_literal(url)
+
+	def test_resolve_public_host_fails_closed_without_an_answer(self) -> None:
+		"""No host, a failed lookup and an empty answer are all refusals, never an
+		empty list of addresses that would leave nothing to validate."""
+		with self.subTest(case="empty host"), self.assertRaises(NonPublicHostError):
+			safe_fetch.resolve_public_host("")
+		with (
+			self.subTest(case="lookup fails"),
+			patch("monitoring.safe_fetch.socket.getaddrinfo", side_effect=socket.gaierror(socket.EAI_NONAME, "no")),
+			self.assertRaises(NonPublicHostError),
+		):
+			safe_fetch.resolve_public_host("missing.example.test")
+		with (
+			self.subTest(case="empty answer"),
+			patch("monitoring.safe_fetch.socket.getaddrinfo", return_value=[]),
+			self.assertRaises(NonPublicHostError),
+		):
+			safe_fetch.resolve_public_host("empty.example.test")
+
+	def test_fetch_follows_exactly_max_redirects(self) -> None:
+		"""The bound is exact: a chain of ``MAX_REDIRECTS`` hops is followed to its
+		end, one more hop is refused."""
+		hops = safe_fetch.MAX_REDIRECTS
+		for chain, refused in [(hops, False), (hops + 1, True)]:
+			with self.subTest(chain=chain), requests_mock.Mocker() as mocker:
+				for index in range(chain):
+					mocker.get(
+						f"https://example.com/{index}",
+						status_code=302,
+						headers={"Location": f"https://example.com/{index + 1}"},
+					)
+				mocker.get(f"https://example.com/{chain}", text="end")
+				if refused:
+					with self.assertRaises(requests.TooManyRedirects):
+						safe_fetch.fetch("https://example.com/0", timeout=5)
+				else:
+					self.assertEqual(safe_fetch.fetch("https://example.com/0", timeout=5).text, "end")
+
 
 class _LoopbackTransportTestCase(SimpleTestCase):
 	"""Base for tests that keep the real pinned adapter, pool and sockets.
