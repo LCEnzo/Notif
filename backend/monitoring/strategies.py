@@ -6,6 +6,7 @@
 # Implement via requests session, to reduce network load, and request spam.
 
 import hashlib
+import io
 import json
 import logging
 import re
@@ -998,7 +999,10 @@ class FeedStrategy(BaseStrategy):
 		except requests.RequestException as exc:
 			return Err(f"Feed fetch failed: {exc}")
 
-		feed = feedparser.parse(response.content)
+		# A stream, never bytes or str: feedparser opens either one as a local path
+		# (unbounded read) when it names an existing file, and this body is
+		# whatever the remote server chose to send.
+		feed = feedparser.parse(io.BytesIO(response.content))
 
 		if feed.bozo and not feed.entries:
 			bozo_msg = str(feed.bozo_exception) if feed.bozo_exception else "unknown parse error"

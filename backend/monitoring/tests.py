@@ -1372,6 +1372,16 @@ class FeedStrategyTestCase(TestCase):
 		assert self.strategy.can_scrape_url(URL("https://substack.com/feed")) is True
 		assert self.strategy.can_scrape_url(URL("https://forum.example.com/index.rss")) is True
 
+	def test_body_naming_a_local_file_is_parsed_as_data(self):
+		"""A response body that spells a local path is remote data, never a file to open."""
+		local_feed = (Path(__file__).parent / "tests" / "stratechery.xml").resolve()
+
+		with requests_mock.Mocker() as mocker:
+			mocker.get(self.feed_url, content=str(local_feed).encode())
+			result = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert not isinstance(result, Ok), f"parsed the local file {local_feed.name}: {result}"
+
 	def test_scrape_new_feed_returns_all_entries_and_sets_comparison(self):
 		"""First scrape of a feed: returns all entries, sets last_entry_id to the first (newest)."""
 		with requests_mock.Mocker() as mocker:
