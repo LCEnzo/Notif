@@ -9,11 +9,13 @@ pass without exercising anything.
 
 import runpy
 import socket
+import warnings
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
 import pytest
+from django.conf import Settings
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -115,3 +117,18 @@ def test_suite_cannot_connect_beyond_loopback() -> None:
 	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock, pytest.raises(RuntimeError, match=r"192\.0\.2\.1"):
 		sock.settimeout(1)
 		sock.connect(("192.0.2.1", 9))
+
+
+# settings_dev is left out: importing it extends INSTALLED_APPS, MIDDLEWARE and
+# LOGGING in place, objects the running test settings share, and creates logs/.
+@pytest.mark.parametrize("module", ["notif.settings_test", "notif.settings_prod"])
+def test_settings_load_without_warnings(module: str) -> None:
+	# Django's deprecation warnings, and its refusal of EMAIL_* settings beside
+	# MAILERS, fire only when django.conf.Settings loads a module. The suite loads
+	# settings_test alone, so a slip in settings_prod would otherwise first show
+	# as a deploy that does not start.
+	with warnings.catch_warnings(record=True) as caught:
+		warnings.simplefilter("always")
+		Settings(module)
+
+	assert [f"{warning.category.__name__}: {warning.message}" for warning in caught] == []
