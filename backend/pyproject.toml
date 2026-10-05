@@ -171,6 +171,33 @@ select = [
 	"PLC2401", # non-ASCII characters in variable names
 	"PLC2403", # non-ASCII characters in import statements
 	"PLC3002", # unnecessary direct call to a lambda
+	# ported from auto_platforma's API config: error handling, security, test hygiene
+	"BLE001",  # blind `except Exception`; narrow it, or noqa with the reason it must stay broad
+	"FBT",     # boolean positional parameters and arguments; make the flag keyword-only
+	"G004",    # f-string in a logging call; formats eagerly, pass args lazily instead
+	"PGH003",  # blanket `# type: ignore` without an error code
+	"PGH004",  # blanket `# noqa` without a rule code
+	"PLC0415", # import inside a function; noqa only for app-registry/import-order constraints, with the reason
+	"PIE",     # flake8-pie: redundant pass/spread/dict kwargs/lambda/range start, duplicate class fields or enum values, chained startswith
+	"PT011",   # `pytest.raises` on a broad exception without `match=`
+	"PT014",   # duplicate cases in `pytest.mark.parametrize`
+	"PT017",   # asserting on the caught exception inside `except`; use `pytest.raises`
+	"PT018",   # composite `assert a and b`; split so the failure names the false half
+	"RUF001",  # confusable unicode character in a string
+	"RUF002",  # confusable unicode character in a docstring
+	"RUF003",  # confusable unicode character in a comment
+	"S113",    # `requests` call without a timeout
+	"S301",    # `pickle` deserialization
+	"S302",    # `marshal` deserialization
+	"S307",    # `eval()`; use `ast.literal_eval`
+	"S324",    # md5/sha1 and friends without `usedforsecurity=False`
+	"S501",    # `requests` call with `verify=False`
+	"S506",    # `yaml.load` with an unsafe loader
+	"S608",    # SQL assembled by string formatting
+	# Django injection sinks (not from auto_platforma)
+	"S308",    # `mark_safe`; bypasses template autoescaping
+	"S610",    # `QuerySet.extra`; raw SQL fragments
+	"S611",    # `RawSQL`; raw SQL expression
 ]
 ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118", "W191"]
 
@@ -224,6 +251,9 @@ exclude = ["migrations", "\\.venv", "venv", "^mutants/"]
 mypy_path = "stubs"
 check_untyped_defs = true
 disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
 disallow_untyped_defs = true
 warn_unused_configs = true
 warn_unused_ignores = true
@@ -236,6 +266,7 @@ strict_equality = true
 [[tool.mypy.overrides]]
 module = ["*.tests", "*.tests.*"]
 disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pydantic-mypy]
 init_typed = true

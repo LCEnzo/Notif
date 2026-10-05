@@ -32,7 +32,7 @@ import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager, suppress
 from contextvars import ContextVar, Token
-from typing import Any, Literal
+from typing import Any, Literal, override
 from urllib.parse import urljoin, urlsplit
 
 import requests
@@ -204,6 +204,7 @@ class PublicOnlyHTTPAdapter(HTTPAdapter):
 	class, which runs for the initial request *and* every redirect hop.
 	"""
 
+	@override
 	def init_poolmanager(
 		self,
 		connections: int,
@@ -221,6 +222,7 @@ class PublicOnlyHTTPAdapter(HTTPAdapter):
 			**pool_kwargs,
 		)
 
+	@override
 	def send(
 		self,
 		request: requests.PreparedRequest,

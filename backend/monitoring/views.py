@@ -1,6 +1,9 @@
+import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from django.core.paginator import Page
+from django.db import Error as DbError
+from django.db import connections
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -32,6 +35,8 @@ from monitoring.serializers import (
 from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
 from notif.config import settings
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
 	_LinkModelViewSet = ModelViewSet[Link]
@@ -291,14 +296,16 @@ def status_check(request: Request) -> Response:
 	Used by load balancers and operators to confirm the service can handle traffic
 	and to verify which code is deployed.
 	"""
-	from django.db import connections
-
 	try:
 		with connections["default"].cursor() as cursor:
 			cursor.execute("SELECT 1")
 		db_status = "ok"
 		status_code = 200
-	except Exception:
+	except DbError:
+		# django.db.Error, not DatabaseError: Django wraps every driver failure into this
+		# hierarchy, and InterfaceError (e.g. a closed connection) sits outside DatabaseError.
+		# The response stays opaque because the endpoint is public; the log keeps the cause.
+		logger.exception("Readiness probe: database check failed")
 		db_status = "down"
 		status_code = 503
 

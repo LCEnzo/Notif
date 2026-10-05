@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 from datetime import timedelta
 from pathlib import Path
@@ -7,7 +8,9 @@ from unittest.mock import patch
 
 import pytest
 from django.core.cache import cache
+from django.core.exceptions import AppRegistryNotReady
 from django.core.management import call_command
+from django.db import IntegrityError, OperationalError, ProgrammingError
 from django.test import TestCase
 from django.test.utils import override_settings
 from django.urls import reverse
@@ -25,7 +28,10 @@ from commons.result import Err, Ok
 from commons.test_utils import SetupMixin, login_client
 from monitoring.models import Link
 from monitoring.rss_content_backfill import RssContentBackfillSummary
+from ops.logging import SystemEventHandler
+from ops.management.commands.run_due_tasks import _LOCK_KEY, _release_lock
 from ops.models import MaintenanceLock, SystemEvent
+from ops.views import _write_sqlite_backup
 
 pytestmark = pytest.mark.timeout(30)
 
@@ -147,8 +153,6 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(completed.details["size_bytes"], len(body))
 
 	def test_write_sqlite_backup_handles_memory_database(self):
-		from ops.views import _write_sqlite_backup
-
 		source = sqlite3.connect(":memory:")
 		try:
 			source.execute("create table example (value text)")
@@ -310,8 +314,6 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 		scrape_link.assert_not_called()
 
 	def test_command_does_not_release_newer_stale_lock_takeover(self):
-		from ops.management.commands.run_due_tasks import _LOCK_KEY, _release_lock
-
 		first_acquired_at = timezone.now() - timedelta(hours=2)
 		second_acquired_at = timezone.now()
 		MaintenanceLock.objects.create(key=_LOCK_KEY, acquired_at=second_acquired_at)
@@ -397,10 +399,6 @@ class RunDueTasksCommandTestCase(SetupMixin, TestCase):
 
 class SystemEventHandlerTestCase(TestCase):
 	def test_emit_creates_system_event(self):
-		import logging
-
-		from ops.logging import SystemEventHandler
-
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
 			name="test.logger",
@@ -421,10 +419,6 @@ class SystemEventHandlerTestCase(TestCase):
 		self.assertEqual(event.details["lineno"], 42)
 
 	def test_emit_truncates_long_source(self):
-		import logging
-
-		from ops.logging import SystemEventHandler
-
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
 			name="x" * 200,
@@ -441,10 +435,6 @@ class SystemEventHandlerTestCase(TestCase):
 		self.assertEqual(len(event.source), 120)
 
 	def test_emit_truncates_long_message(self):
-		import logging
-
-		from ops.logging import SystemEventHandler
-
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
 			name="test",
@@ -461,12 +451,6 @@ class SystemEventHandlerTestCase(TestCase):
 		self.assertEqual(len(event.message), 1000)
 
 	def test_emit_survives_db_error(self):
-		import logging
-
-		from django.db import OperationalError
-
-		from ops.logging import SystemEventHandler
-
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
 			name="test",
@@ -484,10 +468,6 @@ class SystemEventHandlerTestCase(TestCase):
 			handler.emit(record)
 
 	def test_emit_survives_generic_exception(self):
-		import logging
-
-		from ops.logging import SystemEventHandler
-
 		handler = SystemEventHandler()
 		record = logging.LogRecord(
 			name="test",
@@ -503,3 +483,39 @@ class SystemEventHandlerTestCase(TestCase):
 			mock_create.side_effect = RuntimeError("something broke")
 			# Should not raise — calls handleError internally
 			handler.emit(record)
+
+	def test_emit_reports_only_unexpected_errors_through_handle_error(self):
+		# The not-ready states return quietly, since the console handler still carries the
+		# record; anything else must reach handleError instead of vanishing. IntegrityError is
+		# the boundary: a DatabaseError like the quiet two, yet it signals a real fault.
+		# AppRegistryNotReady really comes from the deferred model import, which cannot be
+		# re-triggered once this process has loaded its apps, so it is raised from create().
+		cases: list[tuple[Exception, bool]] = [
+			(AppRegistryNotReady("Apps aren't loaded yet."), False),
+			(OperationalError("no such table: ops_systemevent"), False),
+			(ProgrammingError("relation does not exist"), False),
+			(IntegrityError("NOT NULL constraint failed"), True),
+			(RuntimeError("something broke"), True),
+		]
+		record = logging.LogRecord(
+			name="test",
+			level=logging.WARNING,
+			pathname="/app/test.py",
+			lineno=1,
+			msg="test",
+			args=(),
+			exc_info=None,
+		)
+		for exc, reported in cases:
+			with self.subTest(exc=type(exc).__name__):
+				handler = SystemEventHandler()
+				with (
+					patch("ops.models.SystemEvent.objects.create", side_effect=exc),
+					patch.object(handler, "handleError") as handle_error,
+				):
+					handler.emit(record)
+
+				if reported:
+					handle_error.assert_called_once_with(record)
+				else:
+					handle_error.assert_not_called()

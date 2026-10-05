@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
 from accounts.models import DeviceSession, User
+from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH
 
 if TYPE_CHECKING:
 	_UserModelSerializer = ModelSerializer[User]
@@ -171,7 +172,7 @@ class PasswordResetConfirmSerializer(_AnySerializer):
 	"""Accepts email, code, and new password to complete reset."""
 
 	email = serializers.EmailField()
-	code = serializers.CharField(min_length=6, max_length=6)
+	code = serializers.CharField(min_length=PASSWORD_RESET_CODE_LENGTH, max_length=PASSWORD_RESET_CODE_LENGTH)
 	new_password = serializers.CharField(min_length=1)
 
 	def validate_email(self, value: str) -> str:
@@ -180,5 +181,5 @@ class PasswordResetConfirmSerializer(_AnySerializer):
 	def validate_code(self, value: str) -> str:
 		code = value.strip()
 		if not code.isascii() or not code.isdigit():
-			raise serializers.ValidationError("Code must contain 6 digits.")
+			raise serializers.ValidationError(f"Code must contain {PASSWORD_RESET_CODE_LENGTH} digits.")
 		return code

@@ -44,7 +44,7 @@ def test_debug_and_bootstrap_login_default_off() -> None:
 @pytest.mark.parametrize("debug", [True, False])
 @pytest.mark.parametrize("bootstrap", [True, False])
 def test_environment_invariants(
-	env: Environment, debug: bool, bootstrap: bool, monkeypatch: pytest.MonkeyPatch
+	env: Environment, *, debug: bool, bootstrap: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
 	monkeypatch.setenv("NOTIF_ENV", env.value)
 	monkeypatch.setenv("DEBUG", str(debug).lower())
