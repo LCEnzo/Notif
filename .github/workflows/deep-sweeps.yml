@@ -155,8 +155,9 @@ jobs:
     needs: gate
     if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'mutation')
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
-    # A full sweep over ~6k lines of source is hours, not minutes. The cap is
-    # explicit so a pathological run cannot sit on a runner indefinitely.
+    # 1738 mutants. A local run (6 workers, WSL) got through 1488 of them in 50
+    # minutes, then slowed to a crawl on the tail, whose mutants are covered by
+    # the slowest tests; a 4-vCPU hosted runner may need most of this cap.
     timeout-minutes: 360
     defaults:
       run:
@@ -181,17 +182,21 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group mutation
 
-      # mutmut exits non-zero when mutants survive, which is the normal state of
-      # a codebase that has never been mutation tested. The score is the output,
-      # not the exit code.
+      # Surviving mutants do not fail `mutmut run`; a broken baseline or a
+      # timeout does, and the results collected so far are still worth the
+      # upload. The step's own timeout sits below the job's so the steps after
+      # it get to run: mutmut records each verdict as it lands.
       - name: Mutation sweep
         continue-on-error: true
-        run: uv run --group mutation mutmut run
+        timeout-minutes: 330
+        run: uv run --frozen --group mutation mutmut run
 
       - name: Collect results
         if: always()
         continue-on-error: true
-        run: uv run --group mutation mutmut results | tee ../mutation-results.txt
+        run: |
+          set -o pipefail
+          uv run --frozen --group mutation mutmut results | tee ../mutation-results.txt
 
       - name: Upload mutation report
         if: always()
