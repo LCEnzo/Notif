@@ -487,3 +487,16 @@ class RealTransportTestCase(SimpleTestCase):
 					safe_fetch.fetch(f"{scheme}://public.example.test/", timeout=5)
 				self.assertNotIsInstance(refused.exception, requests.Timeout)
 				self.assertIn("Failed to establish a new connection", str(refused.exception))
+
+
+class ResolverBypassTestCase(SimpleTestCase):
+	"""No ``real_ssrf`` marker: conftest's resolver bypass applies here."""
+
+	def test_unmocked_fetch_fails_without_touching_the_network(self) -> None:
+		with (
+			patch("monitoring.safe_fetch.socket.getaddrinfo", side_effect=AssertionError("unexpected DNS lookup")),
+			patch("monitoring.safe_fetch.create_connection", side_effect=AssertionError("unexpected dial")),
+			self.assertRaises(requests.ConnectionError) as failed,
+		):
+			safe_fetch.fetch("http://example.com/", timeout=5)
+		self.assertIn("No validated address", str(failed.exception))
