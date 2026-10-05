@@ -218,7 +218,8 @@ indent-style = "tab"
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main", "pydantic.mypy"]
-exclude = ["migrations", "\\.venv", "venv"]
+# mutants/ is mutmut's rewritten copy of the source tree (see [tool.mutmut]).
+exclude = ["migrations", "\\.venv", "venv", "^mutants/"]
 mypy_path = "stubs"
 check_untyped_defs = true
 disallow_any_generics = true
@@ -255,6 +256,8 @@ addopts = [
 	"--tb=short",
 	"--reuse-db",
 	"--nomigrations",
+	# mutmut's rewritten copy of the tree duplicates every test module.
+	"--ignore=mutants",
 	"--timeout=30",
 	"-n",
 	"4",
