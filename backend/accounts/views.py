@@ -516,7 +516,11 @@ class UserViewSet(_UserModelViewSet):
 	queryset = User.objects.all()
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		"""Apply the stricter 'register' scope on account creation."""
+		"""Apply the stricter 'register' scope on account creation.
+
+		The default ScopedRateThrottle reads the scope; appending another one here
+		would charge every registration against the budget twice.
+		"""
 		if self.action == "create":
 			self.throttle_scope = "register"
 		return super().get_throttles()

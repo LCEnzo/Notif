@@ -5,7 +5,7 @@ from django.db.models.query import QuerySet
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status as http_status
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_scope
 from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
@@ -188,6 +188,7 @@ def _request_error_message(errors: dict[str, Any]) -> str:
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_scope("scrape")
 def trigger_scrape(request: Request) -> Response:
 	"""Scrape one link, or every link the caller owns.
 
@@ -241,11 +242,6 @@ def trigger_scrape(request: Request) -> Response:
 				},
 			}
 		)
-
-
-# @api_view exposes the generated view class as .cls; the default ScopedRateThrottle
-# reads the scrape scope from it. Disabled in tests via the empty test throttle set.
-trigger_scrape.cls.throttle_scope = "scrape"  # type: ignore[attr-defined]
 
 
 @extend_schema(

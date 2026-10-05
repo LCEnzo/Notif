@@ -211,6 +211,7 @@ REST_FRAMEWORK: dict[str, Any] = {
 	"DEFAULT_THROTTLE_CLASSES": [
 		"rest_framework.throttling.UserRateThrottle",
 		"rest_framework.throttling.AnonRateThrottle",
+		# A no-op unless the view sets throttle_scope (trigger_scrape, registration).
 		"rest_framework.throttling.ScopedRateThrottle",
 	],
 	"DEFAULT_THROTTLE_RATES": _REST_THROTTLE_RATES,
