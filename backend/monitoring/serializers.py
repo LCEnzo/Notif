@@ -4,7 +4,9 @@ from django.db.models import QuerySet
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
+from monitoring import safe_fetch
 from monitoring.models import Link, Notification, Strategy, Update
+from monitoring.safe_fetch import NonPublicHostError
 
 if TYPE_CHECKING:
 	_StrategyModelSerializer = ModelSerializer[Strategy]
@@ -89,6 +91,21 @@ class LinkSerializer(_LinkModelSerializer):
 			"url": {"required": True},
 			"strategy": {"required": True},
 		}
+
+	def validate_url(self, value: str) -> str:
+		"""Reject URLs whose host is a non-public IP literal or a localhost name.
+
+		Early, actionable feedback only, and deliberately without DNS: a lookup
+		here would put a blocking, attacker-timed call on the request path and
+		refuse links whenever DNS hiccups, while still not being authoritative,
+		since the answer can change before the scrape. ``safe_fetch`` resolves
+		and pins every hop at fetch time.
+		"""
+		try:
+			safe_fetch.reject_non_public_literal(value)
+		except NonPublicHostError as exc:
+			raise serializers.ValidationError(str(exc)) from exc
+		return value
 
 
 class UpdateSerializer(_UpdateModelSerializer):

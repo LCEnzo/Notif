@@ -73,6 +73,7 @@ select = [
 	"DJ",    # flake8-django
 	"RET",   # flake8-return
 	"SIM",   # flake8-simplify
+	"TID251",  # banned-api: outbound HTTP goes through monitoring.safe_fetch (see banned-api below)
 	"T201",  # use of print, can leak secrets in logs
 	"PTH",
 	"RUF100",# unused-noqa
@@ -201,6 +202,41 @@ indent-style = "tab"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+# TID251 exemptions from the outbound-HTTP ban below, each for a stated reason:
+# the guard itself is built from the raw clients it bans everywhere else.
+"monitoring/safe_fetch.py" = ["TID251"]
+# Talks to pytest-django's live_server on loopback, never to a user-supplied URL.
+"test_openapi_conformance.py" = ["TID251"]
+# Manual fixture downloaders run by hand from a dev machine; never imported by the app.
+"monitoring/tests/scripts/*.py" = ["TID251"]
+
+# Every outbound fetch must go through monitoring.safe_fetch, which pins
+# connections to validated public addresses and bounds bodies and time.
+# A raw client skips all of that, so CI refuses the usual entry points.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"requests.get".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"requests.post".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.put".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.patch".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.delete".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.head".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.options".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.request".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"requests.Session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.sessions.Session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"urllib.request.urlopen".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"urllib.request.urlretrieve".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"urllib3.PoolManager".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.request".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"urllib3.HTTPConnectionPool".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.HTTPSConnectionPool".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.connection_from_url".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"http.client.HTTPConnection".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"http.client.HTTPSConnection".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+# Not a dependency. Any httpx client would bypass the pinned requests adapter
+# entirely, so adopting it has to come with a guarded transport, not slip in.
+"httpx".msg = "httpx bypasses the SSRF guard's pinned adapter; route fetches through monitoring.safe_fetch."
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main", "pydantic.mypy"]
@@ -262,6 +298,7 @@ markers = [
     "e2e: end-to-end tests using real downloaded feeds — most directly test parsing correctness",
     "conformance: live-HTTP response validation against the committed openapi.json schema",
     "property: Hypothesis property-based tests that verify invariants across generated inputs",
+    "real_ssrf: exercises the real SSRF resolver; exempt from the conftest resolver bypass",
 ]
 
 [tool.coverage.run]
