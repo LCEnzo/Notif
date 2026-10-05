@@ -16,7 +16,7 @@ from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -1747,7 +1747,10 @@ def _atom_feed_xml(draw, min_items=1, max_items=20):
 
 @pytest.mark.property
 @given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
-@settings(max_examples=200)
+# Timing is not what this property is about. Under instrumentation (coverage,
+# mutmut's trampolines) examples run close to the 200ms default deadline, and a
+# cold Hypothesis cache makes the first draw slow enough to trip too_slow.
+@settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 def test_feed_strategy_dedup_is_idempotent(feed_xml):
 	"""Second scrape with first scrape's comparison data returns zero new entries.
 
