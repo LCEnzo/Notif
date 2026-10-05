@@ -1,8 +1,23 @@
 """Pytest-wide fixtures for the backend suite."""
 
+from typing import Any
+
 import pytest
 
 import monitoring.safe_fetch as safe_fetch
+
+
+@pytest.fixture(scope="session")
+def live_server(django_db_setup: None, live_server: Any) -> Any:
+	"""pytest-django's live server, started only once the test database exists.
+
+	The server shares the test's in-memory SQLite connection with its request
+	threads only if the database is in memory when the server starts. A test that
+	asks for live_server directly gets it before the function-scoped database
+	fixtures run, so without django_db_setup here each request thread opens a
+	connection of its own that Django never closes for an in-memory database.
+	"""
+	return live_server
 
 
 def _resolve_nothing(host: str) -> list[str]:

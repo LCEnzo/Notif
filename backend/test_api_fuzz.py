@@ -36,6 +36,8 @@ import pytest
 import requests
 import schemathesis
 from django.conf import settings
+from django.db import connections
+from django.db.backends.sqlite3.base import DatabaseWrapper as SQLiteDatabaseWrapper
 from hypothesis import HealthCheck
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
@@ -220,6 +222,20 @@ def ipv4_localhost(monkeypatch: pytest.MonkeyPatch) -> None:
 		return real_getaddrinfo("127.0.0.1" if host == "localhost" else host, port, *args, **kwargs)
 
 	monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+
+def test_live_server_shares_the_test_database_connection(live_server: Any) -> None:
+	"""The live server serves requests over the test's own in-memory connection.
+
+	Django hands an in-memory SQLite connection to the server thread only if the
+	test database exists when the server starts. Otherwise every request thread
+	opens its own connection, which Django never closes for an in-memory
+	database, and each one surfaces later as an unclosed-database ResourceWarning.
+	"""
+	default = connections["default"]
+	assert isinstance(default, SQLiteDatabaseWrapper)
+	assert default.is_in_memory_db()
+	assert live_server.thread.connections_override.get("default") is default
 
 
 def _requires_auth(case: Case[Any]) -> bool:
