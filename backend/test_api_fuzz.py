@@ -27,14 +27,14 @@ fuzzing it would break the fuzzer itself or reach outside the test process.
 """
 
 import os
-from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 import requests
 import schemathesis
-from django.test import override_settings
+from django.conf import settings
 from hypothesis import HealthCheck
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
@@ -42,7 +42,7 @@ from schemathesis import Case, CheckFunction
 from schemathesis.checks import CHECKS as CHECKS_REGISTRY
 from schemathesis.checks import load_all_checks, not_a_server_error
 
-# Checks register lazily; the deep profile resolves two of them by name below.
+# Checks register lazily; EXCLUDED_CHECKS below resolves one of them by name.
 load_all_checks()
 
 BACKEND_ROOT = Path(__file__).resolve().parent
@@ -118,20 +118,13 @@ TIMEOUT_SECONDS = 1800 if _IS_DEEP else 120
 # passes None, which means "all of Schemathesis' default checks".
 CHECKS: list[CheckFunction] | None = None if _IS_DEEP else [cast("CheckFunction", not_a_server_error)]
 
-# Two checks cannot work against this harness and are excluded rather than left
-# to cry wolf. Both ask "does the API reject a request with the auth removed?",
-# and both are defeated the same way: we hand Schemathesis a pre-authenticated
-# ``requests.Session``, whose cookie jar re-attaches ``notif_session`` to every
-# request after Schemathesis has stripped it. The endpoint then answers 200 and
-# the check reports an auth bypass that does not exist. Fixing this properly
-# means registering a ``@schemathesis.auth()`` provider so Schemathesis owns the
-# credential and can genuinely remove it; that is follow-up work, not a silent
-# omission.
-# cast: the registry is typed to also hand back check *classes*, but these two
-# are registered as plain functions and that is what call_and_validate accepts.
-EXCLUDED_CHECKS = cast(
-	"list[CheckFunction]", list(CHECKS_REGISTRY.get_by_names(["ignored_auth", "negative_data_rejection"]))
-)
+# ``negative_data_rejection`` demands a 4xx for every schema-violating request,
+# and DRF is lenient by design: it ignores unknown query parameters and coerces
+# scalars (``"name": 0`` saves as ``"0"``). Run against this API it reports that
+# leniency on most write and list operations, burying the findings that matter.
+# cast: the registry is typed to also hand back check *classes*, but this one is
+# registered as a plain function and that is what call_and_validate accepts.
+EXCLUDED_CHECKS = cast("list[CheckFunction]", list(CHECKS_REGISTRY.get_by_names(["negative_data_rejection"])))
 
 # Phase selection is what actually decides the runtime, far more than
 # ``max_examples``. Measured on POST /api/v1/monitoring/links/: the ``fuzzing``
@@ -145,40 +138,76 @@ PHASES = ["examples", "coverage", "fuzzing", "stateful"] if _IS_DEEP else ["fuzz
 
 schema = schemathesis.openapi.from_path(BACKEND_ROOT / "openapi.json").exclude(operation_id=list(UNFUZZABLE_OPERATIONS))
 schema.config.phases.update(phases=PHASES)
+# By default Schemathesis treats the schema's security schemes as parameters and
+# generates a value for each: a random ``notif_session`` cookie and a random
+# ``Authorization`` header. The random cookie went out alongside the real one,
+# Django kept the last of the two, and every secured operation answered 401 — the
+# fuzzer never got past authentication. The real credential is now passed per
+# call (see ``FuzzCredentials``), which would override the random cookie, but a
+# random header that happened to start with ``Session `` would still be a 401.
+# Random credentials only exercise the auth layer's first branch anyway, so turn
+# them off rather than carry the noise.
+schema.config.generation.update(with_security_parameters=False)
 
 FUZZ_USERNAME = "fuzzer"
 FUZZ_PASSWORD = "fuzzer-pass-123"  # pragma: allowlist secret
 FUZZ_EMAIL = "fuzzer@example.com"
 
 
+@dataclass(frozen=True, slots=True)
+class FuzzCredentials:
+	"""The fuzzer's cookie-transport session, handed to Schemathesis per call.
+
+	Passed as ``cookies``/``headers`` arguments rather than through a
+	``requests.Session`` cookie jar: Schemathesis treats a credential it was
+	handed explicitly as the real one, and strips exactly that when a check
+	(``ignored_auth``) needs to replay a request unauthenticated.
+	"""
+
+	session_token: str
+	csrf_token: str
+
+	# Cookie-transport writes enforce CSRF: the csrftoken cookie and the
+	# X-CSRFToken header must both be present and agree.
+	def cookies(self) -> dict[str, str]:
+		return {settings.SESSION_TOKEN_COOKIE_NAME: self.session_token, "csrftoken": self.csrf_token}
+
+	def headers(self) -> dict[str, str]:
+		return {"X-CSRFToken": self.csrf_token}
+
+
 @pytest.fixture
-def fuzz_session(live_server: Any, django_user_model: Any) -> Iterator[requests.Session]:
-	"""An authenticated ``requests`` session for the fuzzer to reuse.
+def fuzz_credentials(live_server: Any, django_user_model: Any) -> FuzzCredentials:
+	"""Create the fuzzing user and log it in over cookie transport.
 
 	Function-scoped, so it costs one user creation and one login per *operation*
-	rather than per generated example. The session cookie is Secure by design and
-	``requests`` honours that strictly over plain HTTP (unlike Chromium's loopback
-	exception), so the flag is overridden exactly as in the conformance trial or
-	the cookie would never be sent back.
+	rather than per generated example.
 	"""
-	with override_settings(SESSION_TOKEN_COOKIE_SECURE=False):
-		django_user_model.objects.create_user(
-			username=FUZZ_USERNAME,
-			password=FUZZ_PASSWORD,
-			email=FUZZ_EMAIL,
-		)
-		session = requests.Session()
-		login = session.post(
-			f"{live_server.url}/api/v1/auth/login/",
-			json={"username": FUZZ_USERNAME, "password": FUZZ_PASSWORD, "transport": "cookie"},
-			timeout=10,
-		)
-		assert login.status_code == 200, login.text
-		# Cookie-transport writes enforce CSRF; login hands out a readable
-		# csrftoken cookie exactly so clients can echo it back.
-		session.headers["X-CSRFToken"] = session.cookies["csrftoken"]
-		yield session
-		session.close()
+	django_user_model.objects.create_user(
+		username=FUZZ_USERNAME,
+		password=FUZZ_PASSWORD,
+		email=FUZZ_EMAIL,
+	)
+	login = requests.post(
+		f"{live_server.url}/api/v1/auth/login/",
+		json={"username": FUZZ_USERNAME, "password": FUZZ_PASSWORD, "transport": "cookie"},
+		timeout=10,
+	)
+	assert login.status_code == 200, login.text
+	return FuzzCredentials(
+		session_token=login.cookies[settings.SESSION_TOKEN_COOKIE_NAME],
+		csrf_token=login.cookies["csrftoken"],
+	)
+
+
+def _requires_auth(case: Case[Any]) -> bool:
+	"""True when the operation declares no anonymous (``{}``) security alternative.
+
+	The schema declares security per operation and has no global default, so the
+	operation's own list is the whole answer.
+	"""
+	security = case.operation.definition.raw.get("security") or []
+	return {} not in security
 
 
 @schema.parametrize()
@@ -198,13 +227,20 @@ def fuzz_session(live_server: Any, django_user_model: Any) -> Iterator[requests.
 def test_operation_survives_generated_input(
 	case: Case[Any],
 	live_server: Any,
-	fuzz_session: requests.Session,
+	fuzz_credentials: FuzzCredentials,
 ) -> None:
 	# transaction=True is required: live_server serves from a separate thread and
 	# connection, so the fuzzing user must be committed for its login to be seen.
-	case.call_and_validate(
+	response = case.call_and_validate(
 		base_url=live_server.url,
-		session=fuzz_session,
+		headers=fuzz_credentials.headers(),
+		cookies=fuzz_credentials.cookies(),
 		checks=CHECKS,
 		excluded_checks=EXCLUDED_CHECKS,
+	)
+	# The ci profile fails only on a 5xx, so a fuzzer stuck at the auth layer
+	# would pass green while exercising nothing behind it. A valid credential
+	# never earns a 401 on a secured operation; one here means it did not land.
+	assert not (response.status_code == 401 and _requires_auth(case)), (
+		f"fuzzer credential was rejected; generated requests are not reaching the handler: {response.text}"
 	)
