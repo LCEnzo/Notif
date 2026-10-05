@@ -33,6 +33,13 @@ on:
 permissions:
   contents: read
 
+# A manual run and the weekly one must not overlap: on a self-hosted runner they
+# would queue behind each other anyway, and two copies of the same multi-hour
+# sweep produce nothing the first did not.
+concurrency:
+  group: deep-sweeps
+  cancel-in-progress: false
+
 env:
   # Lines of non-test backend source that must have changed in the window for a
   # scheduled sweep to be worth running.
@@ -42,6 +49,7 @@ env:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
       changed_lines: ${{ steps.check.outputs.changed_lines }}
@@ -93,6 +101,9 @@ jobs:
     needs: gate
     if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'fuzz')
     runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    # Every operation is also capped by its own pytest timeout; this bounds the
+    # whole job well below GitHub's 6-hour default.
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: backend
@@ -121,10 +132,14 @@ jobs:
       # every Schemathesis check, and the ones it currently reports are schema
       # documentation gaps rather than runtime faults. The run is a report; the
       # artifact below is the deliverable. Making it red weekly would just train
-      # everyone to ignore it.
+      # everyone to ignore it. pipefail still matters: without it the step
+      # reports tee's exit status, and a sweep that cannot even collect looks
+      # exactly like one that ran.
       - name: Deep schema fuzz
         continue-on-error: true
-        run: uv run pytest -q test_api_fuzz.py --junitxml=../fuzz-report.xml | tee ../fuzz-report.txt
+        run: |
+          set -o pipefail
+          uv run pytest -q test_api_fuzz.py --junitxml=../fuzz-report.xml | tee ../fuzz-report.txt
 
       - name: Upload fuzz report
         if: always()
