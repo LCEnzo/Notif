@@ -2,6 +2,7 @@ import gzip
 import ipaddress
 import socket
 import threading
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -100,6 +101,20 @@ def _respond(status: int, body: bytes = b"", headers: dict[str, str] | None = No
 		handler.send_header("Content-Length", str(len(body)))
 		handler.end_headers()
 		handler.wfile.write(body)
+
+	return route
+
+
+def _drip(prefix: bytes, seconds: float) -> _Route:
+	"""Write ``prefix``, then a byte every 50 ms for ``seconds``: each byte well
+	inside any socket timeout, the whole far past the deadline under test."""
+
+	def route(handler: BaseHTTPRequestHandler) -> None:
+		handler.wfile.write(prefix)
+		stop_at = time.monotonic() + seconds
+		while time.monotonic() < stop_at:
+			handler.wfile.write(b"a")
+			time.sleep(0.05)
 
 	return route
 
@@ -589,6 +604,76 @@ class GuardedLoginFlowTestCase(_LoopbackTransportTestCase):
 				QQAlertsStrategy._get_alerts_html("reader", "pw")
 			with self.subTest(flow="Kemono"), self.assertRaises(ResponseTooLargeError):
 				KemonoFavouritesStrategy._get_favourites_html("reader", "pw")
+
+
+@pytest.mark.real_ssrf
+class FetchDeadlineTestCase(_LoopbackTransportTestCase):
+	"""``FETCH_DEADLINE_SECONDS`` bounds a whole fetch, not each socket call.
+
+	Each test patches the deadline to 0.5 s against a per-call timeout of
+	2-5 s and a server that stalls for 5 s, so only the deadline can end the
+	fetch in under 2 s."""
+
+	def test_deadline_cuts_off_a_header_drip_on_a_later_hop(self) -> None:
+		self.server.routes[("GET", "/start")] = _respond(302, headers={"Location": "/drip"})
+		self.server.routes[("GET", "/drip")] = _drip(b"HTTP/1.0 200 OK\r\nX-Drip: ", seconds=5)
+		started = time.monotonic()
+		with (
+			self._network(),
+			patch.object(safe_fetch, "FETCH_DEADLINE_SECONDS", 0.5),
+			self.assertRaises(safe_fetch.DeadlineExceededError),
+		):
+			safe_fetch.fetch("http://public.example.test/start", timeout=2)
+		self.assertLess(time.monotonic() - started, 2)
+
+	def test_deadline_cuts_off_a_body_drip(self) -> None:
+		"""Without a Content-Length the body ends at connection close. On Linux
+		the shut-down socket then reads as a clean end of body (Windows reports
+		an aborted connection instead), and only the session's final deadline
+		check stops the truncated body being returned as the whole page."""
+		self.server.routes[("GET", "/drip")] = _drip(b"HTTP/1.0 200 OK\r\n\r\n", seconds=5)
+		started = time.monotonic()
+		with (
+			self._network(),
+			patch.object(safe_fetch, "FETCH_DEADLINE_SECONDS", 0.5),
+			self.assertRaises(safe_fetch.DeadlineExceededError),
+		):
+			safe_fetch.fetch("http://public.example.test/drip", timeout=2)
+		self.assertLess(time.monotonic() - started, 2)
+
+	def test_session_past_its_deadline_fails_even_when_nothing_raised(self) -> None:
+		"""The clean-end-of-body case on any platform: no request failed inside
+		the session, but it ran past the deadline, so its results are refused."""
+		with (
+			patch.object(safe_fetch, "FETCH_DEADLINE_SECONDS", 0.1),
+			self.assertRaises(safe_fetch.DeadlineExceededError),
+			safe_fetch.guarded_session(),
+		):
+			time.sleep(0.3)
+
+	def test_deadline_clips_connect_attempts(self) -> None:
+		"""A dial that hangs gets only the remaining budget, and no further
+		address is tried once the deadline has passed."""
+		dialled: list[str] = []
+		timeouts: list[float] = []
+
+		def hanging_dial(address: tuple[str, int], timeout: float, *args: object, **kwargs: object) -> socket.socket:
+			dialled.append(address[0])
+			timeouts.append(timeout)
+			time.sleep(timeout)
+			raise TimeoutError("test dialer: no answer")
+
+		started = time.monotonic()
+		with (
+			patch("monitoring.safe_fetch.socket.getaddrinfo", _FakeResolver(_TEST_DNS)),
+			patch("monitoring.safe_fetch.create_connection", hanging_dial),
+			patch.object(safe_fetch, "FETCH_DEADLINE_SECONDS", 0.5),
+			self.assertRaises(safe_fetch.DeadlineExceededError),
+		):
+			safe_fetch.fetch("http://multi.example.test/", timeout=5)
+		self.assertLess(time.monotonic() - started, 2)
+		self.assertEqual(dialled, [_PUBLIC_A])
+		self.assertLessEqual(timeouts[0], 0.5)
 
 
 class ResolverBypassTestCase(SimpleTestCase):

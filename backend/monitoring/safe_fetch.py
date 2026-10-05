@@ -1,6 +1,6 @@
 """Outbound HTTP with SSRF guardrails: public-address-only + bounded bodies.
 
-Every fetch the monitoring app makes must go through this module. Three
+Every fetch the monitoring app makes must go through this module. Four
 enforcements, all defense-in-depth layers rather than UX checks:
 
 * Connections are **DNS-pinned**: the socket connects to an address that was
@@ -12,9 +12,13 @@ enforcements, all defense-in-depth layers rather than UX checks:
   302 cannot smuggle an unbounded body past the cap.
 * ``fetch`` uses a **fresh session per call**, so cookies set by one target
   never leak into another user's scrape of the same host.
+* A guarded session has a **wall-clock deadline** (``FETCH_DEADLINE_SECONDS``)
+  covering every hop, connect and read — DNS lookups excepted, which only the
+  system resolver bounds — so a server that drips bytes slower than the
+  socket timeout cannot hold a scrape open indefinitely.
 
-``NonPublicHostError`` and ``ResponseTooLargeError`` subclass
-``requests.RequestException`` so existing call sites that already translate
+``NonPublicHostError``, ``ResponseTooLargeError`` and ``DeadlineExceededError``
+subclass ``requests.RequestException`` so call sites that already translate
 ``RequestException`` into ``Err`` results keep working unchanged.
 """
 
@@ -23,7 +27,11 @@ from __future__ import annotations
 import ipaddress
 import socket
 import sys
-from collections.abc import Mapping
+import threading
+import time
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager, suppress
+from contextvars import ContextVar, Token
 from typing import Any, Literal
 from urllib.parse import urljoin, urlsplit
 
@@ -37,6 +45,7 @@ from urllib3.util.connection import create_connection
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_REDIRECTS = 5
+FETCH_DEADLINE_SECONDS = 60.0
 _CHUNK_SIZE = 64 * 1024
 
 
@@ -46,6 +55,10 @@ class NonPublicHostError(requests.RequestException):
 
 class ResponseTooLargeError(requests.RequestException):
 	"""The response body exceeded MAX_RESPONSE_BYTES."""
+
+
+class DeadlineExceededError(requests.Timeout):
+	"""A guarded session ran past FETCH_DEADLINE_SECONDS."""
 
 
 def _address_is_public(address: str) -> bool:
@@ -123,18 +136,21 @@ class _PublicOnlyHTTPConnection(HTTPConnection):
 			addresses = resolve_public_host(self._dns_host)
 		except NonPublicHostError as exc:
 			raise _NonPublicHostBlockedError(str(exc)) from exc
+		deadline = _active_deadline.get()
 		error: OSError = OSError(f"No validated address to connect to for {self.host!r}.")
 		for address in addresses:
 			try:
 				sock = create_connection(
 					(address, self.port),
-					self.timeout,
+					self.timeout if deadline is None else deadline.clip_connect_timeout(self.timeout),
 					source_address=self.source_address,
 					socket_options=self.socket_options,
 				)
 			except OSError as exc:
 				error = exc
 				continue
+			if deadline is not None:
+				deadline.watch(sock)
 			sys.audit("http.client.connect", self, self.host, self.port)
 			return sock
 		if isinstance(error, TimeoutError):
@@ -242,8 +258,88 @@ def _reject_literal_private_host(host: str) -> None:
 		raise NonPublicHostError(f"Host {host!r} is a non-public address, which is refused.")
 
 
-def guarded_session() -> requests.Session:
-	"""A Session whose http/https connections are pinned to public hosts."""
+class _Deadline:
+	"""Wall-clock budget for one guarded session, enforced from outside the I/O.
+
+	Socket timeouts bound each ``recv``, not their sum: a server that drips a
+	byte per timeout window holds a header or body read open indefinitely.
+	So when the budget runs out a timer shuts down every socket the session
+	opened, which fails whatever read is blocked on it. Connect attempts are
+	clipped to the remaining budget instead, as their sockets are only watched
+	once connected. DNS lookups cannot be interrupted; the system resolver's
+	own timeouts bound them.
+	"""
+
+	_token: Token[_Deadline | None]
+
+	def __init__(self, seconds: float) -> None:
+		self._expires_at = time.monotonic() + seconds
+		self._timer = threading.Timer(seconds, self._expire)
+		self._timer.daemon = True
+		self._lock = threading.Lock()
+		self._fired = False
+		self._watched: list[socket.socket] = []
+
+	@property
+	def expired(self) -> bool:
+		return self._fired or time.monotonic() >= self._expires_at
+
+	def clip_connect_timeout(self, timeout: object) -> float:
+		remaining = self._expires_at - time.monotonic()
+		if remaining <= 0:
+			raise TimeoutError("The fetch deadline passed before connecting.")
+		return min(timeout, remaining) if isinstance(timeout, int | float) else remaining
+
+	def watch(self, sock: socket.socket) -> None:
+		# Watch a duplicate: wrapping the socket for TLS detaches the original
+		# object, but a duplicate stays valid, and shutting it down ends the
+		# connection both share. It is closed when the session ends.
+		duplicate = sock.dup()
+		with self._lock:
+			self._watched.append(duplicate)
+			if self._fired:
+				_shut_down(duplicate)
+
+	def _expire(self) -> None:
+		with self._lock:
+			self._fired = True
+			for watched in self._watched:
+				_shut_down(watched)
+
+	def __enter__(self) -> _Deadline:
+		self._token = _active_deadline.set(self)
+		self._timer.start()
+		return self
+
+	def __exit__(self, *exc_info: object) -> None:
+		self._timer.cancel()
+		_active_deadline.reset(self._token)
+		with self._lock:
+			for watched in self._watched:
+				watched.close()
+			self._watched.clear()
+
+
+def _shut_down(sock: socket.socket) -> None:
+	# Already closed by its peer or never fully connected: nothing left to interrupt.
+	with suppress(OSError):
+		sock.shutdown(socket.SHUT_RDWR)
+
+
+# The deadline of the guarded session running in this context, read by the
+# pinned connection, which urllib3 constructs without any way to pass it in.
+_active_deadline: ContextVar[_Deadline | None] = ContextVar("safe_fetch_deadline", default=None)
+
+
+@contextmanager
+def guarded_session() -> Iterator[requests.Session]:
+	"""A Session whose http/https connections are pinned to public hosts, for
+	at most ``FETCH_DEADLINE_SECONDS`` of wall-clock time.
+
+	Past the deadline, requests on it fail with ``DeadlineExceededError`` —
+	also when the interrupted read ended cleanly, since a body without a
+	declared length that just stops can look complete.
+	"""
 	session = requests.Session()
 	# Environment proxies would route the connection through the proxy pool
 	# instead of the pinned connection classes below, silently bypassing the
@@ -252,7 +348,16 @@ def guarded_session() -> requests.Session:
 	session.trust_env = False
 	session.mount("https://", PublicOnlyHTTPAdapter())
 	session.mount("http://", PublicOnlyHTTPAdapter())
-	return session
+	exceeded = f"Gave up at the {FETCH_DEADLINE_SECONDS:g}-second fetch deadline."
+	with session, _Deadline(FETCH_DEADLINE_SECONDS) as deadline:
+		try:
+			yield session
+		except requests.RequestException as exc:
+			if not deadline.expired or isinstance(exc, NonPublicHostError | ResponseTooLargeError):
+				raise
+			raise DeadlineExceededError(exceeded) from exc
+		if deadline.expired:
+			raise DeadlineExceededError(exceeded)
 
 
 def _read_bounded(response: requests.Response) -> bytes:
@@ -301,10 +406,12 @@ def fetch(url: str, *, timeout: float) -> requests.Response:
 	Returns the response with ``_content`` populated (so ``.text``/``.content``
 	work as usual) and the stream already consumed. Redirects are followed by
 	hand (up to ``MAX_REDIRECTS``), with every hop validated by the pinned
-	adapter and read under the cap. A fresh session per call means cookies do
-	not survive across fetches. Raises ``requests.RequestException``
-	subclasses — including ``NonPublicHostError``, ``ResponseTooLargeError``
-	and ``requests.TooManyRedirects`` — on any failure.
+	adapter and read under the cap, all within ``FETCH_DEADLINE_SECONDS``;
+	``timeout`` still bounds each connect and each read. A fresh session per
+	call means cookies do not survive across fetches. Raises
+	``requests.RequestException`` subclasses — including ``NonPublicHostError``,
+	``ResponseTooLargeError``, ``DeadlineExceededError`` and
+	``requests.TooManyRedirects`` — on any failure.
 	"""
 	with guarded_session() as session:
 		current = url
