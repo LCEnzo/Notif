@@ -22,7 +22,7 @@ LOGGING["root"]["handlers"] = ["console"]
 # Mail is captured in mail.outbox instead of reaching SMTP or the console.
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
-# Config fails the bootstrap login closed; the suite exercises its flow.
+# Base keeps the bootstrap login off; the suite exercises its flow.
 DEV_BOOTSTRAP_LOGIN_ENABLED = True
 
 # MD5-first keeps user creation fast enough for the suite.
