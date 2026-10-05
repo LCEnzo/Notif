@@ -271,6 +271,19 @@ class SSRFGuardTestCase(TestCase):
 				self.assertTrue(safe_fetch._address_is_public(public))
 		self.assertFalse(safe_fetch._address_is_public("not-an-ip"))
 
+	def test_embedded_ipv4_rule_covers_exactly_the_slash_96_prefixes(self) -> None:
+		"""NAT64 (64:ff9b::/96) and IPv4-compatible (::/96) addresses are judged
+		by their low 32 bits; one bit outside either /96 the address is judged as
+		itself. Inside: the high half of the IPv4 space (bit 96 set) still unwraps.
+		Outside: an address carrying 127.0.0.1 in the low bits but outside the
+		prefix is a plain IPv6 address, not loopback."""
+		for address in ["64:ff9b::ffff:ffff", "::ac10:1", "::c0a8:101"]:
+			with self.subTest(address=address, side="inside"):
+				self.assertFalse(safe_fetch._address_is_public(address))
+		for address in ["64:ff9b::1:7f00:1", "::1:7f00:1"]:
+			with self.subTest(address=address, side="outside"):
+				self.assertTrue(safe_fetch._address_is_public(address))
+
 	def test_address_classifier_refuses_ranges_is_global_misses(self) -> None:
 		"""Each range ``is_global`` calls public but the guard refuses, with
 		addresses on both sides of its edges."""
@@ -445,6 +458,26 @@ class SSRFGuardTestCase(TestCase):
 		request = requests.Request("GET", "https://example.com/").prepare()
 		with self.assertRaises(NonPublicHostError):
 			adapter.send(request, timeout=2, proxies={"https": "http://proxy.example.com:3128"})
+
+	def test_literal_check_accepts_public_ip_literals(self) -> None:
+		"""The no-DNS check refuses non-public literals only; a public IPv4 or
+		IPv6 literal passes, to be dialled and re-checked at fetch time."""
+		for url in ["http://93.184.216.34/", "https://[2606:4700::1111]/feed"]:
+			with self.subTest(url=url), patch("monitoring.safe_fetch.socket.getaddrinfo", side_effect=_no_dns):
+				safe_fetch.reject_non_public_literal(url)
+
+	def test_fetch_returns_non_redirect_responses_carrying_location(self) -> None:
+		"""Only redirect statuses are followed: a 200 or 201 may carry Location
+		(201 names the created resource), and fetch returns it as the answer."""
+		for status in [200, 201]:
+			with self.subTest(status=status), requests_mock.Mocker() as mocker:
+				mocker.get(
+					"https://example.com/start", status_code=status, headers={"Location": "/elsewhere"}, text="here"
+				)
+				mocker.get("https://example.com/elsewhere", text="followed")
+				response = safe_fetch.fetch("https://example.com/start", timeout=5)
+				self.assertEqual((response.status_code, response.text), (status, "here"))
+				self.assertEqual(mocker.call_count, 1)
 
 	def test_literal_check_fails_closed_on_unparseable_urls(self) -> None:
 		"""A URL urllib3 cannot parse is refused with the guard's own error class,
