@@ -24,8 +24,9 @@ Two profiles, selected by ``NOTIF_FUZZ_PROFILE``:
 		NOTIF_FUZZ_PROFILE=deep uv run pytest -q test_api_fuzz.py
 
 Excluded operations are listed in ``UNFUZZABLE_OPERATIONS`` with the reason for
-each. The exclusions are deliberately narrow: an operation is only excluded when
-fuzzing it would break the fuzzer itself or reach outside the test process.
+each: fuzzing them would break the fuzzer itself, reach outside the test
+process, or cost far more than it finds, or they fail on a known server error
+that is excluded until it is fixed.
 """
 
 import os
@@ -282,4 +283,9 @@ def test_operation_survives_generated_input(
 	# never earns a 401 on a secured operation; one here means it did not land.
 	assert not (response.status_code == 401 and _requires_auth(case)), (
 		f"fuzzer credential was rejected; generated requests are not reaching the handler: {response.text}"
+	)
+	# The same blind spot one layer down: cookie-transport writes enforce CSRF,
+	# and a token pair that does not land turns every unsafe method into a 403.
+	assert not (response.status_code == 403 and "CSRF Failed" in response.text), (
+		f"fuzzer CSRF token was rejected; generated writes are not reaching the handler: {response.text}"
 	)
