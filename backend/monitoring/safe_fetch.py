@@ -39,8 +39,9 @@ import requests
 from requests.adapters import DEFAULT_POOLBLOCK, HTTPAdapter
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
-from urllib3.exceptions import ConnectTimeoutError, NewConnectionError
+from urllib3.exceptions import ConnectTimeoutError, LocationParseError, NewConnectionError
 from urllib3.poolmanager import PoolManager
+from urllib3.util import parse_url
 from urllib3.util.connection import create_connection
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
@@ -262,6 +263,28 @@ def _reject_literal_private_host(host: str) -> None:
 		return
 	if not _address_is_public(host):
 		raise NonPublicHostError(f"Host {host!r} is a non-public address, which is refused.")
+
+
+def reject_non_public_literal(url: str) -> None:
+	"""Refuse ``url`` when its host is a non-public IP literal or a localhost
+	name: the checks that need no DNS lookup.
+
+	The host is read with urllib3's parser, the one the transport dials with,
+	because ``urlsplit`` can disagree: it reads ``http://127.0.0.1\\@example.com/``
+	as example.com, where urllib3 dials 127.0.0.1. Hostnames, and IPv4 written
+	in decimal or hex, are not resolved here; the pinned connection validates
+	whatever they resolve to at fetch time.
+	"""
+	try:
+		host = parse_url(url).host
+	except LocationParseError as exc:
+		raise NonPublicHostError(f"URL {url!r} cannot be parsed.") from exc
+	if not host:
+		raise NonPublicHostError("URL has no host.")
+	host = host.strip("[]").rstrip(".")
+	if host == "localhost" or host.endswith(".localhost"):
+		raise NonPublicHostError(f"Host {host!r} is a loopback name, which is refused.")
+	_reject_literal_private_host(host)
 
 
 class _Deadline:

@@ -1,5 +1,4 @@
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit
 
 from django.db.models import QuerySet
 from rest_framework import serializers
@@ -94,20 +93,16 @@ class LinkSerializer(_LinkModelSerializer):
 		}
 
 	def validate_url(self, value: str) -> str:
-		"""Reject URLs whose host resolves to a non-public address, at write time.
+		"""Reject URLs whose host is a non-public IP literal or a localhost name.
 
-		This resolves the host — a real, blocking DNS lookup on the request path —
-		so a bad target is refused when the Link is saved, with an error the client
-		can act on. It is not the authoritative check: ``safe_fetch`` re-resolves
-		and pins every hop at scrape time, because the answer can change between
-		write and fetch.
-
-		Looked up on the module (not bound at import) so tests can patch
-		``safe_fetch.resolve_public_host`` and so a stale binding can never
-		survive a re-import order change.
+		Early, actionable feedback only, and deliberately without DNS: a lookup
+		here would put a blocking, attacker-timed call on the request path and
+		refuse links whenever DNS hiccups, while still not being authoritative,
+		since the answer can change before the scrape. ``safe_fetch`` resolves
+		and pins every hop at fetch time.
 		"""
 		try:
-			safe_fetch.resolve_public_host(urlsplit(value).hostname or "")
+			safe_fetch.reject_non_public_literal(value)
 		except NonPublicHostError as exc:
 			raise serializers.ValidationError(str(exc)) from exc
 		return value

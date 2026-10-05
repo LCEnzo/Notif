@@ -41,6 +41,11 @@ _TEST_DNS = {
 	"2130706433": ["127.0.0.1"],
 }
 
+
+def _no_dns(*args: object, **kwargs: object) -> None:
+	raise AssertionError("unexpected DNS lookup")
+
+
 _AddrInfo = tuple[socket.AddressFamily, socket.SocketKind, int, str, tuple[str, int]]
 
 
@@ -190,33 +195,38 @@ class SSRFGuardTestCase(TestCase):
 			format="json",
 		)
 
-	def test_link_api_rejects_internal_targets(self) -> None:
-		resolver = _FakeResolver({**_TEST_DNS, "localhost": ["127.0.0.1", "::1"]})
+	def test_link_api_rejects_internal_targets_without_dns(self) -> None:
 		for url in [
 			"http://127.0.0.1/",
 			"http://localhost/",
+			"http://admin.localhost:8000/",
+			"http://admin.localhost./",
 			"http://[::1]/",
+			"http://[::ffff:127.0.0.1]/",
 			"http://10.0.0.1/",
 			"http://192.168.1.1/",
 			"http://172.16.0.1/",
 			"http://169.254.169.254/latest/meta-data/",
-			"http://2130706433/",  # decimal encoding of 127.0.0.1
+			# urlsplit reads the host as example.com; urllib3 would dial 127.0.0.1.
+			"http://127.0.0.1\\@example.com/",
 		]:
-			with self.subTest(url=url), patch("monitoring.safe_fetch.socket.getaddrinfo", resolver):
+			with self.subTest(url=url), patch("monitoring.safe_fetch.socket.getaddrinfo", side_effect=_no_dns):
 				response = self._create_link(url)
 				self.assertEqual(
 					response.status_code,
 					400,
 					msg=f"{url} -> {response.status_code} {getattr(response, 'data', None)}",
 				)
+				# Refused by validate_url, not by the URL field's own syntax check.
+				self.assertIn("which is refused", str(response.data["url"]))
 
-	def test_link_api_accepts_public_target(self) -> None:
-		with patch(
-			"monitoring.safe_fetch.socket.getaddrinfo",
-			return_value=[(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))],
-		):
-			response = self._create_link("https://example.com/feed")
-		self.assertEqual(response.status_code, 201)
+	def test_link_api_accepts_hostnames_without_resolving_them(self) -> None:
+		"""Hostnames are left to the pinned connection at fetch time, so saving
+		a link neither waits on DNS nor fails when DNS does."""
+		for url in ["https://example.com/feed", "https://does-not-resolve.example.test/feed"]:
+			with self.subTest(url=url), patch("monitoring.safe_fetch.socket.getaddrinfo", side_effect=_no_dns):
+				response = self._create_link(url)
+			self.assertEqual(response.status_code, 201)
 
 	def test_address_classifier(self) -> None:
 		for private in [
