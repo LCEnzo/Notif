@@ -167,6 +167,7 @@ select = [
 	"PLC3002", # unnecessary direct call to a lambda
 	# ported from auto_platforma's API config: error handling, security, test hygiene
 	"BLE001",  # blind `except Exception`; narrow it, or noqa with the reason it must stay broad
+	"FBT",     # boolean positional parameters and arguments; make the flag keyword-only
 	"G004",    # f-string in a logging call; formats eagerly, pass args lazily instead
 	"PGH003",  # blanket `# type: ignore` without an error code
 	"PGH004",  # blanket `# noqa` without a rule code

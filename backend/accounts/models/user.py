@@ -122,7 +122,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 	def delete(
 		self,
 		using: Any | None = None,
-		keep_parents: bool = False,
+		keep_parents: bool = False,  # noqa: FBT001, FBT002 - overrides Django's Model.delete signature
 	) -> tuple[int, dict[str, int]]:
 		with transaction.atomic(using=using):
 			self.date_deleted = timezone.now()
@@ -133,6 +133,6 @@ class User(AbstractBaseUser, PermissionsMixin):
 	def actually_delete(
 		self,
 		using: Any | None = None,
-		keep_parents: bool = False,
+		keep_parents: bool = False,  # noqa: FBT001, FBT002 - mirrors Model.delete, which it forwards to
 	) -> tuple[int, dict[str, int]]:
 		return super().delete(using=using, keep_parents=keep_parents)

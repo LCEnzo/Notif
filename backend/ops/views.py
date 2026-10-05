@@ -274,10 +274,10 @@ def _stream_and_unlink(path: str, audit_context: dict[str, Any]) -> Iterator[byt
 				yield chunk
 	finally:
 		_unlink_quiet(path)
-		_record_stream_outcome(audit_context, bytes_sent, completed)
+		_record_stream_outcome(audit_context, bytes_sent, completed=completed)
 
 
-def _record_stream_outcome(audit_context: dict[str, Any], bytes_sent: int, completed: bool) -> None:
+def _record_stream_outcome(audit_context: dict[str, Any], bytes_sent: int, *, completed: bool) -> None:
 	username = audit_context.get("username", "?")
 	size_bytes = audit_context.get("size_bytes", 0)
 	details = {**audit_context, "bytes_streamed": bytes_sent}
