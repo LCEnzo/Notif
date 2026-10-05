@@ -12,6 +12,7 @@ import pytest
 import requests
 import requests_mock
 from django.core.management import call_command
+from django.db import InterfaceError, OperationalError, connections
 from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
@@ -1093,6 +1094,41 @@ class StratChoicesViewTestCase(SetupMixin, TestCase):
 		response = APIClient().get(reverse("get-strat-choices"))
 
 		self.assertEqual(response.status_code, 401)
+
+
+class StatusCheckViewTestCase(TestCase):
+	def test_reports_ok_when_the_database_answers(self):
+		response = APIClient().get(reverse("status-check"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["status"], "ok")
+		self.assertEqual(response.data["db"], "ok")
+
+	def test_database_errors_become_503_and_are_logged(self):
+		# InterfaceError is the boundary case: it derives from django.db.Error but not from
+		# DatabaseError, so catching DatabaseError alone would let it escape as a 500.
+		for exc in (OperationalError("db gone"), InterfaceError("connection already closed")):
+			with self.subTest(exc=type(exc).__name__):
+				with (
+					patch.object(connections["default"], "cursor", side_effect=exc),
+					self.assertLogs("monitoring.views", level=logging.ERROR) as logs,
+				):
+					response = APIClient().get(reverse("status-check"))
+
+				self.assertEqual(response.status_code, 503)
+				self.assertEqual(response.data["status"], "error")
+				self.assertEqual(response.data["db"], "down")
+				self.assertNotIn(str(exc), response.content.decode())
+				self.assertEqual(len(logs.records), 1)
+				exc_info = logs.records[0].exc_info or (None, None, None)
+				self.assertIs(exc_info[1], exc)
+
+	def test_non_database_errors_are_not_reported_as_database_down(self):
+		with (
+			patch.object(connections["default"], "cursor", side_effect=RuntimeError("bug, not an outage")),
+			self.assertRaisesMessage(RuntimeError, "bug, not an outage"),
+		):
+			APIClient().get(reverse("status-check"))
 
 
 # ── FeedStrategy Tests ────────────────────────────────────────────────────

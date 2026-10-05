@@ -503,3 +503,46 @@ class SystemEventHandlerTestCase(TestCase):
 			mock_create.side_effect = RuntimeError("something broke")
 			# Should not raise — calls handleError internally
 			handler.emit(record)
+
+	def test_emit_reports_only_unexpected_errors_through_handle_error(self):
+		import logging
+
+		from django.core.exceptions import AppRegistryNotReady
+		from django.db import IntegrityError, OperationalError, ProgrammingError
+
+		from ops.logging import SystemEventHandler
+
+		# The not-ready states return quietly, since the console handler still carries the
+		# record; anything else must reach handleError instead of vanishing. IntegrityError is
+		# the boundary: a DatabaseError like the quiet two, yet it signals a real fault.
+		# AppRegistryNotReady really comes from the deferred model import, which cannot be
+		# re-triggered once this process has loaded its apps, so it is raised from create().
+		cases: list[tuple[Exception, bool]] = [
+			(AppRegistryNotReady("Apps aren't loaded yet."), False),
+			(OperationalError("no such table: ops_systemevent"), False),
+			(ProgrammingError("relation does not exist"), False),
+			(IntegrityError("NOT NULL constraint failed"), True),
+			(RuntimeError("something broke"), True),
+		]
+		record = logging.LogRecord(
+			name="test",
+			level=logging.WARNING,
+			pathname="/app/test.py",
+			lineno=1,
+			msg="test",
+			args=(),
+			exc_info=None,
+		)
+		for exc, reported in cases:
+			with self.subTest(exc=type(exc).__name__):
+				handler = SystemEventHandler()
+				with (
+					patch("ops.models.SystemEvent.objects.create", side_effect=exc),
+					patch.object(handler, "handleError") as handle_error,
+				):
+					handler.emit(record)
+
+				if reported:
+					handle_error.assert_called_once_with(record)
+				else:
+					handle_error.assert_not_called()
