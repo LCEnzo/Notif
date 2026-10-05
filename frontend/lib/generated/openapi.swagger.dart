@@ -2487,7 +2487,7 @@ class UserCreation {
     required this.username,
     required this.email,
     this.name,
-    required this.password,
+    this.password,
   });
 
   factory UserCreation.fromJson(Map<String, dynamic> json) =>
@@ -2503,7 +2503,7 @@ class UserCreation {
   @JsonKey(name: 'name')
   final String? name;
   @JsonKey(name: 'password')
-  final String password;
+  final String? password;
   static const fromJsonFactory = _$UserCreationFromJson;
 
   @override
@@ -2557,7 +2557,7 @@ extension $UserCreationExtension on UserCreation {
     Wrapped<String>? username,
     Wrapped<String>? email,
     Wrapped<String?>? name,
-    Wrapped<String>? password,
+    Wrapped<String?>? password,
   }) {
     return UserCreation(
       username: (username != null ? username.value : this.username),

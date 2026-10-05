@@ -1,3 +1,5 @@
+import json
+import re
 from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
@@ -28,6 +30,7 @@ from accounts.device_sessions import (
 )
 from accounts.models import DeviceSession, User
 from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetBudget, PasswordResetCode
+from accounts.serializers import UserCreationSerializer, UserFullReadSerializer, UserMinimalReadSerializer
 from accounts.views import _send_reset_email_in_background
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
@@ -184,6 +187,191 @@ class UserSerializerSelectionTestCase(TestCase):
 		self.assertEqual(response.data["email"], self.user.email)
 		self.assertIn("is_staff", response.data)
 		self.assertIn("is_superuser", response.data)
+
+
+# Django's encoded form is "<algorithm>$<params...>$<hash>": md5$salt$hex,
+# pbkdf2_sha256$iterations$salt$b64, argon2$argon2id$v=19$..., bcrypt_sha256$$2b$...
+_PASSWORD_HASH_SHAPE = re.compile(r"[a-z0-9_]+\$[^\s\"]*\$")
+
+
+class UserPasswordHashExposureTestCase(TestCase):
+	"""No user endpoint may ever answer with a stored password hash.
+
+	UserCreationSerializer serves POST, PUT and PATCH, so its responses are the
+	ones at risk; the read serializers and get_my_info are pinned too, so a
+	field added to them later cannot reintroduce the leak.
+	"""
+
+	user: User
+	other_user: User
+	admin: User
+
+	@classmethod
+	def setUpTestData(cls) -> None:
+		cls.user = User.objects.create_user(
+			username="hash-exposure-user",
+			email="hash-exposure-user@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+		cls.other_user = User.objects.create_user(
+			username="hash-exposure-other",
+			email="hash-exposure-other@example.com",
+			password=_ALTERNATE_VALID_TEST_PASSWORD,
+		)
+		cls.admin = User.objects.create_superuser(
+			username="hash-exposure-admin",
+			email="hash-exposure-admin@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+
+	def setUp(self) -> None:
+		self.client_for_user = login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD)
+		self.client_for_admin = login_client(APIClient(), self.admin.get_username(), _VALID_TEST_PASSWORD)
+
+	def _assert_carries_no_hash(self, response: Any) -> None:
+		body = response.content.decode()
+		self.assertIsNone(_PASSWORD_HASH_SHAPE.search(body), body)
+		for stored in User.objects.values_list("password", flat=True):
+			self.assertNotIn(stored, body)
+		if status.is_success(response.status_code):
+			# A 400 may key its message under "password"; a success has no reason to.
+			self.assertNotIn("password", response.data)
+
+	def test_registration_response_carries_no_hash(self):
+		response = APIClient().post(
+			reverse("users-list"),
+			{
+				"username": "hash-exposure-new",
+				"email": "hash-exposure-new@example.com",
+				"password": _VALID_TEST_PASSWORD,
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self._assert_carries_no_hash(response)
+		# Write-only, not dropped: the password still reached the new account.
+		self.assertTrue(User.objects.get(username="hash-exposure-new").check_password(_VALID_TEST_PASSWORD))
+
+	def test_patch_response_carries_no_hash(self):
+		cases = [
+			("own row", self.client_for_user, self.user),
+			("admin on another row", self.client_for_admin, self.other_user),
+		]
+		for label, client, target in cases:
+			with self.subTest(label):
+				response = client.patch(
+					reverse("users-detail", kwargs={"pk": target.pk}), {"name": "Renamed"}, format="json"
+				)
+
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+				self._assert_carries_no_hash(response)
+
+	def test_put_response_carries_no_hash(self):
+		# PUT cannot reach a 2xx today: the serializer requires password and
+		# update() refuses it. The 400s still pass through the same serializer,
+		# so they are held to the same rule.
+		profile = {"username": self.user.username, "email": self.user.email, "name": "Renamed"}
+		cases = [
+			("own row without password", self.client_for_user, self.user, profile),
+			("own row with password", self.client_for_user, self.user, {**profile, "password": _VALID_TEST_PASSWORD}),
+			(
+				"admin on another row",
+				self.client_for_admin,
+				self.other_user,
+				{"username": self.other_user.username, "email": self.other_user.email},
+			),
+		]
+		for label, client, target, payload in cases:
+			with self.subTest(label):
+				response = client.put(reverse("users-detail", kwargs={"pk": target.pk}), payload, format="json")
+
+				self._assert_carries_no_hash(response)
+
+	def test_read_endpoints_carry_no_hash(self):
+		cases = [
+			("list", "get", reverse("users-list")),
+			("own detail", "get", reverse("users-detail", kwargs={"pk": self.user.pk})),
+			("other detail", "get", reverse("users-detail", kwargs={"pk": self.other_user.pk})),
+			("get_my_info GET", "get", reverse("users-get-my-info")),
+			("get_my_info POST", "post", reverse("users-get-my-info")),
+		]
+		for label, method, url in cases:
+			with self.subTest(label):
+				response = getattr(self.client_for_user, method)(url, format="json")
+
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+				self._assert_carries_no_hash(response)
+
+	def test_no_user_serializer_renders_password(self):
+		for serializer_class in (UserCreationSerializer, UserFullReadSerializer, UserMinimalReadSerializer):
+			with self.subTest(serializer_class.__name__):
+				field = serializer_class().fields.get("password")
+				self.assertTrue(field is None or field.write_only)
+				self.assertNotIn("password", serializer_class(self.user).data)
+
+
+class UserDetailNonIntegerPkTestCase(TestCase):
+	"""A user detail URL whose id is not an integer gets an ordinary answer, never a 500.
+
+	Writes answer as they do for any other id that is not the caller's own: 403
+	for a regular user, refused before any lookup, and 404 for an admin, who
+	passes the permission and then misses the row. GET is 404 for both.
+	"""
+
+	user: User
+	admin: User
+
+	@classmethod
+	def setUpTestData(cls) -> None:
+		cls.user = User.objects.create_user(
+			username="non-integer-pk-user",
+			email="non-integer-pk-user@example.com",
+			password=_VALID_TEST_PASSWORD,
+			name="Unchanged",
+		)
+		cls.admin = User.objects.create_superuser(
+			username="non-integer-pk-admin",
+			email="non-integer-pk-admin@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+
+	def _non_integer_pks(self) -> list[str]:
+		return [
+			"abc",
+			"1e3",
+			# One character off the caller's own id.
+			f"{self.user.pk}x",
+			# str.isdigit() accepts it, int() does not.
+			"\N{SUPERSCRIPT TWO}",
+			# str.isdecimal() accepts it, int() refuses past 4300 digits by default.
+			"1" * 5000,
+		]
+
+	def test_writes_answer_403_for_a_user_and_404_for_an_admin(self):
+		callers = [
+			("user", login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD), 403),
+			("admin", login_client(APIClient(), self.admin.get_username(), _VALID_TEST_PASSWORD), 404),
+		]
+		for pk in self._non_integer_pks():
+			url = reverse("users-detail", kwargs={"pk": pk})
+			for caller, client, expected in callers:
+				for method in ("put", "patch", "delete"):
+					with self.subTest(pk=pk[:12], caller=caller, method=method):
+						response = getattr(client, method)(url, {"name": "Changed"}, format="json")
+
+						self.assertEqual(response.status_code, expected)
+
+		self.user.refresh_from_db()
+		self.assertEqual(self.user.name, "Unchanged")
+
+	def test_get_stays_404(self):
+		client = login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD)
+		for pk in self._non_integer_pks():
+			with self.subTest(pk=pk[:12]):
+				response = client.get(reverse("users-detail", kwargs={"pk": pk}))
+
+				self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class LoginViewTestCase(TestCase):
@@ -1254,6 +1442,58 @@ class ChangePasswordTestCase(TestCase):
 
 				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 				self.assertIn("error", response.data)
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_rejects_a_body_that_is_not_a_json_object(self):
+		valid_fields = {"current_password": _VALID_TEST_PASSWORD, "new_password": _ALTERNATE_VALID_TEST_PASSWORD}
+		raw_bodies = [
+			"[]",
+			# The right fields, one level too deep.
+			json.dumps([valid_fields]),
+			'"current_password"',
+			"123",
+			"null",
+			"true",
+		]
+		for raw_body in raw_bodies:
+			with self.subTest(body=raw_body):
+				response = self.authed.post(self.url, raw_body, content_type="application/json")
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertEqual(set(response.data), {"error"})
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_rejects_password_fields_that_are_not_strings(self):
+		# The current password is right in each case, so the new one reaches the
+		# validators, which assume a str.
+		not_strings: list[Any] = [
+			12345678,
+			1.5,
+			True,
+			[_ALTERNATE_VALID_TEST_PASSWORD],
+			{"value": _ALTERNATE_VALID_TEST_PASSWORD},
+		]
+		for new_password in not_strings:
+			with self.subTest(new_password=new_password):
+				response = self.authed.post(
+					self.url,
+					{"current_password": _VALID_TEST_PASSWORD, "new_password": new_password},
+					format="json",
+				)
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertEqual(set(response.data), {"error"})
+
+		response = self.authed.post(
+			self.url,
+			{"current_password": [_VALID_TEST_PASSWORD], "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			format="json",
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 		self.user.refresh_from_db()
 		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
