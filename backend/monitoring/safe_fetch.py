@@ -47,6 +47,8 @@ MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_REDIRECTS = 5
 FETCH_DEADLINE_SECONDS = 60.0
 _CHUNK_SIZE = 64 * 1024
+_NAT64 = ipaddress.IPv6Network("64:ff9b::/96")
+_IPV4_COMPATIBLE = ipaddress.IPv6Network("::/96")
 
 
 class NonPublicHostError(requests.RequestException):
@@ -68,11 +70,15 @@ def _address_is_public(address: str) -> bool:
 	unspecified ranges (IPv4 and IPv6 alike) are all rejected — including
 	169.254.169.254-style cloud metadata and ::1. Multicast is excluded
 	explicitly: ``is_global`` does not consistently cover it (e.g. ff02::1).
+	NAT64 (64:ff9b::/96) and IPv4-compatible (::/96) addresses are judged by
+	the IPv4 address in their low 32 bits, which ``is_global`` ignores.
 	"""
 	try:
 		ip = ipaddress.ip_address(address)
 	except ValueError:
 		return False
+	if isinstance(ip, ipaddress.IPv6Address) and (ip in _NAT64 or ip in _IPV4_COMPATIBLE):
+		ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
 	return ip.is_global and not ip.is_multicast
 
 

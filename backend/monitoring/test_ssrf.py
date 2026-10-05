@@ -236,10 +236,21 @@ class SSRFGuardTestCase(TestCase):
 			"fe80::1",
 			"fc00::1",
 			"ff02::1",
+			"64:ff9b::7f00:1",  # NAT64 of 127.0.0.1
+			"64:ff9b::a9fe:a9fe",  # NAT64 of 169.254.169.254
+			"::127.0.0.1",  # IPv4-compatible
+			"::a00:5",  # IPv4-compatible 10.0.0.5
 		]:
 			with self.subTest(address=private):
 				self.assertFalse(safe_fetch._address_is_public(private))
-		for public in ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2606:4700::1111", "::ffff:8.8.8.8"]:
+		for public in [
+			"8.8.8.8",
+			"1.1.1.1",
+			"93.184.216.34",
+			"2606:4700::1111",
+			"::ffff:8.8.8.8",
+			"64:ff9b::808:808",  # NAT64 of 8.8.8.8
+		]:
 			with self.subTest(address=public):
 				self.assertTrue(safe_fetch._address_is_public(public))
 		self.assertFalse(safe_fetch._address_is_public("not-an-ip"))
