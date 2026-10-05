@@ -941,6 +941,52 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 		response = other_client.get(reverse("notifications-detail", kwargs={"pk": self.notification.pk}))
 		self.assertEqual(response.status_code, 404)
 
+	def test_since_includes_from_the_cutoff_instant_on(self):
+		# Pin the update to a known instant so both sides of the >= cutoff can be probed.
+		Update.objects.filter(pk=self.update.pk).update(created_at=datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+		cases = [
+			("2026-03-10T12:00:00Z", True),
+			("2026-03-10T12:00:00.000001Z", False),
+			# The same instant written at another offset.
+			("2026-03-10T14:00:00+02:00", True),
+			("2026-03-10T14:00:01+02:00", False),
+			# No offset reads as TIME_ZONE (UTC); a bare date as its midnight.
+			("2026-03-10 12:00", True),
+			("2026-03-10 12:01", False),
+			("2026-03-10", True),
+			("2026-03-11", False),
+		]
+		for since, included in cases:
+			with self.subTest(since=since):
+				response = self.api_client.get(reverse("notifications-list"), {"since": since})
+
+				self.assertEqual(response.status_code, 200)
+				ids = [n["id"] for n in response.data["results"]]
+				self.assertEqual(self.notification.pk in ids, included)
+
+	def test_unreadable_since_is_400(self):
+		unreadable = [
+			"abc",
+			"2026-13-45",
+			"\x00",
+			# Well-formed, but a UTC conversion takes them past year 1 or 9999.
+			"0001-01-01T00:00:00+01:00",
+			"9999-12-31T23:59:59-01:00",
+		]
+		for since in unreadable:
+			with self.subTest(since=since):
+				response = self.api_client.get(reverse("notifications-list"), {"since": since})
+
+				self.assertEqual(response.status_code, 400)
+				self.assertEqual(set(response.data), {"detail"})
+
+	def test_mark_all_read_with_unreadable_since_marks_nothing(self):
+		response = self.api_client.post(f"{reverse('notifications-mark-all-read')}?since=abc")
+
+		self.assertEqual(response.status_code, 400)
+		self.notification.refresh_from_db()
+		self.assertEqual(self.notification.status, Notification.Status.UNREAD)
+
 	def test_mark_all_read(self):
 		# Create a second notification for regular_user
 		create_notification(
