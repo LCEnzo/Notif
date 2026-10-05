@@ -130,19 +130,14 @@ class Settings(BaseSettings):
 		if self.NOTIF_ENV == Environment.PRODUCTION and self.DEBUG:
 			raise ValueError(
 				"NOTIF_ENV=production with DEBUG=true is not allowed: DEBUG marks a local "
-				"development environment and legalizes the dev bootstrap login. Set "
-				"DEBUG=false (the default) or NOTIF_ENV=staging/local."
+				"development environment. Set DEBUG=false (the default)."
 			)
-		if self.DEV_BOOTSTRAP_LOGIN_ENABLED and not self.DEBUG:
+		if self.DEV_BOOTSTRAP_LOGIN_ENABLED and not (self.DEBUG and self.NOTIF_ENV == Environment.LOCAL):
 			raise ValueError(
-				"DEV_BOOTSTRAP_LOGIN_ENABLED requires DEBUG=true: the bootstrap login "
-				"creates an account with repository-public credentials and must never "
-				"run outside an explicit local debug environment."
-			)
-		if self.DEV_BOOTSTRAP_LOGIN_ENABLED and self.NOTIF_ENV != Environment.LOCAL:
-			raise ValueError(
-				"DEV_BOOTSTRAP_LOGIN_ENABLED requires NOTIF_ENV=local: the bootstrap "
-				"login is a local-development convenience, not a staging feature."
+				"DEV_BOOTSTRAP_LOGIN_ENABLED=true needs NOTIF_ENV=local and DEBUG=true "
+				f"(got NOTIF_ENV={self.NOTIF_ENV}, DEBUG={self.DEBUG}): the bootstrap login "
+				"accepts repository-public credentials. Outside local development, remove "
+				"it or set it to false."
 			)
 		return self
 
