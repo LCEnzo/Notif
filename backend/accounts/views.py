@@ -1,6 +1,7 @@
 import contextlib
 import hashlib
 import logging
+import secrets
 import threading
 from collections.abc import Callable, Sequence
 from datetime import timedelta
@@ -8,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models.query import QuerySet
@@ -39,7 +41,7 @@ from accounts.device_sessions import (
 	session_for_token,
 )
 from accounts.models import DeviceSession, User
-from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH, PasswordResetBudget
+from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH, PasswordResetBudget, PasswordResetCode
 from accounts.serializers import (
 	DeviceSessionSerializer,
 	LoginRequestSerializer,
@@ -118,7 +120,7 @@ def _send_reset_email_in_background(to_email: Email, code: str) -> None:
 	above cap how many of these threads can ever exist.
 	"""
 	# Imported at call time so tests can patch commons.email.send_password_reset_email.
-	from commons.email import send_password_reset_email
+	from commons.email import send_password_reset_email  # noqa: PLC0415 - test seam, slated for removal
 
 	# send_password_reset_email already logs failures with the address attached;
 	# the daemon thread must not die with a traceback.
@@ -591,8 +593,6 @@ class UserViewSet(_UserModelViewSet):
 			)
 
 		try:
-			from django.contrib.auth.password_validation import validate_password
-
 			validate_password(new_password, user)
 		except DjangoValidationError as exc:
 			return Response(
@@ -647,7 +647,6 @@ class PasswordResetRequestView(APIView):
 		# codes (invalidating the victim's own), flooding their inbox, and
 		# spending the per-IP throttle budget from the victim's IP.
 		_require_json_request(request)
-		from accounts.models.password_reset import PasswordResetCode
 
 		serializer = PasswordResetRequestSerializer(data=request.data)
 		if not serializer.is_valid():
@@ -664,8 +663,6 @@ class PasswordResetRequestView(APIView):
 		user = User._base_manager.filter(email__iexact=email, is_active=True).first()
 
 		if user is not None:
-			import secrets
-
 			code = str(secrets.randbelow(10**PASSWORD_RESET_CODE_LENGTH)).zfill(PASSWORD_RESET_CODE_LENGTH)
 
 			PasswordResetCode.issue_for_user(user=user, code=code)
@@ -702,7 +699,6 @@ class PasswordResetConfirmView(APIView):
 		# must not be able to burn guesses against the victim's code from the
 		# victim's browser.
 		_require_json_request(request)
-		from accounts.models.password_reset import PasswordResetCode
 
 		serializer = PasswordResetConfirmSerializer(data=request.data)
 		if not serializer.is_valid():
@@ -742,10 +738,6 @@ class PasswordResetConfirmView(APIView):
 
 		# Validate password against this specific user
 		try:
-			from django.contrib.auth.password_validation import (
-				validate_password,
-			)
-
 			validate_password(new_password, user)
 		except DjangoValidationError as exc:
 			return Response(

@@ -6,6 +6,8 @@ from django.db import models, router, transaction
 from django.db.models.query import QuerySet
 from django.utils import timezone
 
+from accounts.models.device_session import DeviceSession
+
 if TYPE_CHECKING:
 	_UserManagerBase = BaseUserManager["User"]
 else:
@@ -101,8 +103,8 @@ class User(AbstractBaseUser, PermissionsMixin):
 			super().save(*args, **kwargs)
 			return
 
-		from accounts.device_sessions import revoke_all_sessions_for_user
-		from accounts.models.device_session import DeviceSession
+		# accounts.device_sessions imports accounts.models, which is mid-import while this module loads.
+		from accounts.device_sessions import revoke_all_sessions_for_user  # noqa: PLC0415 - circular import
 
 		using = kwargs.get("using") or router.db_for_write(type(self), instance=self)
 		kwargs["using"] = using

@@ -11,7 +11,7 @@ class SystemEventHandler(logging.Handler):
 		try:
 			# Deferred: dictConfig imports this module inside django.setup(), before the
 			# app registry can import models.
-			from ops.models import SystemEvent
+			from ops.models import SystemEvent  # noqa: PLC0415 - app registry not ready at import time
 
 			SystemEvent.objects.create(
 				level=record.levelname.lower(),

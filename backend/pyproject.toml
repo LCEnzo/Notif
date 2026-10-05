@@ -170,6 +170,7 @@ select = [
 	"G004",    # f-string in a logging call; formats eagerly, pass args lazily instead
 	"PGH003",  # blanket `# type: ignore` without an error code
 	"PGH004",  # blanket `# noqa` without a rule code
+	"PLC0415", # import inside a function; noqa only for app-registry/import-order constraints, with the reason
 	"PIE",     # flake8-pie: redundant pass/spread/dict kwargs/lambda/range start, duplicate class fields or enum values, chained startswith
 	"PT011",   # `pytest.raises` on a broad exception without `match=`
 	"PT014",   # duplicate cases in `pytest.mark.parametrize`

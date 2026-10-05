@@ -4,6 +4,7 @@ import xml.sax.saxutils
 from datetime import UTC, date, datetime, time
 from pathlib import Path
 from pprint import pprint  # noqa: F401
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
@@ -27,6 +28,7 @@ from commons import Err, Ok
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client
 from commons.utils import create_notification
 from monitoring.models import Link, Notification, Strategy, Update
+from monitoring.rate_limiter import DomainRateLimiter
 from monitoring.rss_content_backfill import backfill_rss_update_content
 from monitoring.services import scrape_link
 from monitoring.strategies import (
@@ -156,27 +158,21 @@ class TestSelectorStratErr(TestCase):
 
 class RateLimiterTestCase(TestCase):
 	def test_same_domain_waits(self):
-		from monitoring.rate_limiter import DomainRateLimiter
-
 		limiter = DomainRateLimiter(delay=0.15)
-		import time
 
-		start = time.monotonic()
+		start = monotonic()
 		limiter.wait_for_domain("https://example.com/a")
 		limiter.wait_for_domain("https://example.com/b")
-		elapsed = time.monotonic() - start
+		elapsed = monotonic() - start
 		assert elapsed >= 0.14
 
 	def test_different_domains_no_wait(self):
-		from monitoring.rate_limiter import DomainRateLimiter
-
 		limiter = DomainRateLimiter(delay=0.5)
-		import time
 
-		start = time.monotonic()
+		start = monotonic()
 		limiter.wait_for_domain("https://example.com/a")
 		limiter.wait_for_domain("https://other.com/b")
-		elapsed = time.monotonic() - start
+		elapsed = monotonic() - start
 		assert elapsed < 0.2
 
 

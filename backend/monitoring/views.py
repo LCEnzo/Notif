@@ -2,6 +2,8 @@ import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from django.core.paginator import Page
+from django.db import Error as DbError
+from django.db import connections
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
@@ -294,14 +296,12 @@ def status_check(request: Request) -> Response:
 	Used by load balancers and operators to confirm the service can handle traffic
 	and to verify which code is deployed.
 	"""
-	from django.db import Error, connections
-
 	try:
 		with connections["default"].cursor() as cursor:
 			cursor.execute("SELECT 1")
 		db_status = "ok"
 		status_code = 200
-	except Error:
+	except DbError:
 		# django.db.Error, not DatabaseError: Django wraps every driver failure into this
 		# hierarchy, and InterfaceError (e.g. a closed connection) sits outside DatabaseError.
 		# The response stays opaque because the endpoint is public; the log keeps the cause.
