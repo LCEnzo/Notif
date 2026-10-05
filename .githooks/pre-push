@@ -80,7 +80,7 @@ if $check_backend; then
 	cd "$repo_root/backend"
 
 	export DJANGO_SECRET_KEY="${DJANGO_SECRET_KEY:-test-key-for-pre-push-hook}"
-	export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-notif.settings}"
+	export DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-notif.settings_prod}"
 
 	run_check "uv lock --check" uv lock --check
 	run_check "uv sync --frozen" uv sync --frozen

@@ -31,8 +31,8 @@ dependencies:
   dio: ^5.8.0
   flutter:
     sdk: flutter
-  flutter_secure_storage: ^10.3.1
-  go_router: ^17.2.1
+  flutter_secure_storage: ^11.2.0
+  go_router: ^18.0.1
   json_annotation: ^4.9.0
   package_info_plus: ^10.0.0
   provider: ^6.0.1
@@ -56,6 +56,10 @@ dev_dependencies:
   # into, from backend/openapi.json. It runs via build_runner; the generated
   # output is committed (see frontend/scripts/refresh_contract.py).
   swagger_dart_code_generator: ^4.1.1
+  # url_launcher_platform_interface lets tests swap UrlLauncherPlatform.instance
+  # for a recording fake, so url_launcher_helper's scheme whitelist can be
+  # exercised without hitting a real OS launcher channel.
+  url_launcher_platform_interface: ^2.3.2
 
   # very_good_analysis is the active analyzer preset. flutter_lints stays
   # available so Flutter's recommended preset is not removed from the toolchain.

@@ -13,7 +13,27 @@ from django.utils.crypto import constant_time_compare, salted_hmac
 
 PASSWORD_RESET_CODE_TTL = timedelta(minutes=30)
 PASSWORD_RESET_CODE_MAX_ATTEMPTS = 5
+# Budget windows and limits for the per-email mint/guess counters.
+PASSWORD_RESET_BUDGET_TTL = timedelta(days=7)
 _RESET_CODE_SALT = "accounts.password_reset_code"
+
+
+class PasswordResetBudget(models.Model):
+	"""Per-email budget for password-reset code minting and guessing.
+
+	Database-backed rather than cache-backed so the limits are shared across
+	all gunicorn workers and survive worker recycling. One row per hashed
+	email; rows older than PASSWORD_RESET_BUDGET_TTL are pruned by
+	``run_due_tasks``.
+	"""
+
+	email_hash = models.CharField(max_length=64, unique=True)
+	window_started_at = models.DateTimeField()
+	mint_count = models.PositiveSmallIntegerField(default=0)
+	guess_count = models.PositiveSmallIntegerField(default=0)
+
+	def __str__(self) -> str:
+		return f"ResetBudget({self.email_hash[:8]}..., mints={self.mint_count}, guesses={self.guess_count})"
 
 
 class PasswordResetCode(models.Model):
