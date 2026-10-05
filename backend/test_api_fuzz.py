@@ -1,32 +1,29 @@
-"""Schema-driven fuzzing: every documented operation, generated inputs, real HTTP.
+"""Schema-driven fuzzing of the documented API: generated inputs, real HTTP.
 
 Where ``test_openapi_conformance.py`` proves one hand-written round trip matches
-the schema, this drives the *whole* committed ``openapi.json`` — Schemathesis
-generates inputs from each operation's parameter and body schemas, calls the
-live server, and checks the response.
+the schema, this covers every operation in the committed ``openapi.json`` except
+those in ``UNFUZZABLE_OPERATIONS``: Schemathesis generates inputs from each
+operation's parameter and body schemas, calls the live server, and checks the
+response.
 
 Two profiles, selected by ``NOTIF_FUZZ_PROFILE``:
 
 ``ci`` (default)
-	Small, seeded, and cheap enough to gate every push. It asserts one
-	thing: no generated input produces a 5xx. That is the check with the best
-	signal-to-noise ratio on an API that was not written schema-first — a 500 is
-	unambiguously a bug, whereas an undocumented 400 is usually just a docs gap.
+	Small and seeded; it runs in backend.yml with the rest of the suite. Its only
+	Schemathesis check is that no generated input produces a 5xx. That check has
+	the best signal-to-noise ratio on an API that was not written schema-first: a
+	500 is unambiguously a bug, whereas an undocumented 400 is usually a docs gap.
 
 ``deep``
 	Every default Schemathesis check but one (status code, content type,
 	headers, response schema conformance, auth enforcement, …) across the
-	``examples``, ``coverage`` and ``fuzzing`` phases at a much higher example
-	count. Expected to find things, which is why it is opt-in and never gates a
-	merge. Run it from ``.github/workflows/deep-sweeps.yml``'s schedule or by
-	hand:
+	``examples``, ``coverage`` and ``fuzzing`` phases, with up to 200 fuzzing
+	examples per operation. An operation's run ends at its first failing case,
+	so an operation with a ``coverage`` finding never reaches ``fuzzing``.
+	Expected to find things, which is why it never gates a merge. Run it from
+	``.github/workflows/deep-sweeps.yml`` or by hand:
 
 		NOTIF_FUZZ_PROFILE=deep uv run pytest -q test_api_fuzz.py
-
-Excluded operations are listed in ``UNFUZZABLE_OPERATIONS`` with the reason for
-each: fuzzing them would break the fuzzer itself, reach outside the test
-process, or cost far more than it finds, or they fail on a known server error
-that is excluded until it is fixed.
 """
 
 import os
@@ -51,15 +48,14 @@ load_all_checks()
 
 BACKEND_ROOT = Path(__file__).resolve().parent
 
-# `format: uri` is the single most expensive thing in this schema to generate.
-# hypothesis-jsonschema satisfies it by generating strings and filtering, and
-# almost everything it generates fails the filter — one operation spent 78s to
-# find five examples. Building URLs directly instead makes generation ~free and
-# produces better inputs than the filter ever did: the host list deliberately
-# mixes public names with loopback, link-local and private addresses so the
-# link validator's rejection path is exercised, not just its happy path. That
-# check reads the URL alone (``safe_fetch.reject_non_public_literal``), so it
-# runs for real here even though conftest stubs out DNS resolution.
+# Strings for `format: uri`. The default strategy, hypothesis-jsonschema's
+# ``https://<domain>``, yields public hostnames only. This host list mixes public
+# names with loopback, link-local and private addresses, so the link validator's
+# non-public-host rejection runs too. That check reads the URL alone
+# (``safe_fetch.reject_non_public_literal``), so it runs for real here even
+# though conftest stubs out DNS resolution. The strategy is also cheaper than the
+# default: the deep profile collects in ~40s with it and ~66s without (Windows,
+# 2026-10-05).
 _FUZZ_URI = st.builds(
 	"{}://{}{}{}".format,
 	st.sampled_from(["http", "https"]),
@@ -88,27 +84,32 @@ _FUZZ_URI = st.builds(
 )
 schemathesis.openapi.format("uri", _FUZZ_URI)
 
-# Operations that cannot be fuzzed, and why. Anything not listed here is fair
+# Operations left out of the fuzz run, and why. Anything not listed here is fair
 # game; keep this set small and keep the justifications concrete, because every
 # entry is API surface that nothing is fuzzing.
 UNFUZZABLE_OPERATIONS = {
-	# Destroy the very session the fuzzer authenticates with, so every
-	# subsequent generated call in the same test would 401 for the wrong reason.
+	# Logout revokes the session the fuzzer authenticates with, so every later
+	# call in the same test would 401 for the wrong reason. revoke_all spares the
+	# caller's own session, so the fuzzer's survives it.
 	"auth_logout_create": "revokes the fuzzer's own session",
 	"auth_sessions_revoke_all_create": "revokes the fuzzer's own session",
-	# Hypothesis favours small integers, and one of them is the fuzzer's own id.
+	# A generated id can be the fuzzer's own, and deleting that user turns every
+	# later call into a 401.
 	"accounts_users_destroy": "can delete the fuzzer's own user; also 500s on a non-integer id",
 	# Known server errors, excluded so the ci gate keeps measuring new ones.
-	# Re-include each once it is fixed. (Neither can rotate the fuzzer's
-	# password: change_password needs the current one, and update refuses it.)
+	# Re-include each once it is fixed. None of the three can change the
+	# fuzzer's password: change_password needs the current one, and update
+	# refuses a password outright.
 	"accounts_users_update": "500s on a non-integer id: int() in IsRequestingThemselves",
 	"accounts_users_partial_update": "500s on a non-integer id: int() in IsRequestingThemselves",
 	"accounts_users_change_password_create": "500s on a non-object JSON body: assert in the view",  # pragma: allowlist secret
-	# Reach outside the test process.
+	# Side effects that matter in a deployment: scraping and reset mail. Here
+	# neither leaves the test process: the fuzzer owns no links to scrape, and
+	# settings_test delivers mail to the locmem outbox.
 	"monitoring_trigger_scrape_create": "performs real outbound HTTP to scrape targets",
 	"accounts_password_reset_create": "sends mail and consumes the reset budget",  # pragma: allowlist secret
-	# Streams the entire SQLite database on every generated example; correctness
-	# is covered by ops/tests.py, and the bytes are pure cost here.
+	# The backup requires a superuser and the fuzzer is not one, so every call
+	# here answers 403; ops/tests.py covers the download itself.
 	"ops_backup_sqlite_retrieve": "streams the whole database per example",
 }
 
@@ -118,31 +119,31 @@ if _PROFILE not in {"ci", "deep"}:
 
 _IS_DEEP = _PROFILE == "deep"
 
-# Bounded on both axes: examples per operation, and the pytest-timeout ceiling
-# that overrides addopts' global 30s (which a fuzz run legitimately exceeds).
+# Bounded on both axes: examples per operation, and a per-test timeout that
+# replaces addopts' 30s, which the coverage phase alone can exceed on the
+# largest operations.
 MAX_EXAMPLES = int(os.environ.get("NOTIF_FUZZ_MAX_EXAMPLES", "200" if _IS_DEEP else "5"))
 TIMEOUT_SECONDS = 1800 if _IS_DEEP else 120
 
-# ``ci`` narrows to the one check that cannot produce a false positive; ``deep``
-# passes None, which means "all of Schemathesis' default checks".
+# ``ci`` keeps only ``not_a_server_error``, whose failures are always real bugs;
+# ``deep`` passes None, which selects Schemathesis' default checks.
 CHECKS: list[CheckFunction] | None = None if _IS_DEEP else [cast("CheckFunction", not_a_server_error)]
 
 # ``negative_data_rejection`` demands a 4xx for every schema-violating request,
-# and DRF is lenient by design: it ignores unknown query parameters and coerces
-# scalars (``"name": 0`` saves as ``"0"``). Run against this API it reports that
-# leniency on most write and list operations, burying the findings that matter.
+# and DRF is lenient by design: it ignores unknown query parameters and
+# read-only fields, and coerces scalars (``"name": 0`` saves as ``"0"``). Against
+# this API the check reports that leniency on several write and list
+# operations, burying the findings that matter.
 # cast: the registry is typed to also hand back check *classes*, but this one is
 # registered as a plain function and that is what call_and_validate accepts.
 EXCLUDED_CHECKS = cast("list[CheckFunction]", list(CHECKS_REGISTRY.get_by_names(["negative_data_rejection"])))
 
-# Phase selection is what actually decides the runtime, far more than
-# ``max_examples``. Measured on POST /api/v1/monitoring/links/: the ``fuzzing``
-# phase costs ~1s, the ``coverage`` phase ~32s, and ``coverage`` is insensitive
-# to ``max_examples`` because it deterministically enumerates schema edge cases
-# (missing required fields, wrong types, boundary values) rather than sampling.
-# So CI takes the cheap sampled phase and the deep profile buys the thorough
-# systematic one. Dropping ``coverage`` from CI is the difference between a 20s
-# job and a 3-minute one.
+# Phase selection decides the runtime far more than ``max_examples`` does.
+# ``fuzzing`` samples up to ``max_examples`` inputs; ``coverage`` enumerates schema
+# edge cases (missing required fields, wrong types, boundary values) whatever
+# ``max_examples`` says. Adding ``coverage`` to ``ci`` takes this module from
+# ~35s to ~3 minutes (Windows, -n 4, 2026-10-05), so ``ci`` samples and
+# ``deep`` enumerates.
 # ``stateful`` is deliberately absent: ``schema.parametrize()`` never runs it (it
 # needs ``schema.as_state_machine()``), so listing it would only claim coverage.
 PHASES = ["examples", "coverage", "fuzzing"] if _IS_DEEP else ["fuzzing"]
@@ -150,26 +151,21 @@ PHASES = ["examples", "coverage", "fuzzing"] if _IS_DEEP else ["fuzzing"]
 schema = schemathesis.openapi.from_path(BACKEND_ROOT / "openapi.json").exclude(operation_id=list(UNFUZZABLE_OPERATIONS))
 schema.config.phases.update(phases=PHASES)
 # ``ci`` is a merge gate, so it replays the same inputs on every run: a red gate
-# then means the diff under review changed the outcome, never that this run
-# happened to sample a new input. Exploration is ``deep``'s job, which keeps a
-# fresh seed per run. The inputs still move when an operation's schema or the
-# Hypothesis/Schemathesis versions change — each of those is part of the diff
-# that turned the gate red. Schemathesis seeds every test itself (a random seed
-# unless told otherwise), and that seed outranks Hypothesis' ``derandomize``.
-# One residual source remains: for a few operations the generated inputs also
-# depend on Python's per-process hash seed, so exact replay additionally needs
-# PYTHONHASHSEED pinned in the environment that runs pytest.
+# points at the diff under review rather than at a newly sampled input.
+# Exploration is ``deep``'s job, which keeps a fresh seed per run. The inputs
+# still move when an operation's schema or the Hypothesis/Schemathesis versions
+# change, and those changes arrive in a diff too. Schemathesis seeds every test
+# itself (a random seed unless told otherwise), and that seed outranks
+# Hypothesis' ``derandomize``. Replay is exact only with PYTHONHASHSEED pinned:
+# for a few operations the inputs also depend on Python's per-process hash seed.
 if not _IS_DEEP:
 	schema.config.seed = 0
 # By default Schemathesis treats the schema's security schemes as parameters and
 # generates a value for each: a random ``notif_session`` cookie and a random
-# ``Authorization`` header. The random cookie went out alongside the real one,
-# Django kept the last of the two, and every secured operation answered 401 — the
-# fuzzer never got past authentication. The real credential is now passed per
-# call (see ``FuzzCredentials``), which would override the random cookie, but a
-# random header that happened to start with ``Session `` would still be a 401.
-# Random credentials only exercise the auth layer's first branch anyway, so turn
-# them off rather than carry the noise.
+# ``Authorization`` header. The explicit credential (``FuzzCredentials``)
+# replaces a generated cookie of the same name, but a generated header that
+# starts with ``Session`` outranks any cookie and earns a 401. Random
+# credentials only exercise the rejection path anyway, so none are generated.
 schema.config.generation.update(with_security_parameters=False)
 
 FUZZ_USERNAME = "fuzzer"
@@ -229,7 +225,8 @@ def ipv4_localhost(monkeypatch: pytest.MonkeyPatch) -> None:
 
 	The live server binds 127.0.0.1 and the fuzzer opens a fresh connection per
 	request. On Windows every such connect tries ::1 first and stalls ~2s on the
-	refusal, which takes this module from ~15s to ~105s.
+	refusal: single-process, this module takes ~375s without the fixture and ~30s
+	with it (2026-10-05).
 	"""
 	real_getaddrinfo = socket.getaddrinfo
 
