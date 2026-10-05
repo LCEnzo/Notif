@@ -570,10 +570,17 @@ class UserViewSet(_UserModelViewSet):
 		user = request.user
 		assert isinstance(user, User)
 
-		# DRF types request.data as dict | list; this endpoint requires a JSON
-		# object body, so narrow before reading individual fields.
+		# request.data is whatever JSON value the client sent: an array, string,
+		# number, bool or null parses just as well as an object. Both the body
+		# and its fields are client input, so they are narrowed with a 400
+		# rather than asserted; the validators below assume a str and raise on
+		# anything else.
 		body = request.data
-		assert isinstance(body, dict)
+		if not isinstance(body, dict):
+			return Response(
+				{"error": "Send a JSON object with current_password and new_password."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
 
 		current_password = body.get("current_password")
 		new_password = body.get("new_password")
@@ -581,6 +588,12 @@ class UserViewSet(_UserModelViewSet):
 		if not current_password or not new_password:
 			return Response(
 				{"error": "Both current_password and new_password are required."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+
+		if not isinstance(current_password, str) or not isinstance(new_password, str):
+			return Response(
+				{"error": "current_password and new_password must be strings."},
 				status=status.HTTP_400_BAD_REQUEST,
 			)
 

@@ -1,3 +1,4 @@
+import json
 import re
 from datetime import timedelta
 from typing import Any
@@ -1441,6 +1442,58 @@ class ChangePasswordTestCase(TestCase):
 
 				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 				self.assertIn("error", response.data)
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_rejects_a_body_that_is_not_a_json_object(self):
+		valid_fields = {"current_password": _VALID_TEST_PASSWORD, "new_password": _ALTERNATE_VALID_TEST_PASSWORD}
+		raw_bodies = [
+			"[]",
+			# The right fields, one level too deep.
+			json.dumps([valid_fields]),
+			'"current_password"',
+			"123",
+			"null",
+			"true",
+		]
+		for raw_body in raw_bodies:
+			with self.subTest(body=raw_body):
+				response = self.authed.post(self.url, raw_body, content_type="application/json")
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertEqual(set(response.data), {"error"})
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_rejects_password_fields_that_are_not_strings(self):
+		# The current password is right in each case, so the new one reaches the
+		# validators, which assume a str.
+		not_strings: list[Any] = [
+			12345678,
+			1.5,
+			True,
+			[_ALTERNATE_VALID_TEST_PASSWORD],
+			{"value": _ALTERNATE_VALID_TEST_PASSWORD},
+		]
+		for new_password in not_strings:
+			with self.subTest(new_password=new_password):
+				response = self.authed.post(
+					self.url,
+					{"current_password": _VALID_TEST_PASSWORD, "new_password": new_password},
+					format="json",
+				)
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertEqual(set(response.data), {"error"})
+
+		response = self.authed.post(
+			self.url,
+			{"current_password": [_VALID_TEST_PASSWORD], "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			format="json",
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 		self.user.refresh_from_db()
 		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
