@@ -271,6 +271,28 @@ class SSRFGuardTestCase(TestCase):
 				self.assertTrue(safe_fetch._address_is_public(public))
 		self.assertFalse(safe_fetch._address_is_public("not-an-ip"))
 
+	def test_address_classifier_refuses_ranges_is_global_misses(self) -> None:
+		"""Each range ``is_global`` calls public but the guard refuses, with
+		addresses on both sides of its edges."""
+		ranges: dict[str, tuple[list[str], list[str]]] = {
+			# IPv4-translated (RFC 2765). Outside: the IPv4-mapped neighbour,
+			# judged by its embedded IPv4 address as before.
+			"::ffff:0:0:0/96": (["::ffff:0:7f00:1", "::ffff:0:808:808"], ["::ffff:8.8.8.8"]),
+			# Deprecated site-local. Both neighbours (fe80::/10, ff00::/8) are
+			# non-public anyway, so the outside control is an ordinary public one.
+			"fec0::/10": (["fec0::1", "feff:ffff::1"], ["2606:4700::1111"]),
+			"192.88.99.0/24": (["192.88.99.0", "192.88.99.255"], ["192.88.98.255", "192.88.100.0"]),
+			# Also refused when it arrives NAT64-wrapped (64:ff9b::a83f:8110).
+			"168.63.129.16/32": (["168.63.129.16", "64:ff9b::a83f:8110"], ["168.63.129.15", "168.63.129.17"]),
+		}
+		for network, (inside, outside) in ranges.items():
+			for address in inside:
+				with self.subTest(network=network, address=address, side="inside"):
+					self.assertFalse(safe_fetch._address_is_public(address))
+			for address in outside:
+				with self.subTest(network=network, address=address, side="outside"):
+					self.assertTrue(safe_fetch._address_is_public(address))
+
 	def test_resolve_public_host_rejects_mixed_records(self) -> None:
 		"""A host with one public and one private record is a rebinding setup."""
 		with (
