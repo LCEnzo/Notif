@@ -2417,6 +2417,7 @@
                     },
                     "password": {
                         "type": "string",
+                        "writeOnly": true,
                         "maxLength": 128
                     }
                 }
@@ -2689,6 +2690,7 @@
                     },
                     "password": {
                         "type": "string",
+                        "writeOnly": true,
                         "maxLength": 128
                     }
                 },
