@@ -16,6 +16,7 @@ from drf_spectacular.generators import SchemaGenerator
 USERS_LIST = "/api/v1/accounts/users/"
 USERS_DETAIL = "/api/v1/accounts/users/{id}/"
 GET_MY_INFO = "/api/v1/accounts/users/get_my_info/"
+CHANGE_PASSWORD = "/api/v1/accounts/users/change_password/"
 
 _HTTP_METHODS = {"get", "put", "patch", "post", "delete", "head", "options", "trace"}
 
@@ -38,6 +39,11 @@ def _json_body(request_or_response: dict[str, Any]) -> Any:
 	return request_or_response["content"]["application/json"]["schema"]
 
 
+def _component(schema: dict[str, Any], name: str) -> dict[str, Any]:
+	component: dict[str, Any] = schema["components"]["schemas"][name]
+	return component
+
+
 def test_user_detail_offers_patch_and_no_put(schema: dict[str, Any]) -> None:
 	assert _methods(schema, USERS_DETAIL) == {"get", "patch", "delete"}
 
@@ -45,3 +51,18 @@ def test_user_detail_offers_patch_and_no_put(schema: dict[str, Any]) -> None:
 def test_get_my_info_is_get_only_and_returns_the_full_user(schema: dict[str, Any]) -> None:
 	assert _methods(schema, GET_MY_INFO) == {"get"}
 	assert _json_body(schema["paths"][GET_MY_INFO]["get"]["responses"]["200"]) == _ref("UserFullRead")
+
+
+def test_change_password_documents_its_real_body_and_answers(schema: dict[str, Any]) -> None:
+	operation = schema["paths"][CHANGE_PASSWORD]["post"]
+
+	assert _json_body(operation["requestBody"]) == _ref("ChangePasswordRequest")
+	body = _component(schema, "ChangePasswordRequest")
+	assert set(body["properties"]) == {"current_password", "new_password"}
+	assert set(body["required"]) == {"current_password", "new_password"}
+	# The view refuses an empty string for either field, as it does a missing one.
+	assert {field["minLength"] for field in body["properties"].values()} == {1}
+
+	assert _json_body(operation["responses"]["200"]) == _ref("StatusResponse")
+	assert _json_body(operation["responses"]["400"]) == _ref("ErrorMessage")
+	assert _component(schema, "ErrorMessage")["required"] == ["error"]

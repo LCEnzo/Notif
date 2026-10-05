@@ -299,17 +299,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/ChangePasswordRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/ChangePasswordRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/ChangePasswordRequest"
                             }
                         }
                     },
@@ -328,11 +328,21 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserCreation"
+                                    "$ref": "#/components/schemas/StatusResponse"
                                 }
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorMessage"
+                                }
+                            }
+                        },
+                        "description": "A field is missing, empty or not a string, the current password is wrong, or the password validators refused the new one."
                     }
                 }
             }
@@ -1765,6 +1775,26 @@
                 "type": "string",
                 "description": "* `network_unavailable` - Network unavailable\n* `timeout` - Timeout\n* `unauthorized` - Unauthorized\n* `forbidden` - Forbidden\n* `validation_failed` - Validation failed\n* `contract_violation` - Contract violation\n* `corrupt_local_state` - Corrupt local state\n* `source_blocked_degraded` - Source blocked or degraded\n* `server_error` - Server error\n* `unexpected_failure` - Unexpected failure"
             },
+            "ChangePasswordRequest": {
+                "type": "object",
+                "description": "The change_password body, for the schema.\n\nThe view validates the body itself rather than through this serializer: a\nCharField would coerce a number into a string, which the view refuses.",
+                "properties": {
+                    "current_password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "current_password",
+                    "new_password"
+                ]
+            },
             "ClientEvent": {
                 "type": "object",
                 "properties": {
@@ -1886,6 +1916,18 @@
                     "public_id",
                     "transport",
                     "user_agent"
+                ]
+            },
+            "ErrorMessage": {
+                "type": "object",
+                "description": "The ``{\"error\": ...}`` body account views answer a refused request with.",
+                "properties": {
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "error"
                 ]
             },
             "HealthCheckResponse": {

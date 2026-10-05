@@ -1441,7 +1441,14 @@ class ChangePasswordTestCase(TestCase):
 		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
 
 	def test_requires_both_fields(self):
-		for payload in ({"new_password": _ALTERNATE_VALID_TEST_PASSWORD}, {"current_password": _VALID_TEST_PASSWORD}):
+		# An empty string counts as missing, which the schema states as minLength 1.
+		payloads = [
+			{"new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			{"current_password": _VALID_TEST_PASSWORD},
+			{"current_password": "", "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": ""},
+		]
+		for payload in payloads:
 			with self.subTest(payload=payload):
 				response = self.authed.post(self.url, payload, format="json")
 

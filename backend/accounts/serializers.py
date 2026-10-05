@@ -66,6 +66,23 @@ class UserCreationSerializer(_UserModelSerializer):
 		return attrs
 
 
+class ChangePasswordRequestSerializer(_AnySerializer):
+	"""The change_password body, for the schema.
+
+	The view validates the body itself rather than through this serializer: a
+	CharField would coerce a number into a string, which the view refuses.
+	"""
+
+	current_password = serializers.CharField(write_only=True, min_length=1)
+	new_password = serializers.CharField(write_only=True, min_length=1)
+
+
+class ErrorMessageSerializer(_AnySerializer):
+	"""The ``{"error": ...}`` body account views answer a refused request with."""
+
+	error = serializers.CharField()
+
+
 class UserFullReadSerializer(_UserModelSerializer):
 	class Meta:
 		model = User

@@ -43,7 +43,9 @@ from accounts.device_sessions import (
 from accounts.models import DeviceSession, User
 from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH, PasswordResetBudget, PasswordResetCode
 from accounts.serializers import (
+	ChangePasswordRequestSerializer,
 	DeviceSessionSerializer,
+	ErrorMessageSerializer,
 	LoginRequestSerializer,
 	LoginResponseSerializer,
 	PasswordResetConfirmSerializer,
@@ -567,6 +569,19 @@ class UserViewSet(_UserModelViewSet):
 		assert isinstance(user, User)
 		return Response(status=status.HTTP_200_OK, data=UserFullReadSerializer(user).data)
 
+	@extend_schema(
+		request=ChangePasswordRequestSerializer,
+		responses={
+			status.HTTP_200_OK: StatusResponseSerializer,
+			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorMessageSerializer,
+				description=(
+					"A field is missing, empty or not a string, the current password is wrong, "
+					"or the password validators refused the new one."
+				),
+			),
+		},
+	)
 	@action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
 	def change_password(self, request: Request) -> Response:
 		"""Change the authenticated user's password.
