@@ -30,5 +30,5 @@ class SystemEventHandler(logging.Handler):
 		except OperationalError, ProgrammingError:
 			# The table may not exist yet during migrations/startup.
 			return
-		except Exception:
+		except Exception:  # noqa: BLE001 - emit must never raise into the caller's log call; handleError reports it
 			self.handleError(record)

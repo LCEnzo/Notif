@@ -246,7 +246,7 @@ def _write_sqlite_backup(source: sqlite3.Connection, db_name: str, tmp_path: str
 	databases (tests with ``:memory:`` or ``file::memory:?…``) we fall back to
 	``serialize()`` because there is no file to reopen.
 	"""
-	if db_name == ":memory:" or db_name.startswith("file::memory:") or db_name.startswith("file:memdb"):
+	if db_name == ":memory:" or db_name.startswith(("file::memory:", "file:memdb")):
 		data = source.serialize()
 		with Path(tmp_path).open("wb") as fh:
 			fh.write(data)
