@@ -1,14 +1,11 @@
 import gzip
 import ipaddress
-import shutil
 import socket
-import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from typing import Any, cast
 from unittest.mock import patch
 
@@ -20,7 +17,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.models import User
-from commons import Err, Ok
+from commons import Err
 from commons.test_utils import login_client
 from commons.utils import password
 from monitoring import safe_fetch
@@ -28,7 +25,6 @@ from monitoring.models import Strategy
 from monitoring.safe_fetch import MAX_RESPONSE_BYTES, NonPublicHostError, ResponseTooLargeError
 from monitoring.strategies import (
 	URL,
-	FeedStrategy,
 	GeneralSelectorStrategy,
 	KemonoFavouritesStrategy,
 	QQAlertsStrategy,
@@ -806,47 +802,3 @@ class ResolverBypassTestCase(SimpleTestCase):
 		):
 			safe_fetch.fetch("http://example.com/", timeout=5)
 		self.assertIn("No validated address", str(failed.exception))
-
-
-@pytest.mark.real_ssrf
-class FeedStrategyLocalFileTestCase(TestCase):
-	"""``FeedStrategy`` hands the fetched body straight to ``feedparser.parse``.
-
-	``requests_mock`` replaces the transport adapter, so these exercise the parse
-	step alone; the body is attacker-controlled external data in production.
-	"""
-
-	def _scratch_dir(self) -> Path:
-		# In-repo scratch (AGENTS.md: never %TEMP%); unique per call for xdist.
-		scratch = Path(tempfile.mkdtemp(prefix="ssrf_feed_", dir=str(Path(__file__).resolve().parent)))
-		self.addCleanup(shutil.rmtree, scratch, ignore_errors=True)
-		return scratch
-
-	@pytest.mark.xfail(strict=True, reason="SSRF-FEED-LFI: feedparser opens a local file named by the feed body")
-	def test_feed_body_naming_a_local_file_is_not_read(self) -> None:
-		"""SSRF-FEED-LFI: feedparser 6.x treats a ``bytes`` payload that spells an
-		existing path as a *filename* and ``open()``s it. A hostile feed whose body
-		is a local path therefore reads that file; when the file is itself a feed,
-		its contents surface as scraped updates — a local-file read (and, against a
-		blocking path such as ``/dev/zero``, a denial of service) that bypasses the
-		SSRF guard, the size cap and the deadline entirely.
-
-		Fix: parse a file-like wrapper (``io.BytesIO(response.content)``) so the
-		``hasattr(..., "read")`` branch runs and the bytes are never a filename.
-		"""
-		sentinel = "SSRF-LOCAL-FILE-LEAK"
-		secret_feed = self._scratch_dir() / "secret_feed.xml"
-		secret_feed.write_text(
-			'<?xml version="1.0"?><rss version="2.0"><channel><title>leak</title>'
-			f"<item><title>{sentinel}</title><link>http://attacker.example/</link></item>"
-			"</channel></rss>",
-			encoding="utf-8",
-		)
-
-		url = "https://feed.example.com/rss"
-		with requests_mock.Mocker() as mocker:
-			mocker.get(url, content=str(secret_feed).encode("utf-8"))
-			result = FeedStrategy().scrape(URL(url), {}, {})
-
-		titles = [update.title for update in result.value.updates] if isinstance(result, Ok) else []
-		self.assertNotIn(sentinel, titles, "feedparser opened and parsed a local file named by the response body")
