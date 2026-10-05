@@ -310,6 +310,69 @@ class UserPasswordHashExposureTestCase(TestCase):
 				self.assertNotIn("password", serializer_class(self.user).data)
 
 
+class UserDetailNonIntegerPkTestCase(TestCase):
+	"""A user detail URL whose id is not an integer gets an ordinary answer, never a 500.
+
+	Writes answer as they do for any other id that is not the caller's own: 403
+	for a regular user, refused before any lookup, and 404 for an admin, who
+	passes the permission and then misses the row. GET is 404 for both.
+	"""
+
+	user: User
+	admin: User
+
+	@classmethod
+	def setUpTestData(cls) -> None:
+		cls.user = User.objects.create_user(
+			username="non-integer-pk-user",
+			email="non-integer-pk-user@example.com",
+			password=_VALID_TEST_PASSWORD,
+			name="Unchanged",
+		)
+		cls.admin = User.objects.create_superuser(
+			username="non-integer-pk-admin",
+			email="non-integer-pk-admin@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+
+	def _non_integer_pks(self) -> list[str]:
+		return [
+			"abc",
+			"1e3",
+			# One character off the caller's own id.
+			f"{self.user.pk}x",
+			# str.isdigit() accepts it, int() does not.
+			"\N{SUPERSCRIPT TWO}",
+			# str.isdecimal() accepts it, int() refuses past 4300 digits by default.
+			"1" * 5000,
+		]
+
+	def test_writes_answer_403_for_a_user_and_404_for_an_admin(self):
+		callers = [
+			("user", login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD), 403),
+			("admin", login_client(APIClient(), self.admin.get_username(), _VALID_TEST_PASSWORD), 404),
+		]
+		for pk in self._non_integer_pks():
+			url = reverse("users-detail", kwargs={"pk": pk})
+			for caller, client, expected in callers:
+				for method in ("put", "patch", "delete"):
+					with self.subTest(pk=pk[:12], caller=caller, method=method):
+						response = getattr(client, method)(url, {"name": "Changed"}, format="json")
+
+						self.assertEqual(response.status_code, expected)
+
+		self.user.refresh_from_db()
+		self.assertEqual(self.user.name, "Unchanged")
+
+	def test_get_stays_404(self):
+		client = login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD)
+		for pk in self._non_integer_pks():
+			with self.subTest(pk=pk[:12]):
+				response = client.get(reverse("users-detail", kwargs={"pk": pk}))
+
+				self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
 class LoginViewTestCase(TestCase):
 	"""Credential exchange: transports, replacement, and the in-transaction guard."""
 

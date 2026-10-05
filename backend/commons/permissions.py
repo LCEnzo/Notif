@@ -30,7 +30,13 @@ class IsRequestingThemselves(BasePermission):
 
 		if has_requester and has_requestee:
 			requester_pk = int(str(request.user.pk))
-			requestee_pk = int(view.kwargs["pk"])
+			# The kwarg is whatever path segment the router matched, so it need
+			# not be an integer. Such an id names nobody, so it is refused like
+			# any other id that is not the caller's own, rather than raising.
+			try:
+				requestee_pk = int(view.kwargs["pk"])
+			except ValueError:
+				return False
 
 			return requester_pk == requestee_pk
 
