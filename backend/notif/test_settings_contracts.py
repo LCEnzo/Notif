@@ -1,0 +1,114 @@
+"""Contracts between the per-environment settings modules.
+
+Where a test needs a module's own values it executes the module's file afresh
+instead of reading ``django.conf.settings``: settings_test rewrites the shared
+REST_FRAMEWORK dict in place, and the live bootstrap flag was fixed at import
+by whatever ``.env`` the process loaded, so asserting on the live values could
+pass without exercising anything.
+"""
+
+import runpy
+import socket
+from pathlib import Path
+from typing import Any
+from unittest import mock
+
+import pytest
+from django.core.exceptions import ImproperlyConfigured
+from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.test import APIRequestFactory
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, SimpleRateThrottle, UserRateThrottle
+from rest_framework.views import APIView
+
+from notif import config
+
+
+def _execute(settings_module: str) -> dict[str, Any]:
+	# run_path, not run_module: settings_test.py matches pytest's *_test.py
+	# pattern, so the assertion-rewriting import hook claims it.
+	return runpy.run_path(str(Path(config.__file__).with_name(f"{settings_module}.py")))
+
+
+def _production_rest_framework() -> dict[str, Any]:
+	rest_framework: dict[str, Any] = _execute("settings_base")["REST_FRAMEWORK"]
+	return rest_framework
+
+
+class _ScopedView(APIView):
+	"""Global and scoped throttles together, as the auth views run them.
+
+	Listed explicitly rather than extending the defaults: a default
+	ScopedRateThrottle would otherwise run twice and charge each request twice.
+	"""
+
+	authentication_classes: list[type[Any]] = []
+	permission_classes = [AllowAny]
+	throttle_classes = [UserRateThrottle, AnonRateThrottle, ScopedRateThrottle]
+	throttle_scope = "login"
+
+	def get(self, request: Request) -> Response:
+		return Response(status=204)
+
+
+@pytest.mark.parametrize("module", ["settings_base", "settings_prod"])
+def test_bootstrap_login_stays_off_whatever_the_env_attests(module: str, monkeypatch: pytest.MonkeyPatch) -> None:
+	# The worst case config can validate: an env claiming to be a local debug box.
+	monkeypatch.setattr(config.settings, "DEV_BOOTSTRAP_LOGIN_ENABLED", True)
+
+	assert _execute(module)["DEV_BOOTSTRAP_LOGIN_ENABLED"] is False
+
+
+def test_test_settings_keep_production_throttle_classes() -> None:
+	# APIView captured the default classes at import; they are what views run.
+	running = [f"{cls.__module__}.{cls.__qualname__}" for cls in APIView.throttle_classes]
+
+	assert running == _production_rest_framework()["DEFAULT_THROTTLE_CLASSES"]
+
+
+def test_test_settings_declare_every_production_scope_without_a_rate() -> None:
+	production_rates = _production_rest_framework()["DEFAULT_THROTTLE_RATES"]
+	# SimpleRateThrottle captured the rates at import; they are what every throttle reads.
+	running_rates = SimpleRateThrottle.THROTTLE_RATES
+
+	# The default throttles' own scopes must be declared, or they fail on construction.
+	assert {"user", "anon"} <= production_rates.keys()
+	assert running_rates == dict.fromkeys(production_rates)
+
+
+def test_none_rate_admits_what_a_real_rate_throttles() -> None:
+	view = _ScopedView.as_view()
+	factory = APIRequestFactory()
+
+	def statuses(remote_addr: str) -> list[int]:
+		return [view(factory.get("/", REMOTE_ADDR=remote_addr)).status_code for _ in range(3)]
+
+	assert statuses("198.51.100.1") == [204, 204, 204]
+	# Control: the same path does consult the throttle. Distinct documentation
+	# addresses keep this history out of every other test's cache keys.
+	with mock.patch.object(
+		SimpleRateThrottle, "THROTTLE_RATES", {**SimpleRateThrottle.THROTTLE_RATES, "login": "1/min"}
+	):
+		assert statuses("198.51.100.2") == [204, 429, 429]
+
+
+def test_undeclared_scope_fails_loudly() -> None:
+	view = _ScopedView.as_view(throttle_scope="never-declared")
+
+	with pytest.raises(ImproperlyConfigured, match="never-declared"):
+		view(APIRequestFactory().get("/"))
+
+
+def test_test_settings_refuse_a_production_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+	monkeypatch.setattr(config.settings, "NOTIF_ENV", config.Environment.PRODUCTION)
+
+	with pytest.raises(RuntimeError, match="NOTIF_ENV=production"):
+		_execute("settings_test")
+
+
+def test_suite_cannot_connect_beyond_loopback() -> None:
+	# pytest-socket (pyproject addopts) raises before a packet leaves. Without it this
+	# is a real attempt on TEST-NET-1, which nothing routes: an OSError instead.
+	with pytest.raises(RuntimeError, match=r"192\.0\.2\.1"):
+		socket.create_connection(("192.0.2.1", 9), timeout=1)

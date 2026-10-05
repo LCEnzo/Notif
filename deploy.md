@@ -274,6 +274,7 @@ sudo -u notif cp .env.example .env
 # ── REQUIRED: edit .env (use /var/lib/notif for data paths) ──
 # DEBUG=false
 # NOTIF_ENV=production
+# DEV_BOOTSTRAP_LOGIN_ENABLED=false   # .env.example enables it; config refuses to start with it here
 # DJANGO_SECRET_KEY=<generate fresh>
 # ALLOWED_HOSTS=notif.lcenzo.com
 # CORS_ALLOWED_ORIGINS=https://notif.lcenzo.com
