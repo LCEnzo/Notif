@@ -1,0 +1,191 @@
+<!--
+	Fixture for KemonoFavouritesStrategy. /favorites needs a login, so the card markup below is copied
+	from the public https://pawchive.pw/artists/updated page (2026-10-05), which renders the same
+	user-card component; names, IDs and times are replaced. Kept from the original: the card structure
+	and classes, the timestamp text shape (no ".ffffff" when microseconds are zero), and the hidden
+	component-container template card that has no href and no timestamp.
+-->
+<!DOCTYPE html>
+<html prefix="og: https://ogp.me/ns#">
+  <head>
+    <meta charset="UTF-8">
+    <title>Favorites | Pawchive</title>
+  </head>
+  <body class="transition-preload" hx-boost="true"
+        hx-target="#main" hx-select="#main" hx-swap="outerHTML show:window:top">
+    <div class="content-wrapper shifted">
+      <main class="main" id="main">
+  <div
+    class="card-list card-list--phone "
+  >
+    <div class="card-list__layout">
+    </div>
+    <div class="card-list__items">
+
+  <a
+    href="/patreon/user/1001"
+    class="user-card "
+    data-id="1001"
+    data-service="patreon"
+    data-style="background-image: linear-gradient(rgb(0 0 0 / 50%), rgb(0 0 0 / 80%)), url(/banners/patreon/1001);"
+  >
+    <div class="user-card__icon">
+      <div class="user-card__user-icon">
+  <span class="fancy-image ">
+  <picture class="fancy-image__picture">
+    <img
+      class="fancy-image__image"
+      src="/icons/patreon/1001"
+      alt=""
+      srcset="/icons/patreon/1001"
+      loading="lazy"
+    >
+  </picture>
+  </span>
+      </div>
+    </div>
+
+    <div class="user-card__info">
+      <span
+        class="user-card__service"
+        style="background-color: #fa5742;"
+      >
+        Patreon
+      </span>
+
+      <div class="user-card__name">Creator One</div>
+
+        <div class="user-card__updated">
+  <time
+    class="timestamp "
+    datetime="2026-10-05 16:00:00"
+  >
+
+      2026-10-05 16:00:00
+
+  </time>
+        </div>
+    </div>
+  </a>
+
+  <a
+    href="/fanbox/user/2002"
+    class="user-card "
+    data-id="2002"
+    data-service="fanbox"
+    data-style="background-image: linear-gradient(rgb(0 0 0 / 50%), rgb(0 0 0 / 80%)), url(/banners/fanbox/2002);"
+  >
+    <div class="user-card__icon">
+      <div class="user-card__user-icon">
+  <span class="fancy-image ">
+  <picture class="fancy-image__picture">
+    <img
+      class="fancy-image__image"
+      src="/icons/fanbox/2002"
+      alt=""
+      srcset="/icons/fanbox/2002"
+      loading="lazy"
+    >
+  </picture>
+  </span>
+      </div>
+    </div>
+
+    <div class="user-card__info">
+      <span
+        class="user-card__service"
+        style="background-color: #2c333c;"
+      >
+        Pixiv Fanbox
+      </span>
+
+      <div class="user-card__name">Creator Two</div>
+
+        <div class="user-card__updated">
+  <time
+    class="timestamp "
+    datetime="2026-10-04 09:30:15.250000"
+  >
+
+      2026-10-04 09:30:15.250000
+
+  </time>
+        </div>
+    </div>
+  </a>
+
+  <a
+    href="/fantia/user/3003"
+    class="user-card "
+    data-id="3003"
+    data-service="fantia"
+    data-style="background-image: linear-gradient(rgb(0 0 0 / 50%), rgb(0 0 0 / 80%)), url(/banners/fantia/3003);"
+  >
+    <div class="user-card__icon">
+      <div class="user-card__user-icon">
+  <span class="fancy-image ">
+  <picture class="fancy-image__picture">
+    <img
+      class="fancy-image__image"
+      src="/icons/fantia/3003"
+      alt=""
+      srcset="/icons/fantia/3003"
+      loading="lazy"
+    >
+  </picture>
+  </span>
+      </div>
+    </div>
+
+    <div class="user-card__info">
+      <span
+        class="user-card__service"
+        style="background-color: #e1097f;"
+      >
+        Fantia
+      </span>
+
+      <div class="user-card__name">Creator Three</div>
+
+        <div class="user-card__updated">
+  <time
+    class="timestamp "
+    datetime="2026-09-01 00:00:00"
+  >
+
+      2026-09-01 00:00:00
+
+  </time>
+        </div>
+    </div>
+  </a>
+
+    </div>
+  </div>
+
+        <div
+          id="component-container"
+          class="component-container"
+          hidden
+        >
+  <time
+    class="timestamp "
+    datetime=""
+  >
+
+  </time>
+
+  <a class="user-card">
+    <div class="user-card__icon"></div>
+    <div class="user-card__info">
+      <span class="user-card__service"></span>
+      <div class="user-card__name"></div>
+      <div class="user-card__updated"></div>
+      <div class="user-card__count"></div>
+    </div>
+  </a>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>

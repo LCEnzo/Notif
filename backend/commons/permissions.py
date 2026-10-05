@@ -7,6 +7,8 @@ from rest_framework import permissions
 from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 
+from accounts.models import User
+
 
 class ReadOnly(BasePermission):
 	"""
@@ -82,8 +84,6 @@ class OwnerOrAdminQuerysetMixin:
 		``.filter(user=request.user)``.  Pass a callable ``(queryset, user)``
 		for custom ownership logic.
 		"""
-		from accounts.models import User  # avoid circular import
-
 		user = self.request.user  # type: ignore[attr-defined]  # mixin used with DRF ViewSets
 		if not isinstance(user, User):
 			return base_queryset.none()
