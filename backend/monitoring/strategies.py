@@ -861,11 +861,18 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 	def _extract_datetime(self, card_tag: Tag) -> datetime | None:
 		dt = card_tag.select_one("time.timestamp")
-		if dt is not None:
-			return datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f").replace(
-				tzinfo=timezone.get_default_timezone()
-			)
-		return None
+		if dt is None:
+			return None
+		text = dt.text.strip()
+		if text == "":
+			return None
+		# The site prints Python's str(datetime), which drops ".ffffff" when the microseconds are zero:
+		# pawchive.pw's creator cards read "2026-10-05 16:00:00". fromisoformat takes both shapes;
+		# anything else raises, so a markup change fails the scrape instead of silently skipping cards.
+		parsed = datetime.fromisoformat(text)
+		if timezone.is_naive(parsed):
+			return timezone.make_aware(parsed, timezone.get_default_timezone())
+		return parsed.astimezone(timezone.get_default_timezone())
 
 	def _extract_link(self, card_tag: Tag, url: URL) -> URL | None:
 		link = _string_attr_value(card_tag.attrs.get("href"))
