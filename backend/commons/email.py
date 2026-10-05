@@ -42,7 +42,6 @@ def send_password_reset_email(to_email: str, code: str) -> None:
 			to=[to_email],
 		)
 		message.attach_alternative(html_body, "text/html")
-		# No fail_silently: it is deprecated for Django 7.0, and False is the default.
 		message.send()
 	except Exception:
 		logger.exception("Failed to send password reset email to %s", to_email)
