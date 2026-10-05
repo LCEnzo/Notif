@@ -79,6 +79,27 @@ class UserViewSetTestCase(ViewSetMixin):
 	def test_update_user(self):
 		self._test_update_object()
 
+	def test_put_is_not_routed_and_changes_nothing(self):
+		# Cases where the permission passes, so the 405 is the method's verdict
+		# rather than a 403 standing in front of it.
+		admin_client = login_client(APIClient(), self.superuser.get_username())
+		cases = [
+			("own row", self.api_client, self.regular_user),
+			("admin on another row", admin_client, self.secondary_user),
+		]
+		for label, client, target in cases:
+			with self.subTest(label):
+				url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: target.pk})
+				payload = {"username": target.username, "email": target.email, "name": "Renamed by PUT"}
+
+				response = client.put(url, payload, format="json")
+
+				self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+				self.assertNotIn("PUT", response["Allow"])
+				self.assertIn("PATCH", response["Allow"])
+				target.refresh_from_db()
+				self.assertNotEqual(target.name, "Renamed by PUT")
+
 	def test_admin_password_update_for_another_user_fails_explicitly(self):
 		admin_client = login_client(APIClient(), self.superuser.get_username())
 		url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: self.regular_user.pk})
@@ -197,7 +218,7 @@ _PASSWORD_HASH_SHAPE = re.compile(r"[a-z0-9_]+\$[^\s\"]*\$")
 class UserPasswordHashExposureTestCase(TestCase):
 	"""No user endpoint may ever answer with a stored password hash.
 
-	UserCreationSerializer serves POST, PUT and PATCH, so its responses are the
+	UserCreationSerializer serves POST and PATCH, so its responses are the
 	ones at risk; the read serializers and get_my_info are pinned too, so a
 	field added to them later cannot reintroduce the leak.
 	"""
@@ -265,27 +286,6 @@ class UserPasswordHashExposureTestCase(TestCase):
 				)
 
 				self.assertEqual(response.status_code, status.HTTP_200_OK)
-				self._assert_carries_no_hash(response)
-
-	def test_put_response_carries_no_hash(self):
-		# PUT cannot reach a 2xx today: the serializer requires password and
-		# update() refuses it. The 400s still pass through the same serializer,
-		# so they are held to the same rule.
-		profile = {"username": self.user.username, "email": self.user.email, "name": "Renamed"}
-		cases = [
-			("own row without password", self.client_for_user, self.user, profile),
-			("own row with password", self.client_for_user, self.user, {**profile, "password": _VALID_TEST_PASSWORD}),
-			(
-				"admin on another row",
-				self.client_for_admin,
-				self.other_user,
-				{"username": self.other_user.username, "email": self.other_user.email},
-			),
-		]
-		for label, client, target, payload in cases:
-			with self.subTest(label):
-				response = client.put(reverse("users-detail", kwargs={"pk": target.pk}), payload, format="json")
-
 				self._assert_carries_no_hash(response)
 
 	def test_read_endpoints_carry_no_hash(self):
@@ -356,7 +356,7 @@ class UserDetailNonIntegerPkTestCase(TestCase):
 		for pk in self._non_integer_pks():
 			url = reverse("users-detail", kwargs={"pk": pk})
 			for caller, client, expected in callers:
-				for method in ("put", "patch", "delete"):
+				for method in ("patch", "delete"):
 					with self.subTest(pk=pk[:12], caller=caller, method=method):
 						response = getattr(client, method)(url, {"name": "Changed"}, format="json")
 

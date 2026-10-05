@@ -514,6 +514,10 @@ class DeviceSessionViewSet(ListModelMixin, _DeviceSessionGenericViewSet):
 class UserViewSet(_UserModelViewSet):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
+	# No PUT: a full replacement must carry every required field, password
+	# included, and update() refuses a password, so PUT could only ever 400.
+	# PATCH is the update method.
+	http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
 	def get_throttles(self) -> list[BaseThrottle]:
 		"""Apply stricter 'register' throttle on account creation."""
@@ -535,7 +539,7 @@ class UserViewSet(_UserModelViewSet):
 		# full serializer. Comparing under a different name, and as strings
 		# since kwargs["pk"] is a string, keeps this a real equality check.
 		match (self.request.method, requester_pk):
-			case ("POST" | "PUT" | "PATCH", _):
+			case ("POST" | "PATCH", _):
 				return UserCreationSerializer
 			case ("GET", requester) if requester is not None and wanted_pk is not None and str(requester) == wanted_pk:
 				return UserFullReadSerializer
