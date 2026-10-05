@@ -42,8 +42,7 @@ class UserData {
 /// the keystore, a browser wants a cookie it cannot read.
 enum SessionTransport {
   cookie,
-  bearer
-  ;
+  bearer;
 
   String get wireValue => name;
 }
