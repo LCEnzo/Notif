@@ -550,16 +550,16 @@ class KemonoFavouritesMarkupTestCase(TestCase):
 _naive_datetimes = st.datetimes()
 
 
-class KemonoCardTimestampPropertyTestCase(HypothesisTestCase):
-	@pytest.mark.property
-	@given(moment=st.one_of(_naive_datetimes, _naive_datetimes.map(lambda d: d.replace(microsecond=0))))
-	@settings(max_examples=200)
-	def test_round_trips_python_datetime_str(self, moment: datetime):
-		# The site prints str(datetime), whose ".ffffff" appears only for non-zero microseconds; the
-		# second strategy branch forces the zero case so both shapes are always exercised.
-		[card] = KemonoFavouritesStrategy()._extract_kemono_profile_cards(_kemono_card_html(str(moment)))
+# A plain function for the reason given on test_feed_strategy_dedup_is_idempotent.
+@pytest.mark.property
+@given(moment=st.one_of(_naive_datetimes, _naive_datetimes.map(lambda d: d.replace(microsecond=0))))
+@settings(max_examples=200)
+def test_kemono_card_timestamp_round_trips_python_datetime_str(moment: datetime):
+	# The site prints str(datetime), whose ".ffffff" appears only for non-zero microseconds; the
+	# second strategy branch forces the zero case so both shapes are always exercised.
+	[card] = KemonoFavouritesStrategy()._extract_kemono_profile_cards(_kemono_card_html(str(moment)))
 
-		assert card.date_time == moment.replace(tzinfo=UTC)
+	assert card.date_time == moment.replace(tzinfo=UTC)
 
 
 class SBSVThreadmarksStrategyTestCase(TestCase):
