@@ -7,6 +7,7 @@ from pprint import pprint  # noqa: F401
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
+from urllib.parse import parse_qs
 
 import pytest
 import requests
@@ -183,7 +184,7 @@ class TestSelectorStrat(TestCase):
 	def test_selector_strat(self):
 		strat = GeneralSelectorStrategy()
 
-		url = "https://kemono.party/patreon/user/50187986"
+		url = "https://pawchive.pw/patreon/user/50187986"
 		config_data = {"selectors": ["article.post-card"]}
 		html_content = """
 		<html>
@@ -321,7 +322,7 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 			name="Creator",
 			date_time=datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC),
 			service="patreon",
-			link=URL("https://kemono.party/patreon/user/1"),
+			link=URL(f"{KemonoFavouritesStrategy.base_url}/patreon/user/1"),
 		)
 
 		with (
@@ -329,7 +330,7 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 			patch.object(KemonoFavouritesStrategy, "_extract_kemono_profile_cards", return_value=[card]),
 		):
 			result = strategy.scrape(
-				URL("https://kemono.party/favorites"),
+				URL(KemonoFavouritesStrategy.fav_url),
 				{"username": "u", "password": "p"},
 				{},
 			)
@@ -344,7 +345,7 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 			name="Creator",
 			date_time=datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC),
 			service="patreon",
-			link=URL("https://kemono.party/patreon/user/1"),
+			link=URL(f"{KemonoFavouritesStrategy.base_url}/patreon/user/1"),
 		)
 
 		with (
@@ -352,13 +353,42 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 			patch.object(KemonoFavouritesStrategy, "_extract_kemono_profile_cards", return_value=[card]),
 		):
 			result = strategy.scrape(
-				URL("https://kemono.party/favorites"),
+				URL(KemonoFavouritesStrategy.fav_url),
 				{"username": "u", "password": "p"},
 				{"last_update": "2024-01-01T00:00:00+00:00"},
 			)
 
 		assert isinstance(result, Ok)
 		assert len(result.value.updates) == 1
+
+	def test_credentials_are_posted_only_to_the_pinned_pawchive_login_url(self):
+		# Literal URLs on purpose, not the class constants: the user's credentials go to this host on
+		# every scrape, so moving them elsewhere has to be a deliberate edit here, not a silent one.
+		with requests_mock.Mocker() as mocker:
+			mocker.post("https://pawchive.pw/account/login", text="")
+			mocker.get("https://pawchive.pw/favorites", text="")
+			result = KemonoFavouritesStrategy().scrape(
+				URL("https://pawchive.pw/favorites"),
+				{"username": "user-x", "password": "pass-y"},  # pragma: allowlist secret
+				{},
+			)
+
+		assert isinstance(result, Ok)
+		login, favourites = mocker.request_history
+		assert (login.method, login.url) == ("POST", "https://pawchive.pw/account/login")
+		assert parse_qs(login.text) == {"username": ["user-x"], "password": ["pass-y"]}
+		assert (favourites.method, favourites.url) == ("GET", "https://pawchive.pw/favorites")
+
+	def test_legacy_kemono_party_link_is_rejected_before_any_request(self):
+		with requests_mock.Mocker() as mocker:
+			result = KemonoFavouritesStrategy().scrape(
+				URL("https://kemono.party/favorites"),
+				{"username": "u", "password": "p"},
+				{},
+			)
+
+		assert result == Err("Invalid URL")
+		assert mocker.request_history == []
 
 
 class SBSVThreadmarksStrategyTestCase(TestCase):

@@ -775,15 +775,19 @@ class KemonoCardInfo:
 @register
 class KemonoFavouritesStrategy(BaseStrategy):
 	"""
-	Check Kemono favourites.
+	Check favourites on a Kemono-style site (currently pawchive.pw).
 
-	Config data should include username, password.
+	Config data should include username, password; they are POSTed to ``login_url`` on every scrape.
 	"""
 
 	display_name = "Kemono Favourites"
 
-	login_url = "https://kemono.party/account/login"
-	fav_url = "https://kemono.party/favorites"
+	# The only place the host is stated: the user's credentials go here on every scrape. The previous
+	# host, kemono.party, lost its A record but stays registered, so whoever holds it could start
+	# receiving them. A host change must also update the literal pin in the strategy's tests.
+	base_url = "https://pawchive.pw"
+	login_url = f"{base_url}/account/login"
+	fav_url = f"{base_url}/favorites"
 
 	def can_scrape_url(self, url: URL) -> bool:
 		parsed_url = urlsplit(url)
@@ -869,8 +873,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 	def _extract_kemono_profile_cards(self, html: str) -> list[KemonoCardInfo]:
 		card_tags = _get_content_with_css_selector(html, ".user-card")
-		parsed_url = urlsplit(KemonoFavouritesStrategy.fav_url)
-		url: URL = URL(f"{parsed_url.scheme}://{parsed_url.netloc}")
+		url: URL = URL(KemonoFavouritesStrategy.base_url)
 
 		cards = []
 		for card_tag in card_tags:
