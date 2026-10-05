@@ -110,5 +110,8 @@ def test_test_settings_refuse_a_production_environment(monkeypatch: pytest.Monke
 def test_suite_cannot_connect_beyond_loopback() -> None:
 	# pytest-socket (pyproject addopts) raises before a packet leaves. Without it this
 	# is a real attempt on TEST-NET-1, which nothing routes: an OSError instead.
-	with pytest.raises(RuntimeError, match=r"192\.0\.2\.1"):
-		socket.create_connection(("192.0.2.1", 9), timeout=1)
+	# A socket we close ourselves, not socket.create_connection: that helper closes
+	# its socket only on OSError, so pytest-socket's RuntimeError would leak it.
+	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock, pytest.raises(RuntimeError, match=r"192\.0\.2\.1"):
+		sock.settimeout(1)
+		sock.connect(("192.0.2.1", 9))
