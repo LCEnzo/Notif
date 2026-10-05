@@ -23,7 +23,13 @@ from commons.utils import password
 from monitoring import safe_fetch
 from monitoring.models import Strategy
 from monitoring.safe_fetch import MAX_RESPONSE_BYTES, NonPublicHostError, ResponseTooLargeError
-from monitoring.strategies import URL, GeneralSelectorStrategy, KemonoFavouritesStrategy, QQAlertsStrategy
+from monitoring.strategies import (
+	URL,
+	FeedStrategy,
+	GeneralSelectorStrategy,
+	KemonoFavouritesStrategy,
+	QQAlertsStrategy,
+)
 
 # Public addresses the fake resolver hands out. Nothing ever connects to them:
 # the dialer below records the address and connects to the loopback server.
@@ -265,6 +271,41 @@ class SSRFGuardTestCase(TestCase):
 				self.assertTrue(safe_fetch._address_is_public(public))
 		self.assertFalse(safe_fetch._address_is_public("not-an-ip"))
 
+	def test_embedded_ipv4_rule_covers_exactly_the_slash_96_prefixes(self) -> None:
+		"""NAT64 (64:ff9b::/96) and IPv4-compatible (::/96) addresses are judged
+		by their low 32 bits; one bit outside either /96 the address is judged as
+		itself. Inside: the high half of the IPv4 space (bit 96 set) still unwraps.
+		Outside: an address carrying 127.0.0.1 in the low bits but outside the
+		prefix is a plain IPv6 address, not loopback."""
+		for address in ["64:ff9b::ffff:ffff", "::ac10:1", "::c0a8:101"]:
+			with self.subTest(address=address, side="inside"):
+				self.assertFalse(safe_fetch._address_is_public(address))
+		for address in ["64:ff9b::1:7f00:1", "::1:7f00:1"]:
+			with self.subTest(address=address, side="outside"):
+				self.assertTrue(safe_fetch._address_is_public(address))
+
+	def test_address_classifier_refuses_ranges_is_global_misses(self) -> None:
+		"""Each range ``is_global`` calls public but the guard refuses, with
+		addresses on both sides of its edges."""
+		ranges: dict[str, tuple[list[str], list[str]]] = {
+			# IPv4-translated (RFC 2765). Outside: the IPv4-mapped neighbour,
+			# judged by its embedded IPv4 address as before.
+			"::ffff:0:0:0/96": (["::ffff:0:7f00:1", "::ffff:0:808:808"], ["::ffff:8.8.8.8"]),
+			# Deprecated site-local. Both neighbours (fe80::/10, ff00::/8) are
+			# non-public anyway, so the outside control is an ordinary public one.
+			"fec0::/10": (["fec0::1", "feff:ffff::1"], ["2606:4700::1111"]),
+			"192.88.99.0/24": (["192.88.99.0", "192.88.99.255"], ["192.88.98.255", "192.88.100.0"]),
+			# Also refused when it arrives NAT64-wrapped (64:ff9b::a83f:8110).
+			"168.63.129.16/32": (["168.63.129.16", "64:ff9b::a83f:8110"], ["168.63.129.15", "168.63.129.17"]),
+		}
+		for network, (inside, outside) in ranges.items():
+			for address in inside:
+				with self.subTest(network=network, address=address, side="inside"):
+					self.assertFalse(safe_fetch._address_is_public(address))
+			for address in outside:
+				with self.subTest(network=network, address=address, side="outside"):
+					self.assertTrue(safe_fetch._address_is_public(address))
+
 	def test_resolve_public_host_rejects_mixed_records(self) -> None:
 		"""A host with one public and one private record is a rebinding setup."""
 		with (
@@ -278,6 +319,27 @@ class SSRFGuardTestCase(TestCase):
 			self.assertRaises(NonPublicHostError),
 		):
 			safe_fetch.resolve_public_host("rebinding.example.com")
+
+	def test_refusal_text_does_not_echo_the_resolved_address(self) -> None:
+		"""The refusal reaches the link's owner (``last_scrape_error``, the scrape
+		API), so it names the host but not what it resolved to: echoing that would
+		let any user map internal names to compose-network addresses. The address
+		still goes to the server log."""
+		internal = "10.0.0.5"
+		answer = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (internal, 0))]
+		with (
+			patch("monitoring.safe_fetch.socket.getaddrinfo", return_value=answer),
+			self.assertLogs("monitoring.safe_fetch", "WARNING") as logged,
+		):
+			with self.assertRaises(NonPublicHostError) as refused:
+				safe_fetch.resolve_public_host("db.example.test")
+			result = FeedStrategy().scrape(URL("http://db.example.test/feed"), {}, {})
+		self.assertIn("db.example.test", str(refused.exception))
+		self.assertNotIn(internal, str(refused.exception))
+		assert isinstance(result, Err)
+		self.assertIn("non-public", result.error)
+		self.assertNotIn(internal, result.error)
+		self.assertTrue(any(internal in line for line in logged.output))
 
 	def test_resolve_public_host_returns_each_public_address_once_in_order(self) -> None:
 		"""A resolver may repeat an address (an /etc/hosts duplicate, or glibc
@@ -380,6 +442,86 @@ class SSRFGuardTestCase(TestCase):
 			safe_fetch.fetch("https://example.com/sets-cookie", timeout=5)
 			safe_fetch.fetch("https://example.com/reads-cookie", timeout=5)
 			self.assertNotIn("Cookie", mocker.last_request.headers)
+
+	def test_guarded_session_does_not_trust_environment(self) -> None:
+		"""Environment proxies, ``.netrc`` and CA-bundle env vars must not steer a
+		guarded fetch: ``trust_env`` stays off, or ``HTTP(S)_PROXY`` would route the
+		connection around the pinned adapter and out of the validated-address boundary."""
+		with safe_fetch.guarded_session() as session:
+			self.assertFalse(session.trust_env)
+
+	def test_adapter_send_refuses_proxied_requests(self) -> None:
+		"""A proxy would move the connection outside the adapter's validated-address
+		boundary, so a proxied send is refused before any network work — even for a
+		public host that would otherwise be allowed."""
+		adapter = safe_fetch.PublicOnlyHTTPAdapter()
+		request = requests.Request("GET", "https://example.com/").prepare()
+		with self.assertRaises(NonPublicHostError):
+			adapter.send(request, timeout=2, proxies={"https": "http://proxy.example.com:3128"})
+
+	def test_literal_check_accepts_public_ip_literals(self) -> None:
+		"""The no-DNS check refuses non-public literals only; a public IPv4 or
+		IPv6 literal passes, to be dialled and re-checked at fetch time."""
+		for url in ["http://93.184.216.34/", "https://[2606:4700::1111]/feed"]:
+			with self.subTest(url=url), patch("monitoring.safe_fetch.socket.getaddrinfo", side_effect=_no_dns):
+				safe_fetch.reject_non_public_literal(url)
+
+	def test_fetch_returns_non_redirect_responses_carrying_location(self) -> None:
+		"""Only redirect statuses are followed: a 200 or 201 may carry Location
+		(201 names the created resource), and fetch returns it as the answer."""
+		for status in [200, 201]:
+			with self.subTest(status=status), requests_mock.Mocker() as mocker:
+				mocker.get(
+					"https://example.com/start", status_code=status, headers={"Location": "/elsewhere"}, text="here"
+				)
+				mocker.get("https://example.com/elsewhere", text="followed")
+				response = safe_fetch.fetch("https://example.com/start", timeout=5)
+				self.assertEqual((response.status_code, response.text), (status, "here"))
+				self.assertEqual(mocker.call_count, 1)
+
+	def test_literal_check_fails_closed_on_unparseable_urls(self) -> None:
+		"""A URL urllib3 cannot parse is refused with the guard's own error class,
+		which the link serializer turns into a 400 — not any other exception."""
+		for url in ["http://[::1]./", "http://[/", "http://exa mple.com/"]:
+			with self.subTest(url=url), self.assertRaises(NonPublicHostError):
+				safe_fetch.reject_non_public_literal(url)
+
+	def test_resolve_public_host_fails_closed_without_an_answer(self) -> None:
+		"""No host, a failed lookup and an empty answer are all refusals, never an
+		empty list of addresses that would leave nothing to validate."""
+		with self.subTest(case="empty host"), self.assertRaises(NonPublicHostError):
+			safe_fetch.resolve_public_host("")
+		with (
+			self.subTest(case="lookup fails"),
+			patch("monitoring.safe_fetch.socket.getaddrinfo", side_effect=socket.gaierror(socket.EAI_NONAME, "no")),
+			self.assertRaises(NonPublicHostError),
+		):
+			safe_fetch.resolve_public_host("missing.example.test")
+		with (
+			self.subTest(case="empty answer"),
+			patch("monitoring.safe_fetch.socket.getaddrinfo", return_value=[]),
+			self.assertRaises(NonPublicHostError),
+		):
+			safe_fetch.resolve_public_host("empty.example.test")
+
+	def test_fetch_follows_exactly_max_redirects(self) -> None:
+		"""The bound is exact: a chain of ``MAX_REDIRECTS`` hops is followed to its
+		end, one more hop is refused."""
+		hops = safe_fetch.MAX_REDIRECTS
+		for chain, refused in [(hops, False), (hops + 1, True)]:
+			with self.subTest(chain=chain), requests_mock.Mocker() as mocker:
+				for index in range(chain):
+					mocker.get(
+						f"https://example.com/{index}",
+						status_code=302,
+						headers={"Location": f"https://example.com/{index + 1}"},
+					)
+				mocker.get(f"https://example.com/{chain}", text="end")
+				if refused:
+					with self.assertRaises(requests.TooManyRedirects):
+						safe_fetch.fetch("https://example.com/0", timeout=5)
+				else:
+					self.assertEqual(safe_fetch.fetch("https://example.com/0", timeout=5).text, "end")
 
 
 class _LoopbackTransportTestCase(SimpleTestCase):
