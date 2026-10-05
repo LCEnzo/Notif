@@ -188,6 +188,10 @@ select = [
 	"S501",    # `requests` call with `verify=False`
 	"S506",    # `yaml.load` with an unsafe loader
 	"S608",    # SQL assembled by string formatting
+	# Django injection sinks (not from auto_platforma)
+	"S308",    # `mark_safe`; bypasses template autoescaping
+	"S610",    # `QuerySet.extra`; raw SQL fragments
+	"S611",    # `RawSQL`; raw SQL expression
 ]
 ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118", "W191"]
 
