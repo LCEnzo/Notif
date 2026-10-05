@@ -62,6 +62,21 @@ jobs:
       - name: Django system check
         run: uv run python manage.py check
 
+      - name: Django deploy check
+        # Pinned here rather than inherited from config defaults, so the step
+        # checks the production posture whichever way those defaults point.
+        env:
+          DJANGO_SETTINGS_MODULE: notif.settings_prod
+          NOTIF_ENV: production
+          DEBUG: 'false'
+          DEV_BOOTSTRAP_LOGIN_ENABLED: 'false'
+        # A fresh random key per run: --deploy rejects short or predictable
+        # keys (security.W009), and no secret-looking literal gets committed.
+        run: |
+          DJANGO_SECRET_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+          export DJANGO_SECRET_KEY
+          uv run python manage.py check --deploy --fail-level WARNING
+
       - name: Missing migrations
         run: uv run python manage.py makemigrations --check --dry-run
 
