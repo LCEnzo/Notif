@@ -297,15 +297,12 @@ addopts = [
 	"-n",
 	"4",
 ]
-# A warning is a failure: deprecations get fixed while they are one-line
-# changes, not discovered as errors on the next major upgrade.
+# Warnings fail the suite, so deprecations get fixed while they are small.
 filterwarnings = [
 	"error",
-	# Windows hosts only, where the certificate store holds CAs that Windows accepts
-	# and OpenSSL cannot parse (national eID middleware installs some). openapi_core
-	# reads its bundled schemas through urllib, whose opener builds a default TLS
-	# context even for file:// URLs, and CPython warns while loading the store.
-	# Neither the repo nor its dependencies can avoid it.
+	# Windows hosts only: CPython warns about store CAs OpenSSL cannot parse (eID
+	# middleware installs some) whenever urllib builds a TLS context, which openapi_core
+	# does even for its file:// schemas. Nothing in the repo can avoid it.
 	"ignore:Bad certificate in Windows certificate store:UserWarning:ssl$",
 ]
 markers = [

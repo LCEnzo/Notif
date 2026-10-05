@@ -19,8 +19,7 @@ REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"] = dict.fromkeys(REST_FRAMEWORK["DEFAULT
 # Console only — test runs must not write SystemEvent rows or log files.
 LOGGING["root"]["handlers"] = ["console"]
 
-# Mail is captured in mail.outbox instead of reaching SMTP or the console. Every
-# alias is replaced whole: locmem rejects the SMTP OPTIONS base may have set.
+# Mail is captured in mail.outbox. Entries are replaced whole: locmem rejects SMTP OPTIONS.
 MAILERS = {alias: {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"} for alias in MAILERS}
 
 # Base keeps the bootstrap login off; the suite exercises its flow.

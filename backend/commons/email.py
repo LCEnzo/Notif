@@ -15,8 +15,7 @@ logger = logging.getLogger(__name__)
 def send_password_reset_email(to_email: str, code: str) -> None:
 	"""Send a 6-digit password reset code.
 
-	The transport is the default mailer in Django's MAILERS setting, which
-	notif.settings_base builds from the EMAIL_* environment. Local development
+	The transport is Django's default mailer (MAILERS). Local development
 	defaults to the console backend, while production can use Resend's SMTP
 	endpoint or any other SMTP provider.
 	"""

@@ -1847,7 +1847,6 @@ class FeedStrategyTestCase(TestCase):
   </channel>
 </rss>"""
 
-		# Beautiful Soup warns about exactly these two shapes when handed them as strings.
 		with requests_mock.Mocker() as mocker, warnings.catch_warnings():
 			warnings.simplefilter("error")
 			mocker.get(self.feed_url, text=feed)

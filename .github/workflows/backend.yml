@@ -72,9 +72,8 @@ jobs:
           DEV_BOOTSTRAP_LOGIN_ENABLED: 'false'
         # A fresh random key per run: --deploy rejects short or predictable
         # keys (security.W009), and no secret-looking literal gets committed.
-        # Production sends mail through Resend, so the step needs a credential
-        # too: without one the console mailer is selected, which --deploy
-        # rejects (mail.E001). Nothing is sent; the value is never used.
+        # A placeholder mail key likewise: without one the console mailer is
+        # selected, which --deploy rejects (mail.E001). Nothing is sent.
         run: |
           DJANGO_SECRET_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(64))')"
           RESEND_API_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(32))')"

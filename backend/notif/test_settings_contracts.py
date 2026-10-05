@@ -112,21 +112,17 @@ def test_test_settings_refuse_a_production_environment(monkeypatch: pytest.Monke
 def test_suite_cannot_connect_beyond_loopback() -> None:
 	# pytest-socket (pyproject addopts) raises before a packet leaves. Without it this
 	# is a real attempt on TEST-NET-1, which nothing routes: an OSError instead.
-	# A socket we close ourselves, not socket.create_connection: that helper closes
-	# its socket only on OSError, so pytest-socket's RuntimeError would leak it.
+	# Not create_connection: it closes its socket only on OSError, and pytest-socket raises RuntimeError.
 	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock, pytest.raises(RuntimeError, match=r"192\.0\.2\.1"):
 		sock.settimeout(1)
 		sock.connect(("192.0.2.1", 9))
 
 
-# settings_dev is left out: importing it extends INSTALLED_APPS, MIDDLEWARE and
-# LOGGING in place, objects the running test settings share, and creates logs/.
+# Not settings_dev: importing it mutates INSTALLED_APPS, MIDDLEWARE and LOGGING, which the live settings share.
 @pytest.mark.parametrize("module", ["notif.settings_test", "notif.settings_prod"])
 def test_settings_load_without_warnings(module: str) -> None:
-	# Django's deprecation warnings, and its refusal of EMAIL_* settings beside
-	# MAILERS, fire only when django.conf.Settings loads a module. The suite loads
-	# settings_test alone, so a slip in settings_prod would otherwise first show
-	# as a deploy that does not start.
+	# Django's deprecation warnings and its EMAIL_*-beside-MAILERS refusal fire only in
+	# django.conf.Settings, which the suite otherwise applies to settings_test alone.
 	with warnings.catch_warnings(record=True) as caught:
 		warnings.simplefilter("always")
 		Settings(module)

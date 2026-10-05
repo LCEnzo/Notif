@@ -280,16 +280,12 @@ LEGACY_REFRESH_COOKIE_NAME = "notif_refresh"
 LEGACY_REFRESH_COOKIE_PATH = "/api/v1/token/"
 
 # Email
-# MAILERS replaces Django's EMAIL_* connection settings (deprecated in 6.1, gone
-# in 7.0), and Django refuses to start when both are defined. The environment
-# keeps its EMAIL_* names; only the Django-side shape changed.
 _SMTP_MAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 _MAIL_BACKEND = settings.EMAIL_BACKEND or (
 	_SMTP_MAIL_BACKEND if settings.EMAIL_HOST_PASSWORD else "django.core.mail.backends.console.EmailBackend"
 )
 MAILERS: dict[str, dict[str, Any]] = {"default": {"BACKEND": _MAIL_BACKEND}}
-# Only the SMTP backend takes these; any other backend rejects unknown OPTIONS
-# with InvalidMailer, so an EMAIL_BACKEND override to one gets none.
+# Other backends reject these OPTIONS (InvalidMailer), so only SMTP gets them.
 if _MAIL_BACKEND == _SMTP_MAIL_BACKEND:
 	MAILERS["default"]["OPTIONS"] = {
 		"host": settings.EMAIL_HOST,
