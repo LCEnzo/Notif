@@ -23,7 +23,7 @@ from bs4.element import AttributeValueList, ResultSet, Tag
 from django.utils import timezone
 
 from commons.result import Err, Ok, Result
-from monitoring.safe_fetch import fetch, guarded_session, read_body_capped
+from monitoring.safe_fetch import fetch, guarded_session, request_capped
 
 logger = logging.getLogger(__name__)
 
@@ -638,9 +638,10 @@ class QQAlertsStrategy(BaseStrategy):
 		}
 
 		with guarded_session() as session:
-			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			get_response = request_capped(
+				session, "GET", QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True
+			)
 			get_response.raise_for_status()
-			read_body_capped(get_response)
 			session_cookie = get_response.cookies.get(session_cookie_name)
 			login_headers["Cookie"] = f"{session_cookie_name}={session_cookie}"
 
@@ -649,9 +650,15 @@ class QQAlertsStrategy(BaseStrategy):
 				session.headers[header] = value
 
 			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
-			response = session.post(QQAlertsStrategy.login_url, data=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = request_capped(
+				session,
+				"POST",
+				QQAlertsStrategy.login_url,
+				data=payload,
+				timeout=REQUEST_TIMEOUT_SECONDS,
+				allow_redirects=True,
+			)
 			response.raise_for_status()
-			read_body_capped(response)
 			session.close()
 
 		return response
@@ -894,15 +901,23 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		}
 
 		with guarded_session() as session:
-			login_response = session.post(
-				KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS
+			# Not following the login's redirect: on a 307/308 requests would resend
+			# the credentials to wherever it points. The session cookie is set by the
+			# redirect response itself, and the favourites page is fetched next anyway.
+			login_response = request_capped(
+				session,
+				"POST",
+				KemonoFavouritesStrategy.login_url,
+				data=data,
+				timeout=REQUEST_TIMEOUT_SECONDS,
+				allow_redirects=False,
 			)
 			login_response.raise_for_status()
-			read_body_capped(login_response)
 
-			fav_response = session.get(KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			fav_response = request_capped(
+				session, "GET", KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True
+			)
 			fav_response.raise_for_status()
-			read_body_capped(fav_response)
 
 			session.close()
 

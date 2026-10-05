@@ -5,16 +5,20 @@ import pytest
 import monitoring.safe_fetch as safe_fetch
 
 
+def _resolve_nothing(host: str) -> list[str]:
+	return []
+
+
 @pytest.fixture(autouse=True)
 def _bypass_public_host_resolution_for_mocked_network(
 	request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-	"""Neutralize the SSRF guard's DNS resolution for the mocked-network suite.
+	"""Keep the broad suite off real DNS and the real network.
 
-	``PublicOnlyHTTPAdapter`` resolves the hostname before delegating to the
-	mocked transport, and ``LinkSerializer`` validates link URLs through the
-	same resolver — a real DNS lookup for tests that never touch the network.
-	Neutralize it so the broad suite stays hermetic.
+	The replacement resolves every host to no addresses, so a test that
+	reaches the guarded transport without a mock (``requests_mock`` replaces
+	the adapter, so mocked tests never get there) fails with a
+	``requests.ConnectionError`` instead of resolving and dialling out.
 
 	Tests that exercise the guard itself carry the ``real_ssrf`` marker and are
 	exempted: they run against the real resolver by default, so a new guard test
@@ -22,4 +26,4 @@ def _bypass_public_host_resolution_for_mocked_network(
 	"""
 	if request.node.get_closest_marker("real_ssrf"):
 		return
-	monkeypatch.setattr(safe_fetch, "resolve_public_host", lambda host: None)
+	monkeypatch.setattr(safe_fetch, "resolve_public_host", _resolve_nothing)
