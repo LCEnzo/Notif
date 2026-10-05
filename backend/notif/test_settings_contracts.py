@@ -19,7 +19,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.test import APIRequestFactory
-from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle, SimpleRateThrottle, UserRateThrottle
 from rest_framework.views import APIView
 
 from notif import config
@@ -37,11 +37,15 @@ def _production_rest_framework() -> dict[str, Any]:
 
 
 class _ScopedView(APIView):
-	"""Production's default throttles plus a scoped one, as the auth views run them."""
+	"""Global and scoped throttles together, as the auth views run them.
+
+	Listed explicitly rather than extending the defaults: a default
+	ScopedRateThrottle would otherwise run twice and charge each request twice.
+	"""
 
 	authentication_classes: list[type[Any]] = []
 	permission_classes = [AllowAny]
-	throttle_classes = [*APIView.throttle_classes, ScopedRateThrottle]
+	throttle_classes = [UserRateThrottle, AnonRateThrottle, ScopedRateThrottle]
 	throttle_scope = "login"
 
 	def get(self, request: Request) -> Response:
