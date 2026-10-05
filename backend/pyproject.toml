@@ -301,10 +301,12 @@ do_not_mutate = [
 ]
 # The suite's own addopts assume an interactive full run: xdist spawns four
 # workers per mutant (pure overhead when mutmut already parallelises across
-# mutants), pytest-randomly reseeds ordering and Hypothesis on every run, which
-# makes "was this mutant killed?" nondeterministic, and coverage is irrelevant
-# to a mutation verdict. Override all three.
-pytest_add_cli_args = ["-n", "0", "-p", "no:randomly", "-q", "--no-cov"]
+# mutants), and coverage is irrelevant to a mutation verdict. Hypothesis seeds
+# itself from OS entropy on every run, independently of pytest-randomly, so a
+# property test could kill a mutant on one run and miss it on the next;
+# --hypothesis-seed pins it, which also keeps Hypothesis' example database out
+# of the verdict. (mutmut passes -p no:randomly for its own runs already.)
+pytest_add_cli_args = ["-n", "0", "-p", "no:randomly", "-q", "--no-cov", "--hypothesis-seed=0"]
 # The oracle for a mutation run is the fast unit suite, not the whole thing.
 # The live-server tests (conformance, fuzz) take tens of seconds *per run* and
 # mutmut runs the suite once per mutant, which turns a multi-hour sweep into a
