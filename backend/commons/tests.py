@@ -58,8 +58,8 @@ _path_segments = st.one_of(
 @given(raw_pk=_path_segments)
 @settings(max_examples=300)
 def test_is_requesting_themselves_is_total_and_keeps_its_integer_reading(raw_pk: str):
-	# Before the fix, int() raising here escaped as a 500. Whatever int() could
-	# read keeps the answer it always had; whatever it could not is refused.
+	# The permission never raises: whatever int() reads keeps its integer
+	# answer, and whatever it cannot read is refused.
 	try:
 		expected = int(raw_pk) == _REQUESTER_PK
 	except ValueError:

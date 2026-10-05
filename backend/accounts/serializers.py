@@ -22,8 +22,8 @@ class UserCreationSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = ["username", "email", "name", "password"]
-		# This serializer also renders the POST/PUT/PATCH responses, where a
-		# readable password field echoed the stored hash back to the caller.
+		# This serializer also renders the POST/PUT/PATCH responses, and the
+		# stored password hash must never appear in one.
 		extra_kwargs = {"password": {"write_only": True}}
 
 	@transaction.atomic

@@ -136,13 +136,13 @@ class NotificationPagination(PageNumberPagination):
 def _since_cutoff(raw: str) -> datetime:
 	"""Read the ``since`` query parameter as an aware UTC datetime, or answer 400.
 
-	Parsed exactly as the ORM parsed the raw string when it went straight into
-	the filter, so every value that worked keeps its meaning. Two kinds used to
-	escape as a 500: an unreadable value (Django's ValidationError, which DRF
-	does not translate) and a readable one whose UTC conversion leaves
-	datetime's year 1..9999 range (OverflowError, raised at query time).
-	ParseError answers with the {"detail": ...} body the neighbouring query
-	parameters already use (an invalid page, the Caddy log limit).
+	Parsed with the same ``DateTimeField.to_python`` the ORM applies to a raw
+	filter value, and a naive result takes the default timezone as the ORM's
+	would, so a value means the same here as in the queryset. DRF does not
+	translate Django's ValidationError, and a UTC conversion past year 1 or 9999
+	raises OverflowError; both become a ParseError, whose {"detail": ...} body
+	matches the neighbouring query parameters (an invalid page, the Caddy log
+	limit).
 	"""
 	try:
 		parsed: datetime | None = DateTimeField().to_python(raw)
