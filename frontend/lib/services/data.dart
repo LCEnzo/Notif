@@ -126,8 +126,7 @@ enum NotificationStatus {
   unread,
   read,
   dismissed,
-  unknown
-  ;
+  unknown;
 
   static NotificationStatus fromWire(String? raw) {
     switch (raw) {
@@ -211,8 +210,7 @@ enum LinkSort {
   newest('-pk', 'Newest'),
   oldest('pk', 'Oldest'),
   recentlyScraped('-last_scraped,-pk', 'Recently scraped'),
-  leastRecentlyScraped('last_scraped,pk', 'Least recently scraped')
-  ;
+  leastRecentlyScraped('last_scraped,pk', 'Least recently scraped');
 
   const LinkSort(this.apiValue, this.label);
   final String apiValue;
@@ -882,8 +880,7 @@ class LinkService extends ChangeNotifier {
 
 enum NotifSort {
   newest('-update__created_at,-pk', 'Newest'),
-  oldest('update__created_at,pk', 'Oldest')
-  ;
+  oldest('update__created_at,pk', 'Oldest');
 
   const NotifSort(this.apiValue, this.label);
   final String apiValue;
