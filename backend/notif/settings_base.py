@@ -11,17 +11,16 @@ from typing import Any
 
 from notif.config import settings
 
-# App code reads settings.TESTING to relax behavior under test (e.g. login
-# throttling backoff). Only notif.settings_test sets it to True.
-TESTING = False
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = settings.DJANGO_SECRET_KEY
 
-DEV_BOOTSTRAP_LOGIN_ENABLED = settings.DEV_BOOTSTRAP_LOGIN_ENABLED
+# The bootstrap login accepts repository-public credentials, so it stays off
+# unless an environment module opts in. Only settings_dev does; production never
+# does, whatever its env attests (NOTIF_ENV itself defaults to local).
+DEV_BOOTSTRAP_LOGIN_ENABLED = False
 DEV_BOOTSTRAP_USERNAME = settings.DEV_BOOTSTRAP_USERNAME
 DEV_BOOTSTRAP_PASSWORD = settings.DEV_BOOTSTRAP_PASSWORD
 DEV_BOOTSTRAP_EMAIL = settings.DEV_BOOTSTRAP_EMAIL
