@@ -231,15 +231,20 @@ indent-style = "tab"
 "requests.Session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
 "requests.session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
 "requests.sessions.Session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
-"urllib.request.urlopen".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
-"urllib.request.urlretrieve".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
 "urllib3.PoolManager".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
 "urllib3.request".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
 "urllib3.HTTPConnectionPool".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
 "urllib3.HTTPSConnectionPool".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
 "urllib3.connection_from_url".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
-"http.client.HTTPConnection".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
-"http.client.HTTPSConnection".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+# Whole modules: banned-api matches dotted paths exactly, so the member bans
+# above miss the same clients imported from their defining submodule (e.g.
+# `from requests.api import get`). Banning a module covers all its members.
+"requests.api".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.poolmanager".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.connectionpool".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.connection".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib.request".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"http.client".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
 # Not a dependency. Any httpx client would bypass the pinned requests adapter
 # entirely, so adopting it has to come with a guarded transport, not slip in.
 "httpx".msg = "httpx bypasses the SSRF guard's pinned adapter; route fetches through monitoring.safe_fetch."

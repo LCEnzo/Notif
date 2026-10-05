@@ -22,6 +22,9 @@ class UserCreationSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = ["username", "email", "name", "password"]
+		# This serializer also renders the POST/PUT/PATCH responses, and the
+		# stored password hash must never appear in one.
+		extra_kwargs = {"password": {"write_only": True}}
 
 	@transaction.atomic
 	def create(self, validated_data: dict[str, Any]) -> User:

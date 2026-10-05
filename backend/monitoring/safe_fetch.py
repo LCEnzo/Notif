@@ -25,6 +25,7 @@ subclass ``requests.RequestException`` so call sites that already translate
 from __future__ import annotations
 
 import ipaddress
+import logging
 import socket
 import sys
 import threading
@@ -44,12 +45,26 @@ from urllib3.poolmanager import PoolManager
 from urllib3.util import parse_url
 from urllib3.util.connection import create_connection
 
+logger = logging.getLogger(__name__)
+
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_REDIRECTS = 5
 FETCH_DEADLINE_SECONDS = 60.0
 _CHUNK_SIZE = 64 * 1024
 _NAT64 = ipaddress.IPv6Network("64:ff9b::/96")
 _IPV4_COMPATIBLE = ipaddress.IPv6Network("::/96")
+# Ranges ``is_global`` calls public that must still never be dialled.
+# IPv4-translated addresses (RFC 2765) embed an IPv4 address the way
+# IPv4-mapped ones do, but ``is_global`` only unwraps the mapped form. Site-
+# local (RFC 3879) and the 6to4 relay anycast (RFC 7526) are deprecated and
+# not globally routed. 168.63.129.16 is Azure's platform endpoint, reachable
+# only from inside a VM on the host.
+_NON_PUBLIC_DESPITE_IS_GLOBAL = (
+	ipaddress.IPv6Network("::ffff:0:0:0/96"),
+	ipaddress.IPv6Network("fec0::/10"),
+	ipaddress.IPv4Network("192.88.99.0/24"),
+	ipaddress.IPv4Network("168.63.129.16/32"),
+)
 
 
 class NonPublicHostError(requests.RequestException):
@@ -72,7 +87,9 @@ def _address_is_public(address: str) -> bool:
 	169.254.169.254-style cloud metadata and ::1. Multicast is excluded
 	explicitly: ``is_global`` does not consistently cover it (e.g. ff02::1).
 	NAT64 (64:ff9b::/96) and IPv4-compatible (::/96) addresses are judged by
-	the IPv4 address in their low 32 bits, which ``is_global`` ignores.
+	the IPv4 address in their low 32 bits, which ``is_global`` ignores. The
+	ranges in ``_NON_PUBLIC_DESPITE_IS_GLOBAL`` are refused outright, after
+	that unwrapping, so an embedded copy of one is refused too.
 	"""
 	try:
 		ip = ipaddress.ip_address(address)
@@ -80,6 +97,8 @@ def _address_is_public(address: str) -> bool:
 		return False
 	if isinstance(ip, ipaddress.IPv6Address) and (ip in _NAT64 or ip in _IPV4_COMPATIBLE):
 		ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+	if any(ip in network for network in _NON_PUBLIC_DESPITE_IS_GLOBAL):
+		return False
 	return ip.is_global and not ip.is_multicast
 
 
@@ -106,7 +125,11 @@ def resolve_public_host(host: str) -> list[str]:
 	addresses = list(dict.fromkeys(str(info[4][0]) for info in infos))
 	for address in addresses:
 		if not _address_is_public(address):
-			raise NonPublicHostError(f"Host {host!r} resolves to a non-public address ({address}), which is refused.")
+			# The address goes to the log only: the exception text reaches the
+			# link's owner (last_scrape_error, the scrape API), and echoing what
+			# an internal name resolves to would map the compose network for them.
+			logger.warning("Refused host %r: it resolves to the non-public address %s.", host, address)
+			raise NonPublicHostError(f"Host {host!r} resolves to a non-public address, which is refused.")
 	return addresses
 
 
