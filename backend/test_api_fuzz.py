@@ -93,15 +93,10 @@ UNFUZZABLE_OPERATIONS = {
 	# the caller's own session, so it is fuzzed.)
 	"auth_logout_create": "revokes the fuzzer's own session",
 	# A generated id can be the fuzzer's own, and deleting that user turns every
-	# later call into a 401.
-	"accounts_users_destroy": "can delete the fuzzer's own user; also 500s on a non-integer id",
-	# Known server errors, excluded so the ci gate keeps measuring new ones.
-	# Re-include each once it is fixed. None of the three can change the
-	# fuzzer's password: change_password needs the current one, and update
-	# refuses a password outright.
-	"accounts_users_update": "500s on a non-integer id: int() in IsRequestingThemselves",
-	"accounts_users_partial_update": "500s on a non-integer id: int() in IsRequestingThemselves",
-	"accounts_users_change_password_create": "500s on a non-object JSON body: assert in the view",  # pragma: allowlist secret
+	# later call into a 401. The other user writes are fuzzed: change_password
+	# needs the current password and update refuses one, so neither can lock the
+	# fuzzer out.
+	"accounts_users_destroy": "can delete the fuzzer's own user",
 }
 
 _PROFILE = os.environ.get("NOTIF_FUZZ_PROFILE", "ci").strip().lower()
