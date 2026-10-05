@@ -18,7 +18,6 @@ from django.urls import reverse
 from django.utils import timezone
 from hypothesis import given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -1746,36 +1745,39 @@ def _atom_feed_xml(draw, min_items=1, max_items=20):
 </feed>"""
 
 
-class FeedStrategyDedupPropertyTestCase(HypothesisTestCase):
-	"""Property-based tests for FeedStrategy dedup invariant."""
+@pytest.mark.property
+@given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
+@settings(max_examples=200)
+def test_feed_strategy_dedup_is_idempotent(feed_xml):
+	"""Second scrape with first scrape's comparison data returns zero new entries.
 
-	def setUp(self):
-		self.strategy = FeedStrategy()
+	A plain function, not a TestCase method, on purpose: Hypothesis remembers
+	the ``self`` a ``@given`` method first ran with and fails
+	``HealthCheck.differing_executors`` when a later call brings a new one. Any
+	runner that calls ``pytest.main()`` twice in one process (mutmut does, for
+	coverage, stats and the clean run) builds a new TestCase instance each time.
+	The test touches no database, so the Django TestCase bought nothing.
+	"""
+	strategy = FeedStrategy()
+	url = URL("https://example.com/feed")
 
-	@pytest.mark.property
-	@given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
-	@settings(max_examples=200)
-	def test_dedup_is_idempotent(self, feed_xml):
-		"""Second scrape with first scrape's comparison data returns zero new entries."""
-		url = URL("https://example.com/feed")
+	with requests_mock.Mocker() as mocker:
+		mocker.get(url, text=feed_xml)
 
-		with requests_mock.Mocker() as mocker:
-			mocker.get(url, text=feed_xml)
+		# First scrape
+		result1 = strategy.scrape(url, {}, {})
+		assert isinstance(result1, Ok), f"First scrape failed: {result1}"
+		assert len(result1.value.updates) > 0, f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
+		comparison1 = result1.value.comparison_state_update
+		assert comparison1 is not None
 
-			# First scrape
-			result1 = self.strategy.scrape(url, {}, {})
-			assert isinstance(result1, Ok), f"First scrape failed: {result1}"
-			assert len(result1.value.updates) > 0, f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
-			comparison1 = result1.value.comparison_state_update
-			assert comparison1 is not None
-
-			# Second scrape with comparison data from first
-			result2 = self.strategy.scrape(url, {}, comparison1)
-			assert isinstance(result2, Ok), f"Second scrape failed: {result2}"
-			assert len(result2.value.updates) == 0, (
-				f"Dedup invariant violated: second scrape returned "
-				f"{len(result2.value.updates)} entries. comparison1: {comparison1}"
-			)
-			assert result2.value.comparison_state_update is None, (
-				f"Expected None comparison on dedup hit, got: {result2.value.comparison_state_update}"
-			)
+		# Second scrape with comparison data from first
+		result2 = strategy.scrape(url, {}, comparison1)
+		assert isinstance(result2, Ok), f"Second scrape failed: {result2}"
+		assert len(result2.value.updates) == 0, (
+			f"Dedup invariant violated: second scrape returned "
+			f"{len(result2.value.updates)} entries. comparison1: {comparison1}"
+		)
+		assert result2.value.comparison_state_update is None, (
+			f"Expected None comparison on dedup hit, got: {result2.value.comparison_state_update}"
+		)
