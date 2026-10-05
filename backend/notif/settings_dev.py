@@ -6,6 +6,9 @@ from notif.settings_base import *
 
 DEBUG = True
 
+# notif.config refuses this flag outside DEBUG=true and NOTIF_ENV=local.
+DEV_BOOTSTRAP_LOGIN_ENABLED = settings.DEV_BOOTSTRAP_LOGIN_ENABLED
+
 INSTALLED_APPS += ["silk"]
 MIDDLEWARE.insert(1, "silk.middleware.SilkyMiddleware")
 
