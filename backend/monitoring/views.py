@@ -1,15 +1,18 @@
 import logging
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.paginator import Page
 from django.db import Error as DbError
 from django.db import connections
+from django.db.models import DateTimeField
 from django.db.models.query import QuerySet
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema
 from rest_framework import status as http_status
 from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import ParseError, ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
 from rest_framework.pagination import PageNumberPagination
@@ -130,6 +133,31 @@ class NotificationPagination(PageNumberPagination):
 		)
 
 
+def _since_cutoff(raw: str) -> datetime:
+	"""Read the ``since`` query parameter as an aware UTC datetime, or answer 400.
+
+	Parsed exactly as the ORM parsed the raw string when it went straight into
+	the filter, so every value that worked keeps its meaning. Two kinds used to
+	escape as a 500: an unreadable value (Django's ValidationError, which DRF
+	does not translate) and a readable one whose UTC conversion leaves
+	datetime's year 1..9999 range (OverflowError, raised at query time).
+	ParseError answers with the {"detail": ...} body the neighbouring query
+	parameters already use (an invalid page, the Caddy log limit).
+	"""
+	try:
+		parsed: datetime | None = DateTimeField().to_python(raw)
+	except DjangoValidationError as exc:
+		raise ParseError("since must be an ISO 8601 date or datetime.") from exc
+	if parsed is None:  # Only for a None input; narrows the stub's loose return type.
+		raise ParseError("since must be an ISO 8601 date or datetime.")
+	if timezone.is_naive(parsed):
+		parsed = timezone.make_aware(parsed, timezone.get_default_timezone())
+	try:
+		return parsed.astimezone(UTC)
+	except OverflowError as exc:
+		raise ParseError("since is outside the supported date range.") from exc
+
+
 class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, _NotificationGenericViewSet):
 	permission_classes = [IsAuthenticated]
 	serializer_class = NotificationSerializer
@@ -153,7 +181,7 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 
 		since = self.request.query_params.get("since")
 		if since:
-			queryset = queryset.filter(update__created_at__gte=since)
+			queryset = queryset.filter(update__created_at__gte=_since_cutoff(since))
 
 		# OrderingFilter applies ordering on top; select_related avoids N+1.
 		return queryset.select_related("update")
