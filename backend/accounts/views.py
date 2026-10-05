@@ -570,11 +570,9 @@ class UserViewSet(_UserModelViewSet):
 		user = request.user
 		assert isinstance(user, User)
 
-		# request.data is whatever JSON value the client sent: an array, string,
-		# number, bool or null parses just as well as an object. Both the body
-		# and its fields are client input, so they are narrowed with a 400
-		# rather than asserted; the validators below assume a str and raise on
-		# anything else.
+		# request.data is whatever JSON value the client sent, so the body and
+		# both fields are narrowed here with a 400; the password validators
+		# below assume a str.
 		body = request.data
 		if not isinstance(body, dict):
 			return Response(
