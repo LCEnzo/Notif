@@ -6,6 +6,7 @@
 # Implement via requests session, to reduce network load, and request spam.
 
 import hashlib
+import io
 import json
 import logging
 import re
@@ -23,6 +24,7 @@ from bs4.element import AttributeValueList, ResultSet, Tag
 from django.utils import timezone
 
 from commons.result import Err, Ok, Result
+from monitoring.safe_fetch import fetch, guarded_session, request_capped
 
 logger = logging.getLogger(__name__)
 
@@ -122,7 +124,7 @@ def _string_attr_value(value: str | AttributeValueList | None) -> str | None:
 
 def _fetch_url_content(url: URL) -> str | None:
 	try:
-		response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+		response = fetch(url, timeout=REQUEST_TIMEOUT_SECONDS)
 	except requests.RequestException:
 		return None
 	if response.status_code == requests.codes.ok:
@@ -345,7 +347,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		req_url = self._get_threadmarks_url(url)
 
 		try:
-			response = requests.get(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = fetch(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
 		except requests.RequestException as exc:
 			return Err(f"Request failed: {exc}")
 		marks = self._extract_threadmarks(response)
@@ -634,8 +636,10 @@ class QQAlertsStrategy(BaseStrategy):
 			"Origin": f"{parsed_url.scheme}://{parsed_url.netloc}",
 		}
 
-		with requests.Session() as session:
-			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
+		with guarded_session() as session:
+			get_response = request_capped(
+				session, "GET", QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True
+			)
 			get_response.raise_for_status()
 			session_cookie = get_response.cookies.get(session_cookie_name)
 			login_headers["Cookie"] = f"{session_cookie_name}={session_cookie}"
@@ -645,7 +649,14 @@ class QQAlertsStrategy(BaseStrategy):
 				session.headers[header] = value
 
 			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
-			response = session.post(QQAlertsStrategy.login_url, data=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = request_capped(
+				session,
+				"POST",
+				QQAlertsStrategy.login_url,
+				data=payload,
+				timeout=REQUEST_TIMEOUT_SECONDS,
+				allow_redirects=True,
+			)
 			response.raise_for_status()
 			session.close()
 
@@ -923,13 +934,23 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			"password": f"{password}",
 		}
 
-		with requests.session() as session:
-			login_response = session.post(
-				KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS
+		with guarded_session() as session:
+			# Not following the login's redirect: on a 307/308 requests would resend
+			# the credentials to wherever it points. The session cookie is set by the
+			# redirect response itself, and the favourites page is fetched next anyway.
+			login_response = request_capped(
+				session,
+				"POST",
+				KemonoFavouritesStrategy.login_url,
+				data=data,
+				timeout=REQUEST_TIMEOUT_SECONDS,
+				allow_redirects=False,
 			)
 			login_response.raise_for_status()
 
-			fav_response = session.get(KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			fav_response = request_capped(
+				session, "GET", KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True
+			)
 			fav_response.raise_for_status()
 
 			session.close()
@@ -973,12 +994,15 @@ class FeedStrategy(BaseStrategy):
 		**kwargs: Any,
 	) -> ScrapeResult:
 		try:
-			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = fetch(url, timeout=REQUEST_TIMEOUT_SECONDS)
 			response.raise_for_status()
 		except requests.RequestException as exc:
 			return Err(f"Feed fetch failed: {exc}")
 
-		feed = feedparser.parse(response.content)
+		# A stream, never bytes or str: feedparser opens either one as a local path
+		# (unbounded read) when it names an existing file, and this body is
+		# whatever the remote server chose to send.
+		feed = feedparser.parse(io.BytesIO(response.content))
 
 		if feed.bozo and not feed.entries:
 			bozo_msg = str(feed.bozo_exception) if feed.bozo_exception else "unknown parse error"
