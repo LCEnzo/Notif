@@ -25,6 +25,7 @@ from monitoring.models import Strategy
 from monitoring.safe_fetch import MAX_RESPONSE_BYTES, NonPublicHostError, ResponseTooLargeError
 from monitoring.strategies import (
 	URL,
+	FeedStrategy,
 	GeneralSelectorStrategy,
 	KemonoFavouritesStrategy,
 	QQAlertsStrategy,
@@ -283,6 +284,27 @@ class SSRFGuardTestCase(TestCase):
 			self.assertRaises(NonPublicHostError),
 		):
 			safe_fetch.resolve_public_host("rebinding.example.com")
+
+	def test_refusal_text_does_not_echo_the_resolved_address(self) -> None:
+		"""The refusal reaches the link's owner (``last_scrape_error``, the scrape
+		API), so it names the host but not what it resolved to: echoing that would
+		let any user map internal names to compose-network addresses. The address
+		still goes to the server log."""
+		internal = "10.0.0.5"
+		answer = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", (internal, 0))]
+		with (
+			patch("monitoring.safe_fetch.socket.getaddrinfo", return_value=answer),
+			self.assertLogs("monitoring.safe_fetch", "WARNING") as logged,
+		):
+			with self.assertRaises(NonPublicHostError) as refused:
+				safe_fetch.resolve_public_host("db.example.test")
+			result = FeedStrategy().scrape(URL("http://db.example.test/feed"), {}, {})
+		self.assertIn("db.example.test", str(refused.exception))
+		self.assertNotIn(internal, str(refused.exception))
+		assert isinstance(result, Err)
+		self.assertIn("non-public", result.error)
+		self.assertNotIn(internal, result.error)
+		self.assertTrue(any(internal in line for line in logged.output))
 
 	def test_resolve_public_host_returns_each_public_address_once_in_order(self) -> None:
 		"""A resolver may repeat an address (an /etc/hosts duplicate, or glibc

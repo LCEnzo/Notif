@@ -25,6 +25,7 @@ subclass ``requests.RequestException`` so call sites that already translate
 from __future__ import annotations
 
 import ipaddress
+import logging
 import socket
 import sys
 import threading
@@ -43,6 +44,8 @@ from urllib3.exceptions import ConnectTimeoutError, LocationParseError, NewConne
 from urllib3.poolmanager import PoolManager
 from urllib3.util import parse_url
 from urllib3.util.connection import create_connection
+
+logger = logging.getLogger(__name__)
 
 MAX_RESPONSE_BYTES = 10 * 1024 * 1024
 MAX_REDIRECTS = 5
@@ -106,7 +109,11 @@ def resolve_public_host(host: str) -> list[str]:
 	addresses = list(dict.fromkeys(str(info[4][0]) for info in infos))
 	for address in addresses:
 		if not _address_is_public(address):
-			raise NonPublicHostError(f"Host {host!r} resolves to a non-public address ({address}), which is refused.")
+			# The address goes to the log only: the exception text reaches the
+			# link's owner (last_scrape_error, the scrape API), and echoing what
+			# an internal name resolves to would map the compose network for them.
+			logger.warning("Refused host %r: it resolves to the non-public address %s.", host, address)
+			raise NonPublicHostError(f"Host {host!r} resolves to a non-public address, which is refused.")
 	return addresses
 
 
