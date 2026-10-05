@@ -12,11 +12,6 @@ name: Deep Test Sweeps
 on:
   workflow_dispatch:
     inputs:
-      runner:
-        description: 'Runner to execute on'
-        type: choice
-        default: 'ubuntu-latest'
-        options: ['ubuntu-latest', 'self-hosted']
       sweeps:
         description: 'Which sweeps to run'
         type: choice
@@ -33,9 +28,8 @@ on:
 permissions:
   contents: read
 
-# A manual run and the weekly one must not overlap: on a self-hosted runner they
-# would queue behind each other anyway, and two copies of the same multi-hour
-# sweep produce nothing the first did not.
+# A manual run and the weekly one must not overlap: two copies of the same
+# multi-hour sweep produce nothing the first did not.
 concurrency:
   group: deep-sweeps
   cancel-in-progress: false
@@ -100,7 +94,7 @@ jobs:
   fuzz-deep:
     needs: gate
     if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'fuzz')
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     # Every operation is also capped by its own pytest timeout; this bounds the
     # whole job well below GitHub's 6-hour default.
     timeout-minutes: 90
@@ -154,7 +148,7 @@ jobs:
   mutation:
     needs: gate
     if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'mutation')
-    runs-on: ${{ inputs.runner || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     # 1738 mutants. A local run (6 workers, WSL) got through 1488 of them in 50
     # minutes, then slowed to a crawl on the tail, whose mutants are covered by
     # the slowest tests; a 4-vCPU hosted runner may need most of this cap.
