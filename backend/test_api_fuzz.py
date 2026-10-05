@@ -225,13 +225,7 @@ def ipv4_localhost(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_live_server_shares_the_test_database_connection(live_server: Any) -> None:
-	"""The live server serves requests over the test's own in-memory connection.
-
-	Django hands an in-memory SQLite connection to the server thread only if the
-	test database exists when the server starts. Otherwise every request thread
-	opens its own connection, which Django never closes for an in-memory
-	database, and each one surfaces later as an unclosed-database ResourceWarning.
-	"""
+	"""The live server serves requests over the test's own in-memory connection (see conftest.live_server)."""
 	default = connections["default"]
 	assert isinstance(default, SQLiteDatabaseWrapper)
 	assert default.is_in_memory_db()
