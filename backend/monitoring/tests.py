@@ -4,6 +4,7 @@ import xml.sax.saxutils
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from pprint import pprint  # noqa: F401
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
@@ -13,6 +14,7 @@ import pytest
 import requests
 import requests_mock
 from django.core.management import call_command
+from django.db import InterfaceError, OperationalError, connections
 from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
@@ -27,6 +29,7 @@ from commons import Err, Ok
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client
 from commons.utils import create_notification
 from monitoring.models import Link, Notification, Strategy, Update
+from monitoring.rate_limiter import DomainRateLimiter
 from monitoring.rss_content_backfill import backfill_rss_update_content
 from monitoring.services import scrape_link
 from monitoring.strategies import (
@@ -156,27 +159,21 @@ class TestSelectorStratErr(TestCase):
 
 class RateLimiterTestCase(TestCase):
 	def test_same_domain_waits(self):
-		from monitoring.rate_limiter import DomainRateLimiter
-
 		limiter = DomainRateLimiter(delay=0.15)
-		import time
 
-		start = time.monotonic()
+		start = monotonic()
 		limiter.wait_for_domain("https://example.com/a")
 		limiter.wait_for_domain("https://example.com/b")
-		elapsed = time.monotonic() - start
+		elapsed = monotonic() - start
 		assert elapsed >= 0.14
 
 	def test_different_domains_no_wait(self):
-		from monitoring.rate_limiter import DomainRateLimiter
-
 		limiter = DomainRateLimiter(delay=0.5)
-		import time
 
-		start = time.monotonic()
+		start = monotonic()
 		limiter.wait_for_domain("https://example.com/a")
 		limiter.wait_for_domain("https://other.com/b")
-		elapsed = time.monotonic() - start
+		elapsed = monotonic() - start
 		assert elapsed < 0.2
 
 
@@ -1298,6 +1295,41 @@ class StratChoicesViewTestCase(SetupMixin, TestCase):
 		response = APIClient().get(reverse("get-strat-choices"))
 
 		self.assertEqual(response.status_code, 401)
+
+
+class StatusCheckViewTestCase(TestCase):
+	def test_reports_ok_when_the_database_answers(self):
+		response = APIClient().get(reverse("status-check"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["status"], "ok")
+		self.assertEqual(response.data["db"], "ok")
+
+	def test_database_errors_become_503_and_are_logged(self):
+		# InterfaceError is the boundary case: it derives from django.db.Error but not from
+		# DatabaseError, so catching DatabaseError alone would let it escape as a 500.
+		for exc in (OperationalError("db gone"), InterfaceError("connection already closed")):
+			with self.subTest(exc=type(exc).__name__):
+				with (
+					patch.object(connections["default"], "cursor", side_effect=exc),
+					self.assertLogs("monitoring.views", level=logging.ERROR) as logs,
+				):
+					response = APIClient().get(reverse("status-check"))
+
+				self.assertEqual(response.status_code, 503)
+				self.assertEqual(response.data["status"], "error")
+				self.assertEqual(response.data["db"], "down")
+				self.assertNotIn(str(exc), response.content.decode())
+				self.assertEqual(len(logs.records), 1)
+				exc_info = logs.records[0].exc_info or (None, None, None)
+				self.assertIs(exc_info[1], exc)
+
+	def test_non_database_errors_are_not_reported_as_database_down(self):
+		with (
+			patch.object(connections["default"], "cursor", side_effect=RuntimeError("bug, not an outage")),
+			self.assertRaisesMessage(RuntimeError, "bug, not an outage"),
+		):
+			APIClient().get(reverse("status-check"))
 
 
 # ── FeedStrategy Tests ────────────────────────────────────────────────────

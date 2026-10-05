@@ -190,7 +190,6 @@ class BaseStrategy(ABC):
 		This function exists to check if the strategy CAN scrape the URL.
 		Whether that be a hardcoded list of sites, or whatever.
 		"""
-		pass
 
 	@abstractmethod
 	def scrape(
@@ -209,7 +208,6 @@ class BaseStrategy(ABC):
 		ScrapeSuccess.updates -> list[ScrapedUpdate]
 		ScrapeSuccess.comparison_state_update -> None | { "attr name": data for comparison }
 		"""
-		pass
 
 	def __call__(
 		self,
@@ -411,7 +409,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 				try:
 					return datetime.strptime(pub_date_str, "%Y-%m-%dT%H:%M:%S%z")
 				except ValueError as err:
-					logger.error(f"SBSVThreadmarksStrategy | _extract_pub_date: Value Error {err}")
+					logger.error("SBSVThreadmarksStrategy | _extract_pub_date: Value Error %s", err)
 					return None
 		return None
 
