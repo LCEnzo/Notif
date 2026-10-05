@@ -183,6 +183,8 @@ indent-style = "tab"
 "monitoring/safe_fetch.py" = ["TID251"]
 # Talks to pytest-django's live_server on loopback, never to a user-supplied URL.
 "test_openapi_conformance.py" = ["TID251"]
+# Fuzzes pytest-django's live_server on loopback, never a user-supplied URL.
+"test_api_fuzz.py" = ["TID251"]
 # Manual fixture downloaders run by hand from a dev machine; never imported by the app.
 "monitoring/tests/scripts/*.py" = ["TID251"]
 
