@@ -558,7 +558,10 @@ class UserViewSet(_UserModelViewSet):
 
 		return super().get_permissions()
 
-	@action(detail=False, methods=["get", "post"], permission_classes=[IsAuthenticated])
+	# The response is the caller's full record, never the minimal read the
+	# viewset's get_serializer_class() would hand the schema generator.
+	@extend_schema(responses=UserFullReadSerializer)
+	@action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
 	def get_my_info(self, request: Request) -> Response:
 		user = request.user
 		assert isinstance(user, User)

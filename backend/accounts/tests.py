@@ -209,6 +209,12 @@ class UserSerializerSelectionTestCase(TestCase):
 		self.assertIn("is_staff", response.data)
 		self.assertIn("is_superuser", response.data)
 
+	def test_get_my_info_is_read_only(self):
+		response = self.client_for_user.post(reverse("users-get-my-info"), {}, format="json")
+
+		self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+		self.assertEqual(response["Allow"], "GET, HEAD, OPTIONS")
+
 
 # Django's encoded form is "<algorithm>$<params...>$<hash>": md5$salt$hex,
 # pbkdf2_sha256$iterations$salt$b64, argon2$argon2id$v=19$..., bcrypt_sha256$$2b$...
@@ -290,15 +296,14 @@ class UserPasswordHashExposureTestCase(TestCase):
 
 	def test_read_endpoints_carry_no_hash(self):
 		cases = [
-			("list", "get", reverse("users-list")),
-			("own detail", "get", reverse("users-detail", kwargs={"pk": self.user.pk})),
-			("other detail", "get", reverse("users-detail", kwargs={"pk": self.other_user.pk})),
-			("get_my_info GET", "get", reverse("users-get-my-info")),
-			("get_my_info POST", "post", reverse("users-get-my-info")),
+			("list", reverse("users-list")),
+			("own detail", reverse("users-detail", kwargs={"pk": self.user.pk})),
+			("other detail", reverse("users-detail", kwargs={"pk": self.other_user.pk})),
+			("get_my_info", reverse("users-get-my-info")),
 		]
-		for label, method, url in cases:
+		for label, url in cases:
 			with self.subTest(label):
-				response = getattr(self.client_for_user, method)(url, format="json")
+				response = self.client_for_user.get(url, format="json")
 
 				self.assertEqual(response.status_code, status.HTTP_200_OK)
 				self._assert_carries_no_hash(response)
