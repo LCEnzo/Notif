@@ -133,16 +133,10 @@ class NotificationPagination(PageNumberPagination):
 		)
 
 
-def _since_cutoff(raw: str) -> datetime:
-	"""Read the ``since`` query parameter as an aware UTC datetime, or answer 400.
+def _parse_since(raw: str) -> datetime:
+	"""Parse ``?since=`` into an aware UTC datetime, or raise ParseError (a 400).
 
-	Parsed with the same ``DateTimeField.to_python`` the ORM applies to a raw
-	filter value, and a naive result takes the default timezone as the ORM's
-	would, so a value means the same here as in the queryset. DRF does not
-	translate Django's ValidationError, and a UTC conversion past year 1 or 9999
-	raises OverflowError; both become a ParseError, whose {"detail": ...} body
-	matches the neighbouring query parameters (an invalid page, the Caddy log
-	limit).
+	Same parser and default timezone as the ORM's filter, so accepted values keep their meaning.
 	"""
 	try:
 		parsed: datetime | None = DateTimeField().to_python(raw)
@@ -181,7 +175,7 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 
 		since = self.request.query_params.get("since")
 		if since:
-			queryset = queryset.filter(update__created_at__gte=_since_cutoff(since))
+			queryset = queryset.filter(update__created_at__gte=_parse_since(since))
 
 		# OrderingFilter applies ordering on top; select_related avoids N+1.
 		return queryset.select_related("update")
