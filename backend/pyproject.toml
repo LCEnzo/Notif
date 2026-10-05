@@ -33,6 +33,7 @@ dev = [
 	"pytest-cov>=7.0,<8.0",
 	"pytest-django>=4.11,<5.0",
 	"pytest-randomly>=5.0,<6.0",
+	"pytest-socket>=0.7,<0.8",
 	"pytest-timeout>=2.3,<3.0",
 	"pytest-xdist>=3.8,<4.0",
 	"requests-mock>=1.11,<2.0",
@@ -213,6 +214,13 @@ addopts = [
 	"--tb=short",
 	"--reuse-db",
 	"--nomigrations",
+	"--disable-socket",
+	"--allow-unix-socket",
+	# Loopback only: the live-server conformance test needs a local socket, but an
+	# un-mocked HTTP call must fail loudly instead of flaking. With hosts listed,
+	# pytest-socket guards socket.connect() only: DNS lookups, UDP and connect_ex
+	# still go through.
+	"--allow-hosts=127.0.0.1,::1",
 	"--timeout=30",
 	"-n",
 	"4",

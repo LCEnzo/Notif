@@ -503,6 +503,21 @@ class DevBootstrapLoginTestCase(TestCase):
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())
 
+	@override_settings(DEV_BOOTSTRAP_LOGIN_ENABLED=False)
+	def test_disabled_bootstrap_login_rejects_the_public_credentials(self):
+		response = APIClient().post(
+			reverse("auth-login"),
+			{
+				"username": settings.DEV_BOOTSTRAP_USERNAME,
+				"password": settings.DEV_BOOTSTRAP_PASSWORD,
+				"transport": "bearer",
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())
+
 
 class LogoutViewTestCase(TestCase):
 	user: User
