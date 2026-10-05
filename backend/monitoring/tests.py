@@ -1378,10 +1378,18 @@ class FeedStrategyTestCase(TestCase):
 		local_feed = (Path(__file__).parent / "tests" / "stratechery.xml").resolve()
 
 		with requests_mock.Mocker() as mocker:
+			# Control: served as content the file is a feed, so a parser that opened the
+			# path would succeed. Without it, a moved fixture or a failed fetch would
+			# make the assertions below pass on the vulnerable code too.
+			mocker.get(self.feed_url, content=local_feed.read_bytes())
+			as_content = self.strategy.scrape(self.feed_url, {}, {})
 			mocker.get(self.feed_url, content=str(local_feed).encode())
-			result = self.strategy.scrape(self.feed_url, {}, {})
+			as_path = self.strategy.scrape(self.feed_url, {}, {})
 
-		assert not isinstance(result, Ok), f"parsed the local file {local_feed.name}: {result}"
+		assert isinstance(as_content, Ok), as_content
+		assert as_content.value.updates
+		assert isinstance(as_path, Err), f"parsed the local file {local_feed.name}: {as_path}"
+		assert "parse error" in as_path.error.lower()
 
 	def test_scrape_new_feed_returns_all_entries_and_sets_comparison(self):
 		"""First scrape of a feed: returns all entries, sets last_entry_id to the first (newest)."""
