@@ -28,8 +28,8 @@ from accounts.device_sessions import (
 )
 from accounts.models import DeviceSession, User
 from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetBudget, PasswordResetCode
-from accounts.views import _send_reset_email_in_background
-from commons.test_utils import SetupMixin, ViewSetMixin, login_client  # noqa: F401
+from accounts.views import UserViewSet, _send_reset_email_in_background
+from commons.test_utils import SetupMixin, ViewSetMixin, login_client, production_throttling  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
 
 _VALID_TEST_PASSWORD = "N0tif-Test-Credential-2026!"
@@ -72,6 +72,26 @@ class UserViewSetTestCase(ViewSetMixin):
 			"password": _ALTERNATE_VALID_TEST_PASSWORD,
 		}
 		self._test_create_object(fields=fields)
+
+	def test_registration_spends_one_unit_of_its_budget_per_request(self):
+		# A second ScopedRateThrottle on create would charge each request twice,
+		# and the second registration would already be refused.
+		client = APIClient()
+		url = reverse(self.list_view_name)
+
+		def register(i: int) -> int:
+			fields = {
+				"username": f"throttled{i}",
+				"email": f"throttled{i}@example.com",
+				"password": _VALID_TEST_PASSWORD,
+			}
+			return client.post(url, fields, format="json").status_code
+
+		with production_throttling(UserViewSet) as rates:
+			budget = int(rates["register"].split("/")[0])
+			for i in range(budget):
+				self.assertEqual(register(i), status.HTTP_201_CREATED)
+			self.assertEqual(register(budget), status.HTTP_429_TOO_MANY_REQUESTS)
 
 	def test_update_user(self):
 		self._test_update_object()

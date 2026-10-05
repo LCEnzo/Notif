@@ -1,16 +1,24 @@
 from collections import namedtuple
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from typing import Any, cast
+from unittest.mock import patch
 
+from django.core.cache import cache
 from django.db.models import Model
 from django.http import HttpResponse
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.module_loading import import_string
 from rest_framework import status
 from rest_framework.test import APIClient
+from rest_framework.throttling import SimpleRateThrottle
+from rest_framework.views import APIView
 
 from accounts.models import User
 from commons.utils import create_admin, create_strat_and_links, create_users, password
 from monitoring.models import Link, Strategy
+from notif.settings_base import _REST_THROTTLE_CLASSES, _REST_THROTTLE_RATES
 
 
 def login_client(api_client: APIClient, username: str, password: str = password) -> APIClient:
@@ -360,3 +368,28 @@ class ViewSetMixin(SetupMixin, TestCase):
 
 		responses = ViewSetMixin.PermissionResponses(*response_list)
 		return responses
+
+
+@contextmanager
+def production_throttling(*views: type[APIView]) -> Iterator[dict[str, str]]:
+	"""Throttle ``views`` with the production classes and rates; yields the rates.
+
+	Test settings neutralise throttling, and DRF copies the default classes and
+	rates into class attributes at import, so override_settings cannot bring them
+	back. Patch those attributes instead, from the settings_base values the test
+	settings never touch. Only views on the default classes qualify: a view with
+	its own list keeps it in production, and overwriting it here would test
+	something else. Throttle history lives in the default cache, cleared on both
+	sides so no budget leaks between tests.
+	"""
+	classes = [import_string(path) for path in _REST_THROTTLE_CLASSES]
+	with ExitStack() as stack:
+		for view in views:
+			assert view.throttle_classes is APIView.throttle_classes, f"{view.__name__} sets its own throttle classes"
+			stack.enter_context(patch.object(view, "throttle_classes", classes))
+		stack.enter_context(patch.object(SimpleRateThrottle, "THROTTLE_RATES", _REST_THROTTLE_RATES))
+		cache.clear()
+		try:
+			yield _REST_THROTTLE_RATES
+		finally:
+			cache.clear()
