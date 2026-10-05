@@ -89,10 +89,9 @@ schemathesis.openapi.format("uri", _FUZZ_URI)
 # entry is API surface that nothing is fuzzing.
 UNFUZZABLE_OPERATIONS = {
 	# Logout revokes the session the fuzzer authenticates with, so every later
-	# call in the same test would 401 for the wrong reason. revoke_all spares the
-	# caller's own session, so the fuzzer's survives it.
+	# call in the same test would 401 for the wrong reason. (revoke_all spares
+	# the caller's own session, so it is fuzzed.)
 	"auth_logout_create": "revokes the fuzzer's own session",
-	"auth_sessions_revoke_all_create": "revokes the fuzzer's own session",
 	# A generated id can be the fuzzer's own, and deleting that user turns every
 	# later call into a 401.
 	"accounts_users_destroy": "can delete the fuzzer's own user; also 500s on a non-integer id",
@@ -103,14 +102,6 @@ UNFUZZABLE_OPERATIONS = {
 	"accounts_users_update": "500s on a non-integer id: int() in IsRequestingThemselves",
 	"accounts_users_partial_update": "500s on a non-integer id: int() in IsRequestingThemselves",
 	"accounts_users_change_password_create": "500s on a non-object JSON body: assert in the view",  # pragma: allowlist secret
-	# Side effects that matter in a deployment: scraping and reset mail. Here
-	# neither leaves the test process: the fuzzer owns no links to scrape, and
-	# settings_test delivers mail to the locmem outbox.
-	"monitoring_trigger_scrape_create": "performs real outbound HTTP to scrape targets",
-	"accounts_password_reset_create": "sends mail and consumes the reset budget",  # pragma: allowlist secret
-	# The backup requires a superuser and the fuzzer is not one, so every call
-	# here answers 403; ops/tests.py covers the download itself.
-	"ops_backup_sqlite_retrieve": "streams the whole database per example",
 }
 
 _PROFILE = os.environ.get("NOTIF_FUZZ_PROFILE", "ci").strip().lower()
