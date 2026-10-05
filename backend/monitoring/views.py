@@ -29,6 +29,7 @@ from monitoring.models import Link, Notification, Strategy
 from monitoring.serializers import (
 	HealthCheckResponseSerializer,
 	LinkSerializer,
+	MarkAllReadResponseSerializer,
 	NotificationSerializer,
 	StatusCheckResponseSerializer,
 	StrategySerializer,
@@ -189,6 +190,7 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		else:
 			serializer.save()
 
+	@extend_schema(request=None, responses={http_status.HTTP_200_OK: MarkAllReadResponseSerializer})
 	@action(detail=False, methods=["post"])
 	def mark_all_read(self, request: Request) -> Response:
 		updated = (

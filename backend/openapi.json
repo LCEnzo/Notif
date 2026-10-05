@@ -1135,25 +1135,6 @@
                 "tags": [
                     "monitoring"
                 ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Notification"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Notification"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Notification"
-                            }
-                        }
-                    }
-                },
                 "security": [
                     {
                         "sessionBearer": []
@@ -1167,7 +1148,7 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/Notification"
+                                    "$ref": "#/components/schemas/MarkAllReadResponse"
                                 }
                             }
                         },
@@ -2072,6 +2053,19 @@
                     "public_id",
                     "token",
                     "transport"
+                ]
+            },
+            "MarkAllReadResponse": {
+                "type": "object",
+                "properties": {
+                    "marked_read": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "How many of the caller's unread notifications this call marked read."
+                    }
+                },
+                "required": [
+                    "marked_read"
                 ]
             },
             "Notification": {

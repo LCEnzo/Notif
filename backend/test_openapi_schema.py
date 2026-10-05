@@ -17,6 +17,7 @@ USERS_LIST = "/api/v1/accounts/users/"
 USERS_DETAIL = "/api/v1/accounts/users/{id}/"
 GET_MY_INFO = "/api/v1/accounts/users/get_my_info/"
 CHANGE_PASSWORD = "/api/v1/accounts/users/change_password/"
+MARK_ALL_READ = "/api/v1/monitoring/notifications/mark_all_read/"
 
 _HTTP_METHODS = {"get", "put", "patch", "post", "delete", "head", "options", "trace"}
 
@@ -66,3 +67,14 @@ def test_change_password_documents_its_real_body_and_answers(schema: dict[str, A
 	assert _json_body(operation["responses"]["200"]) == _ref("StatusResponse")
 	assert _json_body(operation["responses"]["400"]) == _ref("ErrorMessage")
 	assert _component(schema, "ErrorMessage")["required"] == ["error"]
+
+
+def test_mark_all_read_takes_no_body_and_returns_the_count(schema: dict[str, Any]) -> None:
+	operation = schema["paths"][MARK_ALL_READ]["post"]
+
+	assert "requestBody" not in operation
+	assert _json_body(operation["responses"]["200"]) == _ref("MarkAllReadResponse")
+	body = _component(schema, "MarkAllReadResponse")
+	assert body["required"] == ["marked_read"]
+	assert body["properties"]["marked_read"]["type"] == "integer"
+	assert body["properties"]["marked_read"]["minimum"] == 0
