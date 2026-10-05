@@ -22,7 +22,7 @@ from commons.utils import password
 from monitoring import safe_fetch
 from monitoring.models import Strategy
 from monitoring.safe_fetch import MAX_RESPONSE_BYTES, NonPublicHostError, ResponseTooLargeError
-from monitoring.strategies import URL, GeneralSelectorStrategy
+from monitoring.strategies import URL, GeneralSelectorStrategy, KemonoFavouritesStrategy, QQAlertsStrategy
 
 # Public addresses the fake resolver hands out. Nothing ever connects to them:
 # the dialer below records the address and connects to the loopback server.
@@ -346,9 +346,8 @@ class SSRFGuardTestCase(TestCase):
 			self.assertNotIn("Cookie", mocker.last_request.headers)
 
 
-@pytest.mark.real_ssrf
-class RealTransportTestCase(SimpleTestCase):
-	"""``fetch`` through the real pinned adapter, connection pool and sockets.
+class _LoopbackTransportTestCase(SimpleTestCase):
+	"""Base for tests that keep the real pinned adapter, pool and sockets.
 
 	DNS answers come from ``_FakeResolver`` and every dial is redirected by
 	``_Dialer`` to a loopback server, so the guard sees the addresses a hostile
@@ -377,6 +376,11 @@ class RealTransportTestCase(SimpleTestCase):
 			patch("monitoring.safe_fetch.create_connection", dialer),
 		):
 			yield resolver, dialer
+
+
+@pytest.mark.real_ssrf
+class RealTransportTestCase(_LoopbackTransportTestCase):
+	"""``fetch`` through the real pinned adapter, connection pool and sockets."""
 
 	def test_redirect_to_non_public_target_is_refused_before_dialling(self) -> None:
 		for location in ["http://internal.example.test/", "http://169.254.169.254/latest/meta-data/"]:
@@ -487,6 +491,104 @@ class RealTransportTestCase(SimpleTestCase):
 					safe_fetch.fetch(f"{scheme}://public.example.test/", timeout=5)
 				self.assertNotIsInstance(refused.exception, requests.Timeout)
 				self.assertIn("Failed to establish a new connection", str(refused.exception))
+
+
+@pytest.mark.real_ssrf
+class GuardedLoginFlowTestCase(_LoopbackTransportTestCase):
+	"""``request_capped`` and the QQ/Kemono login flows that use it."""
+
+	def test_request_capped_stops_reading_at_the_cap(self) -> None:
+		"""The body is streamed and the connection dropped past the cap — not
+		read whole by requests and measured afterwards."""
+		limit = 64 * 1024 * 1024
+		sent = [0]
+		finished = threading.Event()
+
+		def endless(handler: BaseHTTPRequestHandler) -> None:
+			handler.send_response(200)
+			handler.end_headers()  # no Content-Length: the body runs until the server stops
+			chunk = b"x" * 64 * 1024
+			try:
+				while sent[0] < limit:
+					handler.wfile.write(chunk)
+					sent[0] += len(chunk)
+			finally:
+				finished.set()
+
+		self.server.routes[("GET", "/endless")] = endless
+		with (
+			self._network(),
+			patch.object(safe_fetch, "MAX_RESPONSE_BYTES", 64 * 1024),
+			safe_fetch.guarded_session() as session,
+			self.assertRaises(ResponseTooLargeError),
+		):
+			safe_fetch.request_capped(
+				session, "GET", "http://public.example.test/endless", timeout=5, allow_redirects=False
+			)
+		self.assertTrue(finished.wait(10))
+		# What the server got out before the hang-up: the cap plus socket buffers.
+		self.assertLess(sent[0], limit // 2)
+
+	def test_qq_flow_logs_in_with_the_session_cookie(self) -> None:
+		login: dict[str, str] = {}
+
+		def login_route(handler: BaseHTTPRequestHandler) -> None:
+			login["cookie"] = handler.headers.get("Cookie", "")
+			login["form"] = handler.rfile.read(int(handler.headers["Content-Length"])).decode()
+			_respond(200, b"<html>alerts</html>")(handler)
+
+		self.server.routes[("GET", "/account/alerts")] = _respond(
+			200, b"<html>log in</html>", {"Set-Cookie": "xf_session=s3ss10n; Path=/"}
+		)
+		self.server.routes[("POST", "/login/login")] = login_route
+		with (
+			self._network() as (_, dialer),
+			patch.object(QQAlertsStrategy, "alerts_url", "http://public.example.test/account/alerts"),
+			patch.object(QQAlertsStrategy, "login_url", "http://public.example.test/login/login"),
+		):
+			response = QQAlertsStrategy._get_alerts_html("reader", "pw")
+		self.assertEqual(response.text, "<html>alerts</html>")
+		self.assertIn("xf_session=s3ss10n", login["cookie"])
+		self.assertIn("login=reader", login["form"])
+		self.assertEqual(set(dialer.dialled), {_PUBLIC_A})
+
+	def test_kemono_flow_reads_favourites_with_the_login_cookie(self) -> None:
+		cookies: list[str] = []
+
+		def favourites_route(handler: BaseHTTPRequestHandler) -> None:
+			cookies.append(handler.headers.get("Cookie", ""))
+			_respond(200, b"<html>favourites</html>")(handler)
+
+		self.server.routes[("POST", "/account/login")] = _respond(200, b"ok", {"Set-Cookie": "session=k3m0n0; Path=/"})
+		self.server.routes[("GET", "/favorites")] = favourites_route
+		with (
+			self._network(),
+			patch.object(KemonoFavouritesStrategy, "login_url", "http://public.example.test/account/login"),
+			patch.object(KemonoFavouritesStrategy, "fav_url", "http://public.example.test/favorites"),
+		):
+			response = KemonoFavouritesStrategy._get_favourites_html("reader", "pw")
+		self.assertEqual(response.text, "<html>favourites</html>")
+		self.assertEqual(cookies, ["session=k3m0n0"])
+
+	def test_oversized_login_flow_responses_are_refused(self) -> None:
+		cap = 1024
+		oversized = _respond(200, b"x" * (cap + 1))
+		self.server.routes[("GET", "/account/alerts")] = _respond(200, b"log in")
+		self.server.routes[("POST", "/login/login")] = oversized
+		self.server.routes[("POST", "/account/login")] = _respond(200, b"ok")
+		self.server.routes[("GET", "/favorites")] = oversized
+		with (
+			self._network(),
+			patch.object(safe_fetch, "MAX_RESPONSE_BYTES", cap),
+			patch.object(QQAlertsStrategy, "alerts_url", "http://public.example.test/account/alerts"),
+			patch.object(QQAlertsStrategy, "login_url", "http://public.example.test/login/login"),
+			patch.object(KemonoFavouritesStrategy, "login_url", "http://public.example.test/account/login"),
+			patch.object(KemonoFavouritesStrategy, "fav_url", "http://public.example.test/favorites"),
+		):
+			with self.subTest(flow="QQ"), self.assertRaises(ResponseTooLargeError):
+				QQAlertsStrategy._get_alerts_html("reader", "pw")
+			with self.subTest(flow="Kemono"), self.assertRaises(ResponseTooLargeError):
+				KemonoFavouritesStrategy._get_favourites_html("reader", "pw")
 
 
 class ResolverBypassTestCase(SimpleTestCase):

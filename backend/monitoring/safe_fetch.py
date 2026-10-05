@@ -24,7 +24,7 @@ import ipaddress
 import socket
 import sys
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urljoin, urlsplit
 
 import requests
@@ -268,13 +268,31 @@ def _read_bounded(response: requests.Response) -> bytes:
 	return b"".join(chunks)
 
 
-def read_body_capped(response: requests.Response) -> bytes:
-	"""Read a response body under the cap, for call sites that manage their
-	own session (the QQ/Kemono login flows). Populates ``_content`` so
-	``.text``/``.content`` work as usual afterwards."""
-	content = _read_bounded(response)
-	response._content = content
-	return content
+def request_capped(
+	session: requests.Session,
+	method: Literal["GET", "POST"],
+	url: str,
+	*,
+	timeout: float,
+	allow_redirects: bool,
+	data: Mapping[str, str] | None = None,
+) -> requests.Response:
+	"""Send one request on a guarded session and read its body under the cap.
+
+	The request always streams, so the cap bounds what is buffered instead of
+	being checked after requests has already read everything. The body is in
+	``.content``/``.text`` and the connection is released on return.
+
+	With ``allow_redirects=True`` requests follows redirects itself and reads
+	each intermediate hop's body into memory uncapped (every hop is still
+	pinned by the adapter). Only the hard-coded first-party login flows do
+	that; ``fetch`` follows redirects by hand instead.
+	"""
+	with session.request(
+		method, url, data=data, timeout=timeout, allow_redirects=allow_redirects, stream=True
+	) as response:
+		response._content = _read_bounded(response)
+	return response
 
 
 def fetch(url: str, *, timeout: float) -> requests.Response:
@@ -291,12 +309,9 @@ def fetch(url: str, *, timeout: float) -> requests.Response:
 	with guarded_session() as session:
 		current = url
 		for _hop in range(MAX_REDIRECTS + 1):
-			with session.get(current, timeout=timeout, stream=True, allow_redirects=False) as response:
-				content = _read_bounded(response)
+			response = request_capped(session, "GET", current, timeout=timeout, allow_redirects=False)
 			location = response.headers.get("Location")
-			if response.is_redirect and location:
-				current = urljoin(current, location)
-				continue
-			response._content = content
-			return response
+			if not (response.is_redirect and location):
+				return response
+			current = urljoin(current, location)
 	raise requests.TooManyRedirects(f"Exceeded {MAX_REDIRECTS} redirects fetching {url}.")
