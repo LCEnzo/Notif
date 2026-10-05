@@ -1,15 +1,12 @@
 """Fail-closed environment invariants for :class:`notif.config.Settings`.
 
-These assert the security posture of the config layer directly, by constructing
-``Settings`` with explicit kwargs rather than through the process environment:
-
-* DEBUG fails closed (defaults to False) when nothing sets it.
+* DEBUG and the dev bootstrap login are off when nothing sets them.
 * A production environment refuses to run with DEBUG on.
 * The dev bootstrap login is only legal in a local DEBUG environment.
 
-Each construction is made hermetic (``_env_file=None`` plus a cleared subset of
-the process environment) so the assertions reflect only the kwargs under test,
-not whatever a developer or the CI gate has configured ambiently.
+The invariants are driven through environment variables, the way a container
+supplies them, with ``_env_file=None`` and the relevant variables cleared so a
+developer's ``.env`` or the CI environment cannot leak into the result.
 """
 
 import pytest
@@ -17,8 +14,7 @@ from pydantic import ValidationError
 
 from notif.config import Environment, Settings
 
-# Env vars whose ambient values would otherwise leak past our kwargs into the
-# fields under test. Cleared per-test so an unset kwarg means "use the default".
+# Env vars whose ambient values would otherwise leak into the fields under test.
 _AMBIENT_KEYS = (
 	"DEBUG",
 	"NOTIF_ENV",
@@ -26,45 +22,43 @@ _AMBIENT_KEYS = (
 	"DJANGO_SECRET_KEY",
 )
 
-# ``_env_file=None`` ignores the repo ``.env`` so results do not depend on a
-# developer's local configuration; DJANGO_SECRET_KEY is required by the model.
+# DJANGO_SECRET_KEY is required by the model.
 _SECRET = "test-secret-key"  # pragma: allowlist secret
 
 
 @pytest.fixture(autouse=True)
 def _hermetic_env(monkeypatch: pytest.MonkeyPatch) -> None:
-	"""Strip config env vars so ``Settings(...)`` reflects only its kwargs."""
+	"""Strip config env vars so each test sees only what it sets."""
 	for key in _AMBIENT_KEYS:
 		monkeypatch.delenv(key, raising=False)
 
 
-def test_debug_defaults_false_when_unset() -> None:
-	settings = Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET, NOTIF_ENV=Environment.LOCAL)
+def test_debug_and_bootstrap_login_default_off() -> None:
+	settings = Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
+
 	assert settings.DEBUG is False
+	assert settings.DEV_BOOTSTRAP_LOGIN_ENABLED is False
 
 
-def test_production_with_debug_is_rejected() -> None:
-	with pytest.raises((ValidationError, ValueError)):
-		Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET, NOTIF_ENV=Environment.PRODUCTION, DEBUG=True)
+@pytest.mark.parametrize("env", list(Environment))
+@pytest.mark.parametrize("debug", [True, False])
+@pytest.mark.parametrize("bootstrap", [True, False])
+def test_environment_invariants(
+	env: Environment, debug: bool, bootstrap: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+	monkeypatch.setenv("NOTIF_ENV", env.value)
+	monkeypatch.setenv("DEBUG", str(debug).lower())
+	monkeypatch.setenv("DEV_BOOTSTRAP_LOGIN_ENABLED", str(bootstrap).lower())
+	# Written from the policy, not the validator: production never claims DEBUG, and the
+	# public-credential bootstrap login needs an env that is both local and DEBUG.
+	legal = not (env is Environment.PRODUCTION and debug) and (not bootstrap or (debug and env is Environment.LOCAL))
 
-
-def test_dev_bootstrap_requires_debug() -> None:
-	with pytest.raises((ValidationError, ValueError)):
-		Settings(
-			_env_file=None,
-			DJANGO_SECRET_KEY=_SECRET,
-			NOTIF_ENV=Environment.LOCAL,
-			DEBUG=False,
-			DEV_BOOTSTRAP_LOGIN_ENABLED=True,
-		)
-
-
-def test_dev_bootstrap_requires_local_env() -> None:
-	with pytest.raises((ValidationError, ValueError)):
-		Settings(
-			_env_file=None,
-			DJANGO_SECRET_KEY=_SECRET,
-			NOTIF_ENV=Environment.STAGING,
-			DEBUG=True,
-			DEV_BOOTSTRAP_LOGIN_ENABLED=True,
-		)
+	if legal:
+		settings = Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
+		resolved = (settings.NOTIF_ENV, settings.DEBUG, settings.DEV_BOOTSTRAP_LOGIN_ENABLED)
+		assert resolved == (env, debug, bootstrap)
+	else:
+		with pytest.raises(ValidationError) as excinfo:
+			Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
+		# An invariant fired, not an unrelated field error such as a missing value.
+		assert [error["type"] for error in excinfo.value.errors()] == ["value_error"]
