@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import ipaddress
 import socket
+import sys
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -30,6 +31,7 @@ import requests
 from requests.adapters import DEFAULT_POOLBLOCK, HTTPAdapter
 from urllib3.connection import HTTPConnection, HTTPSConnection
 from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.exceptions import ConnectTimeoutError, NewConnectionError
 from urllib3.poolmanager import PoolManager
 from urllib3.util.connection import create_connection
 
@@ -68,21 +70,24 @@ def resolve_public_host(host: str) -> list[str]:
 	host with one public and one private record is exactly what a rebinding
 	setup looks like. Also raises when the hostname does not resolve at all
 	(``requests`` would fail anyway, and failing here keeps the error class
-	uniform). The returned addresses are what connections are pinned to.
+	uniform). The returned addresses, deduplicated in resolver order, are what
+	connections are pinned to.
 	"""
 	if not host:
 		raise NonPublicHostError("URL has no host.")
 	try:
-		infos = socket.getaddrinfo(host, None)
+		# SOCK_STREAM: without a socket type, glibc answers each address once
+		# per protocol (stream, datagram, raw).
+		infos = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
 	except OSError as exc:
 		raise NonPublicHostError(f"Host {host!r} does not resolve.") from exc
 	if not infos:
 		raise NonPublicHostError(f"Host {host!r} does not resolve.")
-	addresses = [info[4][0] for info in infos]
+	addresses = list(dict.fromkeys(str(info[4][0]) for info in infos))
 	for address in addresses:
-		if not _address_is_public(str(address)):
+		if not _address_is_public(address):
 			raise NonPublicHostError(f"Host {host!r} resolves to a non-public address ({address}), which is refused.")
-	return [str(address) for address in addresses]
+	return addresses
 
 
 class _NonPublicHostBlockedError(Exception):
@@ -102,9 +107,15 @@ class _PublicOnlyHTTPConnection(HTTPConnection):
 	"""HTTPConnection that connects only to a pre-validated public address.
 
 	``_new_conn`` resolves the hostname, validates every answer, and connects
-	to one of the validated addresses — the exact resolution the validator
-	saw, not a fresh lookup. ``self.host`` is untouched, so the Host header,
-	TLS SNI and certificate verification keep using the real hostname.
+	to the validated addresses — the exact resolution the validator saw, not
+	a fresh lookup. ``self.host`` is untouched, so the Host header, TLS SNI
+	and certificate verification keep using the real hostname.
+
+	Otherwise it mirrors urllib3's ``HTTPConnection._new_conn``: addresses are
+	tried in resolver order, and the last failure is translated into
+	``ConnectTimeoutError`` / ``NewConnectionError``. A raw ``OSError`` here
+	would be misfiled by the pool — an HTTPS connect timeout as a *read*
+	timeout, anything else as an aborted connection.
 	"""
 
 	def _new_conn(self) -> socket.socket:
@@ -112,12 +123,25 @@ class _PublicOnlyHTTPConnection(HTTPConnection):
 			addresses = resolve_public_host(self._dns_host)
 		except NonPublicHostError as exc:
 			raise _NonPublicHostBlockedError(str(exc)) from exc
-		return create_connection(
-			(addresses[0], self.port),
-			self.timeout,
-			source_address=self.source_address,
-			socket_options=self.socket_options,
-		)
+		error: OSError = OSError(f"No validated address to connect to for {self.host!r}.")
+		for address in addresses:
+			try:
+				sock = create_connection(
+					(address, self.port),
+					self.timeout,
+					source_address=self.source_address,
+					socket_options=self.socket_options,
+				)
+			except OSError as exc:
+				error = exc
+				continue
+			sys.audit("http.client.connect", self, self.host, self.port)
+			return sock
+		if isinstance(error, TimeoutError):
+			raise ConnectTimeoutError(
+				self, f"Connection to {self.host} timed out. (connect timeout={self.timeout})"
+			) from error
+		raise NewConnectionError(self, f"Failed to establish a new connection: {error}") from error
 
 
 class _PublicOnlyHTTPSConnection(_PublicOnlyHTTPConnection, HTTPSConnection):

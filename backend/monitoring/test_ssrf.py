@@ -33,6 +33,7 @@ _PUBLIC_B = "93.184.216.35"
 _TEST_DNS = {
 	"public.example.test": [_PUBLIC_A],
 	"other.example.test": [_PUBLIC_B],
+	"multi.example.test": [_PUBLIC_A, _PUBLIC_B],
 	"internal.example.test": ["10.0.0.5"],
 	# glibc's inet_aton reads a bare integer as an IPv4 address, as the
 	# production container does; Windows' resolver would instead try DNS.
@@ -242,14 +243,15 @@ class SSRFGuardTestCase(TestCase):
 		):
 			safe_fetch.resolve_public_host("rebinding.example.com")
 
-	def test_resolve_public_host_accepts_public_records(self) -> None:
+	def test_resolve_public_host_returns_each_public_address_once_in_order(self) -> None:
+		"""A resolver may repeat an address (an /etc/hosts duplicate, or glibc
+		answering once per socket type); each address is dialled at most once."""
 		with patch(
 			"monitoring.safe_fetch.socket.getaddrinfo",
-			return_value=[
-				(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
-			],
+			return_value=[_addrinfo(address, 0) for address in [_PUBLIC_B, _PUBLIC_A, _PUBLIC_B, "2606:4700::1111"]],
 		):
-			safe_fetch.resolve_public_host("example.com")  # must not raise
+			addresses = safe_fetch.resolve_public_host("example.com")
+		self.assertEqual(addresses, [_PUBLIC_B, _PUBLIC_A, "2606:4700::1111"])
 
 	def test_fetch_refuses_private_address_before_any_network(self) -> None:
 		with self.assertRaises(NonPublicHostError):
@@ -456,3 +458,32 @@ class RealTransportTestCase(SimpleTestCase):
 				else:
 					response = safe_fetch.fetch("http://public.example.test/gzip", timeout=5)
 					self.assertEqual(len(response.content), decoded_size)
+
+	def test_connect_falls_back_to_the_next_validated_address(self) -> None:
+		"""As with stock urllib3, one unreachable address does not fail the
+		fetch while another validated address answers."""
+		self.server.routes[("GET", "/")] = _respond(200, b"second address")
+		with self._network(failures={_PUBLIC_A: ConnectionRefusedError}) as (_, dialer):
+			response = safe_fetch.fetch("http://multi.example.test/", timeout=5)
+		self.assertEqual(response.content, b"second address")
+		self.assertEqual(dialer.dialled, [_PUBLIC_A, _PUBLIC_B])
+
+	def test_connect_failures_keep_their_requests_exception_types(self) -> None:
+		"""A dial that times out surfaces as ConnectTimeout and a refused one
+		as a failed new connection, over http and https alike — not as a read
+		timeout or an "aborted" connection, which misdirect diagnosis."""
+		for scheme in ["http", "https"]:
+			with (
+				self.subTest(scheme=scheme, dial="times out"),
+				self._network(failures={_PUBLIC_A: TimeoutError}),
+				self.assertRaises(requests.ConnectTimeout),
+			):
+				safe_fetch.fetch(f"{scheme}://public.example.test/", timeout=5)
+			with (
+				self.subTest(scheme=scheme, dial="refused"),
+				self._network(failures={_PUBLIC_A: ConnectionRefusedError}),
+			):
+				with self.assertRaises(requests.ConnectionError) as refused:
+					safe_fetch.fetch(f"{scheme}://public.example.test/", timeout=5)
+				self.assertNotIsInstance(refused.exception, requests.Timeout)
+				self.assertIn("Failed to establish a new connection", str(refused.exception))
