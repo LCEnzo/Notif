@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import warnings
 import xml.sax.saxutils
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
@@ -1760,6 +1761,36 @@ class FeedStrategyTestCase(TestCase):
 		assert "alert" not in result.value.updates[0][1]
 		assert result.value.updates[1][1] == "Explicit description."
 		assert result.value.updates[2][1] == ""
+
+	def test_locator_like_description_is_content(self):
+		"""A body that is only a URL or a file name is kept as text, without a warning."""
+		feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Link Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Only A Link</title>
+      <link>https://example.com/1</link>
+      <description>https://example.com/elsewhere</description>
+    </item>
+    <item>
+      <title>Only A File Name</title>
+      <link>https://example.com/2</link>
+      <description>notes.txt</description>
+    </item>
+  </channel>
+</rss>"""
+
+		# Beautiful Soup warns about exactly these two shapes when handed them as strings.
+		with requests_mock.Mocker() as mocker, warnings.catch_warnings():
+			warnings.simplefilter("error")
+			mocker.get(self.feed_url, text=feed)
+			result = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Ok)
+		assert [update.description for update in result.value.updates] == ["https://example.com/elsewhere", "notes.txt"]
 
 
 # ── Real Feed Fixture Tests ——————————————————————————————————————————————

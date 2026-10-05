@@ -6,6 +6,7 @@
 # Implement via requests session, to reduce network load, and request spam.
 
 import hashlib
+import io
 import json
 import logging
 import re
@@ -157,7 +158,11 @@ def _selector_comparison_state(selector_state: Mapping[str, SelectorDigestState]
 
 def _html_to_readable_text(html_content: str) -> str:
 	"""Convert feed HTML into bounded readable text for notification bodies."""
-	soup = BeautifulSoup(html_content, "html.parser")
+	# A stream, not the string: a feed body that is only a URL or a file name is
+	# still content, but Beautiful Soup takes a short tag-free string for a locator
+	# passed by mistake and warns. It reads a stream into the same string and parses
+	# it identically, minus that check.
+	soup = BeautifulSoup(io.StringIO(html_content), "html.parser")
 
 	for tag in soup(_NON_CONTENT_TAGS):
 		tag.decompose()
