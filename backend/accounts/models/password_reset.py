@@ -11,6 +11,7 @@ from django.db.models import F
 from django.utils import timezone
 from django.utils.crypto import constant_time_compare, salted_hmac
 
+PASSWORD_RESET_CODE_LENGTH = 6
 PASSWORD_RESET_CODE_TTL = timedelta(minutes=30)
 PASSWORD_RESET_CODE_MAX_ATTEMPTS = 5
 # Budget windows and limits for the per-email mint/guess counters.
@@ -102,5 +103,5 @@ class PasswordResetCode(models.Model):
 
 	@staticmethod
 	def _validate_code(code: str) -> None:
-		if len(code) != 6 or not code.isascii() or not code.isdigit():
-			raise ValidationError("Password reset code must be exactly 6 ASCII digits.")
+		if len(code) != PASSWORD_RESET_CODE_LENGTH or not code.isascii() or not code.isdigit():
+			raise ValidationError(f"Password reset code must be exactly {PASSWORD_RESET_CODE_LENGTH} ASCII digits.")

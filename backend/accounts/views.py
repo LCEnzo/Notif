@@ -39,7 +39,7 @@ from accounts.device_sessions import (
 	session_for_token,
 )
 from accounts.models import DeviceSession, User
-from accounts.models.password_reset import PasswordResetBudget
+from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH, PasswordResetBudget
 from accounts.serializers import (
 	DeviceSessionSerializer,
 	LoginRequestSerializer,
@@ -666,7 +666,7 @@ class PasswordResetRequestView(APIView):
 		if user is not None:
 			import secrets
 
-			code = str(secrets.randbelow(1_000_000)).zfill(6)
+			code = str(secrets.randbelow(10**PASSWORD_RESET_CODE_LENGTH)).zfill(PASSWORD_RESET_CODE_LENGTH)
 
 			PasswordResetCode.issue_for_user(user=user, code=code)
 
