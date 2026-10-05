@@ -8,7 +8,7 @@ live server, and checks the response.
 Two profiles, selected by ``NOTIF_FUZZ_PROFILE``:
 
 ``ci`` (default)
-	Small, deterministic, and cheap enough to gate every push. It asserts one
+	Small, seeded, and cheap enough to gate every push. It asserts one
 	thing: no generated input produces a 5xx. That is the check with the best
 	signal-to-noise ratio on an API that was not written schema-first — a 500 is
 	unambiguously a bug, whereas an undocumented 400 is usually just a docs gap.
@@ -132,13 +132,25 @@ EXCLUDED_CHECKS = cast("list[CheckFunction]", list(CHECKS_REGISTRY.get_by_names(
 # phase costs ~1s, the ``coverage`` phase ~32s, and ``coverage`` is insensitive
 # to ``max_examples`` because it deterministically enumerates schema edge cases
 # (missing required fields, wrong types, boundary values) rather than sampling.
-# So CI takes the cheap randomized phase and the deep profile buys the thorough
+# So CI takes the cheap sampled phase and the deep profile buys the thorough
 # systematic one. Dropping ``coverage`` from CI is the difference between a 20s
 # job and a 3-minute one.
 PHASES = ["examples", "coverage", "fuzzing", "stateful"] if _IS_DEEP else ["fuzzing"]
 
 schema = schemathesis.openapi.from_path(BACKEND_ROOT / "openapi.json").exclude(operation_id=list(UNFUZZABLE_OPERATIONS))
 schema.config.phases.update(phases=PHASES)
+# ``ci`` is a merge gate, so it replays the same inputs on every run: a red gate
+# then means the diff under review changed the outcome, never that this run
+# happened to sample a new input. Exploration is ``deep``'s job, which keeps a
+# fresh seed per run. The inputs still move when an operation's schema or the
+# Hypothesis/Schemathesis versions change — each of those is part of the diff
+# that turned the gate red. Schemathesis seeds every test itself (a random seed
+# unless told otherwise), and that seed outranks Hypothesis' ``derandomize``.
+# One residual source remains: for a few operations the generated inputs also
+# depend on Python's per-process hash seed, so exact replay additionally needs
+# PYTHONHASHSEED pinned in the environment that runs pytest.
+if not _IS_DEEP:
+	schema.config.seed = 0
 # By default Schemathesis treats the schema's security schemes as parameters and
 # generates a value for each: a random ``notif_session`` cookie and a random
 # ``Authorization`` header. The random cookie went out alongside the real one,
