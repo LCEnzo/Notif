@@ -1,13 +1,13 @@
 name: Deep Test Sweeps
 
-# Neither sweep here gates a merge. Both cost minutes-to-hours and produce a
-# report to read rather than a pass/fail signal, so they live outside
-# backend.yml entirely: weekly on a schedule, or on demand.
+# Neither sweep gates a merge: each takes minutes to hours and produces a report
+# to read rather than a pass/fail signal, so both live outside backend.yml and
+# run weekly or on demand.
 #
-# The schedule is change-gated. Running a multi-hour mutation sweep over a week
-# where nothing was touched burns runner time to re-print last week's number, so
-# the `gate` job measures how much backend source actually moved and the sweeps
-# skip themselves when it is not worth it. Manual runs can force past the gate.
+# The weekly run is change-gated: the `gate` job counts the backend source lines
+# changed in CHANGE_WINDOW, and both sweeps skip below CHANGE_THRESHOLD rather
+# than spend hours on code that has not changed. Manual runs bypass the gate
+# unless `force` is unticked.
 
 on:
   workflow_dispatch:
@@ -22,21 +22,21 @@ on:
         type: boolean
         default: true
   schedule:
-    # Mondays, 03:00 UTC. Deliberately not on push.
+    # Mondays, 03:00 UTC.
     - cron: '0 3 * * 1'
 
 permissions:
   contents: read
 
-# A manual run and the weekly one must not overlap: two copies of the same
-# multi-hour sweep produce nothing the first did not.
+# One run at a time: a second run waits for the first instead of paying for the
+# same hours of sweeping twice in parallel.
 concurrency:
   group: deep-sweeps
   cancel-in-progress: false
 
 env:
-  # Lines of non-test backend source that must have changed in the window for a
-  # scheduled sweep to be worth running.
+  # A scheduled run sweeps only when at least this many lines of non-test
+  # backend source were added or removed within CHANGE_WINDOW.
   CHANGE_THRESHOLD: 200
   CHANGE_WINDOW: '7 days ago'
 
@@ -72,8 +72,8 @@ jobs:
             exit 0
           fi
 
-          # Mutation and fuzz results only move when non-test source moves, so
-          # tests, migrations and generated artifacts are excluded from the count.
+          # Counts churn in the code under test only. Tests and migrations are
+          # left out, although new tests alone can move the mutation score.
           changed="$(
             git diff --numstat "$base" HEAD -- \
               backend/accounts backend/commons backend/monitoring backend/notif backend/ops \
@@ -122,13 +122,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      # continue-on-error is the point, not an oversight: the deep profile runs
-      # every Schemathesis check, and the ones it currently reports are schema
-      # documentation gaps rather than runtime faults. The run is a report; the
-      # artifact below is the deliverable. Making it red weekly would just train
-      # everyone to ignore it. pipefail still matters: without it the step
-      # reports tee's exit status, and a sweep that cannot even collect looks
-      # exactly like one that ran.
+      # The deep profile runs all but one of Schemathesis' default checks and
+      # is expected to report findings. The uploaded report is the deliverable,
+      # so findings do not fail the job. pipefail gives the step pytest's exit
+      # status instead of tee's, so a run that fails, or never collects, still
+      # shows as a failed step.
       - name: Deep schema fuzz
         continue-on-error: true
         run: |
@@ -149,9 +147,8 @@ jobs:
     needs: gate
     if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'mutation')
     runs-on: ubuntu-latest
-    # 1738 mutants. A local run (6 workers, WSL) got through 1488 of them in 50
-    # minutes, then slowed to a crawl on the tail, whose mutants are covered by
-    # the slowest tests; a 4-vCPU hosted runner may need most of this cap.
+    # GitHub's limit for hosted runners. A full sweep is expected to take hours,
+    # and mutmut leaves the mutants with the slowest covering tests for last.
     timeout-minutes: 360
     defaults:
       run:
