@@ -14,10 +14,12 @@ Two profiles, selected by ``NOTIF_FUZZ_PROFILE``:
 	unambiguously a bug, whereas an undocumented 400 is usually just a docs gap.
 
 ``deep``
-	Every default Schemathesis check (status code, content type, headers, and
-	response schema conformance) at a much higher example count. Expected to
-	find things, which is why it is opt-in and never gates a merge. Run it from
-	``.github/workflows/deep-sweeps.yml``'s schedule or by hand:
+	Every default Schemathesis check but one (status code, content type,
+	headers, response schema conformance, auth enforcement, …) across the
+	``examples``, ``coverage`` and ``fuzzing`` phases at a much higher example
+	count. Expected to find things, which is why it is opt-in and never gates a
+	merge. Run it from ``.github/workflows/deep-sweeps.yml``'s schedule or by
+	hand:
 
 		NOTIF_FUZZ_PROFILE=deep uv run pytest -q test_api_fuzz.py
 
@@ -54,7 +56,9 @@ BACKEND_ROOT = Path(__file__).resolve().parent
 # find five examples. Building URLs directly instead makes generation ~free and
 # produces better inputs than the filter ever did: the host list deliberately
 # mixes public names with loopback, link-local and private addresses so the
-# link validator's rejection path is exercised, not just its happy path.
+# link validator's rejection path is exercised, not just its happy path. That
+# check reads the URL alone (``safe_fetch.reject_non_public_literal``), so it
+# runs for real here even though conftest stubs out DNS resolution.
 _FUZZ_URI = st.builds(
 	"{}://{}{}{}".format,
 	st.sampled_from(["http", "https"]),
@@ -135,7 +139,9 @@ EXCLUDED_CHECKS = cast("list[CheckFunction]", list(CHECKS_REGISTRY.get_by_names(
 # So CI takes the cheap sampled phase and the deep profile buys the thorough
 # systematic one. Dropping ``coverage`` from CI is the difference between a 20s
 # job and a 3-minute one.
-PHASES = ["examples", "coverage", "fuzzing", "stateful"] if _IS_DEEP else ["fuzzing"]
+# ``stateful`` is deliberately absent: ``schema.parametrize()`` never runs it (it
+# needs ``schema.as_state_machine()``), so listing it would only claim coverage.
+PHASES = ["examples", "coverage", "fuzzing"] if _IS_DEEP else ["fuzzing"]
 
 schema = schemathesis.openapi.from_path(BACKEND_ROOT / "openapi.json").exclude(operation_id=list(UNFUZZABLE_OPERATIONS))
 schema.config.phases.update(phases=PHASES)
