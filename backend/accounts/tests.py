@@ -28,7 +28,7 @@ from accounts.device_sessions import (
 )
 from accounts.models import DeviceSession, User
 from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetBudget, PasswordResetCode
-from accounts.views import UserViewSet, _send_reset_email_in_background
+from accounts.views import _send_reset_email_in_background
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client, production_throttling  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
 
@@ -87,7 +87,7 @@ class UserViewSetTestCase(ViewSetMixin):
 			}
 			return client.post(url, fields, format="json").status_code
 
-		with production_throttling(UserViewSet) as rates:
+		with production_throttling() as rates:
 			budget = int(rates["register"].split("/")[0])
 			for i in range(budget):
 				self.assertEqual(register(i), status.HTTP_201_CREATED)

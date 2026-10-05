@@ -42,7 +42,6 @@ from monitoring.strategies import (
 	ScrapeResult,
 	ScrapeSuccess,
 )
-from monitoring.views import trigger_scrape
 
 logger = logging.getLogger(__name__)
 
@@ -1088,7 +1087,7 @@ class TriggerScrapeViewTestCase(SetupMixin, TestCase):
 		spender_client.force_authenticate(spender)
 		bystander_client.force_authenticate(bystander)
 
-		with production_throttling(trigger_scrape.cls) as rates:
+		with production_throttling() as rates:
 			budget = int(rates["scrape"].split("/")[0])
 			for _ in range(budget):
 				self.assertEqual(spender_client.post(self.url, {}, format="json").status_code, 200)
