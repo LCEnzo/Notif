@@ -211,7 +211,7 @@ indent-style = "tab"
 "monitoring/safe_fetch.py" = ["TID251"]
 # Talks to pytest-django's live_server on loopback, never to a user-supplied URL.
 "test_openapi_conformance.py" = ["TID251"]
-# Fuzzes pytest-django's live_server on loopback, never a user-supplied URL.
+# Talks to pytest-django's live_server on loopback, never to a user-supplied URL.
 "test_api_fuzz.py" = ["TID251"]
 # Manual fixture downloaders run by hand from a dev machine; never imported by the app.
 "monitoring/tests/scripts/*.py" = ["TID251"]
@@ -320,8 +320,9 @@ markers = [
 #     uv run --group mutation mutmut run
 #     uv run --group mutation mutmut results
 #
-# Linux only. mutmut rewrites sources into a `mutants/` tree and drives pytest
-# subprocesses against it; that is not exercised on Windows here.
+# mutmut forks per mutant and refuses to start on native Windows; run it under
+# WSL or Linux. It rewrites the sources into a `mutants/` tree and runs pytest
+# there.
 source_paths = ["accounts", "commons", "monitoring", "notif", "ops"]
 do_not_mutate = [
     # Tests cannot meaningfully be mutated — they are the oracle.
@@ -336,50 +337,49 @@ do_not_mutate = [
     "notif/asgi.py",
     "notif/wsgi.py",
     "notif/urls.py",
-    # Mutating settings/config breaks module import, which fails every test at
-    # once. mutmut scores that as "killed" and the number flatters us for the
-    # wrong reason, so leave config.py's validation to test_config.py instead.
+    # mutmut skips decorated functions, and config.py's are all decorated (a
+    # pydantic validator, a property), so it yields no mutants today; the entry
+    # keeps any later helper out too. test_config.py covers its validation.
     "notif/config.py",
 ]
-# The suite's own addopts assume an interactive full run: xdist spawns four
-# workers per mutant (pure overhead when mutmut already parallelises across
-# mutants), and coverage is irrelevant to a mutation verdict. Hypothesis seeds
-# itself from OS entropy on every run, independently of pytest-randomly, so a
-# property test could kill a mutant on one run and miss it on the next;
-# --hypothesis-seed pins it, which also keeps Hypothesis' example database out
-# of the verdict. (mutmut passes -p no:randomly for its own runs already.)
+# -n 0 overrides addopts' four xdist workers: mutmut maps tests to the functions
+# they reach by recording calls in its own process, so the tests must run there,
+# and it already runs mutants in parallel. --no-cov keeps pytest-cov out; mutmut
+# gathers the line coverage it needs itself. Hypothesis seeds itself from OS
+# entropy on every run, independently of pytest-randomly, so a property test
+# could kill a mutant on one run and miss it on the next; --hypothesis-seed pins
+# it, which also keeps Hypothesis' example database out of the verdict.
+# (-p no:randomly repeats what mutmut already passes to its test runs.)
 pytest_add_cli_args = ["-n", "0", "-p", "no:randomly", "-q", "--no-cov", "--hypothesis-seed=0"]
-# The oracle for a mutation run is the fast unit suite, not the whole thing.
-# The live-server tests (conformance, fuzz) take tens of seconds *per run* and
-# mutmut runs the suite once per mutant, which turns a multi-hour sweep into a
-# multi-week one; `slow` and `e2e` pull real downloaded fixtures for the same
-# reason. Excluding them is a throughput decision, not a coverage compromise:
-# they assert schema conformance, which mutating Python cannot meaningfully
-# perturb anyway.
-# --ignore, not `-m "not conformance and not fuzz"`: both modules build their
-# OpenAPI schema at *import* time, and pytest imports a module before it can
-# evaluate that module's markers. Marker deselection therefore still triggers
-# the import, which fails inside mutants/ and takes the whole baseline run with
-# it. --ignore prevents collection outright. The markers stay useful for humans.
+# The oracle is the fast unit suite. mutmut reruns every test that reaches a
+# mutated function, and the live-server tests (conformance, fuzz) reach most of
+# the API layer at a second or more per test; `slow` and `e2e` parse real
+# downloaded fixtures. The price: e2e is the most direct check on the parsers,
+# so parser mutants it would kill can survive here.
+# --ignore, not `-m "not conformance and not fuzz"`: pytest imports a module
+# before it evaluates that module's markers, and both modules build their
+# OpenAPI schema at import time. Under mutmut the conformance module's import
+# fails (PyYAML cannot load openapi-spec-validator's meta-schema), which fails
+# the baseline run; --ignore prevents collection outright.
 pytest_add_cli_args_test_selection = [
     "--ignore=test_openapi_conformance.py",
     "--ignore=test_api_fuzz.py",
-    # drf-spectacular introspects every serializer and view to build the schema.
-    # mutmut rewrites each source file into a mutant-dispatch shape, and
-    # generation then emits a node PyYAML refuses to serialize. The test asserts
-    # a property of the real tree, not of any mutant, so it cannot be part of a
-    # mutation oracle.
+    # Under mutmut this test fails even with no mutant active: PyYAML cannot
+    # emit the schema drf-spectacular builds. A fresh pytest process over the
+    # same mutants/ tree passes it, so the trigger appears to be mutmut's
+    # repeated in-process runs, not the rewritten sources.
     "--deselect=ops/tests.py::OpsApiTestCase::test_openapi_schema_generates",
     "-m",
     "not slow and not e2e",
 ]
-# Only mutate lines the suite actually executes. Mutants on unreached lines
-# always survive and drown the real signal.
+# Only mutate lines the suite executes. A mutant on a line no test reaches can
+# never be killed, and would bury the survivors that matter.
 mutate_only_covered_lines = true
-# mutmut copies source_paths plus this list into mutants/ and runs there.
-# conftest.py is NOT in mutmut's own defaults (it copies tests/, test*.py and
-# the lock/config files), and without it the autouse SSRF resolver bypass is
-# absent, so every mutant run would do real DNS lookups.
+# mutmut copies source_paths plus this list into mutants/ and runs there. Its
+# own defaults (tests/, test*.py and the lock and config files) leave out
+# conftest.py, whose autouse SSRF resolver bypass keeps the suite off real DNS;
+# without it, tests that reach the guarded transport would resolve hosts for
+# real.
 also_copy = ["conftest.py", "manage.py", "openapi.json", ".env"]
 
 [tool.coverage.run]
