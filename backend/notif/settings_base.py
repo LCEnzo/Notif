@@ -11,10 +11,6 @@ from typing import Any
 
 from notif.config import settings
 
-# App code reads settings.TESTING to relax behavior under test (e.g. login
-# throttling backoff). Only notif.settings_test sets it to True.
-TESTING = False
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 

@@ -10,7 +10,6 @@ if _config.NOTIF_ENV == Environment.PRODUCTION:
 	raise RuntimeError("Refusing to run the test suite with NOTIF_ENV=production.")
 
 DEBUG = False
-TESTING = True
 
 # Throttle classes stay wired so tests exercise the prod-shaped request path: a
 # None rate is a per-scope no-op, while an undeclared scope still raises
