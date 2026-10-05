@@ -789,6 +789,8 @@ class KemonoFavouritesStrategy(BaseStrategy):
 	login_url = f"{base_url}/account/login"
 	fav_url = f"{base_url}/favorites"
 
+	MAX_ERROR_PATH_CHARS = 200
+
 	def can_scrape_url(self, url: URL) -> bool:
 		parsed_url = urlsplit(url)
 
@@ -796,6 +798,20 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		alerts_path = urlsplit(self.fav_url).path
 
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
+
+	@classmethod
+	def _is_favourites_url(cls, url: str) -> bool:
+		"""Whether ``url`` is ``fav_url`` on the same origin (scheme, host, effective port).
+
+		Query, fragment and a trailing slash are ignored.
+		"""
+		same_path = urlsplit(url).path.rstrip("/") == urlsplit(cls.fav_url).path.rstrip("/")
+		return same_path and cls._origin(url) == cls._origin(cls.fav_url)
+
+	@staticmethod
+	def _origin(url: str) -> tuple[str, str | None, int | None]:
+		parts = urlsplit(url)
+		return parts.scheme, parts.hostname, parts.port or {"http": 80, "https": 443}.get(parts.scheme)
 
 	def scrape(
 		self,
@@ -818,6 +834,15 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			resp = self._get_favourites_html(username, password)
 		except requests.RequestException as exc:
 			return Err(f"Request failed: {exc}")
+		if not self._is_favourites_url(resp.url):
+			# Without a session the site 302s /favorites to its login page, which has no cards, so parsing it
+			# would report "nothing new" forever. Name where the request ended up, but never its query string.
+			landed = urlsplit(resp.url)
+			landed_path = landed.path[: self.MAX_ERROR_PATH_CHARS]
+			return Err(
+				f"Favourites request ended at {landed.scheme}://{landed.hostname}{landed_path} instead of "
+				f"{self.fav_url}; the login most likely failed, so check this strategy's username and password"
+			)
 		cards = self._extract_kemono_profile_cards(resp.text)
 
 		# Fill updates with new alerts

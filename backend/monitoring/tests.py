@@ -326,7 +326,11 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 		)
 
 		with (
-			patch.object(KemonoFavouritesStrategy, "_get_favourites_html", return_value=SimpleNamespace(text="")),
+			patch.object(
+				KemonoFavouritesStrategy,
+				"_get_favourites_html",
+				return_value=SimpleNamespace(text="", url=KemonoFavouritesStrategy.fav_url),
+			),
 			patch.object(KemonoFavouritesStrategy, "_extract_kemono_profile_cards", return_value=[card]),
 		):
 			result = strategy.scrape(
@@ -349,7 +353,11 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 		)
 
 		with (
-			patch.object(KemonoFavouritesStrategy, "_get_favourites_html", return_value=SimpleNamespace(text="")),
+			patch.object(
+				KemonoFavouritesStrategy,
+				"_get_favourites_html",
+				return_value=SimpleNamespace(text="", url=KemonoFavouritesStrategy.fav_url),
+			),
 			patch.object(KemonoFavouritesStrategy, "_extract_kemono_profile_cards", return_value=[card]),
 		):
 			result = strategy.scrape(
@@ -389,6 +397,85 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 
 		assert result == Err("Invalid URL")
 		assert mocker.request_history == []
+
+
+class KemonoFavouritesLoginGuardTestCase(TestCase):
+	"""A failed login must surface as Err, while a genuinely empty favourites list stays Ok([])."""
+
+	LOGIN_PAGE = '<main id="main"><form id="login_form" method="POST" action="/account/login"></form></main>'
+	EMPTY_FAVOURITES = '<main id="main"><div class="card-list__items"></div></main>'
+
+	def _scrape(self, mocker: requests_mock.Mocker) -> Any:
+		mocker.post(KemonoFavouritesStrategy.login_url, text="")
+		return KemonoFavouritesStrategy().scrape(
+			URL(KemonoFavouritesStrategy.fav_url),
+			{"username": "u", "password": "p"},
+			{},
+		)
+
+	def test_redirect_to_login_page_is_an_error_naming_the_path_but_not_the_query(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(
+				KemonoFavouritesStrategy.fav_url,
+				status_code=302,
+				headers={"Location": "/account/login?location=/favorites"},
+			)
+			mocker.get(KemonoFavouritesStrategy.login_url, text=self.LOGIN_PAGE)
+			result = self._scrape(mocker)
+
+		assert isinstance(result, Err)
+		assert "ended at https://pawchive.pw/account/login instead of" in result.error
+		assert "?" not in result.error
+		assert "location=" not in result.error
+
+	def test_empty_favourites_page_is_ok_not_a_login_failure(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(KemonoFavouritesStrategy.fav_url, text=self.EMPTY_FAVOURITES)
+			result = self._scrape(mocker)
+
+		assert result == Ok(ScrapeSuccess(updates=[], comparison_state_update=None))
+
+	def test_trailing_slash_or_query_on_the_favourites_page_is_accepted(self):
+		for final_url in (f"{KemonoFavouritesStrategy.fav_url}/", f"{KemonoFavouritesStrategy.fav_url}?logged_in=yes"):
+			with self.subTest(final_url=final_url), requests_mock.Mocker() as mocker:
+				mocker.get(
+					KemonoFavouritesStrategy.fav_url,
+					complete_qs=True,
+					status_code=302,
+					headers={"Location": final_url},
+				)
+				mocker.get(final_url, complete_qs=True, text=self.EMPTY_FAVOURITES)
+				result = self._scrape(mocker)
+
+				assert result == Ok(ScrapeSuccess(updates=[], comparison_state_update=None))
+				assert mocker.request_history[-1].url == final_url
+
+	def test_favourites_url_must_share_the_origin_including_the_effective_port(self):
+		cases = [
+			("https://pawchive.pw/favorites", True),
+			("https://PAWCHIVE.pw/favorites/", True),
+			("https://pawchive.pw:443/favorites", True),
+			("https://pawchive.pw:8443/favorites", False),
+			("http://pawchive.pw/favorites", False),
+			("https://pawchive.pw.example/favorites", False),
+			("https://pawchive.pw/account/login", False),
+		]
+		for url, expected in cases:
+			with self.subTest(url=url):
+				assert KemonoFavouritesStrategy._is_favourites_url(url) is expected
+
+	def test_redirect_to_another_host_is_an_error(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(
+				KemonoFavouritesStrategy.fav_url,
+				status_code=302,
+				headers={"Location": "https://elsewhere.example/favorites"},
+			)
+			mocker.get("https://elsewhere.example/favorites", text=self.EMPTY_FAVOURITES)
+			result = self._scrape(mocker)
+
+		assert isinstance(result, Err)
+		assert "ended at https://elsewhere.example/favorites instead of" in result.error
 
 
 def _kemono_card_html(time_text: str) -> str:
