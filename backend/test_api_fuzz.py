@@ -27,6 +27,7 @@ fuzzing it would break the fuzzer itself or reach outside the test process.
 """
 
 import os
+import socket
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -200,6 +201,22 @@ def fuzz_credentials(live_server: Any, django_user_model: Any) -> FuzzCredential
 	)
 
 
+@pytest.fixture
+def ipv4_localhost(monkeypatch: pytest.MonkeyPatch) -> None:
+	"""Resolve ``localhost`` to 127.0.0.1 alone. Purely a speed fix.
+
+	The live server binds 127.0.0.1 and the fuzzer opens a fresh connection per
+	request. On Windows every such connect tries ::1 first and stalls ~2s on the
+	refusal, which takes this module from ~15s to ~105s.
+	"""
+	real_getaddrinfo = socket.getaddrinfo
+
+	def getaddrinfo(host: bytes | str | None, port: bytes | str | int | None, *args: Any, **kwargs: Any) -> Any:
+		return real_getaddrinfo("127.0.0.1" if host == "localhost" else host, port, *args, **kwargs)
+
+	monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+
+
 def _requires_auth(case: Case[Any]) -> bool:
 	"""True when the operation declares no anonymous (``{}``) security alternative.
 
@@ -224,6 +241,7 @@ def _requires_auth(case: Case[Any]) -> bool:
 @pytest.mark.timeout(TIMEOUT_SECONDS)
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.fuzz
+@pytest.mark.usefixtures("ipv4_localhost")
 def test_operation_survives_generated_input(
 	case: Case[Any],
 	live_server: Any,
