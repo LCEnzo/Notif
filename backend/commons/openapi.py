@@ -22,10 +22,7 @@ class ErrorDetailSerializer(_AnySerializer):
 
 
 class NotifAutoSchema(AutoSchema):
-	"""AutoSchema plus the 400/401/403/404 that DRF's own machinery raises.
-
-	Each is derived from the view, so no view needs a decorator for it; a status the view documents keeps its wording.
-	"""
+	"""AutoSchema plus the 400/401/403/404 DRF raises around each view; see docs/architecture/openapi.md."""
 
 	@override
 	def get_operation(
@@ -94,9 +91,7 @@ class NotifAutoSchema(AutoSchema):
 
 	@staticmethod
 	def _admit_parse_errors(response: dict[str, Any], error_detail: dict[str, Any]) -> None:
-		# The parser, and for cookie sessions the CSRF check (it reads POST bodies), run
-		# before the view, so a body that does not parse is DRF's {"detail"} 400 whatever
-		# the view documents. anyOf, not oneOf: the view's shape need not exclude "detail".
+		# A body that does not parse is DRF's {"detail"} 400 whatever the view documents.
 		for media in response.get("content", {}).values():
 			documented = media.get("schema")
 			if documented is None or documented == error_detail:
