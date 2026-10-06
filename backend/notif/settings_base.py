@@ -206,6 +206,7 @@ REST_FRAMEWORK: dict[str, Any] = {
 	"DEFAULT_AUTHENTICATION_CLASSES": [
 		"accounts.authentication.SessionTokenAuthentication",
 	],
+	# Adds the error statuses DRF raises around views; see docs/architecture/openapi.md.
 	"DEFAULT_SCHEMA_CLASS": "commons.openapi.NotifAutoSchema",
 	"DEFAULT_THROTTLE_CLASSES": [
 		"rest_framework.throttling.UserRateThrottle",
