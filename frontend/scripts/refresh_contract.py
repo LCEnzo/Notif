@@ -4,14 +4,14 @@
 Single source of truth is ``backend/openapi.json`` (kept honest by the backend
 drift check, ``scripts/check_openapi_drift.py``). This script:
 
-1. copies ``backend/openapi.json`` -> ``frontend/swagger/openapi.json``;
+1. copies ``backend/openapi.json`` -> ``frontend/swagger/openapi.json``
+   (gitignored; build_runner only reads inputs inside the package);
 2. runs ``dart run build_runner build`` in ``frontend/``, which makes
    swagger_dart_code_generator emit the Dart models into
    ``frontend/lib/generated/``.
 
 The generated models are committed. CI runs this script and fails on
-``git diff --exit-code``, so a stale schema copy or stale generated models
-cannot merge silently.
+``git diff --exit-code``, so stale generated models cannot merge silently.
 """
 
 from __future__ import annotations
@@ -35,6 +35,8 @@ def _run(args: list[str]) -> int:
 
 
 def main() -> int:
+    # Nothing under swagger/ is tracked, so a fresh checkout lacks the dir.
+    FRONTEND_SPEC.parent.mkdir(exist_ok=True)
     shutil.copyfile(BACKEND_SPEC, FRONTEND_SPEC)
     build = _run(["dart", "run", "build_runner", "build"])
     if build != 0:

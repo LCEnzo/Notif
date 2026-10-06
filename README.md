@@ -81,8 +81,8 @@ backend's OpenAPI schema (`backend/openapi.json`) with
 	uv run python scripts/check_openapi_drift.py --write
 	```
 
-2. Refresh the FE models (copies the schema into `frontend/swagger/`, runs
-   the code generator, formats the output):
+2. Refresh the FE models (copies the schema into `frontend/swagger/`, which
+   is gitignored, runs the code generator, formats the output):
 
 	```bash
 	python frontend/scripts/refresh_contract.py
@@ -90,7 +90,9 @@ backend's OpenAPI schema (`backend/openapi.json`) with
 
 	This is the one command to run day-to-day; it is idempotent when the
 	schema is unchanged. It needs `dart` (or a Flutter SDK) on `PATH` and can
-	be run from anywhere in the repo.
+	be run from anywhere in the repo. Bare `dart run build_runner build` reads
+	whatever copy is in `frontend/swagger/` and fails if there is none, so use
+	the script.
 
 Commit the generated files with the change that produced them. CI enforces
 both halves — `backend.yml` fails on schema drift, `frontend.yml` fails if the
