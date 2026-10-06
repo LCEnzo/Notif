@@ -7,11 +7,14 @@ on:
     branches: [master]
     paths:
       - '**/*.sh'
+      # Explicit, as GitHub does not document whether ** enters dot-directories.
+      - '.github/**/*.sh'
       - '.github/workflows/shellcheck.yml'
   pull_request:
     branches: [master]
     paths:
       - '**/*.sh'
+      - '.github/**/*.sh'
       - '.github/workflows/shellcheck.yml'
 
 permissions:
