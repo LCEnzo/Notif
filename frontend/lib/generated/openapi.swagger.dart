@@ -76,6 +76,72 @@ extension $CaddyAccessLogResponseExtension on CaddyAccessLogResponse {
 }
 
 @JsonSerializable(explicitToJson: true)
+class ChangePasswordRequest {
+  const ChangePasswordRequest({this.currentPassword, this.newPassword});
+
+  factory ChangePasswordRequest.fromJson(Map<String, dynamic> json) =>
+      _$ChangePasswordRequestFromJson(json);
+
+  static const toJsonFactory = _$ChangePasswordRequestToJson;
+  Map<String, dynamic> toJson() => _$ChangePasswordRequestToJson(this);
+
+  @JsonKey(name: 'current_password')
+  final String? currentPassword;
+  @JsonKey(name: 'new_password')
+  final String? newPassword;
+  static const fromJsonFactory = _$ChangePasswordRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is ChangePasswordRequest &&
+            (identical(other.currentPassword, currentPassword) ||
+                const DeepCollectionEquality().equals(
+                  other.currentPassword,
+                  currentPassword,
+                )) &&
+            (identical(other.newPassword, newPassword) ||
+                const DeepCollectionEquality().equals(
+                  other.newPassword,
+                  newPassword,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(currentPassword) ^
+      const DeepCollectionEquality().hash(newPassword) ^
+      runtimeType.hashCode;
+}
+
+extension $ChangePasswordRequestExtension on ChangePasswordRequest {
+  ChangePasswordRequest copyWith({
+    String? currentPassword,
+    String? newPassword,
+  }) {
+    return ChangePasswordRequest(
+      currentPassword: currentPassword ?? this.currentPassword,
+      newPassword: newPassword ?? this.newPassword,
+    );
+  }
+
+  ChangePasswordRequest copyWithWrapped({
+    Wrapped<String?>? currentPassword,
+    Wrapped<String?>? newPassword,
+  }) {
+    return ChangePasswordRequest(
+      currentPassword: (currentPassword != null
+          ? currentPassword.value
+          : this.currentPassword),
+      newPassword: (newPassword != null ? newPassword.value : this.newPassword),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
 class ClientEvent {
   const ClientEvent({
     required this.category,
@@ -451,6 +517,86 @@ extension $DeviceSessionExtension on DeviceSession {
       userAgent: (userAgent != null ? userAgent.value : this.userAgent),
       current: (current != null ? current.value : this.current),
     );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class ErrorDetail {
+  const ErrorDetail({required this.detail});
+
+  factory ErrorDetail.fromJson(Map<String, dynamic> json) =>
+      _$ErrorDetailFromJson(json);
+
+  static const toJsonFactory = _$ErrorDetailToJson;
+  Map<String, dynamic> toJson() => _$ErrorDetailToJson(this);
+
+  @JsonKey(name: 'detail')
+  final String detail;
+  static const fromJsonFactory = _$ErrorDetailFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is ErrorDetail &&
+            (identical(other.detail, detail) ||
+                const DeepCollectionEquality().equals(other.detail, detail)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(detail) ^ runtimeType.hashCode;
+}
+
+extension $ErrorDetailExtension on ErrorDetail {
+  ErrorDetail copyWith({String? detail}) {
+    return ErrorDetail(detail: detail ?? this.detail);
+  }
+
+  ErrorDetail copyWithWrapped({Wrapped<String>? detail}) {
+    return ErrorDetail(detail: (detail != null ? detail.value : this.detail));
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class ErrorMessage {
+  const ErrorMessage({required this.error});
+
+  factory ErrorMessage.fromJson(Map<String, dynamic> json) =>
+      _$ErrorMessageFromJson(json);
+
+  static const toJsonFactory = _$ErrorMessageToJson;
+  Map<String, dynamic> toJson() => _$ErrorMessageToJson(this);
+
+  @JsonKey(name: 'error')
+  final String error;
+  static const fromJsonFactory = _$ErrorMessageFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is ErrorMessage &&
+            (identical(other.error, error) ||
+                const DeepCollectionEquality().equals(other.error, error)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(error) ^ runtimeType.hashCode;
+}
+
+extension $ErrorMessageExtension on ErrorMessage {
+  ErrorMessage copyWith({String? error}) {
+    return ErrorMessage(error: error ?? this.error);
+  }
+
+  ErrorMessage copyWithWrapped({Wrapped<String>? error}) {
+    return ErrorMessage(error: (error != null ? error.value : this.error));
   }
 }
 
@@ -867,6 +1013,51 @@ extension $LoginResponseExtension on LoginResponse {
       transport: (transport != null ? transport.value : this.transport),
       publicId: (publicId != null ? publicId.value : this.publicId),
       token: (token != null ? token.value : this.token),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class MarkAllReadResponse {
+  const MarkAllReadResponse({required this.markedRead});
+
+  factory MarkAllReadResponse.fromJson(Map<String, dynamic> json) =>
+      _$MarkAllReadResponseFromJson(json);
+
+  static const toJsonFactory = _$MarkAllReadResponseToJson;
+  Map<String, dynamic> toJson() => _$MarkAllReadResponseToJson(this);
+
+  @JsonKey(name: 'marked_read')
+  final int markedRead;
+  static const fromJsonFactory = _$MarkAllReadResponseFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is MarkAllReadResponse &&
+            (identical(other.markedRead, markedRead) ||
+                const DeepCollectionEquality().equals(
+                  other.markedRead,
+                  markedRead,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(markedRead) ^ runtimeType.hashCode;
+}
+
+extension $MarkAllReadResponseExtension on MarkAllReadResponse {
+  MarkAllReadResponse copyWith({int? markedRead}) {
+    return MarkAllReadResponse(markedRead: markedRead ?? this.markedRead);
+  }
+
+  MarkAllReadResponse copyWithWrapped({Wrapped<int>? markedRead}) {
+    return MarkAllReadResponse(
+      markedRead: (markedRead != null ? markedRead.value : this.markedRead),
     );
   }
 }
@@ -2564,6 +2755,157 @@ extension $UserCreationExtension on UserCreation {
       email: (email != null ? email.value : this.email),
       name: (name != null ? name.value : this.name),
       password: (password != null ? password.value : this.password),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class UserFullRead {
+  const UserFullRead({
+    this.id,
+    this.name,
+    required this.email,
+    required this.username,
+    this.isStaff,
+    this.isSuperuser,
+    this.dateCreated,
+    this.dateModified,
+    this.dateDeleted,
+  });
+
+  factory UserFullRead.fromJson(Map<String, dynamic> json) =>
+      _$UserFullReadFromJson(json);
+
+  static const toJsonFactory = _$UserFullReadToJson;
+  Map<String, dynamic> toJson() => _$UserFullReadToJson(this);
+
+  @JsonKey(name: 'id')
+  final int? id;
+  @JsonKey(name: 'name')
+  final String? name;
+  @JsonKey(name: 'email')
+  final String email;
+  @JsonKey(name: 'username')
+  final String username;
+  @JsonKey(name: 'is_staff')
+  final bool? isStaff;
+  @JsonKey(name: 'is_superuser')
+  final bool? isSuperuser;
+  @JsonKey(name: 'date_created')
+  final DateTime? dateCreated;
+  @JsonKey(name: 'date_modified')
+  final DateTime? dateModified;
+  @JsonKey(name: 'date_deleted')
+  final DateTime? dateDeleted;
+  static const fromJsonFactory = _$UserFullReadFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is UserFullRead &&
+            (identical(other.id, id) ||
+                const DeepCollectionEquality().equals(other.id, id)) &&
+            (identical(other.name, name) ||
+                const DeepCollectionEquality().equals(other.name, name)) &&
+            (identical(other.email, email) ||
+                const DeepCollectionEquality().equals(other.email, email)) &&
+            (identical(other.username, username) ||
+                const DeepCollectionEquality().equals(
+                  other.username,
+                  username,
+                )) &&
+            (identical(other.isStaff, isStaff) ||
+                const DeepCollectionEquality().equals(
+                  other.isStaff,
+                  isStaff,
+                )) &&
+            (identical(other.isSuperuser, isSuperuser) ||
+                const DeepCollectionEquality().equals(
+                  other.isSuperuser,
+                  isSuperuser,
+                )) &&
+            (identical(other.dateCreated, dateCreated) ||
+                const DeepCollectionEquality().equals(
+                  other.dateCreated,
+                  dateCreated,
+                )) &&
+            (identical(other.dateModified, dateModified) ||
+                const DeepCollectionEquality().equals(
+                  other.dateModified,
+                  dateModified,
+                )) &&
+            (identical(other.dateDeleted, dateDeleted) ||
+                const DeepCollectionEquality().equals(
+                  other.dateDeleted,
+                  dateDeleted,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(id) ^
+      const DeepCollectionEquality().hash(name) ^
+      const DeepCollectionEquality().hash(email) ^
+      const DeepCollectionEquality().hash(username) ^
+      const DeepCollectionEquality().hash(isStaff) ^
+      const DeepCollectionEquality().hash(isSuperuser) ^
+      const DeepCollectionEquality().hash(dateCreated) ^
+      const DeepCollectionEquality().hash(dateModified) ^
+      const DeepCollectionEquality().hash(dateDeleted) ^
+      runtimeType.hashCode;
+}
+
+extension $UserFullReadExtension on UserFullRead {
+  UserFullRead copyWith({
+    int? id,
+    String? name,
+    String? email,
+    String? username,
+    bool? isStaff,
+    bool? isSuperuser,
+    DateTime? dateCreated,
+    DateTime? dateModified,
+    DateTime? dateDeleted,
+  }) {
+    return UserFullRead(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      username: username ?? this.username,
+      isStaff: isStaff ?? this.isStaff,
+      isSuperuser: isSuperuser ?? this.isSuperuser,
+      dateCreated: dateCreated ?? this.dateCreated,
+      dateModified: dateModified ?? this.dateModified,
+      dateDeleted: dateDeleted ?? this.dateDeleted,
+    );
+  }
+
+  UserFullRead copyWithWrapped({
+    Wrapped<int?>? id,
+    Wrapped<String?>? name,
+    Wrapped<String>? email,
+    Wrapped<String>? username,
+    Wrapped<bool?>? isStaff,
+    Wrapped<bool?>? isSuperuser,
+    Wrapped<DateTime?>? dateCreated,
+    Wrapped<DateTime?>? dateModified,
+    Wrapped<DateTime?>? dateDeleted,
+  }) {
+    return UserFullRead(
+      id: (id != null ? id.value : this.id),
+      name: (name != null ? name.value : this.name),
+      email: (email != null ? email.value : this.email),
+      username: (username != null ? username.value : this.username),
+      isStaff: (isStaff != null ? isStaff.value : this.isStaff),
+      isSuperuser: (isSuperuser != null ? isSuperuser.value : this.isSuperuser),
+      dateCreated: (dateCreated != null ? dateCreated.value : this.dateCreated),
+      dateModified: (dateModified != null
+          ? dateModified.value
+          : this.dateModified),
+      dateDeleted: (dateDeleted != null ? dateDeleted.value : this.dateDeleted),
     );
   }
 }

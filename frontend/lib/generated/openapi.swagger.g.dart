@@ -22,6 +22,20 @@ Map<String, dynamic> _$CaddyAccessLogResponseToJson(
   'results': instance.results,
 };
 
+ChangePasswordRequest _$ChangePasswordRequestFromJson(
+  Map<String, dynamic> json,
+) => ChangePasswordRequest(
+  currentPassword: json['current_password'] as String?,
+  newPassword: json['new_password'] as String?,
+);
+
+Map<String, dynamic> _$ChangePasswordRequestToJson(
+  ChangePasswordRequest instance,
+) => <String, dynamic>{
+  'current_password': instance.currentPassword,
+  'new_password': instance.newPassword,
+};
+
 ClientEvent _$ClientEventFromJson(Map<String, dynamic> json) => ClientEvent(
   category: categoryEnumFromJson(json['category']),
   route: json['route'] as String?,
@@ -87,6 +101,18 @@ Map<String, dynamic> _$DeviceSessionToJson(DeviceSession instance) =>
       'user_agent': instance.userAgent,
       'current': instance.current,
     };
+
+ErrorDetail _$ErrorDetailFromJson(Map<String, dynamic> json) =>
+    ErrorDetail(detail: json['detail'] as String);
+
+Map<String, dynamic> _$ErrorDetailToJson(ErrorDetail instance) =>
+    <String, dynamic>{'detail': instance.detail};
+
+ErrorMessage _$ErrorMessageFromJson(Map<String, dynamic> json) =>
+    ErrorMessage(error: json['error'] as String);
+
+Map<String, dynamic> _$ErrorMessageToJson(ErrorMessage instance) =>
+    <String, dynamic>{'error': instance.error};
 
 HealthCheckResponse _$HealthCheckResponseFromJson(Map<String, dynamic> json) =>
     HealthCheckResponse(status: json['status'] as String);
@@ -157,6 +183,13 @@ Map<String, dynamic> _$LoginResponseToJson(LoginResponse instance) =>
       'public_id': instance.publicId,
       'token': instance.token,
     };
+
+MarkAllReadResponse _$MarkAllReadResponseFromJson(Map<String, dynamic> json) =>
+    MarkAllReadResponse(markedRead: (json['marked_read'] as num).toInt());
+
+Map<String, dynamic> _$MarkAllReadResponseToJson(
+  MarkAllReadResponse instance,
+) => <String, dynamic>{'marked_read': instance.markedRead};
 
 Notification _$NotificationFromJson(Map<String, dynamic> json) => Notification(
   id: (json['id'] as num?)?.toInt(),
@@ -502,6 +535,37 @@ Map<String, dynamic> _$UserCreationToJson(UserCreation instance) =>
       'email': instance.email,
       'name': instance.name,
       'password': instance.password,
+    };
+
+UserFullRead _$UserFullReadFromJson(Map<String, dynamic> json) => UserFullRead(
+  id: (json['id'] as num?)?.toInt(),
+  name: json['name'] as String?,
+  email: json['email'] as String,
+  username: json['username'] as String,
+  isStaff: json['is_staff'] as bool?,
+  isSuperuser: json['is_superuser'] as bool?,
+  dateCreated: json['date_created'] == null
+      ? null
+      : DateTime.parse(json['date_created'] as String),
+  dateModified: json['date_modified'] == null
+      ? null
+      : DateTime.parse(json['date_modified'] as String),
+  dateDeleted: json['date_deleted'] == null
+      ? null
+      : DateTime.parse(json['date_deleted'] as String),
+);
+
+Map<String, dynamic> _$UserFullReadToJson(UserFullRead instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'name': instance.name,
+      'email': instance.email,
+      'username': instance.username,
+      'is_staff': instance.isStaff,
+      'is_superuser': instance.isSuperuser,
+      'date_created': instance.dateCreated?.toIso8601String(),
+      'date_modified': instance.dateModified?.toIso8601String(),
+      'date_deleted': instance.dateDeleted?.toIso8601String(),
     };
 
 UserMinimalRead _$UserMinimalReadFromJson(Map<String, dynamic> json) =>
