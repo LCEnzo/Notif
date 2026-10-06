@@ -80,8 +80,7 @@ class UserViewSetTestCase(ViewSetMixin):
 		self._test_update_object()
 
 	def test_put_is_not_routed_and_changes_nothing(self):
-		# Cases where the permission passes, so the 405 is the method's verdict
-		# rather than a 403 standing in front of it.
+		# Callers the permission admits, so the method, not a 403, decides the answer.
 		admin_client = login_client(APIClient(), self.superuser.get_username())
 		cases = [
 			("own row", self.api_client, self.regular_user),
@@ -464,8 +463,7 @@ class LoginViewTestCase(TestCase):
 		self.assertEqual(DeviceSession.objects.count(), 0)
 
 	def test_login_refuses_blank_credentials_before_checking_them(self):
-		# A 400 naming the field, not the 401 a wrong credential gets: the schema
-		# states this as minLength 1. device_label is the control - blank is fine.
+		# A 400 naming the field, not a credential 401; device_label, which takes "", is the control.
 		for field in ("username", "password"):
 			with self.subTest(field=field):
 				blank: dict[str, Any] = {field: ""}

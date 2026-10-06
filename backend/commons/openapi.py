@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 else:
 	_AnySerializer = serializers.Serializer
 
-# Methods whose request carries a body that DRF parses.
 _BODY_METHODS = frozenset({"POST", "PUT", "PATCH"})
 
 
@@ -23,31 +22,9 @@ class ErrorDetailSerializer(_AnySerializer):
 
 
 class NotifAutoSchema(AutoSchema):
-	"""AutoSchema that also documents the error statuses DRF's own machinery produces.
+	"""AutoSchema plus the 400/401/403/404 that DRF's own machinery raises.
 
-	drf-spectacular documents success responses only, unless a view lists more
-	with @extend_schema. Each status added here comes from DRF machinery that
-	runs on every view using it, so it is derived from the view rather than
-	repeated by hand on each one.
-
-	400 on POST, PUT and PATCH: the body may not parse, or may fail validation.
-
-	401 on any view with an authenticator. A dead or malformed bearer token is
-	refused even where anonymous callers are welcome, and a protected view
-	refuses a missing credential.
-
-	403 on unsafe methods of a view with an authenticator, which refuses a live
-	cookie session sent without a valid CSRF token; and on views gated on
-	IsAdminUser (IsSuperUser included), which refuse every other caller.
-
-	404 on a path parameter, which an object lookup can miss, and on a
-	paginated list, which refuses a page past the last one.
-
-	A status the view documents itself keeps the view's wording. The parser
-	runs before the view, and for cookie sessions so does the CSRF check, which
-	reads POST bodies too; so a body that does not parse is DRF's 400
-	``{"detail": ...}`` whatever 400 body the view documents, and that body is
-	widened to accept either shape.
+	Each is derived from the view, so no view needs a decorator for it; a status the view documents keeps its wording.
 	"""
 
 	@override
@@ -69,8 +46,7 @@ class NotifAutoSchema(AutoSchema):
 			self._admit_parse_errors(responses["400"], error_detail)
 		for code, description in self._framework_errors(operation):
 			if code not in responses:
-				# A 400's body is either DRF's {"detail"} or a serializer's
-				# per-field errors, so it is described rather than given a schema.
+				# A 400 is DRF's {"detail"} or a serializer's per-field errors, so it gets no schema.
 				responses[code] = self._error_response(description, None if code == "400" else error_detail)
 		operation["responses"] = dict(sorted(responses.items()))
 		return operation
@@ -83,6 +59,7 @@ class NotifAutoSchema(AutoSchema):
 		if self.method in _BODY_METHODS:
 			errors.append(("400", "The request body could not be parsed, or failed validation."))
 
+		# Anonymous views included: a dead bearer token is refused, not ignored.
 		if authenticates:
 			errors.append(("401", "The session token is missing where one is required, or is invalid or expired."))
 
@@ -97,6 +74,7 @@ class NotifAutoSchema(AutoSchema):
 		not_found: list[str] = []
 		if any(parameter["in"] == "path" for parameter in parameters):
 			not_found.append("nothing matches the path parameters")
+		# A paginated operation is one drf-spectacular gave the paginator's page parameter.
 		paginator = getattr(self.view, "paginator", None)
 		query_names = {parameter["name"] for parameter in parameters if parameter["in"] == "query"}
 		if paginator is not None and getattr(paginator, "page_query_param", None) in query_names:
@@ -116,8 +94,9 @@ class NotifAutoSchema(AutoSchema):
 
 	@staticmethod
 	def _admit_parse_errors(response: dict[str, Any], error_detail: dict[str, Any]) -> None:
-		# anyOf rather than oneOf: a view's own 400 schema need not exclude a
-		# "detail" key, and either shape matching is all a client can rely on.
+		# The parser, and for cookie sessions the CSRF check (it reads POST bodies), run
+		# before the view, so a body that does not parse is DRF's {"detail"} 400 whatever
+		# the view documents. anyOf, not oneOf: the view's shape need not exclude "detail".
 		for media in response.get("content", {}).values():
 			documented = media.get("schema")
 			if documented is None or documented == error_detail:

@@ -44,7 +44,6 @@ urlpatterns = [
 	path("api/v1/redoc/", SpectacularRedocView.as_view(permission_classes=[AllowAny], url_name="schema"), name="redoc"),
 ]
 
-# Under /api/, a URL nothing matches answers JSON like every other API 404.
 handler404 = "notif.views.page_not_found"
 
 if settings.DEBUG:

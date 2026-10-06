@@ -66,12 +66,10 @@ class UserCreationSerializer(_UserModelSerializer):
 		return attrs
 
 
+# Documents the body only: the view validates it itself, since a CharField would
+# coerce a number into a string and the view refuses one.
 class ChangePasswordRequestSerializer(_AnySerializer):
-	"""The change_password body, for the schema.
-
-	The view validates the body itself rather than through this serializer: a
-	CharField would coerce a number into a string, which the view refuses.
-	"""
+	"""The current password, and the one to replace it."""
 
 	current_password = serializers.CharField(write_only=True, min_length=1)
 	new_password = serializers.CharField(write_only=True, min_length=1)
@@ -111,8 +109,7 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 
 
 class LoginRequestSerializer(_AnySerializer):
-	# min_length repeats what allow_blank=False already enforces, so that the
-	# schema states it: drf-spectacular emits minLength only from min_length.
+	# min_length=1 is for the schema: allow_blank=False already refuses "" but emits no minLength.
 	username = serializers.CharField(min_length=1)
 	password = serializers.CharField(write_only=True, min_length=1)
 	transport = serializers.ChoiceField(

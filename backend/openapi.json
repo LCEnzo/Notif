@@ -2700,7 +2700,7 @@
             },
             "ChangePasswordRequest": {
                 "type": "object",
-                "description": "The change_password body, for the schema.\n\nThe view validates the body itself rather than through this serializer: a\nCharField would coerce a number into a string, which the view refuses.",
+                "description": "The current password, and the one to replace it.",
                 "properties": {
                     "current_password": {
                         "type": "string",

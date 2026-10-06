@@ -1,11 +1,6 @@
 """Facts about the generated OpenAPI schema that clients and the fuzzer rely on.
 
-The schema is generated in-process from the view code, not read from
-``openapi.json``, so a failure names the view that changed; the drift check
-separately holds the committed file to this same output. Each test pins what
-the API really does at runtime, which the view tests cover from the other side.
-
-Run with: uv run pytest -q test_openapi_schema.py
+Generated in-process from the views, so a failure names the view; the drift check ties openapi.json to it.
 """
 
 from typing import Any
@@ -106,8 +101,7 @@ def test_login_credentials_are_documented_as_non_blank(schema: dict[str, Any]) -
 def test_registration_is_documented_as_open_to_anonymous_callers(schema: dict[str, Any]) -> None:
 	signed_in: list[dict[str, list[str]]] = [{"sessionBearer": []}, {"sessionCookie": []}]
 
-	# A presented session is still checked (a dead bearer token is a 401), so
-	# both schemes stay listed beside the anonymous alternative.
+	# Both schemes stay listed: a dead bearer token presented here is still a 401.
 	assert schema["paths"][USERS_LIST]["post"]["security"] == [*signed_in, {}]
 	# The control: listing users still needs a session.
 	assert schema["paths"][USERS_LIST]["get"]["security"] == signed_in

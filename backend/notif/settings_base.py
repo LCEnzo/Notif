@@ -205,7 +205,6 @@ REST_FRAMEWORK: dict[str, Any] = {
 	"DEFAULT_AUTHENTICATION_CLASSES": [
 		"accounts.authentication.SessionTokenAuthentication",
 	],
-	# drf-spectacular's AutoSchema, plus the 400/401/403/404 that DRF itself raises.
 	"DEFAULT_SCHEMA_CLASS": "commons.openapi.NotifAutoSchema",
 	"DEFAULT_THROTTLE_CLASSES": [
 		"rest_framework.throttling.UserRateThrottle",

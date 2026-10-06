@@ -516,9 +516,7 @@ class DeviceSessionViewSet(ListModelMixin, _DeviceSessionGenericViewSet):
 class UserViewSet(_UserModelViewSet):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
-	# No PUT: a full replacement must carry every required field, password
-	# included, and update() refuses a password, so PUT could only ever 400.
-	# PATCH is the update method.
+	# No PUT: a full replacement requires password, which update() refuses.
 	http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
 	def get_throttles(self) -> list[BaseThrottle]:
@@ -549,21 +547,15 @@ class UserViewSet(_UserModelViewSet):
 				return UserMinimalReadSerializer
 
 	def get_permissions(self) -> Sequence[Any]:
-		# Account creation, ie. registration, needs to work for visitors without an
-		# account. This is keyed on the action rather than the HTTP method because
-		# keying on the method also stripped IsAuthenticated off every POST @action
-		# on this viewset — change_password and get_my_info — which then reached
-		# their `assert isinstance(user, User)` with an AnonymousUser and returned
-		# 500 to unauthenticated callers. AllowAny rather than no permission at
-		# all: the two admit the same callers, but only AllowAny tells the schema
-		# generator that anonymous callers are welcome here.
+		# Registration is open to anyone. Keyed on the action, not the method, so the
+		# POST @actions keep IsAuthenticated; AllowAny rather than [] so the schema
+		# marks the operation anonymous.
 		if self.action == "create":
 			return [AllowAny()]
 
 		return super().get_permissions()
 
-	# The response is the caller's full record, never the minimal read the
-	# viewset's get_serializer_class() would hand the schema generator.
+	# Overrides the minimal read get_serializer_class() would give the schema.
 	@extend_schema(responses=UserFullReadSerializer)
 	@action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
 	def get_my_info(self, request: Request) -> Response:

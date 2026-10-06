@@ -124,11 +124,7 @@ class SendPasswordResetEmailTestCase(TestCase):
 
 
 class FrameworkErrorStatusTestCase(TestCase):
-	"""The runtime half of the error statuses NotifAutoSchema documents.
-
-	Each test drives one piece of DRF machinery a schema rule rests on, with a
-	control on the other side of the boundary.
-	"""
+	"""The DRF behaviour NotifAutoSchema's rules rest on, each test with a control."""
 
 	user: User
 
@@ -172,8 +168,7 @@ class FrameworkErrorStatusTestCase(TestCase):
 		self.assertEqual(set(response.data), {"detail"})
 
 	def test_the_csrf_check_parses_a_cookie_session_post_body(self):
-		# mark_all_read never reads its body, so only the CSRF check can parse
-		# it - and that check runs for cookie sessions alone.
+		# mark_all_read never reads its body; only a cookie session's CSRF check parses it.
 		url = reverse("notifications-mark-all-read")
 
 		bearer_response = self._bearer_client().post(url, "{", content_type="application/json")
@@ -184,8 +179,7 @@ class FrameworkErrorStatusTestCase(TestCase):
 		self.assertEqual(set(cookie_response.data), {"detail"})
 
 	def test_an_unparseable_body_is_drfs_400_whatever_the_view_answers_with(self):
-		# change_password answers its own refusals with {"error": ...}; a body
-		# that does not parse never reaches that code.
+		# A body that does not parse never reaches the view's own {"error"} refusals.
 		url = reverse("users-change-password")
 
 		for label, client in (("bearer", self._bearer_client()), ("cookie", self._cookie_client())):

@@ -165,13 +165,11 @@ def _parse_since(raw: str) -> datetime:
 		raise ParseError("since is outside the supported date range.") from exc
 
 
-# get_queryset() reads both on every action; they are documented where a caller
-# means to use them, the list and mark_all_read. status references the enum
-# component Notification.status already generates, so clients get one enum
-# rather than a copy per operation.
+# get_queryset() honours both on every action; documented where callers use them.
 _NOTIFICATION_FILTERS = [
 	OpenApiParameter(
 		"status",
+		# Notification.status's own enum component, so codegen emits one enum, not one per operation.
 		type={"$ref": "#/components/schemas/StatusEnum"},
 		description="Only notifications in this state.",
 	),
