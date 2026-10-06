@@ -9,7 +9,7 @@ from django.db import connections
 from django.db.models import DateTimeField
 from django.db.models.query import QuerySet
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status as http_status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ParseError, ValidationError
@@ -165,6 +165,40 @@ def _parse_since(raw: str) -> datetime:
 		raise ParseError("since is outside the supported date range.") from exc
 
 
+# get_queryset() reads both on every action; they are documented where a caller
+# means to use them, the list and mark_all_read. status references the enum
+# component Notification.status already generates, so clients get one enum
+# rather than a copy per operation.
+_NOTIFICATION_FILTERS = [
+	OpenApiParameter(
+		"status",
+		type={"$ref": "#/components/schemas/StatusEnum"},
+		description="Only notifications in this state.",
+	),
+	OpenApiParameter(
+		"since",
+		# The two shapes _parse_since() reads; any other string is a 400.
+		type={"anyOf": [{"type": "string", "format": "date-time"}, {"type": "string", "format": "date"}]},
+		description=(
+			"Only notifications whose update was created at or after this ISO 8601 date or datetime. "
+			"A value without an offset is read in the server's time zone."
+		),
+	),
+]
+
+
+@extend_schema_view(
+	list=extend_schema(
+		parameters=_NOTIFICATION_FILTERS,
+		responses={
+			http_status.HTTP_200_OK: NotificationSerializer(many=True),
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="since is not an ISO 8601 date or datetime, or is out of range.",
+			),
+		},
+	),
+)
 class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, _NotificationGenericViewSet):
 	permission_classes = [IsAuthenticated]
 	serializer_class = NotificationSerializer
@@ -202,7 +236,17 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		else:
 			serializer.save()
 
-	@extend_schema(request=None, responses={http_status.HTTP_200_OK: MarkAllReadResponseSerializer})
+	@extend_schema(
+		request=None,
+		parameters=_NOTIFICATION_FILTERS,
+		responses={
+			http_status.HTTP_200_OK: MarkAllReadResponseSerializer,
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="since is unreadable, or a cookie session sent a body that does not parse.",
+			),
+		},
+	)
 	@action(detail=False, methods=["post"])
 	def mark_all_read(self, request: Request) -> Response:
 		updated = (

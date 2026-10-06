@@ -13,11 +13,14 @@ from typing import Any
 import pytest
 from drf_spectacular.generators import SchemaGenerator
 
+from monitoring.models import Notification
+
 USERS_LIST = "/api/v1/accounts/users/"
 USERS_DETAIL = "/api/v1/accounts/users/{id}/"
 GET_MY_INFO = "/api/v1/accounts/users/get_my_info/"
 CHANGE_PASSWORD = "/api/v1/accounts/users/change_password/"
 MARK_ALL_READ = "/api/v1/monitoring/notifications/mark_all_read/"
+NOTIFICATIONS_LIST = "/api/v1/monitoring/notifications/"
 LINKS_LIST = "/api/v1/monitoring/links/"
 LINK_DETAIL = "/api/v1/monitoring/links/{id}/"
 TRIGGER_SCRAPE = "/api/v1/monitoring/trigger-scrape/"
@@ -179,3 +182,21 @@ def test_view_specific_400s_are_documented(schema: dict[str, Any]) -> None:
 	limit = next(parameter for parameter in caddy_logs["parameters"] if parameter["name"] == "limit")
 	assert limit["in"] == "query"
 	assert (limit["schema"]["minimum"], limit["schema"]["maximum"], limit["schema"]["default"]) == (1, 200, 50)
+
+
+@pytest.mark.parametrize(("path", "method"), [(NOTIFICATIONS_LIST, "get"), (MARK_ALL_READ, "post")])
+def test_notification_filters_are_documented(schema: dict[str, Any], path: str, method: str) -> None:
+	operation = schema["paths"][path][method]
+	query = {parameter["name"]: parameter for parameter in operation["parameters"] if parameter["in"] == "query"}
+
+	assert query["status"]["schema"] == _ref("StatusEnum")
+	assert set(_component(schema, "StatusEnum")["enum"]) == set(Notification.Status.values)
+	assert {option["format"] for option in query["since"]["schema"]["anyOf"]} == {"date-time", "date"}
+	# An unreadable since is a ParseError, so this 400 is always DRF's {"detail"}.
+	assert _json_body(operation["responses"]["400"]) == _ref("ErrorDetail")
+
+
+def test_documenting_the_list_filters_keeps_the_paginated_envelope(schema: dict[str, Any]) -> None:
+	list_200 = schema["paths"][NOTIFICATIONS_LIST]["get"]["responses"]["200"]
+
+	assert _json_body(list_200) == _ref("PaginatedNotificationList")

@@ -1366,6 +1366,31 @@
                         "schema": {
                             "type": "integer"
                         }
+                    },
+                    {
+                        "in": "query",
+                        "name": "since",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                {
+                                    "type": "string",
+                                    "format": "date"
+                                }
+                            ]
+                        },
+                        "description": "Only notifications whose update was created at or after this ISO 8601 date or datetime. A value without an offset is read in the server's time zone."
+                    },
+                    {
+                        "in": "query",
+                        "name": "status",
+                        "schema": {
+                            "$ref": "#/components/schemas/StatusEnum"
+                        },
+                        "description": "Only notifications in this state."
                     }
                 ],
                 "tags": [
@@ -1389,6 +1414,16 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "since is not an ISO 8601 date or datetime, or is out of range."
                     },
                     "401": {
                         "content": {
@@ -1653,6 +1688,33 @@
         "/api/v1/monitoring/notifications/mark_all_read/": {
             "post": {
                 "operationId": "monitoring_notifications_mark_all_read_create",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "since",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                {
+                                    "type": "string",
+                                    "format": "date"
+                                }
+                            ]
+                        },
+                        "description": "Only notifications whose update was created at or after this ISO 8601 date or datetime. A value without an offset is read in the server's time zone."
+                    },
+                    {
+                        "in": "query",
+                        "name": "status",
+                        "schema": {
+                            "$ref": "#/components/schemas/StatusEnum"
+                        },
+                        "description": "Only notifications in this state."
+                    }
+                ],
                 "tags": [
                     "monitoring"
                 ],
@@ -1676,7 +1738,14 @@
                         "description": ""
                     },
                     "400": {
-                        "description": "The request body could not be parsed, or failed validation."
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "since is unreadable, or a cookie session sent a body that does not parse."
                     },
                     "401": {
                         "content": {
