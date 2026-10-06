@@ -163,7 +163,7 @@ mutmut copies `source_paths` plus `also_copy` into `mutants/` and runs there. It
 
 ### Schedule and gate
 
-The cron fires on Saturdays at 02:17 UTC (04:17 in Belgrade in summer, 03:17 in winter), so results are waiting on the first workday. It avoids the top of the hour, when GitHub says scheduled runs are most often delayed and, under enough load, dropped.
+The cron fires on Saturdays at 02:17 UTC (04:17 in Belgrade in summer, 03:17 in winter), so the results are ready on Saturday morning. It avoids the top of the hour, when GitHub says scheduled runs are most often delayed and, under enough load, dropped.
 
 The `gate` job runs `.github/scripts/deep-sweeps-gate.sh`. A manual run starts whichever sweeps its `sweeps` input selects, unconditionally. A scheduled run decides per sweep, from that sweep's last successful run: the newest completed run of this workflow on `master`, among the last 50, in which that sweep's job concluded `success`. Manual runs count. A failed, cancelled or skipped sweep job does not, so a broken sweep is retried the next Saturday.
 
