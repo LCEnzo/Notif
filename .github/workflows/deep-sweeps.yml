@@ -1,6 +1,6 @@
 name: Deep Test Sweeps
 
-# Non-gating sweeps, weekly when enough backend code changed or on demand: see docs/testing.md.
+# Non-gating sweeps: weekly schedule, each sweep at most fortnightly, or on demand. See docs/testing.md.
 
 on:
   workflow_dispatch:
@@ -10,13 +10,9 @@ on:
         type: choice
         default: 'both'
         options: ['both', 'fuzz', 'mutation']
-      force:
-        description: 'Run even if little has changed'
-        type: boolean
-        default: true
   schedule:
-    # Mondays, 03:00 UTC.
-    - cron: '0 3 * * 1'
+    # Saturdays 02:17 UTC: 04:17 in Belgrade in summer, 03:17 in winter.
+    - cron: '17 2 * * 6'
 
 permissions:
   contents: read
@@ -28,65 +24,41 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # A scheduled run sweeps only when at least this many lines of non-test
-  # backend source were added or removed within CHANGE_WINDOW.
+  # A scheduled run starts a sweep only when its last successful run is at least
+  # MIN_DAYS_SINCE_LAST_SWEEP old and CHANGE_THRESHOLD lines of non-test backend
+  # source changed since that run's commit.
   CHANGE_THRESHOLD: 200
-  CHANGE_WINDOW: '7 days ago'
+  MIN_DAYS_SINCE_LAST_SWEEP: 13
 
 jobs:
   gate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # Reads this workflow's earlier runs and their jobs.
+      actions: read
     outputs:
-      should_run: ${{ steps.check.outputs.should_run }}
-      changed_lines: ${{ steps.check.outputs.changed_lines }}
+      fuzz_should_run: ${{ steps.check.outputs.fuzz_should_run }}
+      fuzz_churn: ${{ steps.check.outputs.fuzz_churn }}
+      mutation_should_run: ${{ steps.check.outputs.mutation_should_run }}
+      mutation_churn: ${{ steps.check.outputs.mutation_churn }}
     steps:
       - uses: actions/checkout@v6
         with:
-          # The gate diffs against a commit from a week ago, which a shallow
-          # clone does not contain.
+          # The gate diffs against the commit of each sweep's last successful run.
           fetch-depth: 0
 
-      - name: Measure backend churn in the window
+      - name: Decide which sweeps run
         id: check
-        run: |
-          if [ "${{ inputs.force }}" = "true" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "changed_lines=forced" >> "$GITHUB_OUTPUT"
-            echo "Manual run with force enabled; skipping the churn gate."
-            exit 0
-          fi
-
-          base="$(git rev-list -1 --before="$CHANGE_WINDOW" HEAD || true)"
-          if [ -z "$base" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            echo "changed_lines=unknown" >> "$GITHUB_OUTPUT"
-            echo "No commit older than $CHANGE_WINDOW; running rather than skipping silently."
-            exit 0
-          fi
-
-          # Counts churn in the code under test only. Tests and migrations are
-          # left out, although new tests alone can move the mutation score.
-          changed="$(
-            git diff --numstat "$base" HEAD -- \
-              backend/accounts backend/commons backend/monitoring backend/notif backend/ops \
-            | grep -vE '(/migrations/|/tests/|/tests\.py$|/test_[^/]*\.py$|_test\.py$)' \
-            | awk '{ added += $1; removed += $2 } END { print added + removed + 0 }'
-          )"
-
-          echo "changed_lines=$changed" >> "$GITHUB_OUTPUT"
-          echo "Backend source churn since $base ($CHANGE_WINDOW): $changed lines (threshold $CHANGE_THRESHOLD)."
-
-          if [ "$changed" -ge "$CHANGE_THRESHOLD" ]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Below threshold — skipping this week's sweeps."
-          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SWEEPS_INPUT: ${{ inputs.sweeps }}
+        run: .github/scripts/deep-sweeps-gate.sh
 
   fuzz-deep:
     needs: gate
-    if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'fuzz')
+    if: needs.gate.outputs.fuzz_should_run == 'true'
     runs-on: ubuntu-latest
     # Every operation is also capped by its own pytest timeout; this bounds the
     # whole job well below GitHub's 6-hour default.
@@ -134,7 +106,7 @@ jobs:
 
   mutation:
     needs: gate
-    if: needs.gate.outputs.should_run == 'true' && (github.event_name == 'schedule' || inputs.sweeps == 'both' || inputs.sweeps == 'mutation')
+    if: needs.gate.outputs.mutation_should_run == 'true'
     runs-on: ubuntu-latest
     # GitHub's limit for hosted runners. A full sweep is expected to take hours,
     # and mutmut leaves the mutants with the slowest covering tests for last.

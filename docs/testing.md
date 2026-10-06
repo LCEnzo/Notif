@@ -8,7 +8,8 @@ Why the backend's property tests, schema fuzzing and mutation testing are built 
 | `backend/conftest.py` | `live_server` start order |
 | `backend/test_api_fuzz.py` | Schemathesis fuzzing |
 | `backend/pyproject.toml`, `[tool.mutmut]` | Mutation testing |
-| `.github/workflows/deep-sweeps.yml` | Weekly deep fuzz and mutation runs |
+| `.github/workflows/deep-sweeps.yml` | Scheduled deep fuzz and mutation runs |
+| `.github/scripts/deep-sweeps-gate.sh` | Which sweeps a scheduled run starts |
 
 Source references below are to the locked versions: Hypothesis 6.168.1, Schemathesis 4.24.3, mutmut 3.7.0, pytest 9.1.1, pytest-django 4.14.0. Timings are dated measurements, not guarantees.
 
@@ -121,7 +122,7 @@ The default strategy, hypothesis-jsonschema's, is `https://` plus a generated do
 
 ## Mutation testing (mutmut)
 
-Configured in `[tool.mutmut]` in `backend/pyproject.toml`. It is deliberately outside the merge path: nothing runs it in `backend.yml`, because a run costs hours and its result is a score to read, not a gate to pass. It runs from `deep-sweeps.yml` on a weekly schedule, only when enough has changed, or by hand from `backend/`:
+Configured in `[tool.mutmut]` in `backend/pyproject.toml`. It is deliberately outside the merge path: nothing runs it in `backend.yml`, because a run costs hours and its result is a score to read, not a gate to pass. It runs from `deep-sweeps.yml`, on a schedule at most fortnightly and only when enough has changed, or by hand from `backend/`:
 
     uv run --group mutation mutmut run
     uv run --group mutation mutmut results
@@ -159,7 +160,25 @@ mutmut copies `source_paths` plus `also_copy` into `mutants/` and runs there. It
 
 `.github/workflows/deep-sweeps.yml` runs the `deep` fuzz profile and mutmut. Neither gates a merge: each takes minutes to hours and produces a report to read rather than a pass/fail signal, so both live outside `backend.yml`.
 
-The weekly run (Mondays, 03:00 UTC) is change-gated. The `gate` job counts lines of non-test backend source added or removed within `CHANGE_WINDOW`, and both sweeps skip below `CHANGE_THRESHOLD` rather than spend hours on code that has not changed. Manual runs bypass the gate unless `force` is unticked.
+### Schedule and gate
+
+The cron fires on Saturdays at 02:17 UTC (04:17 in Belgrade in summer, 03:17 in winter), so results are waiting on the first workday. It avoids the top of the hour, when GitHub says scheduled runs are most often delayed and, under enough load, dropped.
+
+The `gate` job runs `.github/scripts/deep-sweeps-gate.sh`. A manual run starts whichever sweeps its `sweeps` input selects, unconditionally. A scheduled run decides per sweep, from that sweep's last successful run: the newest completed run of this workflow on `master`, among the last 50, in which that sweep's job concluded `success`. Manual runs count. A failed, cancelled or skipped sweep job does not, so a broken sweep is retried the next Saturday.
+
+| Last successful run | Its age | Its commit | Churn since that commit | Scheduled sweep |
+|---|---|---|---|---|
+| none among the last 50 runs | | | | runs |
+| found | under `MIN_DAYS_SINCE_LAST_SWEEP` (13 days) | | | skipped |
+| found | 13 days or more | not in history | unknown | runs, with a warning |
+| found | 13 days or more | in history | `CHANGE_THRESHOLD` (200 lines) or more | runs |
+| found | 13 days or more | in history | under 200 lines | skipped |
+
+The weekly cron and the 13-day minimum make the schedule at most fortnightly; 13 rather than 14 absorbs the scheduler's delay, so a sweep that started late two Saturdays ago is still old enough. Churn is lines added plus lines removed in `accounts`, `commons`, `monitoring`, `notif` and `ops`, leaving out tests and migrations, between the last successful run's commit and the commit under test. New tests alone can move the mutation score, but they do not count. Diffing from that commit, rather than over a date window, counts exactly the code the last sweep did not see. A commit missing from history (a force-pushed `master`) leaves churn unknown, and the sweep runs rather than skipping silently.
+
+The gate's job summary gives each sweep's decision, last successful run, age in days and churn.
+
+### Steps
 
 | Step | Behaviour |
 |---|---|
