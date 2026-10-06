@@ -554,9 +554,11 @@ class UserViewSet(_UserModelViewSet):
 		# keying on the method also stripped IsAuthenticated off every POST @action
 		# on this viewset — change_password and get_my_info — which then reached
 		# their `assert isinstance(user, User)` with an AnonymousUser and returned
-		# 500 to unauthenticated callers.
+		# 500 to unauthenticated callers. AllowAny rather than no permission at
+		# all: the two admit the same callers, but only AllowAny tells the schema
+		# generator that anonymous callers are welcome here.
 		if self.action == "create":
-			return []
+			return [AllowAny()]
 
 		return super().get_permissions()
 

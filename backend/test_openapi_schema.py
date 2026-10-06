@@ -87,3 +87,13 @@ def test_login_credentials_are_documented_as_non_blank(schema: dict[str, Any]) -
 	assert login["password"]["minLength"] == 1
 	# The control: device_label takes a blank string, so it carries no minimum.
 	assert "minLength" not in login["device_label"]
+
+
+def test_registration_is_documented_as_open_to_anonymous_callers(schema: dict[str, Any]) -> None:
+	signed_in: list[dict[str, list[str]]] = [{"sessionBearer": []}, {"sessionCookie": []}]
+
+	# A presented session is still checked (a dead bearer token is a 401), so
+	# both schemes stay listed beside the anonymous alternative.
+	assert schema["paths"][USERS_LIST]["post"]["security"] == [*signed_in, {}]
+	# The control: listing users still needs a session.
+	assert schema["paths"][USERS_LIST]["get"]["security"] == signed_in
