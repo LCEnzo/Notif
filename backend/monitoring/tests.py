@@ -27,8 +27,8 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from commons import Err, Ok
-from commons.test_utils import SetupMixin, ViewSetMixin, login_client
-from commons.utils import create_notification
+from commons.test_utils import SetupMixin, ViewSetMixin, login_client, production_throttling
+from commons.utils import create_notification, create_users
 from monitoring.models import Link, Notification, Strategy, Update
 from monitoring.rate_limiter import DomainRateLimiter
 from monitoring.rss_content_backfill import backfill_rss_update_content
@@ -1328,6 +1328,24 @@ class TriggerScrapeViewTestCase(SetupMixin, TestCase):
 			# Renamed from "count" so one field name means one thing everywhere.
 			self.assertIn("updates_found", entry)
 			self.assertNotIn("count", entry)
+
+	def test_scrape_budget_is_per_user_and_spent_by_both_modes(self):
+		# Users without links: scrape-all answers without any outbound fetch.
+		spender, bystander = create_users(2)
+		spender_client, bystander_client = APIClient(), APIClient()
+		spender_client.force_authenticate(spender)
+		bystander_client.force_authenticate(bystander)
+
+		with production_throttling() as rates:
+			budget = int(rates["scrape"].split("/")[0])
+			for _ in range(budget):
+				self.assertEqual(spender_client.post(self.url, {}, format="json").status_code, 200)
+			self.assertEqual(spender_client.post(self.url, {}, format="json").status_code, 429)
+			# Not the spender's link, so a 404 if single-link mode escaped the budget.
+			single = spender_client.post(self.url, {"link_id": self.links[0].pk}, format="json")
+			self.assertEqual(single.status_code, 429)
+			# Keyed per user, not per address: both clients come from 127.0.0.1.
+			self.assertEqual(bystander_client.post(self.url, {}, format="json").status_code, 200)
 
 
 class StratChoicesViewTestCase(SetupMixin, TestCase):
