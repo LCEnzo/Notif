@@ -109,9 +109,8 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 
 
 class LoginRequestSerializer(_AnySerializer):
-	# min_length=1 is for the schema: allow_blank=False already refuses "" but emits no minLength.
-	username = serializers.CharField(min_length=1)
-	password = serializers.CharField(write_only=True, min_length=1)
+	username = serializers.CharField()
+	password = serializers.CharField(write_only=True)
 	transport = serializers.ChoiceField(
 		choices=DeviceSession.Transport.choices,
 		help_text=(

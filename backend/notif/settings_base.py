@@ -222,6 +222,9 @@ SPECTACULAR_SETTINGS = {
 	),
 	"VERSION": settings.VERSION,
 	"SERVE_INCLUDE_SCHEMA": False,
+	# Separate request and response components: read-only fields leave requests,
+	# write-only fields leave responses, and request strings gain minLength 1.
+	"COMPONENT_SPLIT_REQUEST": True,
 }
 
 # Logs go to stdout/stderr so Docker's json-file driver and systemd's

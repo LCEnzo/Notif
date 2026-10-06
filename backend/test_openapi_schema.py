@@ -194,3 +194,87 @@ def test_documenting_the_list_filters_keeps_the_paginated_envelope(schema: dict[
 	list_200 = schema["paths"][NOTIFICATIONS_LIST]["get"]["responses"]["200"]
 
 	assert _json_body(list_200) == _ref("PaginatedNotificationList")
+
+
+def _referenced_components(schema: dict[str, Any], node: Any) -> set[str]:
+	"""Every component node references, directly or through other components."""
+	found: set[str] = set()
+	pending = [node]
+	while pending:
+		current = pending.pop()
+		if isinstance(current, dict):
+			ref = current.get("$ref")
+			if isinstance(ref, str) and ref.startswith("#/components/schemas/"):
+				name = ref.rsplit("/", 1)[-1]
+				if name not in found:
+					found.add(name)
+					pending.append(_component(schema, name))
+			pending.extend(current.values())
+		elif isinstance(current, list):
+			pending.extend(current)
+	return found
+
+
+def _operations(schema: dict[str, Any]) -> list[dict[str, Any]]:
+	return [
+		operation for item in schema["paths"].values() for method, operation in item.items() if method in _HTTP_METHODS
+	]
+
+
+def test_link_create_request_has_no_id_and_its_response_does(schema: dict[str, Any]) -> None:
+	operation = schema["paths"][LINKS_LIST]["post"]
+	request = _component(schema, _json_body(operation["requestBody"])["$ref"].rsplit("/", 1)[-1])
+	response = _component(schema, _json_body(operation["responses"]["201"])["$ref"].rsplit("/", 1)[-1])
+
+	assert "id" not in request["properties"]
+	assert "id" in response["properties"]
+	assert "id" in response["required"]
+
+
+def test_only_the_user_creation_request_carries_a_password(schema: dict[str, Any]) -> None:
+	request_ref = _json_body(schema["paths"][USERS_LIST]["post"]["requestBody"])["$ref"]
+	request = _component(schema, request_ref.rsplit("/", 1)[-1])
+	user_responses = {
+		name
+		for path, item in schema["paths"].items()
+		if path.startswith(USERS_LIST)
+		for method, operation in item.items()
+		if method in _HTTP_METHODS
+		for name in _referenced_components(schema, operation["responses"])
+	}
+
+	assert "password" in request["required"]
+	assert user_responses >= {"UserCreation", "UserFullRead", "UserMinimalRead"}
+	for name in user_responses:
+		assert "password" not in _component(schema, name).get("properties", {}), name
+
+
+def test_requests_carry_no_read_only_fields_and_responses_no_write_only_ones(schema: dict[str, Any]) -> None:
+	requests: set[str] = set()
+	responses: set[str] = set()
+	for operation in _operations(schema):
+		requests |= _referenced_components(schema, operation.get("requestBody", {}))
+		responses |= _referenced_components(schema, operation["responses"])
+
+	def flagged(names: set[str], flag: str) -> set[str]:
+		return {
+			f"{name}.{field}"
+			for name in names
+			for field, spec in _component(schema, name).get("properties", {}).items()
+			if spec.get(flag)
+		}
+
+	assert flagged(requests, "readOnly") == set()
+	assert flagged(responses, "writeOnly") == set()
+	# The control: each side still has fields the other must not, so the sweep is not vacuous.
+	assert "Link.id" in flagged(responses, "readOnly")
+	assert "UserCreationRequest.password" in flagged(requests, "writeOnly")
+
+
+def test_request_components_are_named_once(schema: dict[str, Any]) -> None:
+	names = set(schema["components"]["schemas"])
+
+	assert not {name for name in names if name.endswith("RequestRequest")}
+	assert _json_body(schema["paths"][LOGIN]["post"]["requestBody"]) == _ref("LoginRequest")
+	# The control: a serializer not named for the request gets the suffix once.
+	assert _json_body(schema["paths"][LINKS_LIST]["post"]["requestBody"]) == _ref("LinkRequest")
