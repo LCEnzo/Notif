@@ -34,8 +34,8 @@ Every fact was read in the cited source on 2026-10-06. *Inference* marks what wa
 | F16 | Flutter release builds always run R8 (Android's code shrinker). `--target-platform android-arm64` is a valid flag. | [fl-and], [fl] |
 
 Decided by Luka on 2026-10-06: arm64 only; versionCode is `git rev-list --count`; versionName is the
-pubspec semver; the host is `fdroid.lcenzo.com`; the app ID is `com.lcenzo.notif`, to confirm before
-the first install.
+pubspec semver; the host is `fdroid.lcenzo.com`; the app ID is `com.lcenzo.notif`, which is
+permanent once installed.
 
 ## Options
 
@@ -145,12 +145,11 @@ All of these are inference, except the image and NDK sizes (F12). Measure them o
 
 ## Open questions for Luka
 
-1. Confirm `com.lcenzo.notif` before the first install. It is the one choice that cannot be undone.
-2. What is the real headroom on the VPS? Please run `nproc; free -m; df -h /; docker system df`.
-3. Is there a wildcard DNS record? Does the origin cert cover `*.lcenzo.com`? Check with `openssl x509 -noout -ext subjectAltName`.
-4. Where should the key backups go: the password manager, an offline drive, or both?
-5. Is Cloudflare Bot Fight Mode, or a similar challenge, enabled?
-6. Should the repo use HTTP basic auth? The client supports it, and Caddy needs 3 lines. My default is no, since the APK is built from public source.
+1. What is the real headroom on the VPS? Please run `nproc; free -m; df -h /; docker system df`.
+2. Is there a wildcard DNS record? Does the origin cert cover `*.lcenzo.com`? Check with `openssl x509 -noout -ext subjectAltName`.
+3. Where should the key backups go: the password manager, an offline drive, or both?
+4. Is Cloudflare Bot Fight Mode, or a similar challenge, enabled?
+5. Should the repo use HTTP basic auth? The client supports it, and Caddy needs 3 lines. My default is no, since the APK is built from public source.
 
 [vps]: ../operations/vps_host.md
 [hz]: https://www.hetzner.com/cloud/cost-optimized/
