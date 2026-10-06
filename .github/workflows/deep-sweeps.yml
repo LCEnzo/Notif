@@ -151,7 +151,6 @@ jobs:
 
       - name: Collect results
         if: always()
-        continue-on-error: true
         run: |
           set -o pipefail
           uv run --frozen --group mutation mutmut results | tee ../mutation-results.txt
