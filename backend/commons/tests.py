@@ -196,3 +196,17 @@ class FrameworkErrorStatusTestCase(TestCase):
 				self.assertEqual(set(refused.data), {"error"})
 				self.assertEqual(unparseable.status_code, status.HTTP_400_BAD_REQUEST)
 				self.assertEqual(set(unparseable.data), {"detail"})
+
+	def test_a_path_the_urlconf_refuses_is_a_json_404_under_the_api(self):
+		# The router's lookup pattern refuses a dot, so this never reaches DRF.
+		client = self._bearer_client()
+
+		api_response = client.get("/api/v1/monitoring/links/2.5e-42/")
+		site_response = client.get("/no-such-page/")
+
+		self.assertEqual(api_response.status_code, status.HTTP_404_NOT_FOUND)
+		self.assertEqual(api_response["Content-Type"], "application/json")
+		self.assertEqual(api_response.json(), {"detail": "Not found."})
+		# The control: outside the API, Django's own page stands.
+		self.assertEqual(site_response.status_code, status.HTTP_404_NOT_FOUND)
+		self.assertTrue(site_response["Content-Type"].startswith("text/html"))
