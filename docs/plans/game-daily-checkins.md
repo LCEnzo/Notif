@@ -51,7 +51,7 @@ Auth, per skport-api-docs "Authentication Flow", Areha and canaria PR #4:
 
 1. An email/password login needs a `captchaToken`. It is human-only and yields `ACCOUNT_TOKEN`, which lasts "a few weeks or months, or until you log out" (Areha README).
 2. Each run, Notif exchanges that token. `POST as.gryphline.com/user/oauth2/v2/grant` with `{token, appCode: "6eb76d4e13aa36e6", type: 0}` returns `data.code`. `POST zonai.skport.com/web/v1/user/auth/generate_cred_by_code` with `{kind: 1, code}` returns `data.cred` and `data.token`, the signing salt. When the salt is missing, `GET /web/v1/auth/refresh` with the `cred` header returns it.
-3. The browser's own `cred` and salt expire daily, so they cannot run unattended (canaria #2). **`ACCOUNT_TOKEN` expiry means a manual re-paste.**
+3. The browser's cached salt (`SK_TOKEN_CACHE_KEY`) expires daily, so the browser's `cred` plus salt pair cannot run unattended (canaria #2). **`ACCOUNT_TOKEN` expiry means a manual re-paste.**
 
 ### Getting the credentials
 
