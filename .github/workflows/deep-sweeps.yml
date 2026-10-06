@@ -1,13 +1,6 @@
 name: Deep Test Sweeps
 
-# Neither sweep gates a merge: each takes minutes to hours and produces a report
-# to read rather than a pass/fail signal, so both live outside backend.yml and
-# run weekly or on demand.
-#
-# The weekly run is change-gated: the `gate` job counts the backend source lines
-# changed in CHANGE_WINDOW, and both sweeps skip below CHANGE_THRESHOLD rather
-# than spend hours on code that has not changed. Manual runs bypass the gate
-# unless `force` is unticked.
+# Non-gating sweeps, weekly when enough backend code changed or on demand: see docs/testing.md.
 
 on:
   workflow_dispatch:
@@ -122,11 +115,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      # The deep profile runs all but one of Schemathesis' default checks and
-      # is expected to report findings. The uploaded report is the deliverable,
-      # so findings do not fail the job. pipefail gives the step pytest's exit
-      # status instead of tee's, so a run that fails, or never collects, still
-      # shows as a failed step.
+      # Findings do not fail the job; pipefail keeps pytest's exit status. See docs/testing.md.
       - name: Deep schema fuzz
         continue-on-error: true
         run: |
@@ -173,10 +162,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group mutation
 
-      # Surviving mutants do not fail `mutmut run`; a broken baseline or a
-      # timeout does, and the results collected so far are still worth the
-      # upload. The step's own timeout sits below the job's so the steps after
-      # it get to run: mutmut records each verdict as it lands.
+      # Step timeout below the job's, so partial results still upload: see docs/testing.md.
       - name: Mutation sweep
         continue-on-error: true
         timeout-minutes: 330

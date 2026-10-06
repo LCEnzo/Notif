@@ -551,7 +551,7 @@ class KemonoFavouritesMarkupTestCase(TestCase):
 _naive_datetimes = st.datetimes()
 
 
-# A plain function for the reason given on test_feed_strategy_dedup_is_idempotent.
+# Plain function, not a TestCase method: see docs/testing.md.
 @pytest.mark.property
 @given(moment=st.one_of(_naive_datetimes, _naive_datetimes.map(lambda d: d.replace(microsecond=0))))
 @settings(max_examples=200)
@@ -2095,22 +2095,12 @@ def _atom_feed_xml(draw, min_items=1, max_items=20):
 </feed>"""
 
 
+# Plain function, not a TestCase method, and timing checks off: see docs/testing.md.
 @pytest.mark.property
 @given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
-# Timing is not what this property tests. A cold Hypothesis cache, as in mutmut's
-# fresh mutants/ tree, adds a second or more to the first draw, which trips
-# too_slow under the default deadline.
 @settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 def test_feed_strategy_dedup_is_idempotent(feed_xml):
-	"""Second scrape with first scrape's comparison data returns zero new entries.
-
-	A plain function, not a TestCase method, on purpose: Hypothesis remembers
-	the ``self`` a ``@given`` method first ran with and fails
-	``HealthCheck.differing_executors`` when a later call brings a new one. Any
-	runner that calls ``pytest.main()`` more than once in one process, or again
-	in a fork of it, builds a new TestCase instance each time; mutmut does both.
-	The test touches no database, so a Django TestCase adds nothing.
-	"""
+	"""Second scrape with first scrape's comparison data returns zero new entries."""
 	strategy = FeedStrategy()
 	url = URL("https://example.com/feed")
 

@@ -325,17 +325,7 @@ markers = [
 ]
 
 [tool.mutmut]
-# Mutation testing. Deliberately outside the merge path: nothing here runs in
-# backend.yml, because a mutation run costs hours and its result is a score to
-# read, not a gate to pass. It runs from .github/workflows/deep-sweeps.yml on a
-# weekly schedule (and only when enough has changed), or by hand:
-#
-#     uv run --group mutation mutmut run
-#     uv run --group mutation mutmut results
-#
-# mutmut forks per mutant and refuses to start on native Windows; run it under
-# WSL or Linux. It rewrites the sources into a `mutants/` tree and runs pytest
-# there.
+# Not a merge gate; Linux or WSL only. How to run it, and why each setting: docs/testing.md.
 source_paths = ["accounts", "commons", "monitoring", "notif", "ops"]
 do_not_mutate = [
     # Tests cannot meaningfully be mutated — they are the oracle.
@@ -350,37 +340,16 @@ do_not_mutate = [
     "notif/asgi.py",
     "notif/wsgi.py",
     "notif/urls.py",
-    # mutmut skips decorated functions, and config.py's are all decorated (a
-    # pydantic validator, a property), so it yields no mutants today; the entry
-    # keeps any later helper out too. test_config.py covers its validation.
+    # No mutants today (all its functions are decorated); keeps later helpers out. See docs/testing.md.
     "notif/config.py",
 ]
-# -n 0 overrides addopts' four xdist workers: mutmut maps tests to the functions
-# they reach by recording calls in its own process, so the tests must run there,
-# and it already runs mutants in parallel. --no-cov keeps pytest-cov out; mutmut
-# gathers the line coverage it needs itself. Hypothesis seeds itself from OS
-# entropy on every run, independently of pytest-randomly, so a property test
-# could kill a mutant on one run and miss it on the next; --hypothesis-seed pins
-# it, which also keeps Hypothesis' example database out of the verdict.
-# (-p no:randomly repeats what mutmut already passes to its test runs.)
+# -n 0, --no-cov and the pinned Hypothesis seed are each load-bearing: see docs/testing.md.
 pytest_add_cli_args = ["-n", "0", "-p", "no:randomly", "-q", "--no-cov", "--hypothesis-seed=0"]
-# The oracle is the fast unit suite. mutmut reruns every test that reaches a
-# mutated function, and the live-server tests (conformance, fuzz) reach most of
-# the API layer at a second or more per test; `slow` and `e2e` parse real
-# downloaded fixtures. The price: e2e is the most direct check on the parsers,
-# so parser mutants it would kill can survive here.
-# --ignore, not `-m "not conformance and not fuzz"`: pytest imports a module
-# before it evaluates that module's markers, and both modules build their
-# OpenAPI schema at import time. Under mutmut the conformance module's import
-# fails (PyYAML cannot load openapi-spec-validator's meta-schema), which fails
-# the baseline run; --ignore prevents collection outright.
+# The oracle is the fast unit suite; live-server modules go by --ignore, not -m. See docs/testing.md.
 pytest_add_cli_args_test_selection = [
     "--ignore=test_openapi_conformance.py",
     "--ignore=test_api_fuzz.py",
-    # Under mutmut this test fails even with no mutant active: PyYAML cannot
-    # emit the schema drf-spectacular builds. A fresh pytest process over the
-    # same mutants/ tree passes it, so the trigger appears to be mutmut's
-    # repeated in-process runs, not the rewritten sources.
+    # Fails under mutmut even with no mutant active: see docs/testing.md.
     "--deselect=ops/tests.py::OpsApiTestCase::test_openapi_schema_generates",
     "-m",
     "not slow and not e2e",
@@ -388,11 +357,7 @@ pytest_add_cli_args_test_selection = [
 # Only mutate lines the suite executes. A mutant on a line no test reaches can
 # never be killed, and would bury the survivors that matter.
 mutate_only_covered_lines = true
-# mutmut copies source_paths plus this list into mutants/ and runs there. Its
-# own defaults (tests/, test*.py and the lock and config files) leave out
-# conftest.py, whose autouse SSRF resolver bypass keeps the suite off real DNS;
-# without it, tests that reach the guarded transport would resolve hosts for
-# real.
+# mutmut's defaults leave out conftest.py, whose autouse resolver stub keeps tests off real DNS.
 also_copy = ["conftest.py", "manage.py", "openapi.json", ".env"]
 
 [tool.coverage.run]
