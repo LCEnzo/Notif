@@ -43,13 +43,13 @@ from accounts.device_sessions import (
 from accounts.models import DeviceSession, User
 from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH, PasswordResetBudget, PasswordResetCode
 from accounts.serializers import (
-	ChangePasswordRequestSerializer,
+	ChangePasswordSerializer,
 	DeviceSessionSerializer,
 	ErrorMessageSerializer,
-	LoginRequestSerializer,
 	LoginResponseSerializer,
+	LoginSerializer,
 	PasswordResetConfirmSerializer,
-	PasswordResetRequestSerializer,
+	PasswordResetSerializer,
 	SessionRevokeResponseSerializer,
 	StatusResponseSerializer,
 	UserCreationSerializer,
@@ -304,7 +304,7 @@ class LoginView(AuthThrottleMixin, APIView):
 	throttle_scope = "login"
 
 	@extend_schema(
-		request=LoginRequestSerializer,
+		request=LoginSerializer,
 		responses={
 			status.HTTP_200_OK: LoginResponseSerializer,
 			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
@@ -317,7 +317,7 @@ class LoginView(AuthThrottleMixin, APIView):
 	)
 	def post(self, request: Request) -> Response:
 		_require_json_request(request)
-		serializer = LoginRequestSerializer(data=request.data)
+		serializer = LoginSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
 		username = serializer.validated_data["username"]
 		password = serializer.validated_data["password"]
@@ -567,7 +567,7 @@ class UserViewSet(_UserModelViewSet):
 		return Response(status=status.HTTP_200_OK, data=UserFullReadSerializer(user).data)
 
 	@extend_schema(
-		request=ChangePasswordRequestSerializer,
+		request=ChangePasswordSerializer,
 		responses={
 			status.HTTP_200_OK: StatusResponseSerializer,
 			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
@@ -664,7 +664,7 @@ class PasswordResetRequestView(APIView):
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 	@extend_schema(
-		request=PasswordResetRequestSerializer,
+		request=PasswordResetSerializer,
 		responses={status.HTTP_200_OK: StatusResponseSerializer},
 	)
 	def post(self, request: Request) -> Response:
@@ -674,7 +674,7 @@ class PasswordResetRequestView(APIView):
 		# spending the per-IP throttle budget from the victim's IP.
 		_require_json_request(request)
 
-		serializer = PasswordResetRequestSerializer(data=request.data)
+		serializer = PasswordResetSerializer(data=request.data)
 		if not serializer.is_valid():
 			# Return 200 to prevent enumeration via validation errors
 			return Response({"status": "ok"})

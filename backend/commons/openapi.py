@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Any, override
 
 from drf_spectacular.openapi import AutoSchema
 from drf_spectacular.plumbing import ComponentRegistry
-from drf_spectacular.utils import Direction
 from rest_framework import serializers
 from rest_framework.permissions import SAFE_METHODS, IsAdminUser
 
@@ -27,14 +26,6 @@ class NotifAutoSchema(AutoSchema):
 
 	Each is derived from the view, so no view needs a decorator for it; a status the view documents keeps its wording.
 	"""
-
-	@override
-	def get_serializer_name(self, serializer: serializers.Serializer[Any], direction: Direction) -> str:
-		# The split suffixes request components with "Request"; a serializer named for the request already is.
-		name = super().get_serializer_name(serializer, direction)
-		if direction == "request" and name.endswith("RequestSerializer"):
-			return name.removesuffix("RequestSerializer") + "Serializer"
-		return name
 
 	@override
 	def get_operation(

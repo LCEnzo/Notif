@@ -68,7 +68,7 @@ class UserCreationSerializer(_UserModelSerializer):
 
 # Documents the body only: the view validates it itself, since a CharField would
 # coerce a number into a string and the view refuses one.
-class ChangePasswordRequestSerializer(_AnySerializer):
+class ChangePasswordSerializer(_AnySerializer):
 	"""The current password, and the one to replace it."""
 
 	current_password = serializers.CharField(write_only=True, min_length=1)
@@ -108,7 +108,7 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 # ── device sessions ──────────────────────────────────────────
 
 
-class LoginRequestSerializer(_AnySerializer):
+class LoginSerializer(_AnySerializer):
 	username = serializers.CharField()
 	password = serializers.CharField(write_only=True)
 	transport = serializers.ChoiceField(
@@ -177,7 +177,7 @@ class SessionRevokeResponseSerializer(_AnySerializer):
 # ── password reset ───────────────────────────────────────────
 
 
-class PasswordResetRequestSerializer(_AnySerializer):
+class PasswordResetSerializer(_AnySerializer):
 	"""Accepts an email address for password reset."""
 
 	email = serializers.EmailField()

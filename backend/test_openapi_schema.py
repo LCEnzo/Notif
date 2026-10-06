@@ -276,5 +276,5 @@ def test_request_components_are_named_once(schema: dict[str, Any]) -> None:
 
 	assert not {name for name in names if name.endswith("RequestRequest")}
 	assert _json_body(schema["paths"][LOGIN]["post"]["requestBody"]) == _ref("LoginRequest")
-	# The control: a serializer not named for the request gets the suffix once.
+	# The control: a serializer that also serves responses gets the suffix once too.
 	assert _json_body(schema["paths"][LINKS_LIST]["post"]["requestBody"]) == _ref("LinkRequest")
