@@ -34,8 +34,8 @@ from monitoring.serializers import (
 	NotificationSerializer,
 	StatusCheckResponseSerializer,
 	StrategySerializer,
-	TriggerScrapeRequestSerializer,
 	TriggerScrapeResponseSerializer,
+	TriggerScrapeSerializer,
 )
 from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
@@ -262,7 +262,7 @@ def _request_error_message(errors: dict[str, Any]) -> str:
 
 
 @extend_schema(
-	request=TriggerScrapeRequestSerializer,
+	request=TriggerScrapeSerializer,
 	responses={
 		http_status.HTTP_200_OK: TriggerScrapeResponseSerializer,
 		http_status.HTTP_400_BAD_REQUEST: TriggerScrapeResponseSerializer,
@@ -286,7 +286,7 @@ def trigger_scrape(request: Request) -> Response:
 	# Validated rather than read straight off request.data: a non-numeric link_id
 	# used to reach the ORM and raise ValueError (an unhandled 500), and link_id=0
 	# was falsy, so it silently scraped *everything*.
-	request_serializer = TriggerScrapeRequestSerializer(data=request.data)
+	request_serializer = TriggerScrapeSerializer(data=request.data)
 	if not request_serializer.is_valid():
 		return Response(
 			{"status": "error", "message": _request_error_message(request_serializer.errors)},

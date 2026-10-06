@@ -80,7 +80,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PasswordResetConfirm"
+                                "$ref": "#/components/schemas/PasswordResetConfirmRequest"
                             }
                         }
                     },
@@ -181,17 +181,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/UserCreationRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/UserCreationRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/UserCreationRequest"
                             }
                         }
                     },
@@ -321,17 +321,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserCreation"
+                                "$ref": "#/components/schemas/PatchedUserCreationRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserCreation"
+                                "$ref": "#/components/schemas/PatchedUserCreationRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserCreation"
+                                "$ref": "#/components/schemas/PatchedUserCreationRequest"
                             }
                         }
                     }
@@ -794,7 +794,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/ClientEvent"
+                                "$ref": "#/components/schemas/ClientEventRequest"
                             }
                         }
                     },
@@ -973,17 +973,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         }
                     },
@@ -1114,17 +1114,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         }
                     },
@@ -1205,17 +1205,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedLink"
+                                "$ref": "#/components/schemas/PatchedLinkRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedLink"
+                                "$ref": "#/components/schemas/PatchedLinkRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedLink"
+                                "$ref": "#/components/schemas/PatchedLinkRequest"
                             }
                         }
                     }
@@ -1526,17 +1526,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Notification"
+                                "$ref": "#/components/schemas/NotificationRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Notification"
+                                "$ref": "#/components/schemas/NotificationRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Notification"
+                                "$ref": "#/components/schemas/NotificationRequest"
                             }
                         }
                     }
@@ -1615,17 +1615,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedNotification"
+                                "$ref": "#/components/schemas/PatchedNotificationRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedNotification"
+                                "$ref": "#/components/schemas/PatchedNotificationRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedNotification"
+                                "$ref": "#/components/schemas/PatchedNotificationRequest"
                             }
                         }
                     }
@@ -1907,17 +1907,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         }
                     },
@@ -2048,17 +2048,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         }
                     },
@@ -2139,17 +2139,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedStrategy"
+                                "$ref": "#/components/schemas/PatchedStrategyRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedStrategy"
+                                "$ref": "#/components/schemas/PatchedStrategyRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedStrategy"
+                                "$ref": "#/components/schemas/PatchedStrategyRequest"
                             }
                         }
                     }
@@ -2718,7 +2718,18 @@
                     "new_password"
                 ]
             },
-            "ClientEvent": {
+            "ClientEventAccepted": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ]
+            },
+            "ClientEventRequest": {
                 "type": "object",
                 "properties": {
                     "category": {
@@ -2771,17 +2782,6 @@
                 },
                 "required": [
                     "category"
-                ]
-            },
-            "ClientEventAccepted": {
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "status"
                 ]
             },
             "DeviceSession": {
@@ -2957,6 +2957,39 @@
                     "user"
                 ]
             },
+            "LinkRequest": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                    },
+                    "url": {
+                        "type": "string",
+                        "format": "uri",
+                        "minLength": 1,
+                        "maxLength": 1000
+                    },
+                    "strategy": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "scrape_interval_minutes": {
+                        "type": "integer",
+                        "maximum": 1440,
+                        "minimum": 5
+                    },
+                    "scrape_disabled": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "name",
+                    "strategy",
+                    "url"
+                ]
+            },
             "LoginRequest": {
                 "type": "object",
                 "properties": {
@@ -3055,6 +3088,14 @@
                     "update"
                 ]
             },
+            "NotificationRequest": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "$ref": "#/components/schemas/StatusEnum"
+                    }
+                }
+            },
             "PaginatedLinkList": {
                 "type": "object",
                 "required": [
@@ -3148,18 +3189,19 @@
                     }
                 }
             },
-            "PasswordResetConfirm": {
+            "PasswordResetConfirmRequest": {
                 "type": "object",
                 "description": "Accepts email, code, and new password to complete reset.",
                 "properties": {
                     "email": {
                         "type": "string",
-                        "format": "email"
+                        "format": "email",
+                        "minLength": 1
                     },
                     "code": {
                         "type": "string",
-                        "maxLength": 6,
-                        "minLength": 6
+                        "minLength": 6,
+                        "maxLength": 6
                     },
                     "new_password": {
                         "type": "string",
@@ -3178,41 +3220,30 @@
                 "properties": {
                     "email": {
                         "type": "string",
-                        "format": "email"
+                        "format": "email",
+                        "minLength": 1
                     }
                 },
                 "required": [
                     "email"
                 ]
             },
-            "PatchedLink": {
+            "PatchedLinkRequest": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
                     "name": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 200
                     },
                     "url": {
                         "type": "string",
                         "format": "uri",
+                        "minLength": 1,
                         "maxLength": 1000
-                    },
-                    "user": {
-                        "type": "integer",
-                        "readOnly": true
                     },
                     "strategy": {
                         "type": "integer",
-                        "nullable": true
-                    },
-                    "last_scraped": {
-                        "type": "string",
-                        "format": "date-time",
-                        "readOnly": true,
                         "nullable": true
                     },
                     "scrape_interval_minutes": {
@@ -3220,77 +3251,34 @@
                         "maximum": 1440,
                         "minimum": 5
                     },
-                    "next_scrape_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "readOnly": true,
-                        "nullable": true
-                    },
                     "scrape_disabled": {
                         "type": "boolean"
-                    },
-                    "scrape_failure_count": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
-                    "last_scrape_error": {
-                        "type": "string",
-                        "readOnly": true
-                    },
-                    "comparison_info": {
-                        "type": "string",
-                        "readOnly": true
                     }
                 }
             },
-            "PatchedNotification": {
+            "PatchedNotificationRequest": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
-                    "update": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/Update"
-                            }
-                        ],
-                        "readOnly": true
-                    },
                     "status": {
                         "$ref": "#/components/schemas/StatusEnum"
-                    },
-                    "read_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "readOnly": true,
-                        "nullable": true
                     }
                 }
             },
-            "PatchedStrategy": {
+            "PatchedStrategyRequest": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
-                    "user": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
                     "strat_cls": {
                         "$ref": "#/components/schemas/StratClsEnum"
                     },
                     "data": {}
                 }
             },
-            "PatchedUserCreation": {
+            "PatchedUserCreationRequest": {
                 "type": "object",
                 "properties": {
                     "username": {
                         "type": "string",
+                        "minLength": 1,
                         "description": "Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.",
                         "pattern": "^[\\w.@+-]+$",
                         "maxLength": 150
@@ -3298,15 +3286,18 @@
                     "email": {
                         "type": "string",
                         "format": "email",
+                        "minLength": 1,
                         "maxLength": 254
                     },
                     "name": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 64
                     },
                     "password": {
                         "type": "string",
                         "writeOnly": true,
+                        "minLength": 1,
                         "maxLength": 128
                     }
                 }
@@ -3406,6 +3397,18 @@
                     "id",
                     "strat_cls",
                     "user"
+                ]
+            },
+            "StrategyRequest": {
+                "type": "object",
+                "properties": {
+                    "strat_cls": {
+                        "$ref": "#/components/schemas/StratClsEnum"
+                    },
+                    "data": {}
+                },
+                "required": [
+                    "strat_cls"
                 ]
             },
             "SystemEvent": {
@@ -3576,10 +3579,38 @@
                     "name": {
                         "type": "string",
                         "maxLength": 64
+                    }
+                },
+                "required": [
+                    "email",
+                    "username"
+                ]
+            },
+            "UserCreationRequest": {
+                "type": "object",
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.",
+                        "pattern": "^[\\w.@+-]+$",
+                        "maxLength": 150
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1,
+                        "maxLength": 254
+                    },
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
                     },
                     "password": {
                         "type": "string",
                         "writeOnly": true,
+                        "minLength": 1,
                         "maxLength": 128
                     }
                 },

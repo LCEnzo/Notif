@@ -124,7 +124,7 @@ class NotificationSerializer(_NotificationModelSerializer):
 		read_only_fields = ["id", "update", "read_at"]
 
 
-class TriggerScrapeRequestSerializer(_AnySerializer):
+class TriggerScrapeSerializer(_AnySerializer):
 	link_id = serializers.IntegerField(min_value=1, required=False)
 
 
