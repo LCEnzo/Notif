@@ -164,6 +164,13 @@ class TriggerScrapeResponseSerializer(_AnySerializer):
 	)
 
 
+class MarkAllReadResponseSerializer(_AnySerializer):
+	marked_read = serializers.IntegerField(
+		min_value=0,
+		help_text="How many of the caller's unread notifications this call marked read.",
+	)
+
+
 class HealthCheckResponseSerializer(_AnySerializer):
 	status = serializers.CharField()
 

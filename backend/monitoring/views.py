@@ -9,9 +9,9 @@ from django.db import connections
 from django.db.models import DateTimeField
 from django.db.models.query import QuerySet
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status as http_status
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, throttle_scope
 from rest_framework.exceptions import ParseError, ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
@@ -23,12 +23,14 @@ from rest_framework.serializers import BaseSerializer
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from accounts.models import User
+from commons.openapi import ErrorDetailSerializer
 from commons.permissions import IsOwnerOrAdmin, OwnerOrAdminQuerysetMixin
 from commons.result import Err, Ok
 from monitoring.models import Link, Notification, Strategy
 from monitoring.serializers import (
 	HealthCheckResponseSerializer,
 	LinkSerializer,
+	MarkAllReadResponseSerializer,
 	NotificationSerializer,
 	StatusCheckResponseSerializer,
 	StrategySerializer,
@@ -79,6 +81,17 @@ class LinkViewSet(OwnerOrAdminQuerysetMixin, _LinkModelViewSet):
 		serializer.save(user=user)
 
 
+@extend_schema_view(
+	destroy=extend_schema(
+		responses={
+			http_status.HTTP_204_NO_CONTENT: None,
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="The strategy is still used by one or more links.",
+			),
+		},
+	),
+)
 class StrategyViewSet(OwnerOrAdminQuerysetMixin, _StrategyModelViewSet):
 	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = StrategySerializer
@@ -152,6 +165,38 @@ def _parse_since(raw: str) -> datetime:
 		raise ParseError("since is outside the supported date range.") from exc
 
 
+# get_queryset() honours both on every action; documented where callers use them.
+_NOTIFICATION_FILTERS = [
+	OpenApiParameter(
+		"status",
+		# Notification.status's own enum component, so codegen emits one enum, not one per operation.
+		type={"$ref": "#/components/schemas/StatusEnum"},
+		description="Only notifications in this state.",
+	),
+	OpenApiParameter(
+		"since",
+		# The two shapes _parse_since() reads; any other string is a 400.
+		type={"anyOf": [{"type": "string", "format": "date-time"}, {"type": "string", "format": "date"}]},
+		description=(
+			"Only notifications whose update was created at or after this ISO 8601 date or datetime. "
+			"A value without an offset is read in the server's time zone."
+		),
+	),
+]
+
+
+@extend_schema_view(
+	list=extend_schema(
+		parameters=_NOTIFICATION_FILTERS,
+		responses={
+			http_status.HTTP_200_OK: NotificationSerializer(many=True),
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="since is not an ISO 8601 date or datetime, or is out of range.",
+			),
+		},
+	),
+)
 class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, _NotificationGenericViewSet):
 	permission_classes = [IsAuthenticated]
 	serializer_class = NotificationSerializer
@@ -189,6 +234,17 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		else:
 			serializer.save()
 
+	@extend_schema(
+		request=None,
+		parameters=_NOTIFICATION_FILTERS,
+		responses={
+			http_status.HTTP_200_OK: MarkAllReadResponseSerializer,
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="since is unreadable, or a cookie session sent a body that does not parse.",
+			),
+		},
+	)
 	@action(detail=False, methods=["post"])
 	def mark_all_read(self, request: Request) -> Response:
 		updated = (
@@ -215,6 +271,7 @@ def _request_error_message(errors: dict[str, Any]) -> str:
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_scope("scrape")
 def trigger_scrape(request: Request) -> Response:
 	"""Scrape one link, or every link the caller owns.
 

@@ -44,6 +44,8 @@ urlpatterns = [
 	path("api/v1/redoc/", SpectacularRedocView.as_view(permission_classes=[AllowAny], url_name="schema"), name="redoc"),
 ]
 
+handler404 = "notif.views.page_not_found"
+
 if settings.DEBUG:
 	urlpatterns += [
 		path("silk/", include("silk.urls", namespace="silk")),
