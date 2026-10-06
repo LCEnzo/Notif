@@ -72,9 +72,12 @@ jobs:
           DEV_BOOTSTRAP_LOGIN_ENABLED: 'false'
         # A fresh random key per run: --deploy rejects short or predictable
         # keys (security.W009), and no secret-looking literal gets committed.
+        # A placeholder mail key likewise: without one the console mailer is
+        # selected, which --deploy rejects (mail.E001). Nothing is sent.
         run: |
           DJANGO_SECRET_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(64))')"
-          export DJANGO_SECRET_KEY
+          RESEND_API_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export DJANGO_SECRET_KEY RESEND_API_KEY
           uv run python manage.py check --deploy --fail-level WARNING
 
       - name: Missing migrations

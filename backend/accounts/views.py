@@ -520,10 +520,13 @@ class UserViewSet(_UserModelViewSet):
 	http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		"""Apply stricter 'register' throttle on account creation."""
+		"""Apply the stricter 'register' scope on account creation.
+
+		The default ScopedRateThrottle reads the scope; appending another one here
+		would charge every registration against the budget twice.
+		"""
 		if self.action == "create":
 			self.throttle_scope = "register"
-			return [*super().get_throttles(), ScopedRateThrottle()]
 		return super().get_throttles()
 
 	def get_serializer_class(self) -> type[BaseSerializer[User]]:
