@@ -800,6 +800,7 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 		"""Deleting a strategy with active links returns 400."""
 		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": self.strat.pk}))
 		self.assertEqual(response.status_code, 400)
+		self.assertEqual(set(response.data), {"detail"})
 		self.assertTrue(Strategy.objects.filter(pk=self.strat.pk).exists())
 
 	def test_create_strategy_sets_owner_to_requester(self):

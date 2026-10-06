@@ -9,7 +9,7 @@ from django.db import connections
 from django.db.models import DateTimeField
 from django.db.models.query import QuerySet
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status as http_status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import ParseError, ValidationError
@@ -23,6 +23,7 @@ from rest_framework.serializers import BaseSerializer
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from accounts.models import User
+from commons.openapi import ErrorDetailSerializer
 from commons.permissions import IsOwnerOrAdmin, OwnerOrAdminQuerysetMixin
 from commons.result import Err, Ok
 from monitoring.models import Link, Notification, Strategy
@@ -80,6 +81,17 @@ class LinkViewSet(OwnerOrAdminQuerysetMixin, _LinkModelViewSet):
 		serializer.save(user=user)
 
 
+@extend_schema_view(
+	destroy=extend_schema(
+		responses={
+			http_status.HTTP_204_NO_CONTENT: None,
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="The strategy is still used by one or more links.",
+			),
+		},
+	),
+)
 class StrategyViewSet(OwnerOrAdminQuerysetMixin, _StrategyModelViewSet):
 	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = StrategySerializer

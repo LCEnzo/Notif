@@ -2168,6 +2168,16 @@
                     "204": {
                         "description": "No response body"
                     },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The strategy is still used by one or more links."
+                    },
                     "401": {
                         "content": {
                             "application/json": {
@@ -2321,6 +2331,16 @@
                             }
                         },
                         "description": "SQLite backup file"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The database is not SQLite."
                     },
                     "401": {
                         "content": {
@@ -2504,6 +2524,19 @@
         "/api/v1/ops/logs/caddy/": {
             "get": {
                 "operationId": "ops_logs_caddy_retrieve",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 200,
+                            "default": 50
+                        },
+                        "description": "How many of the newest log entries to return."
+                    }
+                ],
                 "tags": [
                     "ops"
                 ],
@@ -2525,6 +2558,16 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "limit is not an integer within range, or the configured log path is not a file."
                     },
                     "401": {
                         "content": {

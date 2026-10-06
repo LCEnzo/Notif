@@ -23,6 +23,9 @@ LINK_DETAIL = "/api/v1/monitoring/links/{id}/"
 TRIGGER_SCRAPE = "/api/v1/monitoring/trigger-scrape/"
 HEALTH = "/api/v1/monitoring/health/"
 OPS_EVENTS = "/api/v1/ops/events/"
+OPS_CADDY_LOGS = "/api/v1/ops/logs/caddy/"
+OPS_SQLITE_BACKUP = "/api/v1/ops/backup/sqlite/"
+STRATEGY_DETAIL = "/api/v1/monitoring/strategies/{id}/"
 LOGIN = "/api/v1/auth/login/"
 
 _HTTP_METHODS = {"get", "put", "patch", "post", "delete", "head", "options", "trace"}
@@ -163,3 +166,16 @@ def test_a_view_documented_400_body_also_admits_a_parse_error(
 	response_400 = schema["paths"][path]["post"]["responses"]["400"]
 
 	assert _json_body(response_400) == {"anyOf": [_ref(view_body), _ref("ErrorDetail")]}
+
+
+def test_view_specific_400s_are_documented(schema: dict[str, Any]) -> None:
+	strategy_delete = schema["paths"][STRATEGY_DETAIL]["delete"]["responses"]
+	caddy_logs = schema["paths"][OPS_CADDY_LOGS]["get"]
+	sqlite_backup = schema["paths"][OPS_SQLITE_BACKUP]["get"]["responses"]
+
+	assert "204" in strategy_delete
+	for response in (strategy_delete["400"], caddy_logs["responses"]["400"], sqlite_backup["400"]):
+		assert _json_body(response) == _ref("ErrorDetail")
+	limit = next(parameter for parameter in caddy_logs["parameters"] if parameter["name"] == "limit")
+	assert limit["in"] == "query"
+	assert (limit["schema"]["minimum"], limit["schema"]["maximum"], limit["schema"]["default"]) == (1, 200, 50)
