@@ -297,6 +297,14 @@ addopts = [
 	"-n",
 	"4",
 ]
+# Warnings fail the suite, so deprecations get fixed while they are small.
+filterwarnings = [
+	"error",
+	# Windows hosts only: CPython warns about store CAs OpenSSL cannot parse (eID
+	# middleware installs some) whenever urllib builds a TLS context, which openapi_core
+	# does even for its file:// schemas. Nothing in the repo can avoid it.
+	"ignore:Bad certificate in Windows certificate store:UserWarning:ssl$",
+]
 markers = [
     "slow: marks tests that use real downloaded fixtures (deselect with -m 'not slow')",
     "feed: marks tests specific to FeedStrategy",

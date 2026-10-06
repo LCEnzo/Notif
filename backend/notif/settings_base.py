@@ -280,17 +280,21 @@ LEGACY_REFRESH_COOKIE_NAME = "notif_refresh"
 LEGACY_REFRESH_COOKIE_PATH = "/api/v1/token/"
 
 # Email
-EMAIL_BACKEND = settings.EMAIL_BACKEND or (
-	"django.core.mail.backends.smtp.EmailBackend"
-	if settings.EMAIL_HOST_PASSWORD
-	else "django.core.mail.backends.console.EmailBackend"
+_SMTP_MAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+_MAIL_BACKEND = settings.EMAIL_BACKEND or (
+	_SMTP_MAIL_BACKEND if settings.EMAIL_HOST_PASSWORD else "django.core.mail.backends.console.EmailBackend"
 )
-EMAIL_HOST = settings.EMAIL_HOST
-EMAIL_PORT = settings.EMAIL_PORT
-EMAIL_HOST_USER = settings.EMAIL_HOST_USER
-EMAIL_HOST_PASSWORD = settings.EMAIL_HOST_PASSWORD
-EMAIL_USE_TLS = settings.EMAIL_USE_TLS
-EMAIL_TIMEOUT = settings.EMAIL_TIMEOUT
+MAILERS: dict[str, dict[str, Any]] = {"default": {"BACKEND": _MAIL_BACKEND}}
+# Other backends reject these OPTIONS (InvalidMailer), so only SMTP gets them.
+if _MAIL_BACKEND == _SMTP_MAIL_BACKEND:
+	MAILERS["default"]["OPTIONS"] = {
+		"host": settings.EMAIL_HOST,
+		"port": settings.EMAIL_PORT,
+		"username": settings.EMAIL_HOST_USER,
+		"password": settings.EMAIL_HOST_PASSWORD,
+		"use_tls": settings.EMAIL_USE_TLS,
+		"timeout": settings.EMAIL_TIMEOUT,
+	}
 DEFAULT_FROM_EMAIL = settings.EMAIL_FROM
 SERVER_EMAIL = settings.EMAIL_FROM
 EMAIL_FROM = settings.EMAIL_FROM
