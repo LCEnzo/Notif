@@ -28,9 +28,10 @@ jobs:
       # shellcheck ships on the runner image (apt cmd_packages in
       # actions/runner-images toolset-2404.json), so there is no install step.
       # git ls-files picks up new scripts without editing this file.
+      # --verbose logs the command line, so a green run shows what it checked.
       - name: Shellcheck tracked scripts
         # Explicit bash adds pipefail: a failing git ls-files fails the step.
         shell: bash
         run: |
           shellcheck --version
-          git ls-files -z '*.sh' | xargs -0 --no-run-if-empty shellcheck
+          git ls-files -z '*.sh' | xargs -0 --verbose --no-run-if-empty shellcheck
