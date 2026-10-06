@@ -10,8 +10,9 @@ Why the backend's property tests, schema fuzzing and mutation testing are built 
 | `backend/pyproject.toml`, `[tool.mutmut]` | Mutation testing |
 | `.github/workflows/deep-sweeps.yml` | Scheduled deep fuzz and mutation runs |
 | `.github/scripts/deep-sweeps-gate.sh` | Which sweeps a scheduled run starts |
+| `backend/scripts/classify_fuzz_report.py` | Deep fuzz findings versus a broken run |
 
-Source references below are to the locked versions: Hypothesis 6.168.1, Schemathesis 4.24.3, mutmut 3.7.0, pytest 9.1.1, pytest-django 4.14.0. Timings are dated measurements, not guarantees.
+Source references below are to the locked versions: Hypothesis 6.168.1, Schemathesis 4.24.3, mutmut 3.7.0, pytest 9.1.1, pytest-django 4.14.0, on CPython 3.14. Timings are dated measurements, not guarantees.
 
 ## Hypothesis tests are plain functions
 
@@ -77,7 +78,7 @@ The test adds two assertions of its own, in both profiles. `ci` fails only on a 
 
 Phase selection decides the runtime far more than `max_examples` does. `fuzzing` samples up to `max_examples` inputs. `examples` and `coverage` are attached to the test as explicit `@example`s (`schemathesis/generation/hypothesis/builder.py`), so `coverage` enumerates schema edge cases (missing required fields, wrong types, boundary values) whatever `max_examples` says. Adding `coverage` to `ci` took the module from ~35 s to ~3 min (Windows, `-n 4`, 2026-10-05), so `ci` samples and `deep` enumerates.
 
-Hypothesis runs all explicit examples first and raises their failures before it starts generating (`hypothesis/core.py`). An operation with an `examples` or `coverage` finding therefore never reaches `fuzzing` in that run.
+Hypothesis runs the explicit examples before it starts generating, and the first Schemathesis finding among them ends the test (see [findings versus a broken run](#deep-fuzz-findings-versus-a-broken-run)). An operation with an `examples` or `coverage` finding therefore never reaches `fuzzing` in that run.
 
 `stateful` is not listed because `schema.parametrize()` never runs it: the pytest integration maps only `examples`, `coverage` and `fuzzing` to test modes (`schemathesis/pytest/lazy.py`), and stateful testing needs `schema.as_state_machine()`. Listing it would only claim coverage.
 
@@ -158,7 +159,7 @@ mutmut copies `source_paths` plus `also_copy` into `mutants/` and runs there. It
 
 ## Deep sweeps workflow
 
-`.github/workflows/deep-sweeps.yml` runs the `deep` fuzz profile and mutmut. Neither gates a merge: each takes minutes to hours and produces a report to read rather than a pass/fail signal, so both live outside `backend.yml`.
+`.github/workflows/deep-sweeps.yml` runs the `deep` fuzz profile and mutmut. Neither gates a merge: each takes minutes to hours and produces a report to read rather than a pass/fail signal on a diff, so both live outside `backend.yml`. A run still goes red when a sweep breaks, as opposed to reporting what it found, so that a broken sweep cannot pass for a quiet one.
 
 ### Schedule and gate
 
@@ -178,9 +179,25 @@ The weekly cron and the 13-day minimum make the schedule at most fortnightly; 13
 
 The gate's job summary gives each sweep's decision, last successful run, age in days and churn.
 
-### Steps
+### Deep fuzz: findings versus a broken run
 
-| Step | Behaviour |
-|---|---|
-| Deep schema fuzz | `continue-on-error`: findings are expected, and the uploaded report is the deliverable, so they do not fail the job. `set -o pipefail` gives the step pytest's exit status instead of `tee`'s, so a run that fails, or never collects, is still recorded as a failed step. |
-| Mutation sweep | `continue-on-error`: surviving mutants do not fail `mutmut run`, but a broken baseline or a timeout does, and the results collected so far are still worth uploading. The step's timeout sits below the job's so the collect and upload steps still run; mutmut saves each verdict as it lands (`register_result` in `mutmut/mutation/data.py`). |
+pytest exits 1 both for Schemathesis findings, which the deep profile reports on every run, and for a harness that broke. The fuzz step therefore never fails on pytest's exit status. It hands the status to `backend/scripts/classify_fuzz_report.py`, which reads the JUnit report and fails the run on any of:
+
+1. a setup or teardown error;
+2. a failure of `test_live_server_shares_the_test_database_connection`, or its absence from the report;
+3. either canary: the credential 401 or the `CSRF Failed` 403 assertion in `test_api_fuzz.py`;
+4. any other failure that is not a Schemathesis check failure;
+5. a report with no operation in it, one it cannot read, or one that disagrees with the exit status (1 with nothing failed, 0 with failures);
+6. an exit status of 2 or higher: interrupted, internal error, usage error or nothing collected.
+
+A Schemathesis check failure is recognised by its top-level exception. `Case.call_and_validate` raises all the check failures of one response together as one `schemathesis.core.failures.FailureGroup` (`validate_response` in `schemathesis/generation/case.py`), whose members are the checks' `Failure` subclasses with their tracebacks stripped (`_failures_from_exception` in `schemathesis/checks.py`). `FailureGroup` derives from `BaseExceptionGroup`, not `Exception`, and Hypothesis treats only `Exception`, `SystemExit`, `GeneratorExit` and pytest's `Failed` as test failures (`failure_exceptions_to_catch` in `hypothesis/core.py`). Anything else ends the test: the explicit-example loop stops at the first `FailureGroup` (`execute_explicit_examples`), and the engine re-raises one from a generated example without shrinking it (`internal/conjecture/engine.py`). A finding therefore reaches pytest as a bare `FailureGroup`, and the classifier accepts a failure only when its top-level exception is one whose members are all traceback-less `schemathesis.*` failures. A `FailureGroup` that Hypothesis grouped with another error from an earlier explicit example, a canary for instance, fails the run.
+
+pytest renders an exception group in CPython's own layout (`repr_excinfo` in `_pytest/_code/code.py`), and writes the JUnit entry before Schemathesis' pytest hook rewrites the report (`call_and_report` in `_pytest/runner.py`), so the classifier parses that layout (`_ExceptionPrintContext` in CPython's `traceback.py`). A test in `backend/scripts/test_classify_fuzz_report.py` fails if the test names or canary messages it keys on change in `test_api_fuzz.py`.
+
+The classifier also writes the job summary: operations passed, failed and skipped, the number of operations per check failure (by the failure's title and class), and the operations behind them.
+
+### Mutation sweep
+
+`mutmut run` exits 0 however many mutants survive: `_run` in `mutmut/__main__.py` returns after the sweep without reading the results, and exits 1 only when it cannot sweep at all: it fails to list the tests or map them to mutants, or the clean or forced-fail test run goes wrong. The step therefore has no `continue-on-error`, and a broken baseline fails the run. Its own timeout sits below the job's, so a sweep that overruns also fails the run while the collect and upload steps, both `if: always()`, still publish what it finished; mutmut saves each verdict as it lands (`register_result` in `mutmut/mutation/data.py`).
+
+The collect step keeps `continue-on-error`. It runs `mutmut results` and `mutmut export-cicd-stats`, which writes the totals to `mutants/mutmut-cicd-stats.json` (`save_cicd_stats` in `mutmut/__main__.py`), and tabulates them in the job summary. The JSON has no not-checked count, so the summary's Other column is the total less killed, survived and timed out.
