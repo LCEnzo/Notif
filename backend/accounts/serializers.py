@@ -111,8 +111,10 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 
 
 class LoginRequestSerializer(_AnySerializer):
-	username = serializers.CharField()
-	password = serializers.CharField(write_only=True)
+	# min_length repeats what allow_blank=False already enforces, so that the
+	# schema states it: drf-spectacular emits minLength only from min_length.
+	username = serializers.CharField(min_length=1)
+	password = serializers.CharField(write_only=True, min_length=1)
 	transport = serializers.ChoiceField(
 		choices=DeviceSession.Transport.choices,
 		help_text=(

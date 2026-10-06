@@ -78,3 +78,12 @@ def test_mark_all_read_takes_no_body_and_returns_the_count(schema: dict[str, Any
 	assert body["required"] == ["marked_read"]
 	assert body["properties"]["marked_read"]["type"] == "integer"
 	assert body["properties"]["marked_read"]["minimum"] == 0
+
+
+def test_login_credentials_are_documented_as_non_blank(schema: dict[str, Any]) -> None:
+	login = _component(schema, "LoginRequest")["properties"]
+
+	assert login["username"]["minLength"] == 1
+	assert login["password"]["minLength"] == 1
+	# The control: device_label takes a blank string, so it carries no minimum.
+	assert "minLength" not in login["device_label"]
