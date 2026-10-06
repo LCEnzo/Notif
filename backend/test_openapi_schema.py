@@ -18,8 +18,15 @@ USERS_DETAIL = "/api/v1/accounts/users/{id}/"
 GET_MY_INFO = "/api/v1/accounts/users/get_my_info/"
 CHANGE_PASSWORD = "/api/v1/accounts/users/change_password/"
 MARK_ALL_READ = "/api/v1/monitoring/notifications/mark_all_read/"
+LINKS_LIST = "/api/v1/monitoring/links/"
+LINK_DETAIL = "/api/v1/monitoring/links/{id}/"
+TRIGGER_SCRAPE = "/api/v1/monitoring/trigger-scrape/"
+HEALTH = "/api/v1/monitoring/health/"
+OPS_EVENTS = "/api/v1/ops/events/"
+LOGIN = "/api/v1/auth/login/"
 
 _HTTP_METHODS = {"get", "put", "patch", "post", "delete", "head", "options", "trace"}
+_ERROR_STATUSES = {"400", "401", "403", "404"}
 
 
 @pytest.fixture(scope="module")
@@ -65,7 +72,8 @@ def test_change_password_documents_its_real_body_and_answers(schema: dict[str, A
 	assert {field["minLength"] for field in body["properties"].values()} == {1}
 
 	assert _json_body(operation["responses"]["200"]) == _ref("StatusResponse")
-	assert _json_body(operation["responses"]["400"]) == _ref("ErrorMessage")
+	# The view's own refusals; the parse-error alternative is pinned further down.
+	assert _json_body(operation["responses"]["400"])["anyOf"][0] == _ref("ErrorMessage")
 	assert _component(schema, "ErrorMessage")["required"] == ["error"]
 
 
@@ -97,3 +105,61 @@ def test_registration_is_documented_as_open_to_anonymous_callers(schema: dict[st
 	assert schema["paths"][USERS_LIST]["post"]["security"] == [*signed_in, {}]
 	# The control: listing users still needs a session.
 	assert schema["paths"][USERS_LIST]["get"]["security"] == signed_in
+
+
+@pytest.mark.parametrize(
+	("path", "method", "documented"),
+	[
+		# A safe method on a detail route: the lookup can miss; no body, no CSRF.
+		(LINK_DETAIL, "get", {"401", "404"}),
+		# Writes add the body's 400 and the cookie session's CSRF 403.
+		(LINK_DETAIL, "patch", {"400", "401", "403", "404"}),
+		(LINK_DETAIL, "delete", {"401", "403", "404"}),
+		# A paginated list refuses a page past the last one.
+		(LINKS_LIST, "get", {"401", "404"}),
+		# Neither paginated nor parameterised, and a read passes ReadOnly.
+		(USERS_LIST, "get", {"401"}),
+		# Anonymous registration still refuses a dead bearer token and an
+		# unsafe cookie-session write without CSRF.
+		(USERS_LIST, "post", {"400", "401", "403"}),
+		# Admin-only and paginated.
+		(OPS_EVENTS, "get", {"401", "403", "404"}),
+		# The anonymous probe: only the dead bearer token.
+		(HEALTH, "get", {"401"}),
+		# No authenticators: login documents its own 400 and 401 and gains nothing.
+		(LOGIN, "post", {"400", "401"}),
+	],
+)
+def test_framework_error_statuses_are_documented(
+	schema: dict[str, Any], path: str, method: str, documented: set[str]
+) -> None:
+	assert set(schema["paths"][path][method]["responses"]) & _ERROR_STATUSES == documented
+
+
+def test_framework_errors_carry_drfs_detail_body(schema: dict[str, Any]) -> None:
+	responses = schema["paths"][LINK_DETAIL]["patch"]["responses"]
+
+	for code in ("401", "403", "404"):
+		assert _json_body(responses[code]) == _ref("ErrorDetail"), code
+	assert _component(schema, "ErrorDetail")["required"] == ["detail"]
+	# A 400 is DRF's {"detail"} or a serializer's per-field errors: described, not schema'd.
+	assert "content" not in responses["400"]
+
+
+def test_a_status_the_view_documents_keeps_its_wording(schema: dict[str, Any]) -> None:
+	login_401 = schema["paths"][LOGIN]["post"]["responses"]["401"]
+
+	assert login_401["description"].startswith("Invalid credentials")
+	assert "content" not in login_401
+
+
+@pytest.mark.parametrize(
+	("path", "view_body"),
+	[(CHANGE_PASSWORD, "ErrorMessage"), (TRIGGER_SCRAPE, "TriggerScrapeResponse")],
+)
+def test_a_view_documented_400_body_also_admits_a_parse_error(
+	schema: dict[str, Any], path: str, view_body: str
+) -> None:
+	response_400 = schema["paths"][path]["post"]["responses"]["400"]
+
+	assert _json_body(response_400) == {"anyOf": [_ref(view_body), _ref("ErrorDetail")]}
