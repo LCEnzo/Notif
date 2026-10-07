@@ -51,8 +51,9 @@ class SystemEvent {
 
 T _required<T extends Object>(T? value, String field) =>
     value ??
-    (throw FormatException(
-      'contract violation: SystemEvent.$field is missing or mistyped',
+    (throw ContractViolation(
+      schema: 'SystemEvent',
+      detail: '$field is missing or mistyped',
     ));
 
 class CaddyLogEntry {
@@ -148,9 +149,9 @@ class OpsService extends ChangeNotifier {
           .map(
             (item) => item is Map<String, dynamic>
                 ? SystemEvent.fromJson(item)
-                : throw FormatException(
-                    'contract violation: event is ${item.runtimeType}, '
-                    'not an object',
+                : throw ContractViolation(
+                    schema: 'SystemEvent',
+                    detail: 'event is ${item.runtimeType}, not an object',
                   ),
           )
           .toList(growable: false);
