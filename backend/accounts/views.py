@@ -1,13 +1,20 @@
+import contextlib
+import hashlib
 import logging
-from collections.abc import Sequence
+import secrets
+import threading
+from collections.abc import Callable, Sequence
+from datetime import timedelta
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from django.conf import settings
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models.query import QuerySet
 from django.middleware.csrf import rotate_token
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication, get_authorization_header
@@ -34,12 +41,15 @@ from accounts.device_sessions import (
 	session_for_token,
 )
 from accounts.models import DeviceSession, User
+from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH, PasswordResetBudget, PasswordResetCode
 from accounts.serializers import (
+	ChangePasswordSerializer,
 	DeviceSessionSerializer,
-	LoginRequestSerializer,
+	ErrorMessageSerializer,
 	LoginResponseSerializer,
+	LoginSerializer,
 	PasswordResetConfirmSerializer,
-	PasswordResetRequestSerializer,
+	PasswordResetSerializer,
 	SessionRevokeResponseSerializer,
 	StatusResponseSerializer,
 	UserCreationSerializer,
@@ -48,6 +58,7 @@ from accounts.serializers import (
 )
 from commons.network import client_ip
 from commons.permissions import IsRequestingThemselves, ReadOnly
+from commons.types import Email
 
 if TYPE_CHECKING:
 	_UserModelViewSet = ModelViewSet[User]
@@ -60,9 +71,79 @@ logger = logging.getLogger(__name__)
 
 SessionCookieSameSite = Literal["Lax", "Strict", "None", False]
 
+# ── password-reset per-email budgets ────────────────────────────
+# The reset code is 6 digits and the on-disk lockout (5 failures) resets every
+# time a new code is minted, so without a budget that survives code refresh an
+# attacker rotating IPs could grind the 10^6 space. These budgets key on the
+# *email*, not the IP, which also caps cross-site form POSTs from victims'
+# browsers. Database-backed (see PasswordResetBudget) so the limits are shared
+# across all gunicorn workers and survive worker recycling; both counters share
+# one fixed window, reset together on first use after the window elapses.
+_PASSWORD_RESET_REQUEST_BUDGET = (5, 60 * 60)  # (mints per hour, window seconds)
+_PASSWORD_RESET_CONFIRM_BUDGET = (10, 60 * 60)  # (guesses per hour, window seconds)
+
+BudgetKind = Literal["request", "confirm"]
+
+
+def _email_budget_allows(kind: BudgetKind, email: Email, limit: int, window_seconds: int) -> bool:
+	"""True when this email may still perform a password-reset action.
+
+	The email is stored hashed so plaintext addresses never hit the database.
+	The window opens on first use after the previous window elapsed and is
+	shared by both counters, so its expiry zeroes both; each allowed use
+	increments the matching counter under a row lock, so concurrent requests
+	(and multiple gunicorn workers) share one budget.
+	"""
+	field = "mint_count" if kind == "request" else "guess_count"
+	email_hash = hashlib.sha256(email.lower().encode()).hexdigest()
+	now = timezone.now()
+	with transaction.atomic():
+		row, _ = PasswordResetBudget.objects.select_for_update().get_or_create(
+			email_hash=email_hash,
+			defaults={"window_started_at": now},
+		)
+		if row.window_started_at < now - timedelta(seconds=window_seconds):
+			row.window_started_at = now
+			row.mint_count = 0
+			row.guess_count = 0
+		if getattr(row, field) >= limit:
+			return False
+		setattr(row, field, getattr(row, field) + 1)
+		row.save(update_fields=["mint_count", "guess_count", "window_started_at"])
+		return True
+
+
+def _send_reset_email_in_background(to_email: Email, code: str) -> None:
+	"""Send a reset email off the request thread.
+
+	The SMTP round-trip only happens for existing accounts; doing it inline
+	made wall-clock time an account-existence oracle on the reset endpoint.
+	Bounded: the per-IP throttle (3/min) and the per-email budget (5/hour)
+	above cap how many of these threads can ever exist.
+	"""
+	# Imported at call time so tests can patch commons.email.send_password_reset_email.
+	from commons.email import send_password_reset_email  # noqa: PLC0415 - test seam, slated for removal
+
+	# send_password_reset_email already logs failures with the address attached;
+	# the daemon thread must not die with a traceback.
+	with contextlib.suppress(Exception):
+		send_password_reset_email(to_email, code)
+
+
+def _spawn_reset_email_thread(to_email: Email, code: str) -> None:
+	threading.Thread(
+		target=_send_reset_email_in_background,
+		args=(to_email, code),
+		daemon=True,
+	).start()
+
+
+# Module-level seam: tests monkeypatch this with the synchronous sender.
+_send_reset_email: Callable[[Email, str], None] = _spawn_reset_email_thread
+
 
 class AuthThrottleMixin:
-	"""Disables throttling in tests; applies UserRateThrottle + ScopedRateThrottle otherwise.
+	"""Applies UserRateThrottle + ScopedRateThrottle.
 
 	Subclasses must set throttle_scope so ScopedRateThrottle picks up the right rate.
 	"""
@@ -70,8 +151,6 @@ class AuthThrottleMixin:
 	throttle_scope: str
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		if settings.TESTING:
-			return []
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 
@@ -182,7 +261,7 @@ def _user_agent(request: Request) -> str:
 def _ensure_dev_user(username: str, password: str) -> None:
 	"""Create (or reanimate) the dev bootstrap account on first dev login.
 
-	Guarded by DEV_BOOTSTRAP_LOGIN_ENABLED, which defaults to DEBUG. The
+	Guarded by DEV_BOOTSTRAP_LOGIN_ENABLED, which defaults to off. The
 	credentials must match exactly, so this never turns a failed login for a real
 	account into an account creation.
 	"""
@@ -225,7 +304,7 @@ class LoginView(AuthThrottleMixin, APIView):
 	throttle_scope = "login"
 
 	@extend_schema(
-		request=LoginRequestSerializer,
+		request=LoginSerializer,
 		responses={
 			status.HTTP_200_OK: LoginResponseSerializer,
 			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
@@ -238,7 +317,7 @@ class LoginView(AuthThrottleMixin, APIView):
 	)
 	def post(self, request: Request) -> Response:
 		_require_json_request(request)
-		serializer = LoginRequestSerializer(data=request.data)
+		serializer = LoginSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
 		username = serializer.validated_data["username"]
 		password = serializer.validated_data["password"]
@@ -437,12 +516,17 @@ class DeviceSessionViewSet(ListModelMixin, _DeviceSessionGenericViewSet):
 class UserViewSet(_UserModelViewSet):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
+	# No PUT: a full replacement requires password, which update() refuses.
+	http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		"""Apply stricter 'register' throttle on account creation."""
-		if self.action == "create" and not settings.TESTING:
+		"""Apply the stricter 'register' scope on account creation.
+
+		The default ScopedRateThrottle reads the scope; appending another one here
+		would charge every registration against the budget twice.
+		"""
+		if self.action == "create":
 			self.throttle_scope = "register"
-			return [*super().get_throttles(), ScopedRateThrottle()]
 		return super().get_throttles()
 
 	def get_serializer_class(self) -> type[BaseSerializer[User]]:
@@ -458,7 +542,7 @@ class UserViewSet(_UserModelViewSet):
 		# full serializer. Comparing under a different name, and as strings
 		# since kwargs["pk"] is a string, keeps this a real equality check.
 		match (self.request.method, requester_pk):
-			case ("POST" | "PUT" | "PATCH", _):
+			case ("POST" | "PATCH", _):
 				return UserCreationSerializer
 			case ("GET", requester) if requester is not None and wanted_pk is not None and str(requester) == wanted_pk:
 				return UserFullReadSerializer
@@ -466,23 +550,35 @@ class UserViewSet(_UserModelViewSet):
 				return UserMinimalReadSerializer
 
 	def get_permissions(self) -> Sequence[Any]:
-		# Account creation, ie. registration, needs to work for visitors without an
-		# account. This is keyed on the action rather than the HTTP method because
-		# keying on the method also stripped IsAuthenticated off every POST @action
-		# on this viewset — change_password and get_my_info — which then reached
-		# their `assert isinstance(user, User)` with an AnonymousUser and returned
-		# 500 to unauthenticated callers.
+		# Registration is open to anyone. Keyed on the action, not the method, so the
+		# POST @actions keep IsAuthenticated; AllowAny rather than [] so the schema
+		# marks the operation anonymous.
 		if self.action == "create":
-			return []
+			return [AllowAny()]
 
 		return super().get_permissions()
 
-	@action(detail=False, methods=["get", "post"], permission_classes=[IsAuthenticated])
+	# Overrides the minimal read get_serializer_class() would give the schema.
+	@extend_schema(responses=UserFullReadSerializer)
+	@action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
 	def get_my_info(self, request: Request) -> Response:
 		user = request.user
 		assert isinstance(user, User)
 		return Response(status=status.HTTP_200_OK, data=UserFullReadSerializer(user).data)
 
+	@extend_schema(
+		request=ChangePasswordSerializer,
+		responses={
+			status.HTTP_200_OK: StatusResponseSerializer,
+			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorMessageSerializer,
+				description=(
+					"A field is missing, empty or not a string, the current password is wrong, "
+					"or the password validators refused the new one."
+				),
+			),
+		},
+	)
 	@action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
 	def change_password(self, request: Request) -> Response:
 		"""Change the authenticated user's password.
@@ -493,10 +589,15 @@ class UserViewSet(_UserModelViewSet):
 		user = request.user
 		assert isinstance(user, User)
 
-		# DRF types request.data as dict | list; this endpoint requires a JSON
-		# object body, so narrow before reading individual fields.
+		# request.data is whatever JSON value the client sent, so the body and
+		# both fields are narrowed here with a 400; the password validators
+		# below assume a str.
 		body = request.data
-		assert isinstance(body, dict)
+		if not isinstance(body, dict):
+			return Response(
+				{"error": "Send a JSON object with current_password and new_password."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
 
 		current_password = body.get("current_password")
 		new_password = body.get("new_password")
@@ -507,6 +608,12 @@ class UserViewSet(_UserModelViewSet):
 				status=status.HTTP_400_BAD_REQUEST,
 			)
 
+		if not isinstance(current_password, str) or not isinstance(new_password, str):
+			return Response(
+				{"error": "current_password and new_password must be strings."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
+
 		if not user.check_password(current_password):
 			return Response(
 				{"error": "Current password is incorrect."},
@@ -514,8 +621,6 @@ class UserViewSet(_UserModelViewSet):
 			)
 
 		try:
-			from django.contrib.auth.password_validation import validate_password
-
 			validate_password(new_password, user)
 		except DjangoValidationError as exc:
 			return Response(
@@ -552,42 +657,49 @@ class PasswordResetRequestView(APIView):
 	"""
 
 	permission_classes = [AllowAny]
+	parser_classes = [JSONParser]
 	throttle_scope = "password_reset"
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		if settings.TESTING:
-			return []
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 	@extend_schema(
-		request=PasswordResetRequestSerializer,
+		request=PasswordResetSerializer,
 		responses={status.HTTP_200_OK: StatusResponseSerializer},
 	)
 	def post(self, request: Request) -> Response:
-		from accounts.models.password_reset import PasswordResetCode
-		from commons.email import send_password_reset_email
+		# Same cross-site form gate as login/logout: without it, any webpage
+		# could POST form-encoded resets from the victim's browser — minting
+		# codes (invalidating the victim's own), flooding their inbox, and
+		# spending the per-IP throttle budget from the victim's IP.
+		_require_json_request(request)
 
-		serializer = PasswordResetRequestSerializer(data=request.data)
+		serializer = PasswordResetSerializer(data=request.data)
 		if not serializer.is_valid():
 			# Return 200 to prevent enumeration via validation errors
 			return Response({"status": "ok"})
 
-		email = serializer.validated_data["email"]
+		email = Email(serializer.validated_data["email"])
+		if not _email_budget_allows("request", email, *_PASSWORD_RESET_REQUEST_BUDGET):
+			# Budget exhausted: answer identically and silently. This per-email
+			# cap is what makes the mint-new-code-to-reset-the-lockout loop
+			# useless: a fresh code cannot buy more guesses than the budget.
+			return Response({"status": "ok"})
+
 		user = User._base_manager.filter(email__iexact=email, is_active=True).first()
 
 		if user is not None:
-			import secrets
-
-			code = str(secrets.randbelow(1_000_000)).zfill(6)
+			code = str(secrets.randbelow(10**PASSWORD_RESET_CODE_LENGTH)).zfill(PASSWORD_RESET_CODE_LENGTH)
 
 			PasswordResetCode.issue_for_user(user=user, code=code)
 
 			try:
-				send_password_reset_email(user.email, code)
+				_send_reset_email(Email(user.email), code)
 			except Exception:
-				logger.exception("Failed to send reset email to %s", email)
-				# Always return 200 - even a send failure during an email
-				# outage must not become an email-enumeration oracle.
+				# The silent 200 is the anti-enumeration contract: a dispatch
+				# failure must not surface as a 500 that only existing accounts
+				# can trigger.
+				logger.exception("Password reset email dispatch failed for %s", user.email)
 
 		return Response({"status": "ok"})
 
@@ -596,11 +708,10 @@ class PasswordResetConfirmView(APIView):
 	"""Validate a reset code and set a new password."""
 
 	permission_classes = [AllowAny]
+	parser_classes = [JSONParser]
 	throttle_scope = "password_reset_confirm"
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		if settings.TESTING:
-			return []
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 	@extend_schema(
@@ -608,15 +719,26 @@ class PasswordResetConfirmView(APIView):
 		responses={status.HTTP_200_OK: StatusResponseSerializer},
 	)
 	def post(self, request: Request) -> Response:
-		from accounts.models.password_reset import PasswordResetCode
+		# JSON-only, like the request endpoint: form-encoded cross-site POSTs
+		# must not be able to burn guesses against the victim's code from the
+		# victim's browser.
+		_require_json_request(request)
 
 		serializer = PasswordResetConfirmSerializer(data=request.data)
 		if not serializer.is_valid():
 			return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-		email = serializer.validated_data["email"]
+		email = Email(serializer.validated_data["email"])
 		code = serializer.validated_data["code"]
 		new_password = serializer.validated_data["new_password"]
+
+		if not _email_budget_allows("confirm", email, *_PASSWORD_RESET_CONFIRM_BUDGET):
+			# Budget exhausted: the same error as a wrong code, so the endpoint
+			# never advertises that guesses are being counted.
+			return Response(
+				{"error": "Invalid or expired reset code."},
+				status=status.HTTP_400_BAD_REQUEST,
+			)
 
 		user = User._base_manager.filter(email__iexact=email, is_active=True).first()
 		if user is None:
@@ -640,10 +762,6 @@ class PasswordResetConfirmView(APIView):
 
 		# Validate password against this specific user
 		try:
-			from django.contrib.auth.password_validation import (
-				validate_password,
-			)
-
 			validate_password(new_password, user)
 		except DjangoValidationError as exc:
 			return Response(

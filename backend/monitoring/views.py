@@ -1,13 +1,18 @@
+import logging
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.paginator import Page
-from django.db.models import Q
+from django.db import Error as DbError
+from django.db import connections
+from django.db.models import DateTimeField
 from django.db.models.query import QuerySet
 from django.utils import timezone
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import status as http_status
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.exceptions import ValidationError
+from rest_framework.decorators import action, api_view, permission_classes, throttle_scope
+from rest_framework.exceptions import ParseError, ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin, UpdateModelMixin
 from rest_framework.pagination import PageNumberPagination
@@ -18,21 +23,25 @@ from rest_framework.serializers import BaseSerializer
 from rest_framework.viewsets import GenericViewSet, ModelViewSet
 
 from accounts.models import User
+from commons.openapi import ErrorDetailSerializer
 from commons.permissions import IsOwnerOrAdmin, OwnerOrAdminQuerysetMixin
 from commons.result import Err, Ok
 from monitoring.models import Link, Notification, Strategy
 from monitoring.serializers import (
 	HealthCheckResponseSerializer,
 	LinkSerializer,
+	MarkAllReadResponseSerializer,
 	NotificationSerializer,
 	StatusCheckResponseSerializer,
 	StrategySerializer,
-	TriggerScrapeRequestSerializer,
 	TriggerScrapeResponseSerializer,
+	TriggerScrapeSerializer,
 )
 from monitoring.services import scrape_all_links, scrape_link
 from monitoring.strategies import STRATEGY_CHOICES
 from notif.config import settings
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
 	_LinkModelViewSet = ModelViewSet[Link]
@@ -65,21 +74,38 @@ class LinkViewSet(OwnerOrAdminQuerysetMixin, _LinkModelViewSet):
 		return self._scoped_queryset(Link.objects.all())
 
 	def perform_create(self, serializer: BaseSerializer[Link]) -> None:
-		"""Derive ownership from authentication, never from client input."""
+		# Ownership is server-assigned, never client-supplied: `user` is read-only
+		# on the serializer, so a caller cannot plant a link in another account.
 		user = self.request.user
-		assert isinstance(user, User), "link creation requires an application User"
+		assert isinstance(user, User), "authenticated link creation requires an application User"
 		serializer.save(user=user)
 
 
+@extend_schema_view(
+	destroy=extend_schema(
+		responses={
+			http_status.HTTP_204_NO_CONTENT: None,
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="The strategy is still used by one or more links.",
+			),
+		},
+	),
+)
 class StrategyViewSet(OwnerOrAdminQuerysetMixin, _StrategyModelViewSet):
-	permission_classes = [IsAuthenticated]
+	permission_classes = [IsAuthenticated, IsOwnerOrAdmin]
 	serializer_class = StrategySerializer
 
 	def get_queryset(self) -> QuerySet[Strategy]:
-		return self._scoped_queryset(
-			Strategy.objects.all(),
-			user_filter=lambda qs, u: qs.filter(Q(link_set__user=u) | Q(link_set__isnull=True)).distinct(),
-		)
+		# Strategies are strictly owner-scoped (no shared/global strategies): the
+		# mixin's default filter is `user=request.user`, so a user only ever sees
+		# or mutates their own.
+		return self._scoped_queryset(Strategy.objects.all())
+
+	def perform_create(self, serializer: BaseSerializer[Strategy]) -> None:
+		user = self.request.user
+		assert isinstance(user, User), "authenticated strategy creation requires an application User"
+		serializer.save(user=user)
 
 	def perform_destroy(self, instance: Strategy) -> None:
 		if instance.link_set.exists():
@@ -120,6 +146,57 @@ class NotificationPagination(PageNumberPagination):
 		)
 
 
+def _parse_since(raw: str) -> datetime:
+	"""Parse ``?since=`` into an aware UTC datetime, or raise ParseError (a 400).
+
+	Same parser and default timezone as the ORM's filter, so accepted values keep their meaning.
+	"""
+	try:
+		parsed: datetime | None = DateTimeField().to_python(raw)
+	except DjangoValidationError as exc:
+		raise ParseError("since must be an ISO 8601 date or datetime.") from exc
+	if parsed is None:  # Only for a None input; narrows the stub's loose return type.
+		raise ParseError("since must be an ISO 8601 date or datetime.")
+	if timezone.is_naive(parsed):
+		parsed = timezone.make_aware(parsed, timezone.get_default_timezone())
+	try:
+		return parsed.astimezone(UTC)
+	except OverflowError as exc:
+		raise ParseError("since is outside the supported date range.") from exc
+
+
+# get_queryset() honours both on every action; documented where callers use them.
+_NOTIFICATION_FILTERS = [
+	OpenApiParameter(
+		"status",
+		# Notification.status's own enum component, so codegen emits one enum, not one per operation.
+		type={"$ref": "#/components/schemas/StatusEnum"},
+		description="Only notifications in this state.",
+	),
+	OpenApiParameter(
+		"since",
+		# The two shapes _parse_since() reads; any other string is a 400.
+		type={"anyOf": [{"type": "string", "format": "date-time"}, {"type": "string", "format": "date"}]},
+		description=(
+			"Only notifications whose update was created at or after this ISO 8601 date or datetime. "
+			"A value without an offset is read in the server's time zone."
+		),
+	),
+]
+
+
+@extend_schema_view(
+	list=extend_schema(
+		parameters=_NOTIFICATION_FILTERS,
+		responses={
+			http_status.HTTP_200_OK: NotificationSerializer(many=True),
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="since is not an ISO 8601 date or datetime, or is out of range.",
+			),
+		},
+	),
+)
 class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, _NotificationGenericViewSet):
 	permission_classes = [IsAuthenticated]
 	serializer_class = NotificationSerializer
@@ -143,7 +220,7 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 
 		since = self.request.query_params.get("since")
 		if since:
-			queryset = queryset.filter(update__created_at__gte=since)
+			queryset = queryset.filter(update__created_at__gte=_parse_since(since))
 
 		# OrderingFilter applies ordering on top; select_related avoids N+1.
 		return queryset.select_related("update")
@@ -157,6 +234,17 @@ class NotificationViewSet(ListModelMixin, RetrieveModelMixin, UpdateModelMixin, 
 		else:
 			serializer.save()
 
+	@extend_schema(
+		request=None,
+		parameters=_NOTIFICATION_FILTERS,
+		responses={
+			http_status.HTTP_200_OK: MarkAllReadResponseSerializer,
+			http_status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorDetailSerializer,
+				description="since is unreadable, or a cookie session sent a body that does not parse.",
+			),
+		},
+	)
 	@action(detail=False, methods=["post"])
 	def mark_all_read(self, request: Request) -> Response:
 		updated = (
@@ -174,7 +262,7 @@ def _request_error_message(errors: dict[str, Any]) -> str:
 
 
 @extend_schema(
-	request=TriggerScrapeRequestSerializer,
+	request=TriggerScrapeSerializer,
 	responses={
 		http_status.HTTP_200_OK: TriggerScrapeResponseSerializer,
 		http_status.HTTP_400_BAD_REQUEST: TriggerScrapeResponseSerializer,
@@ -183,6 +271,7 @@ def _request_error_message(errors: dict[str, Any]) -> str:
 )
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+@throttle_scope("scrape")
 def trigger_scrape(request: Request) -> Response:
 	"""Scrape one link, or every link the caller owns.
 
@@ -197,7 +286,7 @@ def trigger_scrape(request: Request) -> Response:
 	# Validated rather than read straight off request.data: a non-numeric link_id
 	# used to reach the ORM and raise ValueError (an unhandled 500), and link_id=0
 	# was falsy, so it silently scraped *everything*.
-	request_serializer = TriggerScrapeRequestSerializer(data=request.data)
+	request_serializer = TriggerScrapeSerializer(data=request.data)
 	if not request_serializer.is_valid():
 		return Response(
 			{"status": "error", "message": _request_error_message(request_serializer.errors)},
@@ -286,14 +375,16 @@ def status_check(request: Request) -> Response:
 	Used by load balancers and operators to confirm the service can handle traffic
 	and to verify which code is deployed.
 	"""
-	from django.db import connections
-
 	try:
 		with connections["default"].cursor() as cursor:
 			cursor.execute("SELECT 1")
 		db_status = "ok"
 		status_code = 200
-	except Exception:
+	except DbError:
+		# django.db.Error, not DatabaseError: Django wraps every driver failure into this
+		# hierarchy, and InterfaceError (e.g. a closed connection) sits outside DatabaseError.
+		# The response stays opaque because the endpoint is public; the log keeps the cause.
+		logger.exception("Readiness probe: database check failed")
 		db_status = "down"
 		status_code = 503
 

@@ -17,7 +17,7 @@ from django.db.models.query import QuerySet
 from django.http import HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiResponse, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.filters import OrderingFilter
 from rest_framework.pagination import PageNumberPagination
@@ -30,6 +30,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from commons.network import client_ip
+from commons.openapi import ErrorDetailSerializer
 from ops.models import SystemEvent
 from ops.serializers import (
 	CaddyAccessLogResponseSerializer,
@@ -169,7 +170,23 @@ def _evict_client_events_over_cap() -> None:
 	SystemEvent.objects.filter(id__in=evict_ids).delete()
 
 
-@extend_schema(responses={200: CaddyAccessLogResponseSerializer})
+@extend_schema(
+	parameters=[
+		OpenApiParameter(
+			"limit",
+			type={"type": "integer", "minimum": 1, "maximum": _CADDY_LOG_MAX_LINES},
+			default=_CADDY_LOG_DEFAULT_LINES,
+			description="How many of the newest log entries to return.",
+		),
+	],
+	responses={
+		200: CaddyAccessLogResponseSerializer,
+		400: OpenApiResponse(
+			response=ErrorDetailSerializer,
+			description="limit is not an integer within range, or the configured log path is not a file.",
+		),
+	},
+)
 @api_view(["GET"])
 @permission_classes([IsAdminUser])
 def caddy_access_logs(request: Request) -> Response:
@@ -190,7 +207,12 @@ def caddy_access_logs(request: Request) -> Response:
 	return Response({"configured_path": str(log_path), "results": entries})
 
 
-@extend_schema(responses={200: OpenApiResponse(response=OpenApiTypes.BINARY, description="SQLite backup file")})
+@extend_schema(
+	responses={
+		200: OpenApiResponse(response=OpenApiTypes.BINARY, description="SQLite backup file"),
+		400: OpenApiResponse(response=ErrorDetailSerializer, description="The database is not SQLite."),
+	},
+)
 @api_view(["GET"])
 @permission_classes([IsSuperUser])
 def download_sqlite_backup(request: Request) -> HttpResponse | Response | StreamingHttpResponse:
@@ -246,7 +268,7 @@ def _write_sqlite_backup(source: sqlite3.Connection, db_name: str, tmp_path: str
 	databases (tests with ``:memory:`` or ``file::memory:?…``) we fall back to
 	``serialize()`` because there is no file to reopen.
 	"""
-	if db_name == ":memory:" or db_name.startswith("file::memory:") or db_name.startswith("file:memdb"):
+	if db_name == ":memory:" or db_name.startswith(("file::memory:", "file:memdb")):
 		data = source.serialize()
 		with Path(tmp_path).open("wb") as fh:
 			fh.write(data)
@@ -274,10 +296,10 @@ def _stream_and_unlink(path: str, audit_context: dict[str, Any]) -> Iterator[byt
 				yield chunk
 	finally:
 		_unlink_quiet(path)
-		_record_stream_outcome(audit_context, bytes_sent, completed)
+		_record_stream_outcome(audit_context, bytes_sent, completed=completed)
 
 
-def _record_stream_outcome(audit_context: dict[str, Any], bytes_sent: int, completed: bool) -> None:
+def _record_stream_outcome(audit_context: dict[str, Any], bytes_sent: int, *, completed: bool) -> None:
 	username = audit_context.get("username", "?")
 	size_bytes = audit_context.get("size_bytes", 0)
 	details = {**audit_context, "bytes_streamed": bytes_sent}

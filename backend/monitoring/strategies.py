@@ -6,6 +6,7 @@
 # Implement via requests session, to reduce network load, and request spam.
 
 import hashlib
+import io
 import json
 import logging
 import re
@@ -23,6 +24,7 @@ from bs4.element import AttributeValueList, ResultSet, Tag
 from django.utils import timezone
 
 from commons.result import Err, Ok, Result
+from monitoring.safe_fetch import fetch, guarded_session, request_capped
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ class ScrapedUpdate(NamedTuple):
 
 # A scrape result payload: the normalized updates a strategy found for one source.
 type NotifData = list[ScrapedUpdate]
-type JsonScalar = None | bool | int | float | str
+type JsonScalar = bool | int | float | str | None
 type JsonValue = JsonScalar | Sequence[JsonValue] | Mapping[str, JsonValue]
 type ComparisonState = dict[str, JsonValue]
 type ComparisonStateUpdate = ComparisonState | None
@@ -122,7 +124,7 @@ def _string_attr_value(value: str | AttributeValueList | None) -> str | None:
 
 def _fetch_url_content(url: URL) -> str | None:
 	try:
-		response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+		response = fetch(url, timeout=REQUEST_TIMEOUT_SECONDS)
 	except requests.RequestException:
 		return None
 	if response.status_code == requests.codes.ok:
@@ -157,7 +159,9 @@ def _selector_comparison_state(selector_state: Mapping[str, SelectorDigestState]
 
 def _html_to_readable_text(html_content: str) -> str:
 	"""Convert feed HTML into bounded readable text for notification bodies."""
-	soup = BeautifulSoup(html_content, "html.parser")
+	# A stream parses identically but skips Beautiful Soup's warning that a short
+	# tag-free string looks like a URL or file name; such feed bodies are content.
+	soup = BeautifulSoup(io.StringIO(html_content), "html.parser")
 
 	for tag in soup(_NON_CONTENT_TAGS):
 		tag.decompose()
@@ -190,7 +194,6 @@ class BaseStrategy(ABC):
 		This function exists to check if the strategy CAN scrape the URL.
 		Whether that be a hardcoded list of sites, or whatever.
 		"""
-		pass
 
 	@abstractmethod
 	def scrape(
@@ -209,7 +212,6 @@ class BaseStrategy(ABC):
 		ScrapeSuccess.updates -> list[ScrapedUpdate]
 		ScrapeSuccess.comparison_state_update -> None | { "attr name": data for comparison }
 		"""
-		pass
 
 	def __call__(
 		self,
@@ -347,7 +349,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 		req_url = self._get_threadmarks_url(url)
 
 		try:
-			response = requests.get(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = fetch(req_url, timeout=REQUEST_TIMEOUT_SECONDS)
 		except requests.RequestException as exc:
 			return Err(f"Request failed: {exc}")
 		marks = self._extract_threadmarks(response)
@@ -411,7 +413,7 @@ class SBSVThreadmarksStrategy(BaseStrategy):
 				try:
 					return datetime.strptime(pub_date_str, "%Y-%m-%dT%H:%M:%S%z")
 				except ValueError as err:
-					logger.error(f"SBSVThreadmarksStrategy | _extract_pub_date: Value Error {err}")
+					logger.error("SBSVThreadmarksStrategy | _extract_pub_date: Value Error %s", err)
 					return None
 		return None
 
@@ -636,8 +638,10 @@ class QQAlertsStrategy(BaseStrategy):
 			"Origin": f"{parsed_url.scheme}://{parsed_url.netloc}",
 		}
 
-		with requests.Session() as session:
-			get_response = session.get(QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS)
+		with guarded_session() as session:
+			get_response = request_capped(
+				session, "GET", QQAlertsStrategy.alerts_url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True
+			)
 			get_response.raise_for_status()
 			session_cookie = get_response.cookies.get(session_cookie_name)
 			login_headers["Cookie"] = f"{session_cookie_name}={session_cookie}"
@@ -647,7 +651,14 @@ class QQAlertsStrategy(BaseStrategy):
 				session.headers[header] = value
 
 			# AFAIK this will get the alerts page HTML due to the redirect part of the payload/data
-			response = session.post(QQAlertsStrategy.login_url, data=payload, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = request_capped(
+				session,
+				"POST",
+				QQAlertsStrategy.login_url,
+				data=payload,
+				timeout=REQUEST_TIMEOUT_SECONDS,
+				allow_redirects=True,
+			)
 			response.raise_for_status()
 			session.close()
 
@@ -775,15 +786,21 @@ class KemonoCardInfo:
 @register
 class KemonoFavouritesStrategy(BaseStrategy):
 	"""
-	Check Kemono favourites.
+	Check favourites on a Kemono-style site (currently pawchive.pw).
 
-	Config data should include username, password.
+	Config data should include username, password; they are POSTed to ``login_url`` on every scrape.
 	"""
 
 	display_name = "Kemono Favourites"
 
-	login_url = "https://kemono.party/account/login"
-	fav_url = "https://kemono.party/favorites"
+	# The only place the host is stated: the user's credentials go here on every scrape. The previous
+	# host, kemono.party, lost its A record but stays registered, so whoever holds it could start
+	# receiving them. A host change must also update the literal pin in the strategy's tests.
+	base_url = "https://pawchive.pw"
+	login_url = f"{base_url}/account/login"
+	fav_url = f"{base_url}/favorites"
+
+	MAX_ERROR_PATH_CHARS = 200
 
 	def can_scrape_url(self, url: URL) -> bool:
 		parsed_url = urlsplit(url)
@@ -792,6 +809,20 @@ class KemonoFavouritesStrategy(BaseStrategy):
 		alerts_path = urlsplit(self.fav_url).path
 
 		return alerts_domain == parsed_url.netloc and alerts_path == parsed_url.path
+
+	@classmethod
+	def _is_favourites_url(cls, url: str) -> bool:
+		"""Whether ``url`` is ``fav_url`` on the same origin (scheme, host, effective port).
+
+		Query, fragment and a trailing slash are ignored.
+		"""
+		same_path = urlsplit(url).path.rstrip("/") == urlsplit(cls.fav_url).path.rstrip("/")
+		return same_path and cls._origin(url) == cls._origin(cls.fav_url)
+
+	@staticmethod
+	def _origin(url: str) -> tuple[str, str | None, int | None]:
+		parts = urlsplit(url)
+		return parts.scheme, parts.hostname, parts.port or {"http": 80, "https": 443}.get(parts.scheme)
 
 	def scrape(
 		self,
@@ -814,6 +845,15 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			resp = self._get_favourites_html(username, password)
 		except requests.RequestException as exc:
 			return Err(f"Request failed: {exc}")
+		if not self._is_favourites_url(resp.url):
+			# Without a session the site 302s /favorites to its login page, which has no cards, so parsing it
+			# would report "nothing new" forever. Name where the request ended up, but never its query string.
+			landed = urlsplit(resp.url)
+			landed_path = landed.path[: self.MAX_ERROR_PATH_CHARS]
+			return Err(
+				f"Favourites request ended at {landed.scheme}://{landed.hostname}{landed_path} instead of "
+				f"{self.fav_url}; the login most likely failed, so check this strategy's username and password"
+			)
 		cards = self._extract_kemono_profile_cards(resp.text)
 
 		# Fill updates with new alerts
@@ -857,11 +897,18 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 	def _extract_datetime(self, card_tag: Tag) -> datetime | None:
 		dt = card_tag.select_one("time.timestamp")
-		if dt is not None:
-			return datetime.strptime(dt.text.strip(), "%Y-%m-%d %H:%M:%S.%f").replace(
-				tzinfo=timezone.get_default_timezone()
-			)
-		return None
+		if dt is None:
+			return None
+		text = dt.text.strip()
+		if text == "":
+			return None
+		# The site prints Python's str(datetime), which drops ".ffffff" when the microseconds are zero:
+		# pawchive.pw's creator cards read "2026-10-05 16:00:00". fromisoformat takes both shapes;
+		# anything else raises, so a markup change fails the scrape instead of silently skipping cards.
+		parsed = datetime.fromisoformat(text)
+		if timezone.is_naive(parsed):
+			return timezone.make_aware(parsed, timezone.get_default_timezone())
+		return parsed.astimezone(timezone.get_default_timezone())
 
 	def _extract_link(self, card_tag: Tag, url: URL) -> URL | None:
 		link = _string_attr_value(card_tag.attrs.get("href"))
@@ -869,8 +916,7 @@ class KemonoFavouritesStrategy(BaseStrategy):
 
 	def _extract_kemono_profile_cards(self, html: str) -> list[KemonoCardInfo]:
 		card_tags = _get_content_with_css_selector(html, ".user-card")
-		parsed_url = urlsplit(KemonoFavouritesStrategy.fav_url)
-		url: URL = URL(f"{parsed_url.scheme}://{parsed_url.netloc}")
+		url: URL = URL(KemonoFavouritesStrategy.base_url)
 
 		cards = []
 		for card_tag in card_tags:
@@ -890,13 +936,23 @@ class KemonoFavouritesStrategy(BaseStrategy):
 			"password": f"{password}",
 		}
 
-		with requests.session() as session:
-			login_response = session.post(
-				KemonoFavouritesStrategy.login_url, data=data, timeout=REQUEST_TIMEOUT_SECONDS
+		with guarded_session() as session:
+			# Not following the login's redirect: on a 307/308 requests would resend
+			# the credentials to wherever it points. The session cookie is set by the
+			# redirect response itself, and the favourites page is fetched next anyway.
+			login_response = request_capped(
+				session,
+				"POST",
+				KemonoFavouritesStrategy.login_url,
+				data=data,
+				timeout=REQUEST_TIMEOUT_SECONDS,
+				allow_redirects=False,
 			)
 			login_response.raise_for_status()
 
-			fav_response = session.get(KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS)
+			fav_response = request_capped(
+				session, "GET", KemonoFavouritesStrategy.fav_url, timeout=REQUEST_TIMEOUT_SECONDS, allow_redirects=True
+			)
 			fav_response.raise_for_status()
 
 			session.close()
@@ -940,12 +996,15 @@ class FeedStrategy(BaseStrategy):
 		**kwargs: Any,
 	) -> ScrapeResult:
 		try:
-			response = requests.get(url, timeout=REQUEST_TIMEOUT_SECONDS)
+			response = fetch(url, timeout=REQUEST_TIMEOUT_SECONDS)
 			response.raise_for_status()
 		except requests.RequestException as exc:
 			return Err(f"Feed fetch failed: {exc}")
 
-		feed = feedparser.parse(response.content)
+		# A stream, never bytes or str: feedparser opens either one as a local path
+		# (unbounded read) when it names an existing file, and this body is
+		# whatever the remote server chose to send.
+		feed = feedparser.parse(io.BytesIO(response.content))
 
 		if feed.bozo and not feed.entries:
 			bozo_msg = str(feed.bozo_exception) if feed.bozo_exception else "unknown parse error"

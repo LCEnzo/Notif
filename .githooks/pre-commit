@@ -23,6 +23,13 @@ mapfile -d "" -t staged < <(git diff --cached --name-only -z --diff-filter=ACMRT
 repo_root=$(git rev-parse --show-toplevel)
 cd "$repo_root"
 
+# detect-secrets-hook shells out to git, and the scan below runs inside the
+# staging dir - not a repository. Point git at the repo via env so those calls
+# resolve regardless of cwd. Linked-worktree commits already get an absolute
+# GIT_DIR from git itself; this makes main-checkout commits behave the same.
+GIT_DIR=$(git rev-parse --absolute-git-dir)
+export GIT_DIR
+
 staging_dir=$(mktemp -d)
 trap 'rm -rf "$staging_dir"' EXIT
 

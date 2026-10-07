@@ -1,9 +1,12 @@
 from typing import TYPE_CHECKING, Any
 
+from django.db.models import QuerySet
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
+from monitoring import safe_fetch
 from monitoring.models import Link, Notification, Strategy, Update
+from monitoring.safe_fetch import NonPublicHostError
 
 if TYPE_CHECKING:
 	_StrategyModelSerializer = ModelSerializer[Strategy]
@@ -11,21 +14,50 @@ if TYPE_CHECKING:
 	_UpdateModelSerializer = ModelSerializer[Update]
 	_NotificationModelSerializer = ModelSerializer[Notification]
 	_AnySerializer = serializers.Serializer[Any]
+	_StrategyRelatedField = serializers.PrimaryKeyRelatedField[Strategy]
 else:
 	_StrategyModelSerializer = ModelSerializer
 	_LinkModelSerializer = ModelSerializer
 	_UpdateModelSerializer = ModelSerializer
 	_NotificationModelSerializer = ModelSerializer
 	_AnySerializer = serializers.Serializer
+	_StrategyRelatedField = serializers.PrimaryKeyRelatedField
 
 
 class StrategySerializer(_StrategyModelSerializer):
 	class Meta:
 		model = Strategy
-		fields = "__all__"
+		# Explicit field list (not "__all__"): ownership is server-assigned and
+		# read-only, and `data` may hold third-party credentials, so the field set
+		# is stated deliberately rather than derived.
+		fields = ["id", "user", "strat_cls", "data"]
+		read_only_fields = ["id", "user"]
+
+
+class OwnedStrategyField(_StrategyRelatedField):
+	"""A strategy reference scoped to the requester's own strategies.
+
+	get_queryset is DRF's per-request extension point for related-field
+	validation, so a link can only ever reference a strategy its owner owns — a
+	caller cannot point their link at (and thereby exercise) another user's
+	strategy and stored credentials.
+	"""
+
+	def get_queryset(self) -> QuerySet[Strategy]:
+		queryset = super().get_queryset()
+		assert queryset is not None, "OwnedStrategyField is always constructed with a base queryset"
+		request = self.context.get("request")
+		user = getattr(request, "user", None)
+		if user is None or user.is_anonymous:
+			return queryset.none()
+		if user.is_staff or user.is_superuser:
+			return queryset
+		return queryset.filter(user=user)
 
 
 class LinkSerializer(_LinkModelSerializer):
+	strategy = OwnedStrategyField(queryset=Strategy.objects.all(), allow_null=True)
+
 	class Meta:
 		model = Link
 
@@ -60,6 +92,21 @@ class LinkSerializer(_LinkModelSerializer):
 			"strategy": {"required": True},
 		}
 
+	def validate_url(self, value: str) -> str:
+		"""Reject URLs whose host is a non-public IP literal or a localhost name.
+
+		Early, actionable feedback only, and deliberately without DNS: a lookup
+		here would put a blocking, attacker-timed call on the request path and
+		refuse links whenever DNS hiccups, while still not being authoritative,
+		since the answer can change before the scrape. ``safe_fetch`` resolves
+		and pins every hop at fetch time.
+		"""
+		try:
+			safe_fetch.reject_non_public_literal(value)
+		except NonPublicHostError as exc:
+			raise serializers.ValidationError(str(exc)) from exc
+		return value
+
 
 class UpdateSerializer(_UpdateModelSerializer):
 	class Meta:
@@ -77,7 +124,7 @@ class NotificationSerializer(_NotificationModelSerializer):
 		read_only_fields = ["id", "update", "read_at"]
 
 
-class TriggerScrapeRequestSerializer(_AnySerializer):
+class TriggerScrapeSerializer(_AnySerializer):
 	link_id = serializers.IntegerField(min_value=1, required=False)
 
 
@@ -114,6 +161,13 @@ class TriggerScrapeResponseSerializer(_AnySerializer):
 		child=TriggerScrapeLinkResultSerializer(),
 		required=False,
 		help_text="Scrape-all only: per-link outcome keyed by stringified link id.",
+	)
+
+
+class MarkAllReadResponseSerializer(_AnySerializer):
+	marked_read = serializers.IntegerField(
+		min_value=0,
+		help_text="How many of the caller's unread notifications this call marked read.",
 	)
 
 

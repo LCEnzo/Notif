@@ -6,6 +6,7 @@ from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer
 
 from accounts.models import DeviceSession, User
+from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH
 
 if TYPE_CHECKING:
 	_UserModelSerializer = ModelSerializer[User]
@@ -21,6 +22,9 @@ class UserCreationSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = ["username", "email", "name", "password"]
+		# This serializer also renders the POST/PATCH responses, and the
+		# stored password hash must never appear in one.
+		extra_kwargs = {"password": {"write_only": True}}
 
 	@transaction.atomic
 	def create(self, validated_data: dict[str, Any]) -> User:
@@ -62,6 +66,21 @@ class UserCreationSerializer(_UserModelSerializer):
 		return attrs
 
 
+# Documents the body only: the view validates it itself, since a CharField would
+# coerce a number into a string and the view refuses one.
+class ChangePasswordSerializer(_AnySerializer):
+	"""The current password, and the one to replace it."""
+
+	current_password = serializers.CharField(write_only=True, min_length=1)
+	new_password = serializers.CharField(write_only=True, min_length=1)
+
+
+class ErrorMessageSerializer(_AnySerializer):
+	"""The ``{"error": ...}`` body account views answer a refused request with."""
+
+	error = serializers.CharField()
+
+
 class UserFullReadSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
@@ -89,7 +108,7 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 # ── device sessions ──────────────────────────────────────────
 
 
-class LoginRequestSerializer(_AnySerializer):
+class LoginSerializer(_AnySerializer):
 	username = serializers.CharField()
 	password = serializers.CharField(write_only=True)
 	transport = serializers.ChoiceField(
@@ -158,7 +177,7 @@ class SessionRevokeResponseSerializer(_AnySerializer):
 # ── password reset ───────────────────────────────────────────
 
 
-class PasswordResetRequestSerializer(_AnySerializer):
+class PasswordResetSerializer(_AnySerializer):
 	"""Accepts an email address for password reset."""
 
 	email = serializers.EmailField()
@@ -171,7 +190,7 @@ class PasswordResetConfirmSerializer(_AnySerializer):
 	"""Accepts email, code, and new password to complete reset."""
 
 	email = serializers.EmailField()
-	code = serializers.CharField(min_length=6, max_length=6)
+	code = serializers.CharField(min_length=PASSWORD_RESET_CODE_LENGTH, max_length=PASSWORD_RESET_CODE_LENGTH)
 	new_password = serializers.CharField(min_length=1)
 
 	def validate_email(self, value: str) -> str:
@@ -180,5 +199,5 @@ class PasswordResetConfirmSerializer(_AnySerializer):
 	def validate_code(self, value: str) -> str:
 		code = value.strip()
 		if not code.isascii() or not code.isdigit():
-			raise serializers.ValidationError("Code must contain 6 digits.")
+			raise serializers.ValidationError(f"Code must contain {PASSWORD_RESET_CODE_LENGTH} digits.")
 		return code

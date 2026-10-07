@@ -1,0 +1,18 @@
+[Unit]
+Description=Notif Docker Compose stack
+Requires=docker.service
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/notif/notif-compose.env
+ExecStart=/bin/sh -c 'cd "$NOTIF_DEPLOY_DIR" && exec docker compose -f "$NOTIF_COMPOSE_FILE" --profile "$NOTIF_COMPOSE_PROFILE" up -d --remove-orphans'
+ExecReload=/bin/sh -c 'cd "$NOTIF_DEPLOY_DIR" && exec docker compose -f "$NOTIF_COMPOSE_FILE" --profile "$NOTIF_COMPOSE_PROFILE" up -d --remove-orphans'
+ExecStop=/bin/sh -c 'cd "$NOTIF_DEPLOY_DIR" && exec docker compose -f "$NOTIF_COMPOSE_FILE" --profile "$NOTIF_COMPOSE_PROFILE" stop'
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

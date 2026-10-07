@@ -5,6 +5,9 @@
 .codex/
 .cursor/
 .hermes/
+reasonix.toml
+.reasonix
+codex/
 
 # Python
 .venv/
@@ -36,3 +39,5 @@ gwern.net
 TODO.md
 frontend/devtools_options.yaml
 frontend/design experiment/
+# Codegen input, copied from backend/openapi.json by frontend/scripts/refresh_contract.py
+frontend/swagger/openapi.json

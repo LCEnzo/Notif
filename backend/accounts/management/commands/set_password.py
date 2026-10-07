@@ -1,3 +1,4 @@
+import getpass
 from argparse import ArgumentParser
 from typing import Any
 
@@ -26,8 +27,6 @@ class Command(BaseCommand):
 
 		password = options.get("password")
 		if password is None:
-			import getpass
-
 			password = getpass.getpass("New password: ")
 			confirm = getpass.getpass("Confirm password: ")
 			if password != confirm:

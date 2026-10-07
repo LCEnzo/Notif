@@ -7,6 +7,8 @@ from rest_framework import permissions
 from rest_framework.permissions import BasePermission
 from rest_framework.request import Request
 
+from accounts.models import User
+
 
 class ReadOnly(BasePermission):
 	"""
@@ -28,7 +30,13 @@ class IsRequestingThemselves(BasePermission):
 
 		if has_requester and has_requestee:
 			requester_pk = int(str(request.user.pk))
-			requestee_pk = int(view.kwargs["pk"])
+			# The kwarg is whatever path segment the router matched. One that is
+			# not an integer names nobody, so it is refused like any id that is
+			# not the caller's own.
+			try:
+				requestee_pk = int(view.kwargs["pk"])
+			except ValueError:
+				return False
 
 			return requester_pk == requestee_pk
 
@@ -82,8 +90,6 @@ class OwnerOrAdminQuerysetMixin:
 		``.filter(user=request.user)``.  Pass a callable ``(queryset, user)``
 		for custom ownership logic.
 		"""
-		from accounts.models import User  # avoid circular import
-
 		user = self.request.user  # type: ignore[attr-defined]  # mixin used with DRF ViewSets
 		if not isinstance(user, User):
 			return base_queryset.none()

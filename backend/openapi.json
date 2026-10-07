@@ -19,16 +19,6 @@
                             "schema": {
                                 "$ref": "#/components/schemas/PasswordResetRequest"
                             }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetRequest"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetRequest"
-                            }
                         }
                     },
                     "required": true
@@ -52,6 +42,29 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -67,17 +80,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PasswordResetConfirm"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetConfirm"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/PasswordResetConfirm"
+                                "$ref": "#/components/schemas/PasswordResetConfirmRequest"
                             }
                         }
                     },
@@ -102,6 +105,29 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -133,6 +159,16 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
                     }
                 }
             },
@@ -145,17 +181,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/UserCreationRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/UserCreationRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/UserCreationRequest"
                             }
                         }
                     },
@@ -167,7 +203,8 @@
                     },
                     {
                         "sessionCookie": []
-                    }
+                    },
+                    {}
                 ],
                 "responses": {
                     "201": {
@@ -179,6 +216,29 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -218,63 +278,26 @@
                             }
                         },
                         "description": ""
-                    }
-                }
-            },
-            "put": {
-                "operationId": "accounts_users_update",
-                "parameters": [
-                    {
-                        "in": "path",
-                        "name": "id",
-                        "schema": {
-                            "type": "integer"
-                        },
-                        "description": "A unique integer value identifying this user.",
-                        "required": true
-                    }
-                ],
-                "tags": [
-                    "accounts"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
-                            }
-                        }
                     },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "sessionBearer": []
-                    },
-                    {
-                        "sessionCookie": []
-                    }
-                ],
-                "responses": {
-                    "200": {
+                    "401": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserCreation"
+                                    "$ref": "#/components/schemas/ErrorDetail"
                                 }
                             }
                         },
-                        "description": ""
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -298,17 +321,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserCreation"
+                                "$ref": "#/components/schemas/PatchedUserCreationRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserCreation"
+                                "$ref": "#/components/schemas/PatchedUserCreationRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedUserCreation"
+                                "$ref": "#/components/schemas/PatchedUserCreationRequest"
                             }
                         }
                     }
@@ -331,6 +354,39 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -361,6 +417,36 @@
                 "responses": {
                     "204": {
                         "description": "No response body"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             }
@@ -376,17 +462,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/ChangePasswordRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/ChangePasswordRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
+                                "$ref": "#/components/schemas/ChangePasswordRequest"
                             }
                         }
                     },
@@ -405,11 +491,48 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserCreation"
+                                    "$ref": "#/components/schemas/StatusResponse"
                                 }
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "anyOf": [
+                                        {
+                                            "$ref": "#/components/schemas/ErrorMessage"
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/ErrorDetail"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "description": "A field is missing, empty or not a string, the current password is wrong, or the password validators refused the new one."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -433,57 +556,21 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserMinimalRead"
+                                    "$ref": "#/components/schemas/UserFullRead"
                                 }
                             }
                         },
                         "description": ""
-                    }
-                }
-            },
-            "post": {
-                "operationId": "accounts_users_get_my_info_create",
-                "tags": [
-                    "accounts"
-                ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/UserCreation"
-                            }
-                        }
                     },
-                    "required": true
-                },
-                "security": [
-                    {
-                        "sessionBearer": []
-                    },
-                    {
-                        "sessionCookie": []
-                    }
-                ],
-                "responses": {
-                    "200": {
+                    "401": {
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/UserCreation"
+                                    "$ref": "#/components/schemas/ErrorDetail"
                                 }
                             }
                         },
-                        "description": ""
+                        "description": "The session token is missing where one is required, or is invalid or expired."
                     }
                 }
             }
@@ -635,6 +722,16 @@
                     "401": {
                         "description": "Authentication credentials were not provided."
                     },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
                     "404": {
                         "description": "No such live session for this user."
                     }
@@ -668,8 +765,21 @@
                         },
                         "description": ""
                     },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
                     "401": {
                         "description": "Authentication credentials were not provided."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -684,7 +794,7 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/ClientEvent"
+                                "$ref": "#/components/schemas/ClientEventRequest"
                             }
                         }
                     },
@@ -709,6 +819,29 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -739,6 +872,16 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
                     }
                 }
             }
@@ -797,6 +940,26 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: the requested page is past the last one."
                     }
                 }
             },
@@ -810,17 +973,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         }
                     },
@@ -844,6 +1007,29 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -884,6 +1070,26 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -908,17 +1114,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Link"
+                                "$ref": "#/components/schemas/LinkRequest"
                             }
                         }
                     },
@@ -942,6 +1148,39 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -966,17 +1205,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedLink"
+                                "$ref": "#/components/schemas/PatchedLinkRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedLink"
+                                "$ref": "#/components/schemas/PatchedLinkRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedLink"
+                                "$ref": "#/components/schemas/PatchedLinkRequest"
                             }
                         }
                     }
@@ -999,6 +1238,39 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -1030,6 +1302,36 @@
                 "responses": {
                     "204": {
                         "description": "No response body"
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             }
@@ -1064,6 +1366,31 @@
                         "schema": {
                             "type": "integer"
                         }
+                    },
+                    {
+                        "in": "query",
+                        "name": "since",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                {
+                                    "type": "string",
+                                    "format": "date"
+                                }
+                            ]
+                        },
+                        "description": "Only notifications whose update was created at or after this ISO 8601 date or datetime. A value without an offset is read in the server's time zone."
+                    },
+                    {
+                        "in": "query",
+                        "name": "status",
+                        "schema": {
+                            "$ref": "#/components/schemas/StatusEnum"
+                        },
+                        "description": "Only notifications in this state."
                     }
                 ],
                 "tags": [
@@ -1087,6 +1414,36 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "since is not an ISO 8601 date or datetime, or is out of range."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: the requested page is past the last one."
                     }
                 }
             }
@@ -1126,6 +1483,26 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -1149,17 +1526,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Notification"
+                                "$ref": "#/components/schemas/NotificationRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Notification"
+                                "$ref": "#/components/schemas/NotificationRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Notification"
+                                "$ref": "#/components/schemas/NotificationRequest"
                             }
                         }
                     }
@@ -1182,6 +1559,39 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -1205,17 +1615,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedNotification"
+                                "$ref": "#/components/schemas/PatchedNotificationRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedNotification"
+                                "$ref": "#/components/schemas/PatchedNotificationRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedNotification"
+                                "$ref": "#/components/schemas/PatchedNotificationRequest"
                             }
                         }
                     }
@@ -1238,6 +1648,39 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             }
@@ -1245,28 +1688,36 @@
         "/api/v1/monitoring/notifications/mark_all_read/": {
             "post": {
                 "operationId": "monitoring_notifications_mark_all_read_create",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "since",
+                        "schema": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "format": "date-time"
+                                },
+                                {
+                                    "type": "string",
+                                    "format": "date"
+                                }
+                            ]
+                        },
+                        "description": "Only notifications whose update was created at or after this ISO 8601 date or datetime. A value without an offset is read in the server's time zone."
+                    },
+                    {
+                        "in": "query",
+                        "name": "status",
+                        "schema": {
+                            "$ref": "#/components/schemas/StatusEnum"
+                        },
+                        "description": "Only notifications in this state."
+                    }
+                ],
                 "tags": [
                     "monitoring"
                 ],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Notification"
-                            }
-                        },
-                        "application/x-www-form-urlencoded": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Notification"
-                            }
-                        },
-                        "multipart/form-data": {
-                            "schema": {
-                                "$ref": "#/components/schemas/Notification"
-                            }
-                        }
-                    }
-                },
                 "security": [
                     {
                         "sessionBearer": []
@@ -1280,11 +1731,41 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/Notification"
+                                    "$ref": "#/components/schemas/MarkAllReadResponse"
                                 }
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "since is unreadable, or a cookie session sent a body that does not parse."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -1315,6 +1796,16 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
                     },
                     "503": {
                         "content": {
@@ -1393,6 +1884,16 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
                     }
                 }
             },
@@ -1406,17 +1907,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         }
                     },
@@ -1440,6 +1941,29 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     }
                 }
             }
@@ -1480,6 +2004,26 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -1504,17 +2048,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/Strategy"
+                                "$ref": "#/components/schemas/StrategyRequest"
                             }
                         }
                     },
@@ -1538,6 +2082,39 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -1562,17 +2139,17 @@
                     "content": {
                         "application/json": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedStrategy"
+                                "$ref": "#/components/schemas/PatchedStrategyRequest"
                             }
                         },
                         "application/x-www-form-urlencoded": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedStrategy"
+                                "$ref": "#/components/schemas/PatchedStrategyRequest"
                             }
                         },
                         "multipart/form-data": {
                             "schema": {
-                                "$ref": "#/components/schemas/PatchedStrategy"
+                                "$ref": "#/components/schemas/PatchedStrategyRequest"
                             }
                         }
                     }
@@ -1595,6 +2172,39 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "description": "The request body could not be parsed, or failed validation."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             },
@@ -1626,6 +2236,46 @@
                 "responses": {
                     "204": {
                         "description": "No response body"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The strategy is still used by one or more links."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             }
@@ -1679,11 +2329,38 @@
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "$ref": "#/components/schemas/TriggerScrapeResponse"
+                                    "anyOf": [
+                                        {
+                                            "$ref": "#/components/schemas/TriggerScrapeResponse"
+                                        },
+                                        {
+                                            "$ref": "#/components/schemas/ErrorDetail"
+                                        }
+                                    ]
                                 }
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
                     },
                     "404": {
                         "content": {
@@ -1723,6 +2400,36 @@
                             }
                         },
                         "description": "SQLite backup file"
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The database is not SQLite."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: the caller is not an administrator."
                     }
                 }
             }
@@ -1780,6 +2487,36 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: the caller is not an administrator."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: the requested page is past the last one."
                     }
                 }
             }
@@ -1819,6 +2556,36 @@
                             }
                         },
                         "description": ""
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: the caller is not an administrator."
+                    },
+                    "404": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Not found: nothing matches the path parameters."
                     }
                 }
             }
@@ -1826,6 +2593,19 @@
         "/api/v1/ops/logs/caddy/": {
             "get": {
                 "operationId": "ops_logs_caddy_retrieve",
+                "parameters": [
+                    {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 200,
+                            "default": 50
+                        },
+                        "description": "How many of the newest log entries to return."
+                    }
+                ],
                 "tags": [
                     "ops"
                 ],
@@ -1847,6 +2627,36 @@
                             }
                         },
                         "description": ""
+                    },
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "limit is not an integer within range, or the configured log path is not a file."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: the caller is not an administrator."
                     }
                 }
             }
@@ -1888,7 +2698,38 @@
                 "type": "string",
                 "description": "* `network_unavailable` - Network unavailable\n* `timeout` - Timeout\n* `unauthorized` - Unauthorized\n* `forbidden` - Forbidden\n* `validation_failed` - Validation failed\n* `contract_violation` - Contract violation\n* `corrupt_local_state` - Corrupt local state\n* `source_blocked_degraded` - Source blocked or degraded\n* `server_error` - Server error\n* `unexpected_failure` - Unexpected failure"
             },
-            "ClientEvent": {
+            "ChangePasswordRequest": {
+                "type": "object",
+                "description": "The current password, and the one to replace it.",
+                "properties": {
+                    "current_password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "current_password",
+                    "new_password"
+                ]
+            },
+            "ClientEventAccepted": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ]
+            },
+            "ClientEventRequest": {
                 "type": "object",
                 "properties": {
                     "category": {
@@ -1941,17 +2782,6 @@
                 },
                 "required": [
                     "category"
-                ]
-            },
-            "ClientEventAccepted": {
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string"
-                    }
-                },
-                "required": [
-                    "status"
                 ]
             },
             "DeviceSession": {
@@ -2009,6 +2839,30 @@
                     "public_id",
                     "transport",
                     "user_agent"
+                ]
+            },
+            "ErrorDetail": {
+                "type": "object",
+                "description": "DRF's own error body, which every framework-raised 401, 403 and 404 uses.",
+                "properties": {
+                    "detail": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "detail"
+                ]
+            },
+            "ErrorMessage": {
+                "type": "object",
+                "description": "The ``{\"error\": ...}`` body account views answer a refused request with.",
+                "properties": {
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "error"
                 ]
             },
             "HealthCheckResponse": {
@@ -2103,15 +2957,50 @@
                     "user"
                 ]
             },
+            "LinkRequest": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                    },
+                    "url": {
+                        "type": "string",
+                        "format": "uri",
+                        "minLength": 1,
+                        "maxLength": 1000
+                    },
+                    "strategy": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "scrape_interval_minutes": {
+                        "type": "integer",
+                        "maximum": 1440,
+                        "minimum": 5
+                    },
+                    "scrape_disabled": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "name",
+                    "strategy",
+                    "url"
+                ]
+            },
             "LoginRequest": {
                 "type": "object",
                 "properties": {
                     "username": {
-                        "type": "string"
+                        "type": "string",
+                        "minLength": 1
                     },
                     "password": {
                         "type": "string",
-                        "writeOnly": true
+                        "writeOnly": true,
+                        "minLength": 1
                     },
                     "transport": {
                         "allOf": [
@@ -2155,6 +3044,19 @@
                     "transport"
                 ]
             },
+            "MarkAllReadResponse": {
+                "type": "object",
+                "properties": {
+                    "marked_read": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "How many of the caller's unread notifications this call marked read."
+                    }
+                },
+                "required": [
+                    "marked_read"
+                ]
+            },
             "Notification": {
                 "type": "object",
                 "properties": {
@@ -2185,6 +3087,14 @@
                     "read_at",
                     "update"
                 ]
+            },
+            "NotificationRequest": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "$ref": "#/components/schemas/StatusEnum"
+                    }
+                }
             },
             "PaginatedLinkList": {
                 "type": "object",
@@ -2279,18 +3189,19 @@
                     }
                 }
             },
-            "PasswordResetConfirm": {
+            "PasswordResetConfirmRequest": {
                 "type": "object",
                 "description": "Accepts email, code, and new password to complete reset.",
                 "properties": {
                     "email": {
                         "type": "string",
-                        "format": "email"
+                        "format": "email",
+                        "minLength": 1
                     },
                     "code": {
                         "type": "string",
-                        "maxLength": 6,
-                        "minLength": 6
+                        "minLength": 6,
+                        "maxLength": 6
                     },
                     "new_password": {
                         "type": "string",
@@ -2309,41 +3220,30 @@
                 "properties": {
                     "email": {
                         "type": "string",
-                        "format": "email"
+                        "format": "email",
+                        "minLength": 1
                     }
                 },
                 "required": [
                     "email"
                 ]
             },
-            "PatchedLink": {
+            "PatchedLinkRequest": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
                     "name": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 200
                     },
                     "url": {
                         "type": "string",
                         "format": "uri",
+                        "minLength": 1,
                         "maxLength": 1000
-                    },
-                    "user": {
-                        "type": "integer",
-                        "readOnly": true
                     },
                     "strategy": {
                         "type": "integer",
-                        "nullable": true
-                    },
-                    "last_scraped": {
-                        "type": "string",
-                        "format": "date-time",
-                        "readOnly": true,
                         "nullable": true
                     },
                     "scrape_interval_minutes": {
@@ -2351,73 +3251,34 @@
                         "maximum": 1440,
                         "minimum": 5
                     },
-                    "next_scrape_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "readOnly": true,
-                        "nullable": true
-                    },
                     "scrape_disabled": {
                         "type": "boolean"
-                    },
-                    "scrape_failure_count": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
-                    "last_scrape_error": {
-                        "type": "string",
-                        "readOnly": true
-                    },
-                    "comparison_info": {
-                        "type": "string",
-                        "readOnly": true
                     }
                 }
             },
-            "PatchedNotification": {
+            "PatchedNotificationRequest": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
-                    "update": {
-                        "allOf": [
-                            {
-                                "$ref": "#/components/schemas/Update"
-                            }
-                        ],
-                        "readOnly": true
-                    },
                     "status": {
                         "$ref": "#/components/schemas/StatusEnum"
-                    },
-                    "read_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "readOnly": true,
-                        "nullable": true
                     }
                 }
             },
-            "PatchedStrategy": {
+            "PatchedStrategyRequest": {
                 "type": "object",
                 "properties": {
-                    "id": {
-                        "type": "integer",
-                        "readOnly": true
-                    },
-                    "data": {},
                     "strat_cls": {
                         "$ref": "#/components/schemas/StratClsEnum"
-                    }
+                    },
+                    "data": {}
                 }
             },
-            "PatchedUserCreation": {
+            "PatchedUserCreationRequest": {
                 "type": "object",
                 "properties": {
                     "username": {
                         "type": "string",
+                        "minLength": 1,
                         "description": "Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.",
                         "pattern": "^[\\w.@+-]+$",
                         "maxLength": 150
@@ -2425,14 +3286,18 @@
                     "email": {
                         "type": "string",
                         "format": "email",
+                        "minLength": 1,
                         "maxLength": 254
                     },
                     "name": {
                         "type": "string",
+                        "minLength": 1,
                         "maxLength": 64
                     },
                     "password": {
                         "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1,
                         "maxLength": 128
                     }
                 }
@@ -2519,13 +3384,30 @@
                         "type": "integer",
                         "readOnly": true
                     },
-                    "data": {},
+                    "user": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
                     "strat_cls": {
                         "$ref": "#/components/schemas/StratClsEnum"
-                    }
+                    },
+                    "data": {}
                 },
                 "required": [
                     "id",
+                    "strat_cls",
+                    "user"
+                ]
+            },
+            "StrategyRequest": {
+                "type": "object",
+                "properties": {
+                    "strat_cls": {
+                        "$ref": "#/components/schemas/StratClsEnum"
+                    },
+                    "data": {}
+                },
+                "required": [
                     "strat_cls"
                 ]
             },
@@ -2697,15 +3579,100 @@
                     "name": {
                         "type": "string",
                         "maxLength": 64
+                    }
+                },
+                "required": [
+                    "email",
+                    "username"
+                ]
+            },
+            "UserCreationRequest": {
+                "type": "object",
+                "properties": {
+                    "username": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.",
+                        "pattern": "^[\\w.@+-]+$",
+                        "maxLength": 150
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1,
+                        "maxLength": 254
+                    },
+                    "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
                     },
                     "password": {
                         "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1,
                         "maxLength": 128
                     }
                 },
                 "required": [
                     "email",
                     "password",
+                    "username"
+                ]
+            },
+            "UserFullRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "name": {
+                        "type": "string",
+                        "maxLength": 64
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "maxLength": 254
+                    },
+                    "username": {
+                        "type": "string",
+                        "description": "Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only.",
+                        "pattern": "^[\\w.@+-]+$",
+                        "maxLength": 150
+                    },
+                    "is_staff": {
+                        "type": "boolean",
+                        "title": "Staff status",
+                        "description": "Designates whether the user can log into this admin site."
+                    },
+                    "is_superuser": {
+                        "type": "boolean",
+                        "title": "Superuser status",
+                        "description": "Designates that this user has all permissions without explicitly assigning them."
+                    },
+                    "date_created": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "date_modified": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "date_deleted": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "date_created",
+                    "date_modified",
+                    "email",
+                    "id",
                     "username"
                 ]
             },

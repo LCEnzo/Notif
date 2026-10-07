@@ -8,25 +8,14 @@ uniform float uStep;          // grid cell size in physical pixels (logical step
 
 out vec4 fragColor;
 
-// Deterministic hash replicating the original Dart CustomPainter:
-//   ((cellX * 73856093) ^ (cellY * 19349663)) & 7
-// GLSL ES has no integer XOR/AND on floats, so we replicate via
-// modular arithmetic on the low 3 bits → result 0-7.
+// Per-cell scatter hash mapped to 0-7. Uses Dave Hoskins' sine-free hash:
+// every intermediate stays small enough for exact float32 evaluation, unlike
+// the previous integer-prime hash whose products exceeded the 24-bit mantissa
+// and collapsed to 0 on GPUs.
 float ditherHash(vec2 cell) {
-    float a = mod(cell.x * 73856093.0, 65536.0);
-    float b = mod(cell.y * 19349663.0, 65536.0);
-
-    float c = 0.0;
-    float pow2 = 1.0;
-    for (int i = 0; i < 3; i++) {
-        float bitA = mod(floor(a), 2.0);
-        float bitB = mod(floor(b), 2.0);
-        c += mod(bitA + bitB, 2.0) * pow2;
-        a = floor(a * 0.5);
-        b = floor(b * 0.5);
-        pow2 *= 2.0;
-    }
-    return c;
+    vec3 p3 = fract(vec3(cell.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return floor(fract((p3.x + p3.y) * p3.z) * 8.0);
 }
 
 void main() {
@@ -34,11 +23,16 @@ void main() {
     vec2 cell = floor(coord / uStep);
     float h = ditherHash(cell);
 
+    // Flutter's runtime-effect contract expects premultiplied alpha; writing
+    // straight RGB at low alpha is additive and bleeds toward white.
     if (h < 0.5) {
-        fragColor = uNeutralColor;
+        fragColor = vec4(uNeutralColor.rgb * uNeutralColor.a, uNeutralColor.a);
     } else if (h < 1.5 && coord.y < uSize.y * uAccentCutoff) {
-        fragColor = uAccentColor;
+        fragColor = vec4(uAccentColor.rgb * uAccentColor.a, uAccentColor.a);
     } else {
-        discard;
+        // discard is illegal in SkSL runtime effects (breaks web builds and
+        // desktop Skia shader loading); premultiplied transparent black is a
+        // true no-op under srcOver.
+        fragColor = vec4(0.0);
     }
 }

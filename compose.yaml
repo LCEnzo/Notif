@@ -2,8 +2,7 @@
 # Run with:  docker compose -f compose.yaml --profile prod up -d
 # (Without -f, compose.override.yaml is merged — for dev use only.)
 #
-# Scheduled scraping: add to host crontab:
-#   */15 * * * * cd /path/to/notif && docker compose -f compose.yaml exec -T backend python manage.py scrape
+# Scheduled production work is owned by deploy/systemd/notif-run-due-tasks.timer.
 
 services:
   backend:

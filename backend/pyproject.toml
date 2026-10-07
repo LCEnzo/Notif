@@ -6,12 +6,12 @@ readme = "README.md"
 requires-python = ">=3.14,<3.15"
 dependencies = [
 	"beautifulsoup4>=4.13,<5.0",
-	"django>=6.0.6,<6.1",
+	"django>=6.1.1,<6.2",
 	"drf-spectacular>=0.30.0,<0.31.0",
 	"feedparser>=6.0,<7.0",
 	"gunicorn>=26.0,<27.0",
 	"django-cors-headers>=4.9,<5.0",
-	"djangorestframework>=3.17,<3.18",
+	"djangorestframework>=3.18.1,<3.19",
 	"lxml>=6.1.0,<7.0",
 	"pydantic-settings>=2.14.2,<3.0",
 	"python-dotenv>=1.1,<2.0",
@@ -22,16 +22,18 @@ dependencies = [
 dev = [
 	"detect-secrets>=1.5,<2.0",
 	"django-silk>=5.3,<6.0",
-	"django-stubs[compatible-mypy]>=6.0,<6.1",
-	"djangorestframework-stubs[compatible-mypy]>=3.17.1,<3.18",
+	"django-stubs[compatible-mypy]>=6.1.1,<6.2",
+	"djangorestframework-stubs[compatible-mypy]>=3.18.1,<3.19",
 	"faker>=40.13,<41.0",
 	"hypothesis>=6.152,<7.0",
 	"ipython>=9.2,<10.0",
 	"mypy>=2.3,<3.0",
+	"openapi-core>=0.23.1,<1.0",
 	"pytest>=9.0.3,<10.0",
 	"pytest-cov>=7.0,<8.0",
 	"pytest-django>=4.11,<5.0",
-	"pytest-randomly>=4.0,<5.0",
+	"pytest-randomly>=5.0,<6.0",
+	"pytest-socket>=0.7,<0.8",
 	"pytest-timeout>=2.3,<3.0",
 	"pytest-xdist>=3.8,<4.0",
 	"requests-mock>=1.11,<2.0",
@@ -71,9 +73,127 @@ select = [
 	"DJ",    # flake8-django
 	"RET",   # flake8-return
 	"SIM",   # flake8-simplify
+	"TID251",  # banned-api: outbound HTTP goes through monitoring.safe_fetch (see banned-api below)
 	"T201",  # use of print, can leak secrets in logs
 	"PTH",
 	"RUF100",# unused-noqa
+	"ISC004",  # implicit str concat in collection literals (missing-comma typo)
+	"LOG004",  # .exception() outside an except handler
+	"PLE0304", # __bool__ returning non-bool
+	"PLR1708", # raise StopIteration inside a generator (PEP 479 RuntimeError)
+	"RUF036",  # None goes last in unions
+	"RUF063",  # fragile __dict__ annotations access under PEP 649 (py3.14)
+	"RUF068",  # duplicate entries in __all__
+	"FURB164", # Decimal/Fraction .from_float() over constructor
+	"FURB192", # sorted(x)[0] instead of min/max
+	# pylint errors (PLE), bug-class, adopted wholesale
+	"PLE0100", # yield/yield from in `__init__` turns it into a generator
+	"PLE0101", # `__init__` must not return a value
+	"PLE0115", # name declared both `nonlocal` and `global`
+	"PLE0116", # `continue` inside a `finally` block
+	"PLE0117", # `nonlocal` name without an enclosing binding
+	"PLE0118", # name used before its `global` declaration
+	"PLE0237", # assignment to attribute not defined in `__slots__`
+	"PLE0241", # duplicate base class in a class definition
+	"PLE0302", # special method with an unexpected signature
+	"PLE0303", # `__len__` must return a non-negative integer
+	"PLE0305", # `__index__` must return an integer
+	"PLE0307", # `__str__` must return a `str`
+	"PLE0308", # `__bytes__` must return `bytes`
+	"PLE0309", # `__hash__` must return an integer
+	"PLE0604", # invalid object in `__all__`
+	"PLE0605", # invalid assignment to `__all__`
+	"PLE0643", # hard-coded sequence access known to be out of bounds
+	"PLE0704", # bare `raise` outside an exception handler
+	"PLE1132", # repeated keyword argument in a function call
+	"PLE1142", # `await` used outside an `async` function
+	"PLE1205", # too many positional args for a logging format string
+	"PLE1206", # too few positional args for a logging format string
+	"PLE1300", # unsupported format type in a format string
+	"PLE1307", # mismatched argument type in an old-style format string
+	"PLE1310", # duplicate characters in a `str.strip` call
+	"PLE1507", # `os.getenv` call with an invalid `key` argument
+	"PLE1519", # method decorated with `@singledispatch`
+	"PLE1520", # function decorated with `@singledispatchmethod`
+	"PLE1700", # `yield from` inside an async function
+	"PLE2502", # bidirectional unicode formatting characters
+	"PLE2510", # string containing the raw control character `BS`
+	"PLE2512", # string containing the raw control character `SUB`
+	"PLE2513", # string containing the raw control character `ESC`
+	"PLE2514", # string containing the raw control character `NUL`
+	"PLE2515", # string containing the zero width space character
+	# pylint warnings (PLW), probable-mistake class, adopted wholesale
+	"PLW0108", # lambda wrapping a function call with the same arguments
+	"PLW0120", # `else` clause on a loop without `break`
+	"PLW0127", # variable assigned to itself
+	"PLW0128", # same name assigned multiple times in one statement
+	"PLW0129", # `assert` on a string literal (always true)
+	"PLW0131", # named expression replaceable by a plain assignment
+	"PLW0133", # exception created but never raised
+	"PLW0177", # comparison against NaN (always false)
+	"PLW0211", # staticmethod using `self`/`cls` as first arg
+	"PLW0245", # `super` used without parentheses
+	"PLW0406", # module importing itself
+	"PLW0602", # `global` name not assigned in current scope
+	"PLW0603", # use of `global` to update an identifier
+	"PLW0604", # `global` keyword at module level
+	"PLW0642", # assignment to `self` or `cls`
+	"PLW0711", # `except` with `and`/`or` instead of a tuple
+	"PLW1501", # invalid `mode` argument in `open` calls
+	"PLW1507", # shallow copy of `os.environ`
+	"PLW1508", # `os.getenv` call with an invalid default
+	"PLW1509", # `subprocess.Popen` with `preexec_fn`
+	"PLW1510", # `subprocess.run` without explicit `check`
+	"PLW1641", # `__eq__` without a matching `__hash__`
+	"PLW2101", # lock created and discarded in a `with` statement
+	"PLW2901", # loop variable overwritten inside the loop body
+	"PLW3301", # nested `min`/`max` calls
+	# pylint refactor (PLR), bug-class and clear simplifiers only
+	"PLR0124", # name compared to itself
+	"PLR0133", # comparison between two constants
+	"PLR0206", # property defined with extra parameters
+	"PLR1704", # loop/try/with variable shadows a function parameter
+	"PLR1711", # function ending in a bare `return None`
+	"PLR1714", # repeated equality comparison (use `in`)
+	"PLR1722", # `exit()`/`quit()` instead of `sys.exit`
+	"PLR5501", # `else` block that is just an `if` (use `elif`)
+	# pylint conventions (PLC), cherry-picked
+	"PLC0105", # type name not matching its parameter variance
+	"PLC0131", # `TypeVar` both covariant and contravariant
+	"PLC0132", # `TypeVar` name arg not matching assigned variable
+	"PLC0205", # single string assigned to `__slots__`
+	"PLC0206", # dict iteration using `d[k]` instead of `.items()`
+	"PLC0208", # iteration over a set literal of literal values
+	"PLC2401", # non-ASCII characters in variable names
+	"PLC2403", # non-ASCII characters in import statements
+	"PLC3002", # unnecessary direct call to a lambda
+	# ported from auto_platforma's API config: error handling, security, test hygiene
+	"BLE001",  # blind `except Exception`; narrow it, or noqa with the reason it must stay broad
+	"FBT",     # boolean positional parameters and arguments; make the flag keyword-only
+	"G004",    # f-string in a logging call; formats eagerly, pass args lazily instead
+	"PGH003",  # blanket `# type: ignore` without an error code
+	"PGH004",  # blanket `# noqa` without a rule code
+	"PLC0415", # import inside a function; noqa only for app-registry/import-order constraints, with the reason
+	"PIE",     # flake8-pie: redundant pass/spread/dict kwargs/lambda/range start, duplicate class fields or enum values, chained startswith
+	"PT011",   # `pytest.raises` on a broad exception without `match=`
+	"PT014",   # duplicate cases in `pytest.mark.parametrize`
+	"PT017",   # asserting on the caught exception inside `except`; use `pytest.raises`
+	"PT018",   # composite `assert a and b`; split so the failure names the false half
+	"RUF001",  # confusable unicode character in a string
+	"RUF002",  # confusable unicode character in a docstring
+	"RUF003",  # confusable unicode character in a comment
+	"S113",    # `requests` call without a timeout
+	"S301",    # `pickle` deserialization
+	"S302",    # `marshal` deserialization
+	"S307",    # `eval()`; use `ast.literal_eval`
+	"S324",    # md5/sha1 and friends without `usedforsecurity=False`
+	"S501",    # `requests` call with `verify=False`
+	"S506",    # `yaml.load` with an unsafe loader
+	"S608",    # SQL assembled by string formatting
+	# Django injection sinks (not from auto_platforma)
+	"S308",    # `mark_safe`; bypasses template autoescaping
+	"S610",    # `QuerySet.extra`; raw SQL fragments
+	"S611",    # `RawSQL`; raw SQL expression
 ]
 ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118", "W191"]
 
@@ -82,6 +202,46 @@ indent-style = "tab"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
+# TID251 exemptions from the outbound-HTTP ban below, each for a stated reason:
+# the guard itself is built from the raw clients it bans everywhere else.
+"monitoring/safe_fetch.py" = ["TID251"]
+# Talks to pytest-django's live_server on loopback, never to a user-supplied URL.
+"test_openapi_conformance.py" = ["TID251"]
+# Manual fixture downloaders run by hand from a dev machine; never imported by the app.
+"monitoring/tests/scripts/*.py" = ["TID251"]
+
+# Every outbound fetch must go through monitoring.safe_fetch, which pins
+# connections to validated public addresses and bounds bodies and time.
+# A raw client skips all of that, so CI refuses the usual entry points.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"requests.get".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"requests.post".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.put".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.patch".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.delete".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.head".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.options".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.request".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"requests.Session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"requests.sessions.Session".msg = "An unpinned session skips the SSRF guard; use monitoring.safe_fetch.guarded_session."
+"urllib3.PoolManager".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.request".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"urllib3.HTTPConnectionPool".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.HTTPSConnectionPool".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.connection_from_url".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+# Whole modules: banned-api matches dotted paths exactly, so the member bans
+# above miss the same clients imported from their defining submodule (e.g.
+# `from requests.api import get`). Banning a module covers all its members.
+"requests.api".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.poolmanager".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.connectionpool".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib3.connection".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+"urllib.request".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch.fetch."
+"http.client".msg = "Raw outbound HTTP skips the SSRF guard; use monitoring.safe_fetch."
+# Not a dependency. Any httpx client would bypass the pinned requests adapter
+# entirely, so adopting it has to come with a guarded transport, not slip in.
+"httpx".msg = "httpx bypasses the SSRF guard's pinned adapter; route fetches through monitoring.safe_fetch."
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main", "pydantic.mypy"]
@@ -89,6 +249,9 @@ exclude = ["migrations", "\\.venv", "venv"]
 mypy_path = "stubs"
 check_untyped_defs = true
 disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
 disallow_untyped_defs = true
 warn_unused_configs = true
 warn_unused_ignores = true
@@ -101,6 +264,7 @@ strict_equality = true
 [[tool.mypy.overrides]]
 module = ["*.tests", "*.tests.*"]
 disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pydantic-mypy]
 init_typed = true
@@ -108,28 +272,46 @@ init_forbid_extra = true
 warn_required_dynamic_aliases = true
 
 [tool.django-stubs]
-django_settings_module = "notif.settings"
+django_settings_module = "notif.settings_prod"
 
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "notif.settings"
+DJANGO_SETTINGS_MODULE = "notif.settings_test"
 pythonpath = ["."]
 python_files = ["tests.py", "test_*.py", "*_test.py"]
 addopts = [
+	"--ds=notif.settings_test",
 	"-ra",
 	"--strict-markers",
 	"--strict-config",
 	"--tb=short",
 	"--reuse-db",
 	"--nomigrations",
+	"--disable-socket",
+	"--allow-unix-socket",
+	# Loopback only: the live-server conformance test needs a local socket, but an
+	# un-mocked HTTP call must fail loudly instead of flaking. With hosts listed,
+	# pytest-socket guards socket.connect() only: DNS lookups, UDP and connect_ex
+	# still go through.
+	"--allow-hosts=127.0.0.1,::1",
 	"--timeout=30",
 	"-n",
 	"4",
+]
+# Warnings fail the suite, so deprecations get fixed while they are small.
+filterwarnings = [
+	"error",
+	# Windows hosts only: CPython warns about store CAs OpenSSL cannot parse (eID
+	# middleware installs some) whenever urllib builds a TLS context, which openapi_core
+	# does even for its file:// schemas. Nothing in the repo can avoid it.
+	"ignore:Bad certificate in Windows certificate store:UserWarning:ssl$",
 ]
 markers = [
     "slow: marks tests that use real downloaded fixtures (deselect with -m 'not slow')",
     "feed: marks tests specific to FeedStrategy",
     "e2e: end-to-end tests using real downloaded feeds — most directly test parsing correctness",
+    "conformance: live-HTTP response validation against the committed openapi.json schema",
     "property: Hypothesis property-based tests that verify invariants across generated inputs",
+    "real_ssrf: exercises the real SSRF resolver; exempt from the conftest resolver bypass",
 ]
 
 [tool.coverage.run]

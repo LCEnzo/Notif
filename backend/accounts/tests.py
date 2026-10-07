@@ -1,3 +1,5 @@
+import json
+import re
 from datetime import timedelta
 from typing import Any
 from unittest.mock import patch
@@ -27,8 +29,10 @@ from accounts.device_sessions import (
 	touch,
 )
 from accounts.models import DeviceSession, User
-from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetCode
-from commons.test_utils import SetupMixin, ViewSetMixin, login_client  # noqa: F401
+from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetBudget, PasswordResetCode
+from accounts.serializers import UserCreationSerializer, UserFullReadSerializer, UserMinimalReadSerializer
+from accounts.views import _send_reset_email_in_background
+from commons.test_utils import SetupMixin, ViewSetMixin, login_client, production_throttling  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
 
 _VALID_TEST_PASSWORD = "N0tif-Test-Credential-2026!"
@@ -72,8 +76,48 @@ class UserViewSetTestCase(ViewSetMixin):
 		}
 		self._test_create_object(fields=fields)
 
+	def test_registration_spends_one_unit_of_its_budget_per_request(self):
+		# A second ScopedRateThrottle on create would charge each request twice,
+		# and the second registration would already be refused.
+		client = APIClient()
+		url = reverse(self.list_view_name)
+
+		def register(i: int) -> int:
+			fields = {
+				"username": f"throttled{i}",
+				"email": f"throttled{i}@example.com",
+				"password": _VALID_TEST_PASSWORD,
+			}
+			return client.post(url, fields, format="json").status_code
+
+		with production_throttling() as rates:
+			budget = int(rates["register"].split("/")[0])
+			for i in range(budget):
+				self.assertEqual(register(i), status.HTTP_201_CREATED)
+			self.assertEqual(register(budget), status.HTTP_429_TOO_MANY_REQUESTS)
+
 	def test_update_user(self):
 		self._test_update_object()
+
+	def test_put_is_not_routed_and_changes_nothing(self):
+		# Callers the permission admits, so the method, not a 403, decides the answer.
+		admin_client = login_client(APIClient(), self.superuser.get_username())
+		cases = [
+			("own row", self.api_client, self.regular_user),
+			("admin on another row", admin_client, self.secondary_user),
+		]
+		for label, client, target in cases:
+			with self.subTest(label):
+				url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: target.pk})
+				payload = {"username": target.username, "email": target.email, "name": "Renamed by PUT"}
+
+				response = client.put(url, payload, format="json")
+
+				self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+				self.assertNotIn("PUT", response["Allow"])
+				self.assertIn("PATCH", response["Allow"])
+				target.refresh_from_db()
+				self.assertNotEqual(target.name, "Renamed by PUT")
 
 	def test_admin_password_update_for_another_user_fails_explicitly(self):
 		admin_client = login_client(APIClient(), self.superuser.get_username())
@@ -184,6 +228,175 @@ class UserSerializerSelectionTestCase(TestCase):
 		self.assertIn("is_staff", response.data)
 		self.assertIn("is_superuser", response.data)
 
+	def test_get_my_info_is_read_only(self):
+		response = self.client_for_user.post(reverse("users-get-my-info"), {}, format="json")
+
+		self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+		self.assertEqual(response["Allow"], "GET, HEAD, OPTIONS")
+
+
+# Django's encoded form is "<algorithm>$<params...>$<hash>": md5$salt$hex,
+# pbkdf2_sha256$iterations$salt$b64, argon2$argon2id$v=19$..., bcrypt_sha256$$2b$...
+_PASSWORD_HASH_SHAPE = re.compile(r"[a-z0-9_]+\$[^\s\"]*\$")
+
+
+class UserPasswordHashExposureTestCase(TestCase):
+	"""No user endpoint may ever answer with a stored password hash.
+
+	UserCreationSerializer serves POST and PATCH, so its responses are the
+	ones at risk; the read serializers and get_my_info are pinned too, so a
+	field added to them later cannot reintroduce the leak.
+	"""
+
+	user: User
+	other_user: User
+	admin: User
+
+	@classmethod
+	def setUpTestData(cls) -> None:
+		cls.user = User.objects.create_user(
+			username="hash-exposure-user",
+			email="hash-exposure-user@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+		cls.other_user = User.objects.create_user(
+			username="hash-exposure-other",
+			email="hash-exposure-other@example.com",
+			password=_ALTERNATE_VALID_TEST_PASSWORD,
+		)
+		cls.admin = User.objects.create_superuser(
+			username="hash-exposure-admin",
+			email="hash-exposure-admin@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+
+	def setUp(self) -> None:
+		self.client_for_user = login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD)
+		self.client_for_admin = login_client(APIClient(), self.admin.get_username(), _VALID_TEST_PASSWORD)
+
+	def _assert_carries_no_hash(self, response: Any) -> None:
+		body = response.content.decode()
+		self.assertIsNone(_PASSWORD_HASH_SHAPE.search(body), body)
+		for stored in User.objects.values_list("password", flat=True):
+			self.assertNotIn(stored, body)
+		if status.is_success(response.status_code):
+			# A 400 may key its message under "password"; a success has no reason to.
+			self.assertNotIn("password", response.data)
+
+	def test_registration_response_carries_no_hash(self):
+		response = APIClient().post(
+			reverse("users-list"),
+			{
+				"username": "hash-exposure-new",
+				"email": "hash-exposure-new@example.com",
+				"password": _VALID_TEST_PASSWORD,
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+		self._assert_carries_no_hash(response)
+		# Write-only, not dropped: the password still reached the new account.
+		self.assertTrue(User.objects.get(username="hash-exposure-new").check_password(_VALID_TEST_PASSWORD))
+
+	def test_patch_response_carries_no_hash(self):
+		cases = [
+			("own row", self.client_for_user, self.user),
+			("admin on another row", self.client_for_admin, self.other_user),
+		]
+		for label, client, target in cases:
+			with self.subTest(label):
+				response = client.patch(
+					reverse("users-detail", kwargs={"pk": target.pk}), {"name": "Renamed"}, format="json"
+				)
+
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+				self._assert_carries_no_hash(response)
+
+	def test_read_endpoints_carry_no_hash(self):
+		cases = [
+			("list", reverse("users-list")),
+			("own detail", reverse("users-detail", kwargs={"pk": self.user.pk})),
+			("other detail", reverse("users-detail", kwargs={"pk": self.other_user.pk})),
+			("get_my_info", reverse("users-get-my-info")),
+		]
+		for label, url in cases:
+			with self.subTest(label):
+				response = self.client_for_user.get(url, format="json")
+
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+				self._assert_carries_no_hash(response)
+
+	def test_no_user_serializer_renders_password(self):
+		for serializer_class in (UserCreationSerializer, UserFullReadSerializer, UserMinimalReadSerializer):
+			with self.subTest(serializer_class.__name__):
+				field = serializer_class().fields.get("password")
+				self.assertTrue(field is None or field.write_only)
+				self.assertNotIn("password", serializer_class(self.user).data)
+
+
+class UserDetailNonIntegerPkTestCase(TestCase):
+	"""A user detail URL whose id is not an integer gets an ordinary answer, never a 500.
+
+	Writes answer as they do for any other id that is not the caller's own: 403
+	for a regular user, refused before any lookup, and 404 for an admin, who
+	passes the permission and then misses the row. GET is 404 for both.
+	"""
+
+	user: User
+	admin: User
+
+	@classmethod
+	def setUpTestData(cls) -> None:
+		cls.user = User.objects.create_user(
+			username="non-integer-pk-user",
+			email="non-integer-pk-user@example.com",
+			password=_VALID_TEST_PASSWORD,
+			name="Unchanged",
+		)
+		cls.admin = User.objects.create_superuser(
+			username="non-integer-pk-admin",
+			email="non-integer-pk-admin@example.com",
+			password=_VALID_TEST_PASSWORD,
+		)
+
+	def _non_integer_pks(self) -> list[str]:
+		return [
+			"abc",
+			"1e3",
+			# One character off the caller's own id.
+			f"{self.user.pk}x",
+			# str.isdigit() accepts it, int() does not.
+			"\N{SUPERSCRIPT TWO}",
+			# str.isdecimal() accepts it, int() refuses past 4300 digits by default.
+			"1" * 5000,
+		]
+
+	def test_writes_answer_403_for_a_user_and_404_for_an_admin(self):
+		callers = [
+			("user", login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD), 403),
+			("admin", login_client(APIClient(), self.admin.get_username(), _VALID_TEST_PASSWORD), 404),
+		]
+		for pk in self._non_integer_pks():
+			url = reverse("users-detail", kwargs={"pk": pk})
+			for caller, client, expected in callers:
+				for method in ("patch", "delete"):
+					with self.subTest(pk=pk[:12], caller=caller, method=method):
+						response = getattr(client, method)(url, {"name": "Changed"}, format="json")
+
+						self.assertEqual(response.status_code, expected)
+
+		self.user.refresh_from_db()
+		self.assertEqual(self.user.name, "Unchanged")
+
+	def test_get_stays_404(self):
+		client = login_client(APIClient(), self.user.get_username(), _VALID_TEST_PASSWORD)
+		for pk in self._non_integer_pks():
+			with self.subTest(pk=pk[:12]):
+				response = client.get(reverse("users-detail", kwargs={"pk": pk}))
+
+				self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
 
 class LoginViewTestCase(TestCase):
 	"""Credential exchange: transports, replacement, and the in-transaction guard."""
@@ -268,6 +481,19 @@ class LoginViewTestCase(TestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 		self.assertEqual(DeviceSession.objects.count(), 0)
+
+	def test_login_refuses_blank_credentials_before_checking_them(self):
+		# A 400 naming the field, not a credential 401; device_label, which takes "", is the control.
+		for field in ("username", "password"):
+			with self.subTest(field=field):
+				blank: dict[str, Any] = {field: ""}
+				response = self._login(**blank)
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertEqual(set(response.data), {field})
+		self.assertEqual(DeviceSession.objects.count(), 0)
+
+		self.assertEqual(self._login(device_label="").status_code, status.HTTP_200_OK)
 
 	def test_wrong_password_is_401_and_creates_no_session(self):
 		response = APIClient().post(
@@ -494,6 +720,21 @@ class DevBootstrapLoginTestCase(TestCase):
 			{
 				"username": settings.DEV_BOOTSTRAP_USERNAME,
 				"password": "definitely-not-the-dev-password",
+				"transport": "bearer",
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())
+
+	@override_settings(DEV_BOOTSTRAP_LOGIN_ENABLED=False)
+	def test_disabled_bootstrap_login_rejects_the_public_credentials(self):
+		response = APIClient().post(
+			reverse("auth-login"),
+			{
+				"username": settings.DEV_BOOTSTRAP_USERNAME,
+				"password": settings.DEV_BOOTSTRAP_PASSWORD,
 				"transport": "bearer",
 			},
 			format="json",
@@ -1232,12 +1473,71 @@ class ChangePasswordTestCase(TestCase):
 		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
 
 	def test_requires_both_fields(self):
-		for payload in ({"new_password": _ALTERNATE_VALID_TEST_PASSWORD}, {"current_password": _VALID_TEST_PASSWORD}):
+		# An empty string counts as missing, which the schema states as minLength 1.
+		payloads = [
+			{"new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			{"current_password": _VALID_TEST_PASSWORD},
+			{"current_password": "", "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": ""},
+		]
+		for payload in payloads:
 			with self.subTest(payload=payload):
 				response = self.authed.post(self.url, payload, format="json")
 
 				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 				self.assertIn("error", response.data)
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_rejects_a_body_that_is_not_a_json_object(self):
+		valid_fields = {"current_password": _VALID_TEST_PASSWORD, "new_password": _ALTERNATE_VALID_TEST_PASSWORD}
+		raw_bodies = [
+			"[]",
+			# The right fields, one level too deep.
+			json.dumps([valid_fields]),
+			'"current_password"',
+			"123",
+			"null",
+			"true",
+		]
+		for raw_body in raw_bodies:
+			with self.subTest(body=raw_body):
+				response = self.authed.post(self.url, raw_body, content_type="application/json")
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertEqual(set(response.data), {"error"})
+
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
+
+	def test_rejects_password_fields_that_are_not_strings(self):
+		# The current password is right in each case, so the new one reaches the
+		# validators, which assume a str.
+		not_strings: list[Any] = [
+			12345678,
+			1.5,
+			True,
+			[_ALTERNATE_VALID_TEST_PASSWORD],
+			{"value": _ALTERNATE_VALID_TEST_PASSWORD},
+		]
+		for new_password in not_strings:
+			with self.subTest(new_password=new_password):
+				response = self.authed.post(
+					self.url,
+					{"current_password": _VALID_TEST_PASSWORD, "new_password": new_password},
+					format="json",
+				)
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertEqual(set(response.data), {"error"})
+
+		response = self.authed.post(
+			self.url,
+			{"current_password": [_VALID_TEST_PASSWORD], "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			format="json",
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 		self.user.refresh_from_db()
 		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
@@ -1292,6 +1592,21 @@ class PasswordResetTestCase(TestCase):
 		cls.reset_url = reverse("password-reset")
 		cls.confirm_url = reverse("password-reset-confirm")
 
+	def setUp(self):
+		# Budgets are database rows now; each test's transaction rollback gives
+		# it a fresh budget automatically. A per-test client: pytest-django's
+		# _pre_setup resets cls.client to a plain django Client, wiping any
+		# setUpTestData assignment. The instance attribute shadows that, and the
+		# reset endpoints are JSON-only (cross-site form gate), so default to
+		# JSON rendering.
+		self.client = APIClient()
+		self.client.default_format = "json"
+		# Deliver reset emails synchronously through the module seam so mock
+		# assertions on the sender are deterministic.
+		seam = patch("accounts.views._send_reset_email", _send_reset_email_in_background)
+		seam.start()
+		self.addCleanup(seam.stop)
+
 	# ── request ────────────────────────────────────────────
 
 	def test_request_creates_code_for_existing_user(self):
@@ -1342,6 +1657,17 @@ class PasswordResetTestCase(TestCase):
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, {"status": "ok"})
 
+	def test_request_returns_200_when_dispatch_raises(self):
+		"""A dispatcher failure is logged and the silent 200 still holds."""
+		with (
+			patch("accounts.views._send_reset_email", side_effect=RuntimeError("cannot start thread")),
+			self.assertLogs("accounts.views", level="ERROR") as logs,
+		):
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(response.data, {"status": "ok"})
+		self.assertTrue(any("dispatch failed" in line for line in logs.output))
+
 	def test_request_replaces_existing_code(self):
 		"""New request invalidates any previous code for the same user."""
 		old_code = PasswordResetCode.create_for_user(user=self.user, code="111111")
@@ -1370,6 +1696,23 @@ class PasswordResetTestCase(TestCase):
 			response = self.client.post(self.reset_url, {"email": "nobody@example.com"})
 			self.assertEqual(response.status_code, status.HTTP_200_OK)
 			mock_send.assert_not_called()
+
+	def test_request_rejects_form_encoded_bodies(self):
+		"""A cross-site HTML form could forge this endpoint — form bodies are refused."""
+		response = self.client.post(self.reset_url, {"email": "reset@example.com"}, format="multipart")
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.assertEqual(PasswordResetCode.objects.count(), 0)
+
+	def test_request_is_budgeted_per_email(self):
+		"""Minting codes is capped per email so refresh-the-lockout loops die."""
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			for _ in range(6):
+				response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+		# The first 5 mints go through; the 6th is silently dropped.
+		self.assertEqual(mock_send.call_count, 5)
+		self.assertEqual(PasswordResetCode.objects.count(), 1)
 
 	# ── confirm ──────────────────────────────────────────
 
@@ -1502,6 +1845,94 @@ class PasswordResetTestCase(TestCase):
 
 		self.user.refresh_from_db()
 		self.assertTrue(self.user.check_password("oldpassword123!"))
+
+	def test_confirm_rejects_form_encoded_bodies(self):
+		"""Cross-site form POSTs must not be able to burn guesses from a victim's browser."""
+		PasswordResetCode.create_for_user(user=self.user, code="654321")
+
+		response = self.client.post(
+			self.confirm_url,
+			{
+				"email": "reset@example.com",
+				"code": "654321",
+				"new_password": "NewSecurePass123!",
+			},
+			format="multipart",
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		code = PasswordResetCode.objects.get(user=self.user)
+		self.assertEqual(code.failed_attempts, 0)
+
+	def test_guess_budget_survives_code_reminting(self):
+		"""Minting a fresh code resets the per-code lock but must not refund the per-email guess budget."""
+		PasswordResetCode.create_for_user(user=self.user, code="111111")
+
+		for _ in range(10):
+			response = self.client.post(
+				self.confirm_url,
+				{
+					"email": "reset@example.com",
+					"code": "000000",
+					"new_password": "NewSecurePass123!",
+				},
+			)
+			self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		fresh_code_value = mock_send.call_args.args[1]
+
+		# The re-minted code is unlocked and correct, so only the per-email
+		# budget can refuse the confirm below.
+		fresh_code = PasswordResetCode.objects.get(user=self.user)
+		self.assertFalse(fresh_code.is_locked)
+		self.assertTrue(fresh_code.check_code(fresh_code_value))
+
+		response = self.client.post(
+			self.confirm_url,
+			{
+				"email": "reset@example.com",
+				"code": fresh_code_value,
+				"new_password": "NewSecurePass123!",
+			},
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+		self.user.refresh_from_db()
+		self.assertTrue(self.user.check_password("oldpassword123!"))
+
+	def test_budget_window_expiry_resets_both_counters(self):
+		"""A guess opening a fresh window must not carry the old window's mint cap forward."""
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			for _ in range(6):
+				response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+		self.assertEqual(mock_send.call_count, 5)
+
+		budget = PasswordResetBudget.objects.get()
+		budget.window_started_at = timezone.now() - timedelta(hours=2)
+		budget.save(update_fields=["window_started_at"])
+
+		# Drop the minted code so the junk guess cannot accidentally match it.
+		PasswordResetCode.objects.all().delete()
+		response = self.client.post(
+			self.confirm_url,
+			{
+				"email": "reset@example.com",
+				"code": "000000",
+				"new_password": "NewSecurePass123!",
+			},
+		)
+		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+		with patch("commons.email.send_password_reset_email") as mock_send:
+			response = self.client.post(self.reset_url, {"email": "reset@example.com"})
+		self.assertEqual(response.status_code, status.HTTP_200_OK)
+		mock_send.assert_called_once()
+
+		budget.refresh_from_db()
+		self.assertEqual(budget.mint_count, 1)
+		self.assertEqual(budget.guess_count, 1)
 
 	# ── __str__ hygiene ──────────────────────────────────
 

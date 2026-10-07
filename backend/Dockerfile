@@ -13,7 +13,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     UV_LINK_MODE=copy \
-    GIT_HASH=$GIT_HASH
+    GIT_HASH=$GIT_HASH \
+    DJANGO_SETTINGS_MODULE=notif.settings_prod
 
 WORKDIR /app
 
@@ -44,7 +45,6 @@ RUN mkdir -p /app/staticfiles \
 
 # ── volume permissions (directory must exist before chown) ─────────
 RUN mkdir -p /app/data /app/staticfiles \
-    && chmod +x /app/scripts/*.sh \
     && useradd --create-home appuser \
     && chown -R appuser:appuser /app
 

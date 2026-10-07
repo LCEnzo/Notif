@@ -8,14 +8,14 @@ import sys
 def main() -> None:
 	"""Run administrative tasks."""
 	# Load typed config early — needed before Django settings import
-	from notif.config import settings
+	from notif.config import settings  # noqa: PLC0415 - reads and validates .env; only on invocation, not import
 
 	if len(sys.argv) == 2 and sys.argv[1] == "runserver" and settings.BACKEND_PORT:
 		sys.argv.append(f"{settings.RUNSERVER_HOST}:{settings.BACKEND_PORT}")
 
-	os.environ.setdefault("DJANGO_SETTINGS_MODULE", "notif.settings")
+	os.environ.setdefault("DJANGO_SETTINGS_MODULE", "notif.settings_dev")
 	try:
-		from django.core.management import execute_from_command_line
+		from django.core.management import execute_from_command_line  # noqa: PLC0415 - Django's missing-venv guard
 	except ImportError as exc:
 		raise ImportError(
 			"Couldn't import Django. Are you sure it's installed and "

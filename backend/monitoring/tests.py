@@ -1,17 +1,21 @@
 import hashlib
 import logging
+import warnings
 import xml.sax.saxutils
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from pprint import pprint  # noqa: F401
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import requests
 import requests_mock
 from django.core.management import call_command
+from django.db import InterfaceError, OperationalError, connections
 from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
@@ -23,9 +27,10 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from commons import Err, Ok
-from commons.test_utils import SetupMixin, ViewSetMixin, login_client
-from commons.utils import create_notification
+from commons.test_utils import SetupMixin, ViewSetMixin, login_client, production_throttling
+from commons.utils import create_notification, create_users
 from monitoring.models import Link, Notification, Strategy, Update
+from monitoring.rate_limiter import DomainRateLimiter
 from monitoring.rss_content_backfill import backfill_rss_update_content
 from monitoring.services import scrape_link
 from monitoring.strategies import (
@@ -155,27 +160,21 @@ class TestSelectorStratErr(TestCase):
 
 class RateLimiterTestCase(TestCase):
 	def test_same_domain_waits(self):
-		from monitoring.rate_limiter import DomainRateLimiter
-
 		limiter = DomainRateLimiter(delay=0.15)
-		import time
 
-		start = time.monotonic()
+		start = monotonic()
 		limiter.wait_for_domain("https://example.com/a")
 		limiter.wait_for_domain("https://example.com/b")
-		elapsed = time.monotonic() - start
+		elapsed = monotonic() - start
 		assert elapsed >= 0.14
 
 	def test_different_domains_no_wait(self):
-		from monitoring.rate_limiter import DomainRateLimiter
-
 		limiter = DomainRateLimiter(delay=0.5)
-		import time
 
-		start = time.monotonic()
+		start = monotonic()
 		limiter.wait_for_domain("https://example.com/a")
 		limiter.wait_for_domain("https://other.com/b")
-		elapsed = time.monotonic() - start
+		elapsed = monotonic() - start
 		assert elapsed < 0.2
 
 
@@ -183,7 +182,7 @@ class TestSelectorStrat(TestCase):
 	def test_selector_strat(self):
 		strat = GeneralSelectorStrategy()
 
-		url = "https://kemono.party/patreon/user/50187986"
+		url = "https://pawchive.pw/patreon/user/50187986"
 		config_data = {"selectors": ["article.post-card"]}
 		html_content = """
 		<html>
@@ -321,15 +320,19 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 			name="Creator",
 			date_time=datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC),
 			service="patreon",
-			link=URL("https://kemono.party/patreon/user/1"),
+			link=URL(f"{KemonoFavouritesStrategy.base_url}/patreon/user/1"),
 		)
 
 		with (
-			patch.object(KemonoFavouritesStrategy, "_get_favourites_html", return_value=SimpleNamespace(text="")),
+			patch.object(
+				KemonoFavouritesStrategy,
+				"_get_favourites_html",
+				return_value=SimpleNamespace(text="", url=KemonoFavouritesStrategy.fav_url),
+			),
 			patch.object(KemonoFavouritesStrategy, "_extract_kemono_profile_cards", return_value=[card]),
 		):
 			result = strategy.scrape(
-				URL("https://kemono.party/favorites"),
+				URL(KemonoFavouritesStrategy.fav_url),
 				{"username": "u", "password": "p"},
 				{},
 			)
@@ -344,21 +347,221 @@ class KemonoFavouritesStrategyTestCase(TestCase):
 			name="Creator",
 			date_time=datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC),
 			service="patreon",
-			link=URL("https://kemono.party/patreon/user/1"),
+			link=URL(f"{KemonoFavouritesStrategy.base_url}/patreon/user/1"),
 		)
 
 		with (
-			patch.object(KemonoFavouritesStrategy, "_get_favourites_html", return_value=SimpleNamespace(text="")),
+			patch.object(
+				KemonoFavouritesStrategy,
+				"_get_favourites_html",
+				return_value=SimpleNamespace(text="", url=KemonoFavouritesStrategy.fav_url),
+			),
 			patch.object(KemonoFavouritesStrategy, "_extract_kemono_profile_cards", return_value=[card]),
 		):
 			result = strategy.scrape(
-				URL("https://kemono.party/favorites"),
+				URL(KemonoFavouritesStrategy.fav_url),
 				{"username": "u", "password": "p"},
 				{"last_update": "2024-01-01T00:00:00+00:00"},
 			)
 
 		assert isinstance(result, Ok)
 		assert len(result.value.updates) == 1
+
+	def test_credentials_are_posted_only_to_the_pinned_pawchive_login_url(self):
+		# Literal URLs on purpose, not the class constants: the user's credentials go to this host on
+		# every scrape, so moving them elsewhere has to be a deliberate edit here, not a silent one.
+		with requests_mock.Mocker() as mocker:
+			mocker.post("https://pawchive.pw/account/login", text="")
+			mocker.get("https://pawchive.pw/favorites", text="")
+			result = KemonoFavouritesStrategy().scrape(
+				URL("https://pawchive.pw/favorites"),
+				{"username": "user-x", "password": "pass-y"},  # pragma: allowlist secret
+				{},
+			)
+
+		assert isinstance(result, Ok)
+		login, favourites = mocker.request_history
+		assert (login.method, login.url) == ("POST", "https://pawchive.pw/account/login")
+		assert parse_qs(login.text) == {"username": ["user-x"], "password": ["pass-y"]}
+		assert (favourites.method, favourites.url) == ("GET", "https://pawchive.pw/favorites")
+
+	def test_legacy_kemono_party_link_is_rejected_before_any_request(self):
+		with requests_mock.Mocker() as mocker:
+			result = KemonoFavouritesStrategy().scrape(
+				URL("https://kemono.party/favorites"),
+				{"username": "u", "password": "p"},
+				{},
+			)
+
+		assert result == Err("Invalid URL")
+		assert mocker.request_history == []
+
+
+class KemonoFavouritesLoginGuardTestCase(TestCase):
+	"""A failed login must surface as Err, while a genuinely empty favourites list stays Ok([])."""
+
+	LOGIN_PAGE = '<main id="main"><form id="login_form" method="POST" action="/account/login"></form></main>'
+	EMPTY_FAVOURITES = '<main id="main"><div class="card-list__items"></div></main>'
+
+	def _scrape(self, mocker: requests_mock.Mocker) -> Any:
+		mocker.post(KemonoFavouritesStrategy.login_url, text="")
+		return KemonoFavouritesStrategy().scrape(
+			URL(KemonoFavouritesStrategy.fav_url),
+			{"username": "u", "password": "p"},
+			{},
+		)
+
+	def test_redirect_to_login_page_is_an_error_naming_the_path_but_not_the_query(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(
+				KemonoFavouritesStrategy.fav_url,
+				status_code=302,
+				headers={"Location": "/account/login?location=/favorites"},
+			)
+			mocker.get(KemonoFavouritesStrategy.login_url, text=self.LOGIN_PAGE)
+			result = self._scrape(mocker)
+
+		assert isinstance(result, Err)
+		assert "ended at https://pawchive.pw/account/login instead of" in result.error
+		assert "?" not in result.error
+		assert "location=" not in result.error
+
+	def test_empty_favourites_page_is_ok_not_a_login_failure(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(KemonoFavouritesStrategy.fav_url, text=self.EMPTY_FAVOURITES)
+			result = self._scrape(mocker)
+
+		assert result == Ok(ScrapeSuccess(updates=[], comparison_state_update=None))
+
+	def test_trailing_slash_or_query_on_the_favourites_page_is_accepted(self):
+		for final_url in (f"{KemonoFavouritesStrategy.fav_url}/", f"{KemonoFavouritesStrategy.fav_url}?logged_in=yes"):
+			with self.subTest(final_url=final_url), requests_mock.Mocker() as mocker:
+				mocker.get(
+					KemonoFavouritesStrategy.fav_url,
+					complete_qs=True,
+					status_code=302,
+					headers={"Location": final_url},
+				)
+				mocker.get(final_url, complete_qs=True, text=self.EMPTY_FAVOURITES)
+				result = self._scrape(mocker)
+
+				assert result == Ok(ScrapeSuccess(updates=[], comparison_state_update=None))
+				assert mocker.request_history[-1].url == final_url
+
+	def test_favourites_url_must_share_the_origin_including_the_effective_port(self):
+		cases = [
+			("https://pawchive.pw/favorites", True),
+			("https://PAWCHIVE.pw/favorites/", True),
+			("https://pawchive.pw:443/favorites", True),
+			("https://pawchive.pw:8443/favorites", False),
+			("http://pawchive.pw/favorites", False),
+			("https://pawchive.pw.example/favorites", False),
+			("https://pawchive.pw/account/login", False),
+		]
+		for url, expected in cases:
+			with self.subTest(url=url):
+				assert KemonoFavouritesStrategy._is_favourites_url(url) is expected
+
+	def test_redirect_to_another_host_is_an_error(self):
+		with requests_mock.Mocker() as mocker:
+			mocker.get(
+				KemonoFavouritesStrategy.fav_url,
+				status_code=302,
+				headers={"Location": "https://elsewhere.example/favorites"},
+			)
+			mocker.get("https://elsewhere.example/favorites", text=self.EMPTY_FAVOURITES)
+			result = self._scrape(mocker)
+
+		assert isinstance(result, Err)
+		assert "ended at https://elsewhere.example/favorites instead of" in result.error
+
+
+def _kemono_card_html(time_text: str) -> str:
+	return f'<a class="user-card" href="/patreon/user/1"><time class="timestamp">{time_text}</time></a>'
+
+
+class KemonoFavouritesMarkupTestCase(TestCase):
+	"""Parse the observed pawchive.pw user-card markup end to end (login and favourites mocked)."""
+
+	FIXTURE = Path(__file__).parent / "tests" / "pawchive-favorites.html"
+
+	def _scrape(self, comparison_data: dict[str, Any]) -> Any:
+		html = self.FIXTURE.read_text(encoding="utf-8")
+		with requests_mock.Mocker() as mocker:
+			mocker.post(KemonoFavouritesStrategy.login_url, text="")
+			mocker.get(KemonoFavouritesStrategy.fav_url, text=html)
+			return KemonoFavouritesStrategy().scrape(
+				URL(KemonoFavouritesStrategy.fav_url),
+				{"username": "u", "password": "p"},
+				comparison_data,
+			)
+
+	def test_cards_newer_than_last_update_become_updates_with_and_without_fractional_seconds(self):
+		result = self._scrape({"last_update": "2026-10-01T00:00:00+00:00"})
+
+		assert isinstance(result, Ok)
+		updates = result.value.updates
+		assert [(u.title, u.description) for u in updates] == [
+			(
+				"Kemono: Creator One - Patreon",
+				"New posts by Creator One on Patreon, time 2026-10-05 16:00:00+00:00",
+			),
+			(
+				"Kemono: Creator Two - Pixiv Fanbox",
+				"New posts by Creator Two on Pixiv Fanbox, time 2026-10-04 09:30:15.250000+00:00",
+			),
+		]
+		item_urls = [urlsplit(u.item_url) for u in updates]
+		assert [(u.hostname, u.path.lstrip("/")) for u in item_urls] == [
+			("pawchive.pw", "patreon/user/1001"),
+			("pawchive.pw", "fanbox/user/2002"),
+		]
+		assert result.value.comparison_state_update == {"last_update": "2026-10-05T16:00:00+00:00"}
+
+	def test_first_scrape_reports_every_dated_card_and_skips_the_template_card(self):
+		result = self._scrape({})
+
+		assert isinstance(result, Ok)
+		assert [u.title for u in result.value.updates] == [
+			"Kemono: Creator One - Patreon",
+			"Kemono: Creator Two - Pixiv Fanbox",
+			"Kemono: Creator Three - Fantia",
+		]
+		assert result.value.comparison_state_update == {"last_update": "2026-10-05T16:00:00+00:00"}
+
+	def test_timestamp_shapes(self):
+		cases = [
+			("2026-10-05 16:00:00", datetime(2026, 10, 5, 16, 0, 0, tzinfo=UTC)),
+			("2026-10-05 16:00:00.000001", datetime(2026, 10, 5, 16, 0, 0, 1, tzinfo=UTC)),
+			# An explicit offset is converted, not overwritten: 16:00+02:00 is 14:00 UTC.
+			("2026-10-05 16:00:00+02:00", datetime(2026, 10, 5, 14, 0, 0, tzinfo=UTC)),
+			("   ", None),
+		]
+		for text, expected in cases:
+			with self.subTest(text=text):
+				[card] = KemonoFavouritesStrategy()._extract_kemono_profile_cards(_kemono_card_html(text))
+				assert card.date_time == expected
+				if card.date_time is not None:
+					assert card.date_time.utcoffset() == timedelta(0)
+
+	def test_unparseable_timestamp_raises_instead_of_dropping_the_card(self):
+		with pytest.raises(ValueError, match="2 hours ago"):
+			KemonoFavouritesStrategy()._extract_kemono_profile_cards(_kemono_card_html("2 hours ago"))
+
+
+_naive_datetimes = st.datetimes()
+
+
+class KemonoCardTimestampPropertyTestCase(HypothesisTestCase):
+	@pytest.mark.property
+	@given(moment=st.one_of(_naive_datetimes, _naive_datetimes.map(lambda d: d.replace(microsecond=0))))
+	@settings(max_examples=200)
+	def test_round_trips_python_datetime_str(self, moment: datetime):
+		# The site prints str(datetime), whose ".ffffff" appears only for non-zero microseconds; the
+		# second strategy branch forces the zero case so both shapes are always exercised.
+		[card] = KemonoFavouritesStrategy()._extract_kemono_profile_cards(_kemono_card_html(str(moment)))
+
+		assert card.date_time == moment.replace(tzinfo=UTC)
 
 
 class SBSVThreadmarksStrategyTestCase(TestCase):
@@ -431,6 +634,31 @@ class LinkViewSetTestCase(ViewSetMixin):
 		self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 		self.assertEqual(Link.objects.get(pk=response.data["id"]).user, self.regular_user)
 
+	def test_create_link_forces_owner_to_requester(self):
+		"""A client cannot plant a link in another user's account; owner is the requester."""
+		secondary_client = login_client(APIClient(), self.secondary_user.get_username())
+		strat_resp = secondary_client.post(
+			reverse("strategies-list"),
+			{"strat_cls": "GeneralSelectorStrategy", "data": {"selectors": ["body"]}},
+			format="json",
+		)
+		self.assertEqual(strat_resp.status_code, 201)
+
+		response = secondary_client.post(
+			reverse("links-list"),
+			{
+				"name": "Planted link",
+				"url": "https://example.com/planted",
+				"user": f"{self.regular_user.pk}",
+				"strategy": strat_resp.data["id"],
+			},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 201)
+		created = Link.objects.get(name="Planted link")
+		self.assertEqual(created.user_id, self.secondary_user.pk)
+
 	def test_get_strat_choices(self):
 		response = self.api_client.get(reverse("get-strat-choices"))
 
@@ -453,6 +681,35 @@ class LinkViewSetTestCase(ViewSetMixin):
 
 	def test_update_link(self):
 		self._test_update_object()
+
+	def test_update_link_allows_null_strategy(self):
+		response = self.api_client.patch(
+			reverse("links-detail", kwargs={"pk": self.links[0].pk}),
+			{"strategy": None},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.links[0].refresh_from_db()
+		self.assertIsNone(self.links[0].strategy)
+
+	def test_admin_can_assign_strategy_owned_by_another_user(self):
+		secondary_strategy = Strategy.objects.create(
+			user=self.secondary_user,
+			strat_cls="GeneralSelectorStrategy",
+			data={"selectors": ["body"]},
+		)
+		admin_client = login_client(APIClient(), self.superuser.get_username())
+
+		response = admin_client.patch(
+			reverse("links-detail", kwargs={"pk": self.links[0].pk}),
+			{"strategy": secondary_strategy.pk},
+			format="json",
+		)
+
+		self.assertEqual(response.status_code, 200)
+		self.links[0].refresh_from_db()
+		self.assertEqual(self.links[0].strategy_id, secondary_strategy.pk)
 
 	def test_delete_link(self):
 		self._test_delete_object(
@@ -482,11 +739,13 @@ class LinkViewSetTestCase(ViewSetMixin):
 		)
 
 	def test_other_user_link_permissions(self):
+		# The acting user (secondary) may only reference a strategy they own.
+		secondary_strat = Strategy.objects.filter(user=self.secondary_user).first()
+		assert secondary_strat is not None
 		fields = {
 			"name": "Skitterdoc on Spacebattles",
 			"url": "http://forums.spacebattles.com/threads/some-thread.1234567/threadmarks-load-range?threadmark_category_id=1",
-			"user": f"{self.regular_user.pk}",
-			"strategy": self.strat.pk,
+			"strategy": secondary_strat.pk,
 		}
 		update_fields = {"name": "Maria"}
 		permissions = {"list": True, "retrieve": False, "create": True, "update": False, "delete": False}
@@ -500,8 +759,9 @@ class LinkViewSetTestCase(ViewSetMixin):
 
 
 class StrategyViewSetTestCase(SetupMixin, TestCase):
-	def test_list_includes_orphaned_strategies(self):
-		orphan = Strategy.objects.create(
+	def test_list_includes_my_unlinked_strategies(self):
+		mine = Strategy.objects.create(
+			user=self.regular_user,
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["body"]},
 		)
@@ -510,42 +770,71 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 
 		self.assertEqual(response.status_code, 200)
 		ids = [item["id"] for item in response.data]
-		self.assertIn(orphan.pk, ids)
+		self.assertIn(mine.pk, ids)
 
-	def test_list_excludes_other_users_non_orphaned_strategies(self):
-		other_only_strategy = Strategy.objects.create(
+	def test_list_excludes_other_users_strategies(self):
+		other_strategy = Strategy.objects.create(
+			user=self.secondary_user,
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["article.post-card"]},
 		)
-		Link.objects.create(
-			name="Other user's private strategy",
-			url="https://example.com/private",
-			user=self.secondary_user,
-			strategy=other_only_strategy,
-		)
 
 		response = self.api_client.get(reverse("strategies-list"))
 
 		self.assertEqual(response.status_code, 200)
 		ids = [item["id"] for item in response.data]
-		self.assertNotIn(other_only_strategy.pk, ids)
+		self.assertNotIn(other_strategy.pk, ids)
 
-	def test_delete_orphaned_strategy(self):
-		orphan = Strategy.objects.create(
+	def test_delete_my_unlinked_strategy(self):
+		mine = Strategy.objects.create(
+			user=self.regular_user,
 			strat_cls="GeneralSelectorStrategy",
 			data={"selectors": ["body"]},
 		)
 
-		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": orphan.pk}))
+		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": mine.pk}))
 
 		self.assertEqual(response.status_code, 204)
-		self.assertFalse(Strategy.objects.filter(pk=orphan.pk).exists())
+		self.assertFalse(Strategy.objects.filter(pk=mine.pk).exists())
 
 	def test_delete_strategy_still_in_use(self):
 		"""Deleting a strategy with active links returns 400."""
 		response = self.api_client.delete(reverse("strategies-detail", kwargs={"pk": self.strat.pk}))
 		self.assertEqual(response.status_code, 400)
+		self.assertEqual(set(response.data), {"detail"})
 		self.assertTrue(Strategy.objects.filter(pk=self.strat.pk).exists())
+
+	def test_create_strategy_sets_owner_to_requester(self):
+		"""Strategy ownership is server-assigned to the creating user."""
+		resp = self.api_client.post(
+			reverse("strategies-list"),
+			{"strat_cls": "GeneralSelectorStrategy", "data": {"selectors": ["body"]}},
+			format="json",
+		)
+		self.assertEqual(resp.status_code, 201)
+		strat = Strategy.objects.get(pk=resp.data["id"])
+		self.assertEqual(strat.user_id, self.regular_user.pk)
+
+	def test_pivot_link_does_not_expose_another_users_strategy(self):
+		"""F2: referencing another user's strategy from your own link must not expose it."""
+		other_client = login_client(APIClient(), self.secondary_user.get_username())
+		other_client.post(
+			reverse("links-list"),
+			{"name": "pivot", "url": "https://example.com/x", "strategy": self.strat.pk},
+			format="json",
+		)
+		response = other_client.get(reverse("strategies-detail", kwargs={"pk": self.strat.pk}))
+		self.assertEqual(response.status_code, 404)
+
+	def test_cannot_reference_another_users_strategy_on_link(self):
+		"""A link cannot reference a strategy the requester does not own."""
+		other_client = login_client(APIClient(), self.secondary_user.get_username())
+		response = other_client.post(
+			reverse("links-list"),
+			{"name": "pivot", "url": "https://example.com/x", "strategy": self.strat.pk},
+			format="json",
+		)
+		self.assertEqual(response.status_code, 400)
 
 
 class NotificationViewSetTestCase(SetupMixin, TestCase):
@@ -653,6 +942,52 @@ class NotificationViewSetTestCase(SetupMixin, TestCase):
 		other_client = login_client(APIClient(), self.secondary_user.get_username())
 		response = other_client.get(reverse("notifications-detail", kwargs={"pk": self.notification.pk}))
 		self.assertEqual(response.status_code, 404)
+
+	def test_since_includes_from_the_cutoff_instant_on(self):
+		# Pin the update to a known instant so both sides of the >= cutoff can be probed.
+		Update.objects.filter(pk=self.update.pk).update(created_at=datetime(2026, 3, 10, 12, 0, tzinfo=UTC))
+		cases = [
+			("2026-03-10T12:00:00Z", True),
+			("2026-03-10T12:00:00.000001Z", False),
+			# The same instant written at another offset.
+			("2026-03-10T14:00:00+02:00", True),
+			("2026-03-10T14:00:01+02:00", False),
+			# No offset reads as TIME_ZONE (UTC); a bare date as its midnight.
+			("2026-03-10 12:00", True),
+			("2026-03-10 12:01", False),
+			("2026-03-10", True),
+			("2026-03-11", False),
+		]
+		for since, included in cases:
+			with self.subTest(since=since):
+				response = self.api_client.get(reverse("notifications-list"), {"since": since})
+
+				self.assertEqual(response.status_code, 200)
+				ids = [n["id"] for n in response.data["results"]]
+				self.assertEqual(self.notification.pk in ids, included)
+
+	def test_unreadable_since_is_400(self):
+		unreadable = [
+			"abc",
+			"2026-13-45",
+			"\x00",
+			# Well-formed, but a UTC conversion takes them past year 1 or 9999.
+			"0001-01-01T00:00:00+01:00",
+			"9999-12-31T23:59:59-01:00",
+		]
+		for since in unreadable:
+			with self.subTest(since=since):
+				response = self.api_client.get(reverse("notifications-list"), {"since": since})
+
+				self.assertEqual(response.status_code, 400)
+				self.assertEqual(set(response.data), {"detail"})
+
+	def test_mark_all_read_with_unreadable_since_marks_nothing(self):
+		response = self.api_client.post(f"{reverse('notifications-mark-all-read')}?since=abc")
+
+		self.assertEqual(response.status_code, 400)
+		self.notification.refresh_from_db()
+		self.assertEqual(self.notification.status, Notification.Status.UNREAD)
 
 	def test_mark_all_read(self):
 		# Create a second notification for regular_user
@@ -802,7 +1137,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 				raise RuntimeError("boom")
 
 		link = self.links[0]
-		link.strategy = Strategy.objects.create(strat_cls="RaisingStrategy", data={})
+		link.strategy = Strategy.objects.create(user=link.user, strat_cls="RaisingStrategy", data={})
 		link.save(update_fields=["strategy"])
 
 		with (
@@ -828,7 +1163,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 				return Ok(ScrapeSuccess(updates=[], comparison_state_update=cast(Any, [])))
 
 		link = self.links[0]
-		link.strategy = Strategy.objects.create(strat_cls="InvalidComparisonStateStrategy", data={})
+		link.strategy = Strategy.objects.create(user=link.user, strat_cls="InvalidComparisonStateStrategy", data={})
 		link.save(update_fields=["strategy"])
 
 		with (
@@ -854,7 +1189,7 @@ class ScrapeServiceTestCase(SetupMixin, TestCase):
 				return cast(ScrapeResult, "not a scrape result")
 
 		link = self.links[0]
-		link.strategy = Strategy.objects.create(strat_cls="InvalidScrapeResultStrategy", data={})
+		link.strategy = Strategy.objects.create(user=link.user, strat_cls="InvalidScrapeResultStrategy", data={})
 		link.save(update_fields=["strategy"])
 
 		with (
@@ -995,6 +1330,24 @@ class TriggerScrapeViewTestCase(SetupMixin, TestCase):
 			self.assertIn("updates_found", entry)
 			self.assertNotIn("count", entry)
 
+	def test_scrape_budget_is_per_user_and_spent_by_both_modes(self):
+		# Users without links: scrape-all answers without any outbound fetch.
+		spender, bystander = create_users(2)
+		spender_client, bystander_client = APIClient(), APIClient()
+		spender_client.force_authenticate(spender)
+		bystander_client.force_authenticate(bystander)
+
+		with production_throttling() as rates:
+			budget = int(rates["scrape"].split("/")[0])
+			for _ in range(budget):
+				self.assertEqual(spender_client.post(self.url, {}, format="json").status_code, 200)
+			self.assertEqual(spender_client.post(self.url, {}, format="json").status_code, 429)
+			# Not the spender's link, so a 404 if single-link mode escaped the budget.
+			single = spender_client.post(self.url, {"link_id": self.links[0].pk}, format="json")
+			self.assertEqual(single.status_code, 429)
+			# Keyed per user, not per address: both clients come from 127.0.0.1.
+			self.assertEqual(bystander_client.post(self.url, {}, format="json").status_code, 200)
+
 
 class StratChoicesViewTestCase(SetupMixin, TestCase):
 	def test_returns_a_json_array_of_strategy_names(self):
@@ -1008,6 +1361,41 @@ class StratChoicesViewTestCase(SetupMixin, TestCase):
 		response = APIClient().get(reverse("get-strat-choices"))
 
 		self.assertEqual(response.status_code, 401)
+
+
+class StatusCheckViewTestCase(TestCase):
+	def test_reports_ok_when_the_database_answers(self):
+		response = APIClient().get(reverse("status-check"))
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.data["status"], "ok")
+		self.assertEqual(response.data["db"], "ok")
+
+	def test_database_errors_become_503_and_are_logged(self):
+		# InterfaceError is the boundary case: it derives from django.db.Error but not from
+		# DatabaseError, so catching DatabaseError alone would let it escape as a 500.
+		for exc in (OperationalError("db gone"), InterfaceError("connection already closed")):
+			with self.subTest(exc=type(exc).__name__):
+				with (
+					patch.object(connections["default"], "cursor", side_effect=exc),
+					self.assertLogs("monitoring.views", level=logging.ERROR) as logs,
+				):
+					response = APIClient().get(reverse("status-check"))
+
+				self.assertEqual(response.status_code, 503)
+				self.assertEqual(response.data["status"], "error")
+				self.assertEqual(response.data["db"], "down")
+				self.assertNotIn(str(exc), response.content.decode())
+				self.assertEqual(len(logs.records), 1)
+				exc_info = logs.records[0].exc_info or (None, None, None)
+				self.assertIs(exc_info[1], exc)
+
+	def test_non_database_errors_are_not_reported_as_database_down(self):
+		with (
+			patch.object(connections["default"], "cursor", side_effect=RuntimeError("bug, not an outage")),
+			self.assertRaisesMessage(RuntimeError, "bug, not an outage"),
+		):
+			APIClient().get(reverse("status-check"))
 
 
 # ── FeedStrategy Tests ────────────────────────────────────────────────────
@@ -1050,6 +1438,24 @@ class FeedStrategyTestCase(TestCase):
 		assert self.strategy.can_scrape_url(URL("https://anything.example.com/rss")) is True
 		assert self.strategy.can_scrape_url(URL("https://substack.com/feed")) is True
 		assert self.strategy.can_scrape_url(URL("https://forum.example.com/index.rss")) is True
+
+	def test_body_naming_a_local_file_is_parsed_as_data(self):
+		"""A response body that spells a local path is remote data, never a file to open."""
+		local_feed = (Path(__file__).parent / "tests" / "stratechery.xml").resolve()
+
+		with requests_mock.Mocker() as mocker:
+			# Control: served as content the file is a feed, so a parser that opened the
+			# path would succeed. Without it, a moved fixture or a failed fetch would
+			# make the assertions below pass on the vulnerable code too.
+			mocker.get(self.feed_url, content=local_feed.read_bytes())
+			as_content = self.strategy.scrape(self.feed_url, {}, {})
+			mocker.get(self.feed_url, content=str(local_feed).encode())
+			as_path = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(as_content, Ok), as_content
+		assert as_content.value.updates
+		assert isinstance(as_path, Err), f"parsed the local file {local_feed.name}: {as_path}"
+		assert "parse error" in as_path.error.lower()
 
 	def test_scrape_new_feed_returns_all_entries_and_sets_comparison(self):
 		"""First scrape of a feed: returns all entries, sets last_entry_id to the first (newest)."""
@@ -1439,6 +1845,35 @@ class FeedStrategyTestCase(TestCase):
 		assert result.value.updates[1][1] == "Explicit description."
 		assert result.value.updates[2][1] == ""
 
+	def test_locator_like_description_is_content(self):
+		"""A body that is only a URL or a file name is kept as text, without a warning."""
+		feed = """\
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Link Feed</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Only A Link</title>
+      <link>https://example.com/1</link>
+      <description>https://example.com/elsewhere</description>
+    </item>
+    <item>
+      <title>Only A File Name</title>
+      <link>https://example.com/2</link>
+      <description>notes.txt</description>
+    </item>
+  </channel>
+</rss>"""
+
+		with requests_mock.Mocker() as mocker, warnings.catch_warnings():
+			warnings.simplefilter("error")
+			mocker.get(self.feed_url, text=feed)
+			result = self.strategy.scrape(self.feed_url, {}, {})
+
+		assert isinstance(result, Ok)
+		assert [update.description for update in result.value.updates] == ["https://example.com/elsewhere", "notes.txt"]
+
 
 # ── Real Feed Fixture Tests ——————————————————————————————————————————————
 # These use downloaded feed XML files (see tests/scripts/downloadTestFeeds.py).
@@ -1533,7 +1968,7 @@ class FeedStrategyRealFeedTestCase(TestCase):
 
 class RssContentBackfillTestCase(SetupMixin, TestCase):
 	def test_backfill_updates_existing_rss_update_from_full_content(self):
-		strategy = Strategy.objects.create(strat_cls="FeedStrategy", data={})
+		strategy = Strategy.objects.create(user=self.regular_user, strat_cls="FeedStrategy", data={})
 		link = Link.objects.create(
 			name="RSS source",
 			url="https://example.com/feed",

@@ -71,7 +71,7 @@ def snip_xml(xml: str, max_bytes: int) -> tuple[str, int, int]:
 	return _strip_trailing_line_whitespace(snipped_xml), blocks_seen, blocks_snipped
 
 
-def snip_file(path: Path, max_bytes: int, write: bool) -> SnipStats:
+def snip_file(path: Path, max_bytes: int, *, write: bool) -> SnipStats:
 	original = path.read_text(encoding="utf-8")
 	snipped, blocks_seen, blocks_snipped = snip_xml(original, max_bytes)
 
@@ -134,7 +134,7 @@ def main() -> int:
 	if not paths:
 		raise SystemExit("No XML files found.")
 
-	stats = [snip_file(path, max_content_bytes, args.write) for path in paths]
+	stats = [snip_file(path, max_content_bytes, write=args.write) for path in paths]
 	total_saved = sum(item.bytes_saved for item in stats)
 	total_snipped = sum(item.blocks_snipped for item in stats)
 	action = "snipped" if args.write else "would snip"

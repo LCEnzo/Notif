@@ -26,7 +26,7 @@ jobs:
 
     env:
       DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod
-      DJANGO_SETTINGS_MODULE: notif.settings
+      DJANGO_SETTINGS_MODULE: notif.settings_prod
 
     steps:
       - uses: actions/checkout@v6
@@ -62,8 +62,29 @@ jobs:
       - name: Django system check
         run: uv run python manage.py check
 
+      - name: Django deploy check
+        # Pinned here rather than inherited from config defaults, so the step
+        # checks the production posture whichever way those defaults point.
+        env:
+          DJANGO_SETTINGS_MODULE: notif.settings_prod
+          NOTIF_ENV: production
+          DEBUG: 'false'
+          DEV_BOOTSTRAP_LOGIN_ENABLED: 'false'
+        # A fresh random key per run: --deploy rejects short or predictable
+        # keys (security.W009), and no secret-looking literal gets committed.
+        # A placeholder mail key likewise: without one the console mailer is
+        # selected, which --deploy rejects (mail.E001). Nothing is sent.
+        run: |
+          DJANGO_SECRET_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+          RESEND_API_KEY="$(uv run python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          export DJANGO_SECRET_KEY RESEND_API_KEY
+          uv run python manage.py check --deploy --fail-level WARNING
+
       - name: Missing migrations
         run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Migration regressions
+        run: uv run pytest -q -n 0 --migrations --create-db monitoring/test_migrations.py
 
       - name: OpenAPI schema drift
         run: uv run python scripts/check_openapi_drift.py
