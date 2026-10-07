@@ -9,12 +9,14 @@ on:
       - '**/*.sh'
       # Explicit, as GitHub does not document whether ** enters dot-directories.
       - '.github/**/*.sh'
+      - '.githooks/**'
       - '.github/workflows/shellcheck.yml'
   pull_request:
     branches: [master]
     paths:
       - '**/*.sh'
       - '.github/**/*.sh'
+      - '.githooks/**'
       - '.github/workflows/shellcheck.yml'
 
 permissions:
@@ -31,10 +33,11 @@ jobs:
       # shellcheck ships on the runner image (apt cmd_packages in
       # actions/runner-images toolset-2404.json), so there is no install step.
       # git ls-files picks up new scripts without editing this file.
+      # Hooks have no extension; every file in .githooks/ is a bash script.
       # --verbose logs the command line, so a green run shows what it checked.
       - name: Shellcheck tracked scripts
         # Explicit bash adds pipefail: a failing git ls-files fails the step.
         shell: bash
         run: |
           shellcheck --version
-          git ls-files -z '*.sh' | xargs -0 --verbose --no-run-if-empty shellcheck
+          git ls-files -z '*.sh' '.githooks/*' | xargs -0 --verbose --no-run-if-empty shellcheck
