@@ -12,8 +12,7 @@ enum FailureCategory {
   corruptLocalState('corrupt_local_state'),
   sourceBlockedDegraded('source_blocked_degraded'),
   serverError('server_error'),
-  unexpectedFailure('unexpected_failure')
-  ;
+  unexpectedFailure('unexpected_failure');
 
   const FailureCategory(this.wireName);
 
