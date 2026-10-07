@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:notif/generated/openapi.swagger.dart' as api;
 import 'package:notif/services/persistence.dart';
 
 /// A response the schema-generated model for [schema] could not parse.
@@ -21,21 +22,24 @@ class ContractViolation implements Exception {
   String toString() => 'Contract violation in $schema: $detail';
 }
 
+/// The app's failure classes. A closed set, unlike the generated enum, which
+/// also carries a parse-only `swaggerGeneratedUnknown`.
 enum FailureCategory {
-  networkUnavailable('network_unavailable'),
-  timeout('timeout'),
-  unauthorized('unauthorized'),
-  forbidden('forbidden'),
-  validationFailed('validation_failed'),
-  contractViolation('contract_violation'),
-  corruptLocalState('corrupt_local_state'),
-  sourceBlockedDegraded('source_blocked_degraded'),
-  serverError('server_error'),
-  unexpectedFailure('unexpected_failure');
+  networkUnavailable(api.CategoryEnum.networkUnavailable),
+  timeout(api.CategoryEnum.timeout),
+  unauthorized(api.CategoryEnum.unauthorized),
+  forbidden(api.CategoryEnum.forbidden),
+  validationFailed(api.CategoryEnum.validationFailed),
+  contractViolation(api.CategoryEnum.contractViolation),
+  corruptLocalState(api.CategoryEnum.corruptLocalState),
+  sourceBlockedDegraded(api.CategoryEnum.sourceBlockedDegraded),
+  serverError(api.CategoryEnum.serverError),
+  unexpectedFailure(api.CategoryEnum.unexpectedFailure);
 
-  const FailureCategory(this.wireName);
+  const FailureCategory(this.wire);
 
-  final String wireName;
+  /// The client-event sink's category, named by the schema.
+  final api.CategoryEnum wire;
 }
 
 class AppFailure implements Exception {
