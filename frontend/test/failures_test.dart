@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/generated/openapi.swagger.dart' as api;
+import 'package:notif/services/api_client.dart';
 import 'package:notif/services/failures.dart';
 import 'package:notif/services/persistence.dart';
 

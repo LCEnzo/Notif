@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notif/services/api_client.dart';
 import 'package:notif/services/data.dart';
 import 'package:notif/services/failures.dart';
 
@@ -7,7 +8,7 @@ void main() {
     test('missing required field surfaces an Exception, not a TypeError', () {
       // The generated _$LinkFromJson reads `json['name'] as String`, which
       // throws a TypeError (a Dart Error) when the wire omits a required
-      // field. Fetch sites catch `on Exception`, so _parseContract must
+      // field. Fetch sites catch `on Exception`, so parseContract must
       // convert it — otherwise the failure would escape as an unhandled zone
       // error and the user would see a silently empty list.
       expect(

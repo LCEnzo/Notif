@@ -622,6 +622,54 @@ List<dynamic> expectSuccessList(Response<dynamic> response, String context) {
   );
 }
 
+/// A response that breaks the schema's [schema] component.
+///
+/// A [FormatException], so existing `on FormatException` handling and the
+/// `contract violation` message prefix both still hold.
+class ContractViolation extends FormatException {
+  const ContractViolation({required this.schema, required this.detail})
+    : super('contract violation in $schema: $detail');
+
+  /// OpenAPI component name, e.g. `Link`.
+  final String schema;
+
+  /// What broke. A generated parser's error rarely names the field; the
+  /// stack trace [parseContract] keeps does.
+  final String detail;
+
+  String get contractPath => '#/components/schemas/$schema';
+
+  @override
+  String toString() => message;
+}
+
+/// Runs a schema-generated parse of the [schema] component, converting any
+/// contract violation into an [Exception] the fetch sites' `on Exception`
+/// handlers catch.
+///
+/// The generated parsers throw `TypeError` (a Dart `Error`, not an
+/// `Exception`) when the wire diverges from the schema — e.g. a required
+/// field like `Link.name` going missing. Every fetch site catches
+/// `on Exception`, so a raw `TypeError` would escape as an unhandled zone
+/// error: the spinner clears but `_error` is never set, and the user sees a
+/// silently empty list. Rethrowing as [ContractViolation] keeps the failure
+/// classified and visible.
+///
+/// [schema] is spelled out rather than taken from `T`: release web builds
+/// minify type names.
+T parseContract<T>(String schema, T Function() parse) {
+  try {
+    return parse();
+  } on Object catch (error, stackTrace) {
+    // Generated code can throw arbitrary objects (TypeError, StateError, …);
+    // this is the platform-boundary case for a bare catch.
+    Error.throwWithStackTrace(
+      ContractViolation(schema: schema, detail: '$error'),
+      stackTrace,
+    );
+  }
+}
+
 void expectSuccessStatus(
   Response<dynamic> response,
   String context, {

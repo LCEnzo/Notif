@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:notif/commons/download_helper.dart';
+import 'package:notif/generated/openapi.swagger.dart' as api;
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
@@ -19,16 +20,24 @@ class SystemEvent {
   });
 
   factory SystemEvent.fromJson(Map<String, dynamic> json) {
+    // Parse through the schema-generated type first (see data.dart). The
+    // generator makes readOnly fields nullable, so `required` is checked here.
+    final parsed = parseContract(
+      'SystemEvent',
+      () => api.SystemEvent.fromJson(json),
+    );
+    // The generated enum maps unknown levels to null; keep the wire string so
+    // a level added server-side still renders.
+    final level = json['level'];
+    final details = parsed.details;
     return SystemEvent(
-      id: json['id'] as int,
-      createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
-      level: json['level'] as String,
-      source: json['source'] as String,
-      kind: json['kind'] as String,
-      message: json['message'] as String,
-      details: json['details'] is Map
-          ? Map<String, dynamic>.from(json['details'] as Map)
-          : const {},
+      id: _required(parsed.id, 'id'),
+      createdAt: _required(parsed.createdAt, 'created_at').toLocal(),
+      level: _required(level is String ? level : null, 'level'),
+      source: _required(parsed.source, 'source'),
+      kind: _required(parsed.kind, 'kind'),
+      message: _required(parsed.message, 'message'),
+      details: details is Map ? Map<String, dynamic>.from(details) : const {},
     );
   }
   final int id;
@@ -39,6 +48,12 @@ class SystemEvent {
   final String message;
   final Map<String, dynamic> details;
 }
+
+T _required<T extends Object>(T? value, String field) =>
+    value ??
+    (throw FormatException(
+      'contract violation: SystemEvent.$field is missing or mistyped',
+    ));
 
 class CaddyLogEntry {
   const CaddyLogEntry({required this.data});
@@ -127,13 +142,21 @@ class OpsService extends ChangeNotifier {
       if (rawResults is! List) {
         throw Exception('Fetch system events failed: missing results list.');
       }
+      // Parse everything before swapping, so a bad event keeps the last
+      // complete list instead of leaving a partial one.
+      final events = rawResults
+          .map(
+            (item) => item is Map<String, dynamic>
+                ? SystemEvent.fromJson(item)
+                : throw FormatException(
+                    'contract violation: event is ${item.runtimeType}, '
+                    'not an object',
+                  ),
+          )
+          .toList(growable: false);
       _events
         ..clear()
-        ..addAll(
-          rawResults.whereType<Map<String, dynamic>>().map(
-            (item) => SystemEvent.fromJson(Map<String, dynamic>.from(item)),
-          ),
-        );
+        ..addAll(events);
     } on Exception catch (error) {
       _recordFailure(error, endpoint: 'GET /ops/events/');
       _error = error.toString();

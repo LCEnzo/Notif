@@ -99,7 +99,9 @@ Future<String> _loadAppVersion() async {
     final info = await PackageInfo.fromPlatform();
     final build = info.buildNumber.isEmpty ? '' : '+${info.buildNumber}';
     return '${info.version}$build';
-  } on Exception {
+  } on Object {
+    // Platform call: without a binding it throws a FlutterError, and this
+    // runs unawaited, so anything escaping is an unhandled zone error.
     return '';
   }
 }
