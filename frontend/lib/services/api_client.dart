@@ -530,6 +530,26 @@ List<dynamic> expectSuccessList(Response<dynamic> response, String context) {
   );
 }
 
+/// Runs a schema-generated parse, converting any contract violation into an
+/// [Exception] the fetch sites' `on Exception` handlers catch.
+///
+/// The generated parsers throw `TypeError` (a Dart `Error`, not an
+/// `Exception`) when the wire diverges from the schema — e.g. a required
+/// field like `Link.name` going missing. Every fetch site catches
+/// `on Exception`, so a raw `TypeError` would escape as an unhandled zone
+/// error: the spinner clears but `_error` is never set, and the user sees a
+/// silently empty list. Rethrowing as [FormatException] keeps the failure
+/// classified and visible.
+T parseContract<T>(T Function() parse) {
+  try {
+    return parse();
+  } on Object catch (error) {
+    // Generated code can throw arbitrary objects (TypeError, StateError, …);
+    // this is the platform-boundary case for a bare catch.
+    throw FormatException('contract violation: $error');
+  }
+}
+
 void expectSuccessStatus(
   Response<dynamic> response,
   String context, {
