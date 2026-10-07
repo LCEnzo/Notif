@@ -129,6 +129,10 @@ The default strategy, hypothesis-jsonschema's, is `https://` plus a generated do
 
 `ipv4_localhost` is purely a speed fix. The live server binds 127.0.0.1 (Django's `WSGIServer` uses IPv4 unless asked for IPv6) and Schemathesis opens a new `requests.Session`, and so a fresh connection, per request. On Windows every such connect tried `::1` first and stalled ~2 s on the refusal: single-process, the module took ~375 s without the fixture and ~30 s with it (2026-10-05).
 
+### Why a live server, not the WSGI app in-process
+
+Schemathesis can call the WSGI app in-process (`schema.app`), but its WSGI transport in 4.24.3 hands werkzeug any form body as is (`multipart_serializer` and `urlencoded_serializer` in `schemathesis/transport/wsgi.py`), and werkzeug's `EnvironBuilder` takes only a mapping, a string or bytes. The requests transport encodes other bodies explicitly (`schemathesis/transport/requests.py`). Negative-mode generation sends other bodies, booleans and floats among them, to the operations that accept `multipart/form-data` or `application/x-www-form-urlencoded`, and in-process those raise `AttributeError: 'bool' object has no attribute 'items'`, an error rather than a finding. In-process, `ci` failed that way on `POST /api/v1/accounts/users/change_password/` on every run at seed 0. Speed was no argument either: at 100 examples per operation the module took 136 s in-process and 135 s against the live server (Windows, `-n 4`, 2026-10-07).
+
 ## Mutation testing (mutmut)
 
 Configured in `[tool.mutmut]` in `backend/pyproject.toml`. It is deliberately outside the merge path: nothing runs it in `backend.yml`, because a run costs hours and its result is a score to read, not a gate to pass. It runs from `deep-sweeps.yml`, on a schedule at most fortnightly and only when enough has changed, or by hand from `backend/`:
