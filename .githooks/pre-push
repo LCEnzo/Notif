@@ -39,7 +39,7 @@ run_check() {
 }
 
 # ── detect what changed ──────────────────────────────────────────
-while read -r local_ref local_sha remote_ref remote_sha; do
+while read -r _local_ref local_sha _remote_ref remote_sha; do
 	if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
 		# New branch — diff against merge-base with origin/master.
 		base=$(git merge-base "$local_sha" origin/master 2>/dev/null || echo "")
