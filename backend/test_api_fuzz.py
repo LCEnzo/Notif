@@ -6,22 +6,25 @@ Profiles (``NOTIF_FUZZ_PROFILE``), how to run them, and why the settings below a
 import os
 import socket
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, NoReturn, cast
 
 import pytest
-import requests
 import schemathesis
 from django.conf import settings
 from django.db import connections
 from django.db.backends.sqlite3.base import DatabaseWrapper as SQLiteDatabaseWrapper
+from django.middleware.csrf import CSRF_ALLOWED_CHARS, CSRF_SECRET_LENGTH
+from django.utils.crypto import get_random_string
 from hypothesis import HealthCheck
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
-from schemathesis import Case, CheckFunction
+from schemathesis import AuthContext, Case, CheckFunction
 from schemathesis.checks import CHECKS as CHECKS_REGISTRY
 from schemathesis.checks import load_all_checks, not_a_server_error
+
+from accounts import device_sessions
+from accounts.models import DeviceSession
 
 # Checks register lazily; EXCLUDED_CHECKS below resolves one of them by name.
 load_all_checks()
@@ -96,49 +99,42 @@ schema.config.generation.update(with_security_parameters=False)
 FUZZ_USERNAME = "fuzzer"
 FUZZ_PASSWORD = "fuzzer-pass-123"  # pragma: allowlist secret
 FUZZ_EMAIL = "fuzzer@example.com"
+# Fixed per process, because Schemathesis also applies the auth provider at collection: see docs/testing.md.
+FUZZ_SESSION_TOKEN = device_sessions.generate_token()
+FUZZ_CSRF_TOKEN = get_random_string(CSRF_SECRET_LENGTH, allowed_chars=CSRF_ALLOWED_CHARS)
 
 
-@dataclass(frozen=True, slots=True)
-class FuzzCredentials:
-	"""The fuzzer's cookie-transport session, handed to Schemathesis per call.
+@schema.auth(refresh_interval=None)
+class FuzzSession:
+	"""Signs every generated request in as the fuzz user over cookie transport, with a matching CSRF pair."""
 
-	Passed as ``cookies``/``headers`` arguments, not a ``requests.Session`` jar: see docs/testing.md.
-	"""
+	def get(self, case: Case[Any], context: AuthContext) -> str:
+		return FUZZ_SESSION_TOKEN
 
-	session_token: str
-	csrf_token: str
-
-	# Cookie-transport writes enforce CSRF: the csrftoken cookie and the
-	# X-CSRFToken header must both be present and agree.
-	def cookies(self) -> dict[str, str]:
-		return {settings.SESSION_TOKEN_COOKIE_NAME: self.session_token, "csrftoken": self.csrf_token}
-
-	def headers(self) -> dict[str, str]:
-		return {"X-CSRFToken": self.csrf_token}
+	def set(self, case: Case[Any], data: str, context: AuthContext) -> None:
+		case.cookies.update({settings.SESSION_TOKEN_COOKIE_NAME: data, settings.CSRF_COOKIE_NAME: FUZZ_CSRF_TOKEN})
+		case.headers["X-CSRFToken"] = FUZZ_CSRF_TOKEN
 
 
 @pytest.fixture
-def fuzz_credentials(live_server: Any, django_user_model: Any) -> FuzzCredentials:
-	"""Create the fuzzing user and log it in over cookie transport.
+def fuzz_user(django_user_model: Any) -> Any:
+	"""Create the fuzz user and the session that ``FUZZ_SESSION_TOKEN`` names, inside the test's own database state.
 
-	Function-scoped, so it costs one user creation and one login per *operation*
-	rather than per generated example.
+	The session comes from the login view's ``create_session``, with only its token pinned.
 	"""
-	django_user_model.objects.create_user(
-		username=FUZZ_USERNAME,
-		password=FUZZ_PASSWORD,
-		email=FUZZ_EMAIL,
-	)
-	login = requests.post(
-		f"{live_server.url}/api/v1/auth/login/",
-		json={"username": FUZZ_USERNAME, "password": FUZZ_PASSWORD, "transport": "cookie"},
-		timeout=10,
-	)
-	assert login.status_code == 200, login.text
-	return FuzzCredentials(
-		session_token=login.cookies[settings.SESSION_TOKEN_COOKIE_NAME],
-		csrf_token=login.cookies["csrftoken"],
-	)
+	user = django_user_model.objects.create_user(username=FUZZ_USERNAME, password=FUZZ_PASSWORD, email=FUZZ_EMAIL)
+	with pytest.MonkeyPatch.context() as patch:
+		patch.setattr(device_sessions, "generate_token", lambda: FUZZ_SESSION_TOKEN)
+		issued = device_sessions.create_session(
+			user=user,
+			transport=DeviceSession.Transport.COOKIE,
+			device_label="fuzzer",
+			ip=None,
+			user_agent="",
+			password_hash_at_login=user.password,
+		)
+	assert issued.token == FUZZ_SESSION_TOKEN
+	return user
 
 
 @pytest.fixture
@@ -158,6 +154,20 @@ def test_live_server_shares_the_test_database_connection(live_server: Any) -> No
 	assert isinstance(default, SQLiteDatabaseWrapper)
 	assert default.is_in_memory_db()
 	assert live_server.thread.connections_override.get("default") is default
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.usefixtures("ipv4_localhost", "fuzz_user")
+def test_the_fuzz_session_passes_auth_and_csrf(live_server: Any) -> None:
+	"""Positive control for both canaries: the provider's credential gets a read and a write through."""
+	for method, path in [
+		("GET", "/api/v1/accounts/users/get_my_info/"),
+		("POST", "/api/v1/monitoring/notifications/mark_all_read/"),
+	]:
+		case = schema[path][method].Case()
+		schema.auth.set(case, AuthContext(operation=case.operation, app=schema.app))
+		response = case.call(base_url=live_server.url)
+		assert response.status_code == 200, f"{method} {path}: {response.text}"
 
 
 def _requires_auth(case: Case[Any]) -> bool:
@@ -180,18 +190,16 @@ def _requires_auth(case: Case[Any]) -> bool:
 @pytest.mark.timeout(TIMEOUT_SECONDS)
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.fuzz
-@pytest.mark.usefixtures("ipv4_localhost")
+@pytest.mark.usefixtures("ipv4_localhost", "fuzz_user")
 def test_operation_survives_generated_input(
 	case: Case[Any],
 	live_server: Any,
-	fuzz_credentials: FuzzCredentials,
 	fuzz_canary: Callable[[str, str], NoReturn],
 ) -> None:
 	# transaction=True is required: live_server serves from a separate thread and
-	# connection, so the fuzzing user must be committed for its login to be seen.
+	# connection, so the fuzzing user must be committed for its session to be seen.
 	# call_and_validate in two halves, so the canaries go first: see docs/testing.md.
-	headers, cookies = fuzz_credentials.headers(), fuzz_credentials.cookies()
-	response = case.call(base_url=live_server.url, headers=headers, cookies=cookies)
+	response = case.call(base_url=live_server.url)
 	# ci fails only on a 5xx, so catch a fuzzer stuck at the auth layer: see docs/testing.md.
 	if response.status_code == 401 and _requires_auth(case):
 		fuzz_canary(
@@ -209,11 +217,10 @@ def test_operation_survives_generated_input(
 		response,
 		checks=CHECKS,
 		excluded_checks=EXCLUDED_CHECKS,
-		headers=headers,
-		transport_kwargs={"cookies": cookies, "base_url": live_server.url, "headers": dict(headers)},
+		transport_kwargs={"base_url": live_server.url},
 	)
 
 
-def test_no_auth_provider_expects_a_reauth_replay() -> None:
-	"""The split above skips call_and_validate's reauth replay, a no-op only while nothing configures one."""
+def test_the_auth_provider_asks_for_no_reauth_replay() -> None:
+	"""The split above skips call_and_validate's reauth replay, a no-op only while no provider asks for one."""
 	assert schema.reauth_retry_statuses == frozenset()

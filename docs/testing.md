@@ -92,13 +92,21 @@ Replay is exact only with `PYTHONHASHSEED` pinned: for a few operations the inpu
 
 ### Credentials
 
-`fuzz_credentials` creates the fuzzing user and logs it in over cookie transport, once per operation: a function-scoped fixture is set up once per test item, not once per generated example. The session and CSRF tokens go to `case.call` as `cookies=` and `headers=` arguments, and to `validate_response` in the `transport_kwargs` that `call_and_validate` would build (see [splitting `call_and_validate`](#splitting-call_and_validate)), not through a `requests.Session` cookie jar, because Schemathesis treats only a credential it was handed explicitly as the real one:
+The fuzz user signs in through a Schemathesis auth provider, `FuzzSession`, registered on the schema with `refresh_interval=None`. On every case it sets the session cookie, a `csrftoken` cookie and the matching `X-CSRFToken` header that cookie-transport writes need.
 
-1. The requests transport merges explicit `cookies` over the generated ones and records them on the response's `_override` (`schemathesis/transport/requests.py`).
-2. `ignored_auth` (`schemathesis/specs/openapi/checks.py`) counts a credential found in `_override` as explicit. One it cannot trace there, such as a cookie from a session jar, counts as generated, and a 2xx carrying a generated credential is reported as ignored auth.
-3. For an explicit credential, `ignored_auth` replays the request with exactly that credential stripped from the transport arguments (`build_retry_transport_kwargs` in `schemathesis/specs/openapi/_auth_retry.py`) and expects a 401.
+The credential is fixed for the process: `FUZZ_SESSION_TOKEN` comes from the project's own `device_sessions.generate_token` at import, and `FUZZ_CSRF_TOKEN` is a random secret of Django's CSRF length and alphabet. It has to be fixed because Schemathesis applies the provider at collection too: the `examples` and `coverage` phases build their cases, auth included, while pytest collects the test, and attach them as explicit examples (`CoverageGenerator.__iter__` in `schemathesis/generation/drivers.py`, `add_coverage` in `schemathesis/generation/hypothesis/builder.py`). No database exists at that point, so a provider that logged in, or read a per-test fixture, could not sign those cases in. The harness therefore no longer logs in through `/api/v1/auth/login/`; that operation is fuzzed like any other.
 
-By default Schemathesis also treats the schema's security schemes as parameters and generates a value for each (`with_security_parameters`, default true): a random `notif_session` cookie and a random `Authorization` header. The explicit cookie replaces a generated cookie of the same name. A generated header that starts with `Session` outranks any cookie, though, because `SessionTokenAuthentication.authenticate` tries the header first, and a dead header token earns a 401. Random credentials only exercise the rejection path anyway, so the test turns their generation off.
+The `fuzz_user` fixture makes the fixed token valid, once per test: it creates the fuzz user and a cookie session through the login view's own `device_sessions.create_session`, with only `generate_token` patched to return the fixed token, and fails if the issued token differs. If the session scheme changes, the harness follows it or fails at setup. The user and the session belong to the test's database state and go with it, and the provider caches nothing, so no session outlives its test and none can be served stale. Turning the cache off also turns reauth off: `call_and_validate` replays a request after a reauth only on the statuses that a caching provider declares (`compute_retry_on_statuses` in `schemathesis/auths.py`). `test_the_fuzz_session_passes_auth_and_csrf` is the positive control for the [canaries](#checks): with the fixture, the provider's credential gets an auth-required read and an unsafe write through with a 200.
+
+The user is per test rather than per session. A session-scoped user would live outside the per-test transactions, show up in other tests on the same xdist worker, and be deleted by the flush that ends every transactional test, after which each later fuzz test on that worker would get a 401.
+
+A provider, rather than `cookies=` and `headers=` arguments, is also what `ignored_auth` (`schemathesis/specs/openapi/checks.py`) needs to tell the real credential from a generated one:
+
+1. It counts a provider's credential as explicit: `AuthStorage.set` marks the case (`_has_explicit_auth` in `schemathesis/auths.py`).
+2. For an explicit credential it replays the request with exactly that credential stripped from the case (`remove_auth` in `schemathesis/specs/openapi/_auth_retry.py`) and expects a 401.
+3. A credential it cannot trace to a provider or to the transport's record of explicit arguments counts as generated, and a 2xx carrying one is reported as ignored auth.
+
+By default Schemathesis also treats the schema's security schemes as parameters and generates a value for each (`with_security_parameters`, default true): a random `notif_session` cookie and a random `Authorization` header. The provider's cookie replaces a generated cookie of the same name. A generated header that starts with `Session` outranks any cookie, though, because `SessionTokenAuthentication.authenticate` tries the header first, and a dead header token earns a 401. Random credentials only exercise the rejection path anyway, so the test turns their generation off.
 
 ### Excluded operations
 
@@ -115,7 +123,7 @@ The default strategy, hypothesis-jsonschema's, is `https://` plus a generated do
 
 ### Per-test state across examples
 
-`live_server` is session-scoped, but the transactional database and the login session are per test, and Hypothesis cannot reset them between examples. State therefore accumulates within one operation's run. That is acceptable here: each example is an independent request, and the transactional test flushes the database between operations. Hypothesis fails `HealthCheck.function_scoped_fixture` unless it is suppressed.
+`live_server` is session-scoped, but the transactional database and the fuzz user's session are per test, and Hypothesis cannot reset them between examples. State therefore accumulates within one operation's run. That is acceptable here: each example is an independent request, and the transactional test flushes the database between operations. Hypothesis fails `HealthCheck.function_scoped_fixture` unless it is suppressed.
 
 ### `localhost` resolves to IPv4 only
 
@@ -211,7 +219,7 @@ The hook appends to `item.user_properties` before it yields, because each report
 
 #### Splitting `call_and_validate`
 
-`case.call` followed by `case.validate_response` repeats `call_and_validate` (`schemathesis/generation/case.py`) with one omission: `reauth_and_replay`, which refreshes auth and replays the request when the status is one of `schema.reauth_retry_statuses`. Nothing configures reauth here, so the step is a no-op, and `test_no_auth_provider_expects_a_reauth_replay` fails if that changes. Everything else matches: the same `checks` and `excluded_checks`; the same hooks, since `call` fires `before_call`, `after_call` and `after_network_error` and `validate_response` fires `after_validate`; and the same headers, cookies and `transport_kwargs`, which `ignored_auth` needs to replay the request without its credential.
+`case.call` followed by `case.validate_response` repeats `call_and_validate` (`schemathesis/generation/case.py`) with one omission: `reauth_and_replay`, which refreshes auth and replays the request when the status is one of `schema.reauth_retry_statuses`. The auth provider caches nothing, so that set is empty and the step is a no-op (see [credentials](#credentials)); `test_the_auth_provider_asks_for_no_reauth_replay` fails if that changes. Everything else matches: the same `checks` and `excluded_checks`; the same hooks, since `call` fires `before_call`, `after_call` and `after_network_error` and `validate_response` fires `after_validate`; and the same `transport_kwargs`, which `ignored_auth` needs to replay the request without its credential.
 
 #### Known limits
 
