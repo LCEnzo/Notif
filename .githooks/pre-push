@@ -4,7 +4,7 @@
 # Detects which part of the stack changed (backend, frontend, or both)
 # and runs the matching fast checks:
 #   backend  → uv lock --check, uv sync --frozen, ruff format --check, ruff check, mypy, migration drift
-#   frontend → dart format --set-exit-if-changed, flutter analyze
+#   frontend → dart format check (no rewrite), flutter analyze
 #
 # This is intentionally not full CI, as tests and builds take too long for everyday operations. They are checked in CI.
 #
@@ -108,7 +108,8 @@ if $check_frontend; then
 
 	cd "$repo_root/frontend"
 
-	run_check "dart format --set-exit-if-changed" "$DART" format --set-exit-if-changed .
+	# Report only: a rewrite here would leave the tree differing from the pushed commit.
+	run_check "dart format (fix: cd frontend && dart format .)" "$DART" format --output=none --set-exit-if-changed .
 
 	echo -n "  flutter analyze … "
 	# --no-pub avoids triggering pub get, which can fail in minimal
