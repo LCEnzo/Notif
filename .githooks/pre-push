@@ -47,7 +47,7 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 			changed=$(git diff --name-only "$base..$local_sha" 2>/dev/null || true)
 		else
 			# No merge-base (e.g. initial commit) — check everything.
-			changed=$(git diff --name-only "$local_sha" 2>/dev/null || true)
+			changed=$(git ls-tree -r --name-only --full-tree "$local_sha" 2>/dev/null || true)
 		fi
 	else
 		range="$remote_sha..$local_sha"
