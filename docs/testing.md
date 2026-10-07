@@ -5,14 +5,14 @@ Why the backend's property tests, schema fuzzing and mutation testing are built 
 | File | Topic |
 |---|---|
 | `backend/monitoring/tests.py` | Hypothesis property tests under mutmut |
-| `backend/conftest.py` | `live_server` start order |
+| `backend/conftest.py` | `live_server` start order; the deep fuzz verdict hook and canaries |
 | `backend/test_api_fuzz.py` | Schemathesis fuzzing |
 | `backend/pyproject.toml`, `[tool.mutmut]` | Mutation testing |
 | `.github/workflows/deep-sweeps.yml` | Scheduled deep fuzz and mutation runs |
 | `.github/scripts/deep-sweeps-gate.sh` | Which sweeps a scheduled run starts |
-| `backend/scripts/classify_fuzz_report.py` | Deep fuzz findings versus a broken run |
+| `backend/scripts/classify_fuzz_report.py`, `backend/scripts/test_fuzz_verdict_hook.py` | Deep fuzz findings versus a broken run |
 
-Source references below are to the locked versions: Hypothesis 6.168.1, Schemathesis 4.24.3, mutmut 3.7.0, pytest 9.1.1, pytest-django 4.14.0, on CPython 3.14. Timings are dated measurements, not guarantees.
+Source references below are to the locked versions: Hypothesis 6.168.1, Schemathesis 4.24.3, mutmut 3.7.0, pytest 9.1.1, pytest-django 4.14.0, pytest-timeout 2.4.0, pytest-xdist 3.8.0, on CPython 3.14. Timings are dated measurements, not guarantees.
 
 ## Hypothesis tests are plain functions
 
@@ -72,7 +72,7 @@ Both per-test timeouts replace `addopts`' `--timeout=30`, which the `coverage` p
 
 `deep` passes `checks=None`, which runs every registered check that the Schemathesis config enables, and the config enables all of them by default (`CheckContext` in `schemathesis/checks.py`): status code, content type, headers, response schema conformance, auth enforcement (`ignored_auth`) and others. It excludes `negative_data_rejection`, which requires a rejection status (400, 422 or one of a few other 4xx codes) for every schema-violating request. DRF is lenient by design: it ignores unknown query parameters and read-only fields (`Serializer._writable_fields`), and `CharField` coerces numbers to strings (`"name": 0` saves as `"0"`). Against this API the check reported that leniency on several write and list operations, burying the findings that matter.
 
-The test adds two assertions of its own, in both profiles. `ci` fails only on a 5xx, so a fuzzer stuck at the auth layer would pass green while exercising nothing behind it. A valid session never earns a 401 on an operation that requires auth, and a CSRF token pair that lands never earns `403 CSRF Failed`. Either response means generated requests are not reaching the handler, and fails the test.
+The test adds two canaries of its own, in both profiles. `ci` fails only on a 5xx, so a fuzzer stuck at the auth layer would pass green while exercising nothing behind it. A valid session never earns a 401 on an operation that requires auth, and a CSRF token pair that lands never earns `403 CSRF Failed`. Either response means generated requests are not reaching the handler, and fails the test. The canaries look at the response before Schemathesis' checks do, and the deep fuzz run fails on either one even when a later example's finding hides it: see [masking](#masking-why-canaries-and-timeouts-are-recorded-on-the-side).
 
 ### Phases
 
@@ -92,7 +92,7 @@ Replay is exact only with `PYTHONHASHSEED` pinned: for a few operations the inpu
 
 ### Credentials
 
-`fuzz_credentials` creates the fuzzing user and logs it in over cookie transport, once per operation: a function-scoped fixture is set up once per test item, not once per generated example. The session and CSRF tokens go to `call_and_validate` as `cookies=` and `headers=` arguments, not through a `requests.Session` cookie jar, because Schemathesis treats only a credential it was handed explicitly as the real one:
+`fuzz_credentials` creates the fuzzing user and logs it in over cookie transport, once per operation: a function-scoped fixture is set up once per test item, not once per generated example. The session and CSRF tokens go to `case.call` as `cookies=` and `headers=` arguments, and to `validate_response` in the `transport_kwargs` that `call_and_validate` would build (see [splitting `call_and_validate`](#splitting-call_and_validate)), not through a `requests.Session` cookie jar, because Schemathesis treats only a credential it was handed explicitly as the real one:
 
 1. The requests transport merges explicit `cookies` over the generated ones and records them on the response's `_override` (`schemathesis/transport/requests.py`).
 2. `ignored_auth` (`schemathesis/specs/openapi/checks.py`) counts a credential found in `_override` as explicit. One it cannot trace there, such as a cookie from a session jar, counts as generated, and a 2xx carrying a generated credential is reported as ignored auth.
@@ -181,20 +181,41 @@ The gate's job summary gives each sweep's decision, last successful run, age in 
 
 ### Deep fuzz: findings versus a broken run
 
-pytest exits 1 both for Schemathesis findings, which the deep profile reports on every run, and for a harness that broke. The fuzz step therefore never fails on pytest's exit status. It hands the status to `backend/scripts/classify_fuzz_report.py`, which reads the JUnit report and fails the run on any of:
+pytest exits 1 both for Schemathesis findings, which the deep profile reports on every run, and for a harness that broke. The fuzz step therefore never fails on pytest's exit status. It hands the status to `backend/scripts/classify_fuzz_report.py`, which reads the JUnit report and the properties the verdict hook records on it, and fails the run on any of:
 
 1. a setup or teardown error;
-2. a failure of `test_live_server_shares_the_test_database_connection`, or its absence from the report;
-3. either canary: the credential 401 or the `CSRF Failed` 403 assertion in `test_api_fuzz.py`;
-4. any other failure that is not a Schemathesis check failure;
+2. a fired canary or a reached timeout, whatever exception the test ended with;
+3. a failure the hook did not call a finding, or one with no verdict at all, which means the hook did not run;
+4. a failure of `test_live_server_shares_the_test_database_connection`, its absence from the report, or a failure of any other test that is not a fuzzed operation;
 5. a report with no operation in it, one it cannot read, or one that disagrees with the exit status (1 with nothing failed, 0 with failures);
 6. an exit status of 2 or higher: interrupted, internal error, usage error or nothing collected.
 
-A Schemathesis check failure is recognised by its top-level exception. `Case.call_and_validate` raises all the check failures of one response together as one `schemathesis.core.failures.FailureGroup` (`validate_response` in `schemathesis/generation/case.py`), whose members are the checks' `Failure` subclasses with their tracebacks stripped (`_failures_from_exception` in `schemathesis/checks.py`). `FailureGroup` derives from `BaseExceptionGroup`, not `Exception`, and Hypothesis treats only `Exception`, `SystemExit`, `GeneratorExit` and pytest's `Failed` as test failures (`failure_exceptions_to_catch` in `hypothesis/core.py`). Anything else ends the test: the explicit-example loop stops at the first `FailureGroup` (`execute_explicit_examples`), and the engine re-raises one from a generated example without shrinking it (`internal/conjecture/engine.py`). A finding therefore reaches pytest as a bare `FailureGroup`, and the classifier accepts a failure only when its top-level exception is one whose members are all traceback-less `schemathesis.*` failures. A `FailureGroup` that Hypothesis grouped with another error from an earlier explicit example, a canary for instance, fails the run.
+A failure the hook called a finding is listed in the job summary by its checks, even in a run that fails on something else. The summary gives operations passed, failed and skipped, the number of operations per check, and the operations behind them.
 
-pytest renders an exception group in CPython's own layout (`repr_excinfo` in `_pytest/_code/code.py`), and writes the JUnit entry before Schemathesis' pytest hook rewrites the report (`call_and_report` in `_pytest/runner.py`), so the classifier parses that layout (`_ExceptionPrintContext` in CPython's `traceback.py`). A test in `backend/scripts/test_classify_fuzz_report.py` fails if the test names or canary messages it keys on change in `test_api_fuzz.py`.
+#### The verdict hook
 
-The classifier also writes the job summary: operations passed, failed and skipped, the number of operations per check failure (by the failure's title and class), and the operations behind them.
+`pytest_runtest_makereport` in `backend/conftest.py` classifies the exception object, for `test_operation_survives_generated_input` items alone; it gates on that name. When the call phase raised, it records the JUnit property `fuzz_verdict=finding` if the exception is a `FailureGroup` and every member of it is a `Failure`, plus one `fuzz_check` per distinct check class. Anything else gets `fuzz_verdict=not_a_finding` and a `fuzz_exception` naming the exception's type. Checks are named by class because `Failure.title` is an instance attribute (`__init__` in `schemathesis/core/failures.py`), so it could carry response-derived text.
+
+The exception the hook sees, `call.excinfo.value`, is exactly what Hypothesis re-raised. `Case.validate_response` raises all the check failures of one response together as one `schemathesis.core.failures.FailureGroup` (`validate_response` in `schemathesis/generation/case.py`), whose members are the checks' `Failure` subclasses (`run_checks` and `_failures_from_exception` in `schemathesis/checks.py`). A check that raises anything other than a `Failure`, an `AssertionError` or a `FailureGroup`, such as `InvalidSchema` or a transport error from `ignored_auth`'s replay, escapes bare and is not a finding. Neither is a `FailureGroup` that Hypothesis grouped with an error from an earlier explicit example: the group it raises is a plain `BaseExceptionGroup`.
+
+The hook appends to `item.user_properties` before it yields, because each report copies the list when it is built. JUnit writes the properties from the teardown report, or from the call report when call and teardown both fail, which makes the call its own `<testcase>` (`pytest_runtest_logreport` and `finalize` in `_pytest/junitxml.py`). The `record_property` fixture is not an option: it warns under xunit2, which `filterwarnings = error` turns into an error. Property values are plain `str`, from fixed tokens and class names, never response text: xdist's execnet serialises them by exact type and rejects strings that are not UTF-8-encodable.
+
+`Failure` has no public import path, and `FailureGroup` has none before Schemathesis 4.28, so the hook imports both from `schemathesis.core.failures`. `test_validate_response_raises_a_failure_group_of_failures_on_a_500` in `backend/scripts/test_fuzz_verdict_hook.py` pins them, so an upgrade that moves or reshapes them fails the normal suite. The same module runs each failure shape below through the real hook and the classifier, and fails if the hook's gate or the classifier stops naming the real tests.
+
+#### Masking: why canaries and timeouts are recorded on the side
+
+`FailureGroup` derives from `BaseExceptionGroup`, not `Exception`, and Hypothesis treats only `Exception`, `SystemExit`, `GeneratorExit` and pytest's `Failed` as test failures (`failure_exceptions_to_catch` in `hypothesis/core.py`). It records a failing example of those and keeps generating and shrinking, but anything else ends the test at once: the explicit-example loop stops at the first `FailureGroup` (`execute_explicit_examples`), and the engine re-raises one from a generated example without shrinking it (`internal/conjecture/engine.py`). When one example fails with an ordinary exception and a later one raises a `FailureGroup`, pytest sees only the `FailureGroup`. A verdict read from the final exception alone would call that run a finding. Two earlier failures matter:
+
+1. A canary. The test fires both through the `fuzz_canary` fixture in `backend/conftest.py`, which records `fuzz_canary=<name>` on the item before it raises `FuzzCanaryError`, so the record outlives whatever is raised later. The canaries run between `case.call` and `case.validate_response`, so a check failure on the same response cannot pre-empt them either.
+2. A timeout. On Linux, pytest-timeout's default signal method calls `pytest.fail` inside the running test (`timeout_sigalrm` in `pytest_timeout.py`), and Hypothesis treats that `Failed` as one more failing example and carries on. The hook therefore ignores the timeout's exception. It implements pytest-timeout's `pytest_timeout_set_timer` hook to note when the timer is armed and with what budget, and at teardown records `fuzz_timeout=<budget>` if that much time has passed. Unless `func_only` is set, the timer covers setup, call and teardown, and so does the elapsed time, so a timeout in any phase is recorded; with `func_only` the check only errs on the safe side. An item that reaches its budget before the alarm fires counts as timed out too, which also errs on the safe side. The thread method, the default on Windows, calls `os._exit(1)` instead (`timeout_timer`): no report gets written, or xdist reports the crashed worker without a verdict, and the run fails either way.
+
+#### Splitting `call_and_validate`
+
+`case.call` followed by `case.validate_response` repeats `call_and_validate` (`schemathesis/generation/case.py`) with one omission: `reauth_and_replay`, which refreshes auth and replays the request when the status is one of `schema.reauth_retry_statuses`. Nothing configures reauth here, so the step is a no-op, and `test_no_auth_provider_expects_a_reauth_replay` fails if that changes. Everything else matches: the same `checks` and `excluded_checks`; the same hooks, since `call` fires `before_call`, `after_call` and `after_network_error` and `validate_response` fires `after_validate`; and the same headers, cookies and `transport_kwargs`, which `ignored_auth` needs to replay the request without its credential.
+
+#### Known limit
+
+A harness break that turns every response into a 5xx shows up as `ServerError` findings, not as a broken run. Only the live-server regression test and the canaries guard against that.
 
 ### Mutation sweep
 

@@ -5,9 +5,10 @@ Profiles (``NOTIF_FUZZ_PROFILE``), how to run them, and why the settings below a
 
 import os
 import socket
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 import pytest
 import requests
@@ -78,7 +79,7 @@ CHECKS: list[CheckFunction] | None = None if _IS_DEEP else [cast("CheckFunction"
 
 # ``negative_data_rejection`` reports DRF's deliberate leniency as failures: see docs/testing.md.
 # cast: the registry is typed to also hand back check *classes*, but this one is
-# registered as a plain function and that is what call_and_validate accepts.
+# registered as a plain function and that is what validate_response accepts.
 EXCLUDED_CHECKS = cast("list[CheckFunction]", list(CHECKS_REGISTRY.get_by_names(["negative_data_rejection"])))
 
 # ``ci`` samples, ``deep`` enumerates; ``schema.parametrize()`` never runs ``stateful``. See docs/testing.md.
@@ -184,22 +185,35 @@ def test_operation_survives_generated_input(
 	case: Case[Any],
 	live_server: Any,
 	fuzz_credentials: FuzzCredentials,
+	fuzz_canary: Callable[[str, str], NoReturn],
 ) -> None:
 	# transaction=True is required: live_server serves from a separate thread and
 	# connection, so the fuzzing user must be committed for its login to be seen.
-	response = case.call_and_validate(
-		base_url=live_server.url,
-		headers=fuzz_credentials.headers(),
-		cookies=fuzz_credentials.cookies(),
-		checks=CHECKS,
-		excluded_checks=EXCLUDED_CHECKS,
-	)
+	# call_and_validate in two halves, so the canaries go first: see docs/testing.md.
+	headers, cookies = fuzz_credentials.headers(), fuzz_credentials.cookies()
+	response = case.call(base_url=live_server.url, headers=headers, cookies=cookies)
 	# ci fails only on a 5xx, so catch a fuzzer stuck at the auth layer: see docs/testing.md.
-	assert not (response.status_code == 401 and _requires_auth(case)), (
-		f"fuzzer credential was rejected; generated requests are not reaching the handler: {response.text}"
-	)
+	if response.status_code == 401 and _requires_auth(case):
+		fuzz_canary(
+			"credential",
+			f"fuzzer credential was rejected; generated requests are not reaching the handler: {response.text}",
+		)
 	# The same blind spot one layer down: cookie-transport writes enforce CSRF,
 	# and a token pair that does not land turns every unsafe method into a 403.
-	assert not (response.status_code == 403 and "CSRF Failed" in response.text), (
-		f"fuzzer CSRF token was rejected; generated writes are not reaching the handler: {response.text}"
+	if response.status_code == 403 and "CSRF Failed" in response.text:
+		fuzz_canary(
+			"csrf",
+			f"fuzzer CSRF token was rejected; generated writes are not reaching the handler: {response.text}",
+		)
+	case.validate_response(
+		response,
+		checks=CHECKS,
+		excluded_checks=EXCLUDED_CHECKS,
+		headers=headers,
+		transport_kwargs={"cookies": cookies, "base_url": live_server.url, "headers": dict(headers)},
 	)
+
+
+def test_no_auth_provider_expects_a_reauth_replay() -> None:
+	"""The split above skips call_and_validate's reauth replay, a no-op only while nothing configures one."""
+	assert schema.reauth_retry_statuses == frozenset()

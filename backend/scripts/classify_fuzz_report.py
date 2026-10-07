@@ -1,14 +1,13 @@
 """Tell a deep fuzz run's expected findings from a broken run, and summarise the run in Markdown.
 
-Reads the JUnit XML that ``pytest test_api_fuzz.py --junitxml`` writes. Exits 0 when every failure is
-a Schemathesis check failure, 1 when the run itself is unsound. Rules and sources: docs/testing.md.
+Reads the JUnit XML that ``pytest test_api_fuzz.py --junitxml`` writes, and the properties that
+backend/conftest.py records on each fuzzed operation. Exits 0 when every failure is a Schemathesis
+check failure, 1 when the run itself is unsound. Rules and sources: docs/testing.md.
 """
 
 from __future__ import annotations
 
 import argparse
-import itertools
-import re
 import sys
 import xml.etree.ElementTree as ET
 from collections import Counter
@@ -17,23 +16,14 @@ from pathlib import Path
 
 OPERATION_TEST = "test_operation_survives_generated_input"
 REGRESSION_TEST = "test_live_server_shares_the_test_database_connection"
-# Assertion messages in test_api_fuzz.py: either one means generated requests miss the handler.
-CANARIES = {
-	"credential canary": "fuzzer credential was rejected",
-	"CSRF canary": "fuzzer CSRF token was rejected",
-}
-FAILURE_GROUP = "schemathesis.core.failures.FailureGroup"
-UNLISTED = "(not listed in the report)"
+# JUnit properties that backend/conftest.py records.
+VERDICT = "fuzz_verdict"
+FINDING = "finding"
+CHECK = "fuzz_check"
+EXCEPTION = "fuzz_exception"
+CANARY = "fuzz_canary"
+TIMEOUT = "fuzz_timeout"
 _MAX_DETAIL = 300
-
-# CPython's exception group layout (traceback._ExceptionPrintContext): the top group's lines carry a
-# "  | " margin, its children's "    | ", and a separator line opens each child.
-_TOP_GROUP_START = "+ Exception Group Traceback (most recent call last):"
-_TOP_HEADLINE = re.compile(r"^  \| (?P<type>[A-Za-z_][\w.]*)(?::|$)")
-_CHILD_SEPARATOR = re.compile(r"^  (?:\+-|  )\+-{16} (?:\d+|\.\.\.) -{16}$")
-_CHILD_LINE = re.compile(r"^    \| (?P<content>.*)$")
-_CHECK_FAILURE = re.compile(r"^schemathesis\.[\w.]*\.(?P<name>\w+): (?P<title>.+)$")
-_ELIDED = re.compile(r"^and \d+ more exceptions?$")
 
 
 @dataclass
@@ -52,57 +42,44 @@ def _first_line(text: str) -> str:
 	return line if len(line) <= _MAX_DETAIL else f"{line[:_MAX_DETAIL]}..."
 
 
-def _canary(text: str) -> str | None:
-	return next((name for name, phrase in CANARIES.items() if phrase in text), None)
+def _properties(case: ET.Element, name: str) -> list[str]:
+	return [prop.get("value", "") for prop in case.iter("property") if prop.get("name") == name]
 
 
-def _check_failures(text: str) -> list[str] | None:
-	"""The check failures in a failure whose top-level exception is a FailureGroup; None for anything else.
-
-	Schemathesis raises a FailureGroup of check failures, each stripped of its traceback, and
-	Hypothesis never wraps one: see docs/testing.md.
-	"""
-	lines = text.strip().splitlines()
-	if not lines or lines[0] != _TOP_GROUP_START:
-		return None
-	headline = next((match for line in lines[1:] if (match := _TOP_HEADLINE.match(line))), None)
-	if headline is None or headline["type"] != FAILURE_GROUP:
-		return None
-	checks: list[str] = []
-	for separator, child in itertools.pairwise(lines):
-		if not _CHILD_SEPARATOR.match(separator):
-			continue
-		content = match["content"] if (match := _CHILD_LINE.match(child)) else ""
-		if failure := _CHECK_FAILURE.match(content):
-			checks.append(f"{failure['title']} (`{failure['name']}`)")
-		elif _ELIDED.match(content):
-			checks.append(UNLISTED)
-		else:
-			return None
-	return checks or None
+def _classify_failure(case: ET.Element, failure: ET.Element, verdict: Verdict) -> None:
+	name = case.get("name", "")
+	message = _first_line(failure.get("message", ""))
+	verdicts, checks = _properties(case, VERDICT), _properties(case, CHECK)
+	if name == REGRESSION_TEST:
+		verdict.problems.append(f"{REGRESSION_TEST} failed: {message}")
+	elif not name.startswith(f"{OPERATION_TEST}["):
+		verdict.problems.append(f"{name}: not a fuzzed operation: {message}")
+	elif verdicts == [FINDING] and checks:
+		verdict.findings_by_operation[name.removeprefix(f"{OPERATION_TEST}[").removesuffix("]")] = checks
+		verdict.findings_by_check.update(set(checks))
+	elif exceptions := _properties(case, EXCEPTION):
+		verdict.problems.append(f"{name}: {', '.join(exceptions)} is not a Schemathesis check failure: {message}")
+	elif not verdicts:
+		verdict.problems.append(f"{name}: no {VERDICT} property, so the verdict hook did not run: {message}")
+	else:
+		verdict.problems.append(f"{name}: unexpected {VERDICT} {verdicts} with checks {checks}: {message}")
 
 
 def _classify_case(case: ET.Element, verdict: Verdict) -> bool:
 	"""Record one test case; True when it failed or errored."""
 	name = case.get("name", "")
-	is_operation = name.startswith(f"{OPERATION_TEST}[")
 	error, failure = case.find("error"), case.find("failure")
 	if error is not None:
 		verdict.problems.append(f"{name}: {_first_line(error.get('message', 'error'))}")
+	verdict.problems += [f"{name}: the {canary} canary fired" for canary in dict.fromkeys(_properties(case, CANARY))]
+	verdict.problems += [
+		f"{name}: reached its {budget} s timeout, whose failure a later one can hide"
+		for budget in _properties(case, TIMEOUT)
+	]
 	if failure is not None:
-		message, text = failure.get("message", ""), failure.text or ""
-		checks = _check_failures(text) if is_operation else None
-		if name == REGRESSION_TEST:
-			verdict.problems.append(f"{REGRESSION_TEST} failed: {_first_line(message)}")
-		elif canary := _canary(f"{message}\n{text}"):
-			verdict.problems.append(f"{name}: the {canary} fired: {_first_line(message)}")
-		elif checks is not None:
-			verdict.findings_by_operation[name.removeprefix(f"{OPERATION_TEST}[").removesuffix("]")] = checks
-			verdict.findings_by_check.update(set(checks))
-		else:
-			verdict.problems.append(f"{name}: not a Schemathesis check failure: {_first_line(message)}")
+		_classify_failure(case, failure, verdict)
 	broken = error is not None or failure is not None
-	if is_operation:
+	if name.startswith(f"{OPERATION_TEST}["):
 		verdict.operations += 1
 		if broken:
 			verdict.failed += 1
@@ -148,9 +125,12 @@ def render_summary(verdict: Verdict) -> str:
 	]
 	if verdict.findings_by_check:
 		lines += ["| Schemathesis check failure | Operations |", "|---|---:|"]
-		lines += [f"| {check} | {count} |" for check, count in sorted(verdict.findings_by_check.items())]
+		lines += [f"| `{check}` | {count} |" for check, count in sorted(verdict.findings_by_check.items())]
 		lines += ["", "<details><summary>Operations with findings</summary>", ""]
-		lines += [f"- `{op}`: {', '.join(checks)}" for op, checks in sorted(verdict.findings_by_operation.items())]
+		lines += [
+			f"- `{op}`: {', '.join(f'`{check}`' for check in checks)}"
+			for op, checks in sorted(verdict.findings_by_operation.items())
+		]
 		lines += ["", "</details>", ""]
 	if verdict.problems:
 		lines += ["**The run is unsound.** These are not Schemathesis findings:", ""]

@@ -1,118 +1,67 @@
 """Unit tests for classify_fuzz_report: which deep fuzz failures are findings and which break the run.
 
-The failure texts are trimmed from real JUnit reports: a deep run of test_api_fuzz.py and a
-scratch module raising Schemathesis 4.24.3's own failure classes under Hypothesis 6.168.1.
+Reports are built from the JUnit properties backend/conftest.py records; test_fuzz_verdict_hook.py
+checks that the hook records them.
 """
 
 import xml.etree.ElementTree as ET
+from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
-import classify_fuzz_report
 import pytest
-from classify_fuzz_report import OPERATION_TEST, REGRESSION_TEST, classify, main
+from classify_fuzz_report import (
+	CANARY,
+	CHECK,
+	EXCEPTION,
+	FINDING,
+	OPERATION_TEST,
+	REGRESSION_TEST,
+	TIMEOUT,
+	VERDICT,
+	classify,
+	main,
+)
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
 
-FINDING_ONE_CHECK = """\
-+ Exception Group Traceback (most recent call last):
-  |   File "/runner/backend/.venv/lib/python3.14/site-packages/schemathesis/generation/case.py", line 601, in call_and_validate
-  |     self.validate_response(
-  |     ~~~~~~~~~~~~~~~~~~~~~~^
-  |   File "/runner/backend/.venv/lib/python3.14/site-packages/schemathesis/generation/case.py", line 560, in validate_response
-  |     raise FailureGroup(_failures, message) from None
-  | schemathesis.core.failures.FailureGroup: Schemathesis found 1 distinct failure
-  |
-  | - API rejected schema-compliant request
-  |
-  |     Valid data should have been accepted
-  |     Expected: 2xx, 401, 403, 404, 409, 5xx
-  |
-  | [400] Bad Request:
-  |
-  |     `{"non_field_errors":["This password is entirely numeric."]}`
-  |
-  |  (1 sub-exception)
-  +-+---------------- 1 ----------------
-    | schemathesis.openapi.checks.RejectedPositiveData: API rejected schema-compliant request
-    |
-    | Valid data should have been accepted
-    | Expected: 2xx, 401, 403, 404, 409, 5xx
-    +------------------------------------"""
-
-FINDING_TWO_CHECKS = """\
-+ Exception Group Traceback (most recent call last):
-  |   File "/runner/backend/.venv/lib/python3.14/site-packages/schemathesis/generation/case.py", line 560, in validate_response
-  |     raise FailureGroup(_failures, message) from None
-  | schemathesis.core.failures.FailureGroup: Schemathesis found 2 distinct failures
-  |
-  | - Undocumented HTTP status code
-  |
-  | - Server error
-  |  (2 sub-exceptions)
-  +-+---------------- 1 ----------------
-    | schemathesis.openapi.checks.UndefinedStatusCode: Undocumented HTTP status code
-    |
-    | Received: 405
-    | Documented: 200
-    +---------------- 2 ----------------
-    | schemathesis.core.failures.ServerError: Server error
-    +------------------------------------"""
-
-# A pytest-long-format failure: the canary asserted outside any exception group.
-CANARY_CREDENTIAL = """\
-test_api_fuzz.py:196: in test_operation_survives_generated_input
-    assert not (response.status_code == 401 and _requires_auth(case)), (
-E   AssertionError: fuzzer credential was rejected; generated requests are not reaching the handler: {"detail":"Authentication credentials were not provided."}
-E   assert not (401 == 401 and True)"""
-
-CANARY_CSRF = """\
-test_api_fuzz.py:200: in test_operation_survives_generated_input
-    assert not (response.status_code == 403 and "CSRF Failed" in response.text), (
-E   AssertionError: fuzzer CSRF token was rejected; generated writes are not reaching the handler: {"detail":"CSRF Failed: CSRF token missing."}"""
-
-# Hypothesis groups an Exception from one explicit example with the FailureGroup that ends the loop.
-CANARY_BESIDE_FINDING = """\
-+ Exception Group Traceback (most recent call last):
-  |   File "/runner/backend/.venv/lib/python3.14/site-packages/hypothesis/core.py", line 1691, in _raise_to_user
-  |     raise the_error_hypothesis_found
-  | BaseExceptionGroup: Hypothesis found 2 distinct failures in explicit examples. (2 sub-exceptions)
-  +-+---------------- 1 ----------------
-    | Traceback (most recent call last):
-    |   File "/runner/backend/test_api_fuzz.py", line 196, in test_operation_survives_generated_input
-    |     assert not (response.status_code == 401 and _requires_auth(case)), (
-    | AssertionError: fuzzer credential was rejected; generated requests are not reaching the handler: {}
-    +---------------- 2 ----------------
-    | Exception Group Traceback (most recent call last):
-    |   File "/runner/backend/.venv/lib/python3.14/site-packages/schemathesis/generation/case.py", line 560, in validate_response
-    |     raise FailureGroup(_failures, message) from None
-    | schemathesis.core.failures.FailureGroup: Schemathesis found 1 distinct failure
-    |  (1 sub-exception)
-    +-+---------------- 1 ----------------
-      | schemathesis.openapi.checks.UndefinedStatusCode: Undocumented HTTP status code
-      +------------------------------------"""
-
-CONNECTION_ERROR = """\
-test_api_fuzz.py:190: in test_operation_survives_generated_input
-    response = case.call_and_validate(
-E   requests.exceptions.ConnectionError: HTTPConnectionPool(host='localhost', port=50123): Max retries exceeded"""
-
-LIVE_SERVER_REGRESSION = """\
-test_api_fuzz.py:156: in test_live_server_shares_the_test_database_connection
-    assert live_server.thread.connections_override.get("default") is default
-E   AssertionError: assert None is <DatabaseWrapper vendor='sqlite' alias='default'>"""
-
-Outcome = tuple[str, str, str] | None  # (element tag, message attribute, text), or None for a pass
+Properties = tuple[tuple[str, str], ...]
 
 
-def _operation(label: str) -> str:
-	return f"{OPERATION_TEST}[{label}]"
+@dataclass(frozen=True)
+class Case:
+	name: str
+	outcome: str | None = None  # "failure", "error", "skipped", or None for a pass
+	properties: Properties = ()
+	message: str = "boom"
 
 
-def _write_report(tmp_path: Path, cases: dict[str, Outcome]) -> Path:
+def _operation(label: str, outcome: str | None = None, properties: Properties = ()) -> Case:
+	return Case(f"{OPERATION_TEST}[{label}]", outcome, properties)
+
+
+def _finding(*checks: str) -> Properties:
+	return ((VERDICT, FINDING), *((CHECK, check) for check in checks))
+
+
+def _not_a_finding(exception: str) -> Properties:
+	return ((VERDICT, "not_a_finding"), (EXCEPTION, exception))
+
+
+REGRESSION_PASSED = Case(REGRESSION_TEST)
+HEALTH_PASSED = _operation("GET /api/v1/ops/health/")
+
+
+def _write_report(tmp_path: Path, cases: list[Case]) -> Path:
 	suite = ET.Element("testsuite", name="pytest", tests=str(len(cases)))
-	for name, outcome in cases.items():
-		case = ET.SubElement(suite, "testcase", classname="test_api_fuzz", name=name, time="1.0")
-		if outcome is not None:
-			tag, message, text = outcome
-			ET.SubElement(case, tag, message=message).text = text
+	for case in cases:
+		element = ET.SubElement(suite, "testcase", classname="test_api_fuzz", name=case.name, time="1.0")
+		if case.properties:
+			properties = ET.SubElement(element, "properties")
+			for name, value in case.properties:
+				ET.SubElement(properties, "property", name=name, value=value)
+		if case.outcome is not None:
+			ET.SubElement(element, case.outcome, message=case.message).text = "traceback"
 	root = ET.Element("testsuites", name="pytest tests")
 	root.append(suite)
 	path = tmp_path / "fuzz-report.xml"
@@ -120,119 +69,130 @@ def _write_report(tmp_path: Path, cases: dict[str, Outcome]) -> Path:
 	return path
 
 
-def _finding(text: str = FINDING_ONE_CHECK) -> Outcome:
-	return ("failure", "RejectedPositiveData() [single exception in FailureGroup]", text)
+def _sound_report_with(tmp_path: Path, *cases: Case) -> Path:
+	return _write_report(tmp_path, [REGRESSION_PASSED, HEALTH_PASSED, *cases])
 
 
-def _report_with(tmp_path: Path, **extra: Outcome) -> Path:
-	"""A sound run (regression test green, one operation passing) plus the given operations."""
-	cases: dict[str, Outcome] = {REGRESSION_TEST: None, _operation("GET /api/v1/ops/health/"): None}
-	cases.update({_operation(label): outcome for label, outcome in extra.items()})
-	return _write_report(tmp_path, cases)
-
-
-def test_findings_alone_pass_and_are_counted_per_check(tmp_path: Path) -> None:
-	report = _report_with(
+def test_findings_alone_pass_and_are_counted_per_operation(tmp_path: Path) -> None:
+	report = _sound_report_with(
 		tmp_path,
-		post_users=_finding(),
-		post_links=_finding(),
-		get_users=("failure", "schemathesis.core.failures.FailureGroup: ...", FINDING_TWO_CHECKS),
+		_operation("POST /users/", "failure", _finding("RejectedPositiveData")),
+		_operation("POST /links/", "failure", _finding("RejectedPositiveData")),
+		_operation("GET /users/", "failure", _finding("ServerError", "UndefinedStatusCode")),
 	)
 
 	verdict = classify(report, pytest_exit_code=1)
 
 	assert verdict.problems == []
 	assert (verdict.operations, verdict.passed, verdict.failed) == (4, 1, 3)
-	assert verdict.findings_by_check == {
-		"API rejected schema-compliant request (`RejectedPositiveData`)": 2,
-		"Undocumented HTTP status code (`UndefinedStatusCode`)": 1,
-		"Server error (`ServerError`)": 1,
-	}
+	assert verdict.findings_by_check == {"RejectedPositiveData": 2, "ServerError": 1, "UndefinedStatusCode": 1}
+	assert verdict.findings_by_operation["GET /users/"] == ["ServerError", "UndefinedStatusCode"]
 
 
 def test_a_clean_run_passes(tmp_path: Path) -> None:
-	verdict = classify(_report_with(tmp_path), pytest_exit_code=0)
+	verdict = classify(_sound_report_with(tmp_path), pytest_exit_code=0)
 
 	assert verdict.problems == []
 	assert (verdict.operations, verdict.passed, verdict.failed) == (1, 1, 0)
 
 
+def test_a_failure_that_is_not_a_finding_fails_the_run_and_is_named_by_type(tmp_path: Path) -> None:
+	failure = _operation("POST /links/", "failure", _not_a_finding("requests.exceptions.ConnectionError"))
+
+	verdict = classify(_sound_report_with(tmp_path, failure), pytest_exit_code=1)
+
+	assert len(verdict.problems) == 1
+	assert "POST /links/" in verdict.problems[0]
+	assert "requests.exceptions.ConnectionError is not a Schemathesis check failure" in verdict.problems[0]
+	assert verdict.findings_by_check == {}
+
+
+def test_a_failure_without_a_verdict_fails_the_run(tmp_path: Path) -> None:
+	verdict = classify(_sound_report_with(tmp_path, _operation("POST /links/", "failure")), pytest_exit_code=1)
+
+	assert len(verdict.problems) == 1
+	assert f"no {VERDICT} property" in verdict.problems[0]
+
+
+def test_a_finding_verdict_without_checks_fails_the_run(tmp_path: Path) -> None:
+	failure = _operation("POST /links/", "failure", _finding())
+
+	verdict = classify(_sound_report_with(tmp_path, failure), pytest_exit_code=1)
+
+	assert len(verdict.problems) == 1
+	assert verdict.findings_by_check == {}
+
+
 @pytest.mark.parametrize(
-	("text", "expected"),
+	("properties", "other_problems", "findings"),
 	[
-		(CANARY_CREDENTIAL, "credential canary"),
-		(CANARY_CSRF, "CSRF canary"),
-		(CANARY_BESIDE_FINDING, "credential canary"),
+		(((CANARY, "credential"), *_not_a_finding("conftest.FuzzCanaryError")), 1, {}),
+		# A FailureGroup on a later example replaced the canary's exception.
+		(((CANARY, "credential"), *_finding("ServerError")), 0, {"ServerError": 1}),
 	],
+	ids=["canary-raised-last", "canary-masked-by-a-finding"],
 )
-def test_a_canary_fails_the_run(tmp_path: Path, text: str, expected: str) -> None:
-	report = _report_with(tmp_path, post_links=("failure", "AssertionError: ...", text))
+def test_a_fired_canary_fails_the_run(
+	tmp_path: Path, properties: Properties, other_problems: int, findings: dict[str, int]
+) -> None:
+	report = _sound_report_with(tmp_path, _operation("POST /links/", "failure", properties))
 
 	verdict = classify(report, pytest_exit_code=1)
 
-	assert len(verdict.problems) == 1
-	assert expected in verdict.problems[0]
+	assert f"{OPERATION_TEST}[POST /links/]: the credential canary fired" in verdict.problems
+	assert len(verdict.problems) == 1 + other_problems
+	assert verdict.findings_by_check == findings
+
+
+@pytest.mark.parametrize(
+	("outcome", "properties", "other_problems"),
+	[
+		("failure", ((TIMEOUT, "1800"), *_finding("ServerError")), 0),
+		("failure", ((TIMEOUT, "1800"), *_not_a_finding("_pytest.outcomes.Failed")), 1),
+		(None, ((TIMEOUT, "1800"),), 0),
+	],
+	ids=["masked-by-a-finding", "raised-last", "passed"],
+)
+def test_a_reached_timeout_fails_the_run(
+	tmp_path: Path, outcome: str | None, properties: Properties, other_problems: int
+) -> None:
+	report = _sound_report_with(tmp_path, _operation("POST /links/", outcome, properties))
+
+	verdict = classify(report, pytest_exit_code=0 if outcome is None else 1)
+
+	timeout_problems = [problem for problem in verdict.problems if "1800 s timeout" in problem]
+	assert len(timeout_problems) == 1
+	assert len(verdict.problems) == 1 + other_problems
 
 
 @pytest.mark.parametrize("phase", ["setup", "teardown"])
-def test_a_setup_or_teardown_error_fails_the_run(tmp_path: Path, phase: str) -> None:
-	error = ("error", f'failed on {phase} with "RuntimeError: database setup failed"', "RuntimeError")
-	report = _report_with(tmp_path, post_links=error)
+def test_an_error_fails_the_run_whatever_its_properties(tmp_path: Path, phase: str) -> None:
+	# A teardown error after a finding carries the call's finding verdict.
+	error = Case(f"{OPERATION_TEST}[POST /links/]", "error", _finding("ServerError"), f"failed on {phase}")
 
-	verdict = classify(report, pytest_exit_code=1)
+	verdict = classify(_sound_report_with(tmp_path, error), pytest_exit_code=1)
 
 	assert len(verdict.problems) == 1
 	assert f"failed on {phase}" in verdict.problems[0]
-
-
-def test_an_empty_run_fails(tmp_path: Path) -> None:
-	verdict = classify(_write_report(tmp_path, {}), pytest_exit_code=5)
-
-	assert any("collected no operation" in problem for problem in verdict.problems)
-	assert any("exited with 5" in problem for problem in verdict.problems)
-
-
-def test_a_run_without_operations_fails_even_when_pytest_exits_0(tmp_path: Path) -> None:
-	verdict = classify(_write_report(tmp_path, {REGRESSION_TEST: None}), pytest_exit_code=0)
-
-	assert verdict.problems == ["pytest collected no operation to fuzz"]
-
-
-def test_a_mixed_report_fails_and_still_counts_its_findings(tmp_path: Path) -> None:
-	report = _report_with(
-		tmp_path,
-		post_users=_finding(),
-		post_links=("failure", "requests.exceptions.ConnectionError: ...", CONNECTION_ERROR),
-	)
-
-	verdict = classify(report, pytest_exit_code=1)
-
-	assert len(verdict.problems) == 1
-	assert "post_links" in verdict.problems[0]
-	assert "ConnectionError" in verdict.problems[0]
-	assert verdict.findings_by_check == {"API rejected schema-compliant request (`RejectedPositiveData`)": 1}
-
-
-def test_a_finding_grouped_with_another_error_is_not_a_finding(tmp_path: Path) -> None:
-	text = CANARY_BESIDE_FINDING.replace(
-		"    | AssertionError: fuzzer credential was rejected; generated requests are not reaching the handler: {}",
-		"    | requests.exceptions.ConnectionError: Max retries exceeded",
-	)
-
-	verdict = classify(_report_with(tmp_path, post_links=_finding(text)), pytest_exit_code=1)
-
-	assert len(verdict.problems) == 1
-	assert "not a Schemathesis check failure" in verdict.problems[0]
 	assert verdict.findings_by_check == {}
+
+
+def test_a_failing_test_that_is_not_an_operation_fails_the_run(tmp_path: Path) -> None:
+	failure = Case("test_no_auth_provider_expects_a_reauth_replay", "failure")
+
+	verdict = classify(_sound_report_with(tmp_path, failure), pytest_exit_code=1)
+
+	assert len(verdict.problems) == 1
+	assert "not a fuzzed operation" in verdict.problems[0]
 
 
 def test_a_failing_live_server_regression_test_fails_the_run(tmp_path: Path) -> None:
 	report = _write_report(
 		tmp_path,
-		{
-			REGRESSION_TEST: ("failure", "AssertionError: assert None is ...", LIVE_SERVER_REGRESSION),
-			_operation("POST /api/v1/accounts/users/"): _finding(),
-		},
+		[
+			Case(REGRESSION_TEST, "failure", message="AssertionError: assert None is ..."),
+			_operation("POST /users/", "failure", _finding("ServerError")),
+		],
 	)
 
 	verdict = classify(report, pytest_exit_code=1)
@@ -241,16 +201,29 @@ def test_a_failing_live_server_regression_test_fails_the_run(tmp_path: Path) -> 
 
 
 def test_a_missing_live_server_regression_test_fails_the_run(tmp_path: Path) -> None:
-	report = _write_report(tmp_path, {_operation("GET /api/v1/ops/health/"): None})
-
-	verdict = classify(report, pytest_exit_code=0)
+	verdict = classify(_write_report(tmp_path, [HEALTH_PASSED]), pytest_exit_code=0)
 
 	assert verdict.problems == [f"{REGRESSION_TEST} is missing from the report"]
 
 
+def test_an_empty_run_fails(tmp_path: Path) -> None:
+	verdict = classify(_write_report(tmp_path, []), pytest_exit_code=5)
+
+	assert any("collected no operation" in problem for problem in verdict.problems)
+	assert any("exited with 5" in problem for problem in verdict.problems)
+
+
+def test_a_run_without_operations_fails_even_when_pytest_exits_0(tmp_path: Path) -> None:
+	verdict = classify(_write_report(tmp_path, [REGRESSION_PASSED]), pytest_exit_code=0)
+
+	assert verdict.problems == ["pytest collected no operation to fuzz"]
+
+
 @pytest.mark.parametrize("exit_code", [2, 3, 4, 5])
 def test_a_pytest_exit_code_of_2_or_more_fails_the_run(tmp_path: Path, exit_code: int) -> None:
-	verdict = classify(_report_with(tmp_path, post_users=_finding()), pytest_exit_code=exit_code)
+	report = _sound_report_with(tmp_path, _operation("POST /users/", "failure", _finding("ServerError")))
+
+	verdict = classify(report, pytest_exit_code=exit_code)
 
 	assert len(verdict.problems) == 1
 	assert f"exited with {exit_code}" in verdict.problems[0]
@@ -264,39 +237,12 @@ def test_a_pytest_exit_code_of_2_or_more_fails_the_run(tmp_path: Path, exit_code
 def test_an_exit_code_that_disagrees_with_the_report_fails_the_run(
 	tmp_path: Path, exit_code: int, *, with_finding: bool
 ) -> None:
-	report = _report_with(tmp_path, post_users=_finding()) if with_finding else _report_with(tmp_path)
+	finding = [_operation("POST /users/", "failure", _finding("ServerError"))] if with_finding else []
 
-	verdict = classify(report, pytest_exit_code=exit_code)
+	verdict = classify(_sound_report_with(tmp_path, *finding), pytest_exit_code=exit_code)
 
 	assert len(verdict.problems) == 1
 	assert "disagrees" in verdict.problems[0]
-
-
-def test_a_failure_group_with_a_child_that_is_not_a_check_failure_is_not_a_finding(tmp_path: Path) -> None:
-	text = FINDING_ONE_CHECK.replace(
-		"    | schemathesis.openapi.checks.RejectedPositiveData: API rejected schema-compliant request",
-		"    | Traceback (most recent call last):",
-	)
-
-	verdict = classify(_report_with(tmp_path, post_users=_finding(text)), pytest_exit_code=1)
-
-	assert len(verdict.problems) == 1
-	assert "post_users" in verdict.problems[0]
-
-
-def test_children_elided_from_a_failure_group_still_count_as_findings(tmp_path: Path) -> None:
-	text = FINDING_TWO_CHECKS.replace(
-		"    | schemathesis.core.failures.ServerError: Server error",
-		"    | and 3 more exceptions",
-	).replace("+---------------- 2 ----------------", "+---------------- ... ----------------")
-
-	verdict = classify(_report_with(tmp_path, get_users=_finding(text)), pytest_exit_code=1)
-
-	assert verdict.problems == []
-	assert verdict.findings_by_check == {
-		"Undocumented HTTP status code (`UndefinedStatusCode`)": 1,
-		"(not listed in the report)": 1,
-	}
 
 
 @pytest.mark.parametrize("content", [None, "<testsuites><testsuite>"], ids=["missing", "malformed"])
@@ -312,31 +258,77 @@ def test_an_unreadable_report_fails_the_run(tmp_path: Path, content: str | None)
 
 
 def test_main_exits_0_on_findings_and_writes_a_summary(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-	report = _report_with(tmp_path, post_users=_finding())
+	report = _sound_report_with(tmp_path, _operation("POST /users/", "failure", _finding("RejectedPositiveData")))
 
 	exit_code = main([str(report), "--pytest-exit-code", "1"])
 
 	summary = capsys.readouterr().out
 	assert exit_code == 0
 	assert "| 2 | 1 | 1 | 0 |" in summary
-	assert "| API rejected schema-compliant request (`RejectedPositiveData`) | 1 |" in summary
+	assert "| `RejectedPositiveData` | 1 |" in summary
+	assert "- `POST /users/`: `RejectedPositiveData`" in summary
 
 
 def test_main_exits_1_on_a_problem_and_names_it(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-	report = _report_with(tmp_path, post_links=("failure", "AssertionError: ...", CANARY_CSRF))
+	canary = _operation("POST /links/", "failure", ((CANARY, "csrf"), *_not_a_finding("conftest.FuzzCanaryError")))
 
-	exit_code = main([str(report), "--pytest-exit-code", "1"])
+	exit_code = main([str(_sound_report_with(tmp_path, canary)), "--pytest-exit-code", "1"])
 
 	summary = capsys.readouterr().out
 	assert exit_code == 1
-	assert "CSRF canary" in summary
+	assert "**The run is unsound.**" in summary
+	assert "the csrf canary fired" in summary
 
 
-def test_the_markers_still_match_the_fuzz_module() -> None:
-	"""The classifier keys on names and canary messages that live in test_api_fuzz.py."""
-	source = (Path(__file__).resolve().parents[1] / "test_api_fuzz.py").read_text(encoding="utf-8")
+@dataclass(frozen=True)
+class _Operation:
+	outcome: str | None
+	verdict: str | None  # FINDING, "not_a_finding", or None for no verdict property
+	checks: tuple[str, ...]
+	canary: bool
+	timeout: bool
 
-	assert f"def {REGRESSION_TEST}(" in source
-	assert f"def {OPERATION_TEST}(" in source
-	for phrase in classify_fuzz_report.CANARIES.values():
-		assert phrase in source
+
+_OPERATIONS = st.builds(
+	_Operation,
+	outcome=st.sampled_from([None, "skipped", "failure", "error"]),
+	verdict=st.sampled_from([FINDING, "not_a_finding", None]),
+	checks=st.lists(st.sampled_from(["ServerError", "UndefinedStatusCode", "IgnoredAuth"]), max_size=2).map(tuple),
+	canary=st.booleans(),
+	timeout=st.booleans(),
+)
+
+
+@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
+@given(
+	operations=st.lists(_OPERATIONS, max_size=4),
+	regression=st.sampled_from(["passed", "failed", "missing"]),
+	exit_code=st.sampled_from([0, 1, 2]),
+)
+def test_the_run_is_sound_exactly_when_every_rule_holds(
+	tmp_path: Path, operations: list[_Operation], regression: str, exit_code: int
+) -> None:
+	cases = [] if regression == "missing" else [Case(REGRESSION_TEST, "failure" if regression == "failed" else None)]
+	for number, op in enumerate(operations):
+		properties: list[tuple[str, str]] = []
+		if op.verdict is not None:
+			properties.append((VERDICT, op.verdict))
+		properties += [(CHECK, check) for check in op.checks]
+		properties += [(CANARY, "credential")] * op.canary + [(TIMEOUT, "1800")] * op.timeout
+		cases.append(_operation(f"op{number}", op.outcome, tuple(properties)))
+
+	verdict = classify(_write_report(tmp_path, cases), pytest_exit_code=exit_code)
+
+	# Restated from docs/testing.md, independently of the classifier's code.
+	failed = [op.outcome in {"failure", "error"} for op in operations]
+	findings = [op for op in operations if op.outcome == "failure" and op.verdict == FINDING and op.checks]
+	sound = (
+		exit_code == int(any(failed) or regression == "failed")
+		and regression == "passed"
+		and bool(operations)
+		and not any(op.canary or op.timeout for op in operations)
+		and sum(failed) == len(findings)
+	)
+	assert (verdict.problems == []) == sound, verdict.problems
+	assert verdict.findings_by_check == Counter(check for op in findings for check in set(op.checks))
+	assert (verdict.operations, verdict.failed) == (len(operations), sum(failed))
