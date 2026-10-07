@@ -155,6 +155,22 @@ HttpClientAdapter get apiHttpClientAdapter => _dio.httpClientAdapter;
 set apiHttpClientAdapter(HttpClientAdapter adapter) =>
     _dio.httpClientAdapter = adapter;
 
+/// Reads the CSRF token echoed on unsafe methods; null when there is none.
+typedef CsrfTokenReader = String? Function();
+
+String? _browserCsrfToken() =>
+    kIsWeb ? readBrowserCookie(csrfCookieName) : null;
+
+CsrfTokenReader _csrfTokenReader = _browserCsrfToken;
+
+/// Lets a VM test stand in for the browser cookie jar, since `kIsWeb` is a
+/// compile-time constant there.
+@visibleForTesting
+CsrfTokenReader get apiCsrfTokenReader => _csrfTokenReader;
+
+@visibleForTesting
+set apiCsrfTokenReader(CsrfTokenReader reader) => _csrfTokenReader = reader;
+
 /// Sends a POST request to [path], respecting [BackendUrlMode] from [settings].
 ///
 /// In [BackendUrlMode.builtin] mode the built-in compile-time URL is used.
@@ -176,8 +192,14 @@ Future<Response<dynamic>> apiPost(
   fallbackPolicy: fallbackPolicy,
 );
 
-/// POST to a deliberately anonymous endpoint without ambient cookies, bearer
-/// credentials, auth-state side effects, or cross-origin fallback.
+/// POST to a deliberately anonymous endpoint: no bearer credential, no
+/// auth-state side effects, no fallback to another origin.
+///
+/// On web this cannot shed the session cookie: `withCredentials` only governs
+/// cross-origin requests, and production is same-origin. A live cookie makes
+/// the server enforce CSRF, so the token is echoed here as on any unsafe
+/// request; without it the post is a 403. [describeUnsupportedOrigin] runs
+/// first and refuses cross-origin backends on web, so the token stays home.
 ///
 /// [baseUrl] pins diagnostics to the API origin that produced the failure. If
 /// it is absent, the first configured origin is used and is still never
@@ -492,15 +514,11 @@ Future<Response<dynamic>> _performRequest(
       data: body,
       options: Options(
         method: method,
-        headers: _headersWithCredentials(
-          method,
-          headers,
-          credential,
-          sendCredentials: sendCredentials,
-        ),
+        headers: _headersWithCredentials(method, headers, credential),
         responseType: responseType,
         // The browser adapter reads this per request; on other platforms it is
-        // inert. Anonymous diagnostics explicitly disable ambient cookies.
+        // inert. False only withholds cookies cross-origin (the loopback dev
+        // setup); same-origin requests carry them regardless.
         extra: {'withCredentials': sendCredentials},
       ),
     );
@@ -515,19 +533,16 @@ Future<Response<dynamic>> _performRequest(
 Map<String, String> _headersWithCredentials(
   String method,
   Map<String, String> headers,
-  SessionCredential? credential, {
-  required bool sendCredentials,
-}) {
+  SessionCredential? credential,
+) {
   final result = <String, String>{...headers};
 
   if (credential != null) {
     result['Authorization'] = '$sessionAuthScheme ${credential.token}';
   }
 
-  if (sendCredentials &&
-      kIsWeb &&
-      !_csrfSafeMethods.contains(method.toUpperCase())) {
-    final csrfToken = readBrowserCookie(csrfCookieName);
+  if (!_csrfSafeMethods.contains(method.toUpperCase())) {
+    final csrfToken = _csrfTokenReader();
     if (csrfToken != null) {
       result[csrfHeaderName] = csrfToken;
     }

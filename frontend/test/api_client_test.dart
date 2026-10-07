@@ -5,6 +5,8 @@ import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/auth_test_harness.dart';
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -377,6 +379,100 @@ void main() {
 
     test('a garbled backend URL is refused before any request', () {
       expect(describeUnsupportedOrigin('not a url'), contains('not a usable'));
+    });
+  });
+
+  group('CSRF echo', () {
+    const origin = 'https://notif.example.com';
+    late HttpClientAdapter originalAdapter;
+    late CsrfTokenReader originalReader;
+    late FakeApiAdapter adapter;
+    late AppSettingsController settings;
+
+    setUp(() async {
+      originalAdapter = apiHttpClientAdapter;
+      originalReader = apiCsrfTokenReader;
+      adapter = FakeApiAdapter();
+      apiHttpClientAdapter = adapter;
+      settings = await createLoadedSettings();
+      await settings.setCustomBackendUrl('$origin/api/v1');
+      await settings.setBackendUrlMode(BackendUrlMode.customOnly);
+      configureApiAuth(
+        credentialReader: () =>
+            const SessionCredential(token: 'session-token', origin: origin),
+      );
+    });
+
+    tearDown(() {
+      apiHttpClientAdapter = originalAdapter;
+      apiCsrfTokenReader = originalReader;
+      resetApiAuth();
+      settings.dispose();
+    });
+
+    test('the sessionless post echoes the token but sends no bearer', () async {
+      apiCsrfTokenReader = () => 'csrf-token';
+      adapter.enqueue('/client-events/', const FakeReply(statusCode: 202));
+
+      await apiPostWithoutSession(
+        '/client-events/',
+        settings: settings,
+        headers: jsonHeaders,
+        body: const <String, dynamic>{},
+      );
+
+      final request = adapter.requestFor('/client-events/');
+      expect(request.headers[csrfHeaderName], 'csrf-token');
+      expect(request.authorization, isNull);
+    });
+
+    test('a credentialed unsafe request echoes the token too', () async {
+      apiCsrfTokenReader = () => 'csrf-token';
+      adapter.enqueue('/links/', const FakeReply(statusCode: 201));
+
+      await apiPost(
+        '/links/',
+        settings: settings,
+        headers: jsonHeaders,
+        body: const <String, dynamic>{},
+      );
+
+      final request = adapter.requestFor('/links/');
+      expect(request.headers[csrfHeaderName], 'csrf-token');
+      expect(request.authorization, 'Session session-token');
+    });
+
+    test('safe methods never carry the token', () async {
+      apiCsrfTokenReader = () => 'csrf-token';
+      adapter.enqueue('/links/', const FakeReply(statusCode: 200));
+
+      await apiGet('/links/', settings: settings, headers: jsonHeaders);
+
+      expect(
+        adapter.requestFor('/links/').headers,
+        isNot(contains(csrfHeaderName)),
+      );
+    });
+
+    test('no token to read means no header, not an empty one', () async {
+      apiCsrfTokenReader = () => null;
+      adapter.enqueue('/client-events/', const FakeReply(statusCode: 202));
+
+      await apiPostWithoutSession(
+        '/client-events/',
+        settings: settings,
+        headers: jsonHeaders,
+        body: const <String, dynamic>{},
+      );
+
+      expect(
+        adapter.requestFor('/client-events/').headers,
+        isNot(contains(csrfHeaderName)),
+      );
+    });
+
+    test('off the web the default reader yields nothing', () {
+      expect(originalReader(), isNull);
     });
   });
 }
