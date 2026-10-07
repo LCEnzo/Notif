@@ -1,6 +1,25 @@
 import 'package:dio/dio.dart';
-import 'package:notif/services/json_contracts.dart';
 import 'package:notif/services/persistence.dart';
+
+/// A response the schema-generated model for [schema] could not parse.
+///
+/// Generated parsers throw `TypeError` and kin, which are `Error`s that
+/// `on Exception` fetch sites miss; the parse boundary rethrows them as this.
+class ContractViolation implements Exception {
+  const ContractViolation({required this.schema, required this.detail});
+
+  /// OpenAPI component name, e.g. `Link`.
+  final String schema;
+
+  /// What the generated parser threw. It rarely names the field; the stack
+  /// trace of the rethrow does.
+  final String detail;
+
+  String get contractPath => '#/components/schemas/$schema';
+
+  @override
+  String toString() => 'Contract violation in $schema: $detail';
+}
 
 enum FailureCategory {
   networkUnavailable('network_unavailable'),
@@ -35,10 +54,9 @@ class AppFailure implements Exception {
       return AppFailure(
         category: FailureCategory.contractViolation,
         message: 'Server response did not match the app contract.',
-        endpoint: error.endpoint,
-        contractPath: error.path,
-        expected: error.expected,
-        actual: error.actual,
+        endpoint: endpoint,
+        contractPath: error.contractPath,
+        actual: error.detail,
         cause: error,
       );
     }

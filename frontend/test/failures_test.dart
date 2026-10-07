@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/services/failures.dart';
-import 'package:notif/services/json_contracts.dart';
 import 'package:notif/services/persistence.dart';
 
 void main() {
@@ -21,17 +20,14 @@ void main() {
 
   test('classifies contract violations', () {
     final failure = AppFailure.from(
-      const ContractViolation(
-        endpoint: 'GET /x',
-        path: r'$.id',
-        expected: 'integer',
-        actual: 'string',
-      ),
+      const ContractViolation(schema: 'Link', detail: 'name missing'),
+      endpoint: 'GET /monitoring/links/',
     );
 
     expect(failure.category, FailureCategory.contractViolation);
-    expect(failure.contractPath, r'$.id');
-    expect(failure.expected, 'integer');
+    expect(failure.endpoint, 'GET /monitoring/links/');
+    expect(failure.contractPath, '#/components/schemas/Link');
+    expect(failure.actual, 'name missing');
   });
 
   test('classifies corrupt local state', () {

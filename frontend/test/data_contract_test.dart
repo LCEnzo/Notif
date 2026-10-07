@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notif/services/data.dart';
+import 'package:notif/services/failures.dart';
 
 void main() {
   group('schema-contract parsing', () {
@@ -11,8 +12,26 @@ void main() {
       // error and the user would see a silently empty list.
       expect(
         () => Link.fromJson(const <String, dynamic>{'id': 1}, const {}),
-        throwsA(isA<FormatException>()),
+        throwsA(
+          isA<ContractViolation>()
+              .having((error) => error.schema, 'schema', 'Link')
+              .having((error) => error, 'is an Exception', isA<Exception>()),
+        ),
       );
+    });
+
+    test('a contract violation classifies as one, schema path and all', () {
+      Object? caught;
+      try {
+        NotificationItem.fromJson(const <String, dynamic>{'id': 'one'});
+      } on Exception catch (error) {
+        caught = error;
+      }
+
+      final failure = AppFailure.from(caught!, endpoint: 'GET /notifications/');
+      expect(failure.category, FailureCategory.contractViolation);
+      expect(failure.contractPath, '#/components/schemas/Notification');
+      expect(failure.actual, isNotEmpty);
     });
 
     test('unknown strategy class passes through instead of coercing', () {
