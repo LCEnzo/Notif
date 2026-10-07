@@ -54,10 +54,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
 		changed=$(git diff --name-only "$range" 2>/dev/null || true)
 	fi
 
-	if echo "$changed" | grep -Eq '^(backend/|\.github/workflows/backend\.yml)$'; then
+	if echo "$changed" | grep -Eq '^(backend/|\.github/workflows/backend\.yml$)'; then
 		check_backend=true
 	fi
-	if echo "$changed" | grep -Eq '^(frontend/|\.github/workflows/frontend\.yml)$'; then
+	if echo "$changed" | grep -Eq '^(frontend/|\.github/workflows/frontend\.yml$)'; then
 		check_frontend=true
 	fi
 	if echo "$changed" | grep -Eq '^\.githooks/'; then
