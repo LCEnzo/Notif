@@ -126,11 +126,12 @@ def test_a_finding_verdict_without_checks_fails_the_run(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
 	("properties", "other_problems", "findings"),
 	[
-		(((CANARY, "credential"), *_not_a_finding("conftest.FuzzCanaryError")), 1, {}),
-		# A FailureGroup on a later example replaced the canary's exception.
+		(((CANARY, "credential"), *_finding()), 0, {}),
 		(((CANARY, "credential"), *_finding("ServerError")), 0, {"ServerError": 1}),
+		# Hypothesis grouped the canary's FailureGroup with an earlier explicit example's error.
+		(((CANARY, "credential"), *_not_a_finding("builtins.BaseExceptionGroup")), 1, {}),
 	],
-	ids=["canary-raised-last", "canary-masked-by-a-finding"],
+	ids=["alone", "beside-a-finding", "inside-a-hypothesis-group"],
 )
 def test_a_fired_canary_fails_the_run(
 	tmp_path: Path, properties: Properties, other_problems: int, findings: dict[str, int]
@@ -270,7 +271,7 @@ def test_main_exits_0_on_findings_and_writes_a_summary(tmp_path: Path, capsys: p
 
 
 def test_main_exits_1_on_a_problem_and_names_it(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-	canary = _operation("POST /links/", "failure", ((CANARY, "csrf"), *_not_a_finding("conftest.FuzzCanaryError")))
+	canary = _operation("POST /links/", "failure", ((CANARY, "csrf"), *_finding()))
 
 	exit_code = main([str(_sound_report_with(tmp_path, canary)), "--pytest-exit-code", "1"])
 

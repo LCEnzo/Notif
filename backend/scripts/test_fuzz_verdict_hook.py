@@ -29,6 +29,7 @@ from hypothesis import HealthCheck, example, given, settings
 from hypothesis import strategies as st
 from schemathesis.core.failures import FailureGroup, ServerError
 from schemathesis.openapi.checks import UndefinedStatusCode
+from test_api_fuzz import FuzzCanary
 
 CALLS = []
 SETTINGS = settings(
@@ -47,6 +48,10 @@ def failure_group(*extra):
     ])
 
 
+def canary():
+    return FuzzCanary(name="credential", operation="GET /x", message="fuzzer credential was rejected")
+
+
 def first_call():
     CALLS.append(None)
     return len(CALLS) == 1
@@ -59,18 +64,20 @@ def _shape(name: str, body: str, decorators: str = "", fixtures: str = "") -> st
 @pytest.mark.parametrize("shape", ["{name}"])
 @SETTINGS
 {decorators}@given(x=st.integers(min_value=0))
-def {FUZZ_OPERATION_TEST}(shape, x, fuzz_canary{fixtures}):
+def {FUZZ_OPERATION_TEST}(shape, x{fixtures}):
     {body}
 """
 
 
 SHAPES = {
 	"finding": _shape("finding", "raise failure_group()"),
-	"canary": _shape("canary", 'fuzz_canary("credential", "fuzzer credential was rejected")'),
-	# Claessen's d2: the canary's AssertionError, then a FailureGroup that Hypothesis re-raises instead.
-	"canary_then_finding": _shape(
-		"canary_then_finding",
-		'if first_call():\n        fuzz_canary("credential", "fuzzer credential was rejected")\n    raise failure_group()',
+	"canary": _shape("canary", "raise FailureGroup([canary()])"),
+	"canary_beside_findings": _shape("canary_beside_findings", "raise failure_group(canary())"),
+	# An ordinary failure lets Hypothesis carry on; the canary's FailureGroup then ends the test.
+	"error_then_canary": _shape(
+		"error_then_canary",
+		'if first_call():\n        raise requests.exceptions.ConnectionError("refused")\n'
+		"    raise FailureGroup([canary()])",
 	),
 	# Claessen's g2: what pytest-timeout's signal method raises inside the test, then a FailureGroup.
 	"timeout_then_finding": _shape(
@@ -92,7 +99,7 @@ SHAPES = {
 	+ '\n@pytest.fixture\ndef broken():\n    raise RuntimeError("setup broke")\n',
 	"explicit_grouping": _shape(
 		"explicit_grouping",
-		'if x == -1:\n        raise AssertionError("an explicit example failed")\n    raise failure_group()',
+		'if x == -1:\n        raise AssertionError("an explicit example failed")\n    raise failure_group(canary())',
 		decorators="@example(x=-1)\n@example(x=-2)\n",
 	),
 	"passes": _shape("passes", "pass"),
@@ -104,11 +111,9 @@ SHAPES = {
 _GROUP_CHECKS = [(FUZZ_CHECK, "ServerError"), (FUZZ_CHECK, "UndefinedStatusCode")]
 EXPECTED = {
 	"finding": ("failure", [(FUZZ_VERDICT, "finding"), *_GROUP_CHECKS]),
-	"canary": (
-		"failure",
-		[(FUZZ_CANARY, "credential"), (FUZZ_VERDICT, "not_a_finding"), (FUZZ_EXCEPTION, "conftest.FuzzCanaryError")],
-	),
-	"canary_then_finding": ("failure", [(FUZZ_CANARY, "credential"), (FUZZ_VERDICT, "finding"), *_GROUP_CHECKS]),
+	"canary": ("failure", [(FUZZ_CANARY, "credential"), (FUZZ_VERDICT, "finding")]),
+	"canary_beside_findings": ("failure", [(FUZZ_CANARY, "credential"), (FUZZ_VERDICT, "finding"), *_GROUP_CHECKS]),
+	"error_then_canary": ("failure", [(FUZZ_CANARY, "credential"), (FUZZ_VERDICT, "finding")]),
 	"timeout_then_finding": ("failure", [(FUZZ_VERDICT, "finding"), *_GROUP_CHECKS, (FUZZ_TIMEOUT, "0.05")]),
 	"non_failure_member": (
 		"failure",
@@ -122,7 +127,7 @@ EXPECTED = {
 	"setup_error": ("error", []),
 	"explicit_grouping": (
 		"failure",
-		[(FUZZ_VERDICT, "not_a_finding"), (FUZZ_EXCEPTION, "builtins.BaseExceptionGroup")],
+		[(FUZZ_CANARY, "credential"), (FUZZ_VERDICT, "not_a_finding"), (FUZZ_EXCEPTION, "builtins.BaseExceptionGroup")],
 	),
 	"passes": ("passed", []),
 }
@@ -181,7 +186,7 @@ def test_the_hook_records_each_shape_and_the_classifier_reads_it(pytester: pytes
 		*(f"{FUZZ_OPERATION_TEST}[{label}]" for label in EXPECTED if label not in {"finding", "passes"}),
 		f"{FUZZ_OPERATION_TEST}_twin",
 	}
-	assert sorted(verdict.findings_by_operation) == ["canary_then_finding", "finding", "timeout_then_finding"]
+	assert sorted(verdict.findings_by_operation) == ["canary_beside_findings", "finding", "timeout_then_finding"]
 
 
 def test_the_gate_and_the_classifier_name_the_real_tests() -> None:

@@ -2,7 +2,7 @@
 
 Reads the JUnit XML that ``pytest test_api_fuzz.py --junitxml`` writes, and the properties that
 backend/conftest.py records on each fuzzed operation. Exits 0 when every failure is a Schemathesis
-check failure, 1 when the run itself is unsound. Rules and sources: docs/testing.md.
+check failure other than a canary, 1 when the run itself is unsound. Rules and sources: docs/testing.md.
 """
 
 from __future__ import annotations
@@ -57,6 +57,8 @@ def _classify_failure(case: ET.Element, failure: ET.Element, verdict: Verdict) -
 	elif verdicts == [FINDING] and checks:
 		verdict.findings_by_operation[name.removeprefix(f"{OPERATION_TEST}[").removesuffix("]")] = checks
 		verdict.findings_by_check.update(set(checks))
+	elif verdicts == [FINDING] and _properties(case, CANARY):
+		return  # Only canary checks failed, and _classify_case already counts each canary as a problem.
 	elif exceptions := _properties(case, EXCEPTION):
 		verdict.problems.append(f"{name}: {', '.join(exceptions)} is not a Schemathesis check failure: {message}")
 	elif not verdicts:

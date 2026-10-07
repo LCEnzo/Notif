@@ -1,14 +1,15 @@
 """Pytest-wide fixtures for the backend suite."""
 
 import time
-from collections.abc import Callable, Generator
-from typing import Any, NoReturn
+from collections.abc import Generator
+from typing import Any
 
 import pytest
 
 import monitoring.safe_fetch as safe_fetch
 
 # The deep fuzz verdict: JUnit properties that scripts/classify_fuzz_report.py reads. See docs/testing.md.
+# FUZZ_CANARY is also the attribute that names a canary check's failure.
 FUZZ_OPERATION_TEST = "test_operation_survives_generated_input"
 FUZZ_VERDICT = "fuzz_verdict"
 FUZZ_CHECK = "fuzz_check"
@@ -51,33 +52,27 @@ def _bypass_public_host_resolution_for_mocked_network(
 	monkeypatch.setattr(safe_fetch, "resolve_public_host", _resolve_nothing)
 
 
-class FuzzCanaryError(AssertionError):
-	"""A fuzz canary fired: generated requests are not reaching the handler."""
-
-
-@pytest.fixture
-def fuzz_canary(request: pytest.FixtureRequest) -> Callable[[str, str], NoReturn]:
-	"""Fail the fuzz test, recording the canary on the item first so that no later exception can hide it."""
-
-	def fire(name: str, message: str) -> NoReturn:
-		if (FUZZ_CANARY, name) not in request.node.user_properties:
-			request.node.user_properties.append((FUZZ_CANARY, name))
-		raise FuzzCanaryError(message)
-
-	return fire
-
-
 def _is_fuzz_operation(item: pytest.Item) -> bool:
 	return isinstance(item, pytest.Function) and item.originalname == FUZZ_OPERATION_TEST
+
+
+def _canaries(exc: BaseException) -> set[str]:
+	"""The canary checks that failed anywhere in ``exc``, in a Schemathesis or Hypothesis group or bare."""
+	if isinstance(exc, BaseExceptionGroup):
+		return set[str]().union(*map(_canaries, exc.exceptions))
+	canary = getattr(exc, FUZZ_CANARY, None)
+	return {canary} if isinstance(canary, str) else set()
 
 
 def _verdict(exc: BaseException) -> list[tuple[str, str]]:
 	from schemathesis.core.failures import Failure, FailureGroup  # noqa: PLC0415 - only fuzz operations import it
 
+	canaries = [(FUZZ_CANARY, canary) for canary in sorted(_canaries(exc))]
 	if isinstance(exc, FailureGroup) and all(isinstance(member, Failure) for member in exc.exceptions):
-		checks = sorted({type(member).__name__ for member in exc.exceptions})
-		return [(FUZZ_VERDICT, "finding"), *((FUZZ_CHECK, check) for check in checks)]
-	return [(FUZZ_VERDICT, "not_a_finding"), (FUZZ_EXCEPTION, f"{type(exc).__module__}.{type(exc).__qualname__}")]
+		checks = sorted({type(member).__name__ for member in exc.exceptions if not hasattr(member, FUZZ_CANARY)})
+		return [*canaries, (FUZZ_VERDICT, "finding"), *((FUZZ_CHECK, check) for check in checks)]
+	exception = f"{type(exc).__module__}.{type(exc).__qualname__}"
+	return [*canaries, (FUZZ_VERDICT, "not_a_finding"), (FUZZ_EXCEPTION, exception)]
 
 
 # tryfirst: an observer; the first impl to return a result ends this firstresult hook.

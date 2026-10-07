@@ -5,9 +5,8 @@ Profiles (``NOTIF_FUZZ_PROFILE``), how to run them, and why the settings below a
 
 import os
 import socket
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NoReturn, cast
+from typing import Any, cast
 
 import pytest
 import schemathesis
@@ -19,9 +18,10 @@ from django.utils.crypto import get_random_string
 from hypothesis import HealthCheck
 from hypothesis import settings as hypothesis_settings
 from hypothesis import strategies as st
-from schemathesis import AuthContext, Case, CheckFunction
+from schemathesis import AuthContext, Case, CheckContext, CheckFunction, Response
 from schemathesis.checks import CHECKS as CHECKS_REGISTRY
 from schemathesis.checks import load_all_checks, not_a_server_error
+from schemathesis.core.failures import Failure, FailureGroup
 
 from accounts import device_sessions
 from accounts.models import DeviceSession
@@ -76,13 +76,57 @@ _IS_DEEP = _PROFILE == "deep"
 MAX_EXAMPLES = int(os.environ.get("NOTIF_FUZZ_MAX_EXAMPLES", "200" if _IS_DEEP else "5"))
 TIMEOUT_SECONDS = 1800 if _IS_DEEP else 120
 
-# ``ci`` keeps only ``not_a_server_error``, whose failures are always real bugs;
-# ``deep`` passes None, which selects Schemathesis' default checks.
-CHECKS: list[CheckFunction] | None = None if _IS_DEEP else [cast("CheckFunction", not_a_server_error)]
+
+def _requires_auth(case: Case[Any]) -> bool:
+	"""True when the operation declares no anonymous (``{}``) security alternative.
+
+	The schema declares security per operation and has no global default, so the
+	operation's own list is the whole answer.
+	"""
+	security = case.operation.definition.raw.get("security") or []
+	return {} not in security
+
+
+class FuzzCanary(Failure):
+	"""A canary check failed: generated requests are not reaching the handler. Never a finding: see docs/testing.md."""
+
+	def __init__(self, *, name: str, operation: str, message: str) -> None:
+		super().__init__(operation=operation, title=f"The {name} canary fired", message=message)
+		# conftest.FUZZ_CANARY: the verdict hook reports the canary by this name.
+		self.fuzz_canary = name
+
+
+@schemathesis.check
+def credential_canary(ctx: CheckContext, response: Response, case: Case[Any]) -> bool | None:
+	"""A live session never earns a 401 on an operation that requires auth."""
+	if response.status_code == 401 and _requires_auth(case):
+		message = f"fuzzer credential was rejected; generated requests are not reaching the handler: {response.text}"
+		raise FuzzCanary(name="credential", operation=case.operation.label, message=message)
+	return None
+
+
+@schemathesis.check
+def csrf_canary(ctx: CheckContext, response: Response, case: Case[Any]) -> bool | None:
+	"""A CSRF pair that lands never earns DRF's ``403 CSRF Failed`` on a cookie-transport write."""
+	if response.status_code == 403 and "CSRF Failed" in response.text:
+		message = f"fuzzer CSRF token was rejected; generated writes are not reaching the handler: {response.text}"
+		raise FuzzCanary(name="csrf", operation=case.operation.label, message=message)
+	return None
+
+
+def _checks(profile: str) -> list[CheckFunction] | None:
+	"""``ci`` keeps ``not_a_server_error``, whose failures are always real bugs, and the canaries.
+
+	``deep`` passes None: Schemathesis' default checks, every registered one, so the canaries too.
+	"""
+	if profile == "deep":
+		return None
+	# cast: the registry is typed to also hand back check *classes*, but these are plain
+	# functions, and that is what call_and_validate accepts.
+	return cast("list[CheckFunction]", [not_a_server_error, credential_canary, csrf_canary])
+
 
 # ``negative_data_rejection`` reports DRF's deliberate leniency as failures: see docs/testing.md.
-# cast: the registry is typed to also hand back check *classes*, but this one is
-# registered as a plain function and that is what validate_response accepts.
 EXCLUDED_CHECKS = cast("list[CheckFunction]", list(CHECKS_REGISTRY.get_by_names(["negative_data_rejection"])))
 
 # ``ci`` samples, ``deep`` enumerates; ``schema.parametrize()`` never runs ``stateful``. See docs/testing.md.
@@ -156,28 +200,61 @@ def test_live_server_shares_the_test_database_connection(live_server: Any) -> No
 	assert live_server.thread.connections_override.get("default") is default
 
 
+_READ = ("GET", "/api/v1/accounts/users/get_my_info/")
+_WRITE = ("POST", "/api/v1/monitoring/notifications/mark_all_read/")
+_EACH_PROFILE = pytest.mark.parametrize("profile", ["ci", "deep"])
+
+
+def _fuzz(case: Case[Any], base_url: str, profile: str = _PROFILE) -> Response:
+	"""Send one case and run the profile's checks on the response: the fuzz test's whole body."""
+	return case.call_and_validate(base_url=base_url, checks=_checks(profile), excluded_checks=EXCLUDED_CHECKS)
+
+
+def _signed_case(method: str, path: str) -> Case[Any]:
+	"""A case with no generated input, signed in by the provider as every fuzzed case is."""
+	case = schema[path][method].Case()
+	schema.auth.set(case, AuthContext(operation=case.operation, app=schema.app))
+	return case
+
+
+def _canaries(group: BaseExceptionGroup) -> list[str]:
+	return [member.fuzz_canary for member in group.exceptions if isinstance(member, FuzzCanary)]
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.usefixtures("ipv4_localhost", "fuzz_user")
 def test_the_fuzz_session_passes_auth_and_csrf(live_server: Any) -> None:
-	"""Positive control for both canaries: the provider's credential gets a read and a write through."""
-	for method, path in [
-		("GET", "/api/v1/accounts/users/get_my_info/"),
-		("POST", "/api/v1/monitoring/notifications/mark_all_read/"),
-	]:
-		case = schema[path][method].Case()
-		schema.auth.set(case, AuthContext(operation=case.operation, app=schema.app))
-		response = case.call(base_url=live_server.url)
+	"""Positive control for both canaries: the provider's credential gets an auth-required read and write through.
+
+	``ignored_auth`` also takes it for the real credential, not a generated one, and sees the API reject its absence.
+	"""
+	ignored_auth = cast("CheckFunction", CHECKS_REGISTRY.get_one("ignored_auth"))
+	for method, path in (_READ, _WRITE):
+		case = _signed_case(method, path)
+		response = case.call_and_validate(base_url=live_server.url, checks=[ignored_auth])
 		assert response.status_code == 200, f"{method} {path}: {response.text}"
 
 
-def _requires_auth(case: Case[Any]) -> bool:
-	"""True when the operation declares no anonymous (``{}``) security alternative.
+@_EACH_PROFILE
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.usefixtures("ipv4_localhost")
+def test_a_session_without_its_user_fires_the_credential_canary(live_server: Any, profile: str) -> None:
+	"""Negative control: without ``fuzz_user`` the provider's session names no row."""
+	with pytest.raises(FailureGroup) as raised:
+		_fuzz(_signed_case(*_READ), live_server.url, profile)
+	assert _canaries(raised.value) == ["credential"]
 
-	The schema declares security per operation and has no global default, so the
-	operation's own list is the whole answer.
-	"""
-	security = case.operation.definition.raw.get("security") or []
-	return {} not in security
+
+@_EACH_PROFILE
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.usefixtures("ipv4_localhost", "fuzz_user")
+def test_a_mismatched_csrf_header_fires_the_csrf_canary(live_server: Any, profile: str) -> None:
+	"""Negative control: a CSRF header that does not match the cookie."""
+	case = _signed_case(*_WRITE)
+	case.headers["X-CSRFToken"] = get_random_string(CSRF_SECRET_LENGTH, allowed_chars=CSRF_ALLOWED_CHARS)
+	with pytest.raises(FailureGroup) as raised:
+		_fuzz(case, live_server.url, profile)
+	assert _canaries(raised.value) == ["csrf"]
 
 
 @schema.parametrize()
@@ -191,36 +268,7 @@ def _requires_auth(case: Case[Any]) -> bool:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.fuzz
 @pytest.mark.usefixtures("ipv4_localhost", "fuzz_user")
-def test_operation_survives_generated_input(
-	case: Case[Any],
-	live_server: Any,
-	fuzz_canary: Callable[[str, str], NoReturn],
-) -> None:
+def test_operation_survives_generated_input(case: Case[Any], live_server: Any) -> None:
 	# transaction=True is required: live_server serves from a separate thread and
 	# connection, so the fuzzing user must be committed for its session to be seen.
-	# call_and_validate in two halves, so the canaries go first: see docs/testing.md.
-	response = case.call(base_url=live_server.url)
-	# ci fails only on a 5xx, so catch a fuzzer stuck at the auth layer: see docs/testing.md.
-	if response.status_code == 401 and _requires_auth(case):
-		fuzz_canary(
-			"credential",
-			f"fuzzer credential was rejected; generated requests are not reaching the handler: {response.text}",
-		)
-	# The same blind spot one layer down: cookie-transport writes enforce CSRF,
-	# and a token pair that does not land turns every unsafe method into a 403.
-	if response.status_code == 403 and "CSRF Failed" in response.text:
-		fuzz_canary(
-			"csrf",
-			f"fuzzer CSRF token was rejected; generated writes are not reaching the handler: {response.text}",
-		)
-	case.validate_response(
-		response,
-		checks=CHECKS,
-		excluded_checks=EXCLUDED_CHECKS,
-		transport_kwargs={"base_url": live_server.url},
-	)
-
-
-def test_the_auth_provider_asks_for_no_reauth_replay() -> None:
-	"""The split above skips call_and_validate's reauth replay, a no-op only while no provider asks for one."""
-	assert schema.reauth_retry_statuses == frozenset()
+	_fuzz(case, live_server.url)
