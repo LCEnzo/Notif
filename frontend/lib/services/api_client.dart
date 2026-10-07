@@ -402,7 +402,6 @@ Future<Response<dynamic>> _requestWithFallback(
   ResponseType? responseType,
   FallbackPolicy fallbackPolicy = FallbackPolicy.networkErrors,
   SessionCredential? credentialOverride,
-  bool sendCredentials = true,
 }) async {
   final urls = resolveUrls(path, settings);
   if (urls.isEmpty) {
@@ -423,7 +422,6 @@ Future<Response<dynamic>> _requestWithFallback(
         body: body,
         responseType: responseType,
         credentialOverride: credentialOverride,
-        sendCredentials: sendCredentials,
       );
     } on DioException catch (error) {
       lastError = error;
