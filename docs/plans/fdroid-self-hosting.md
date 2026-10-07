@@ -16,7 +16,7 @@ Facts were read in the cited source on 2026-10-06; F1, F2, F17 and F18 were chec
 
 | # | Fact | Source |
 |---|---|---|
-| F1 | The VPS is a Hetzner CX33 running Debian 13: 4 shared x86 vCPU, 8 GB RAM, 80 GB NVMe. Measured: RAM 7757 MB, 964 MB used, 6792 MB available; 4 GB swap, 91 MB used; `/` 75 GB, 46 GB free; Docker images 9.3 GB (8.2 GB reclaimable), build cache 13.8 GB (2.7 GB reclaimable); load average about 0.02. | `NOTES.md`, [vps], [hz]; `ssh notif`: `nproc; free -m; df -h /; docker system df; uptime` |
+| F1 | The VPS is a Hetzner CX33 running Debian 13: 4 shared x86 vCPU, 8 GB RAM, 80 GB NVMe. Measured: RAM 7757 MB, 964 MB used, 6792 MB available; 4 GB swap, 91 MB used; load average about 0.02. After a Docker cleanup: `/` 75 GB, 57 GB free; images 2.2 GB, build cache 2.2 GB. The cleanup removed `flutter:3.44.0` (F12), so the next web deploy or the first APK build pulls it again. | `NOTES.md`, [vps], [hz]; `ssh notif`: `nproc; free -m; df -h /; docker system df; uptime` |
 | F2 | Cloudflare proxies `notif.lcenzo.com` and has proxied wildcard `*.lcenzo.com` A and AAAA records pointing at the VPS. `fdroid.lcenzo.com` already reaches Caddy's `*.lcenzo.com` block (404). That block's origin cert, `/etc/caddy/origin-certs/lcenzo.com.pem`, covers `*.lcenzo.com` and `lcenzo.com` and expires 2041-05-01. A more specific site block beats the wildcard. | `Caddyfile`, [caddy]; Cloudflare DNS, `curl -I`, `openssl x509` on the VPS |
 | F3 | By default Cloudflare caches `.jar` and `.apk` but not `.json`. With no `Cache-Control`, the edge keeps a response 120 min. `no-cache` responses are not cached. | [cf] |
 | F4 | `applicationId` is `com.example.notif`, release builds are signed with the debug key, and the Gradle heap is `-Xmx1536M` (the template uses 8G). Flutter 3.44.0 pins compileSdk 36, minSdk 24 and NDK 28.2.13676358. | `android/app/build.gradle`, [fl] |
@@ -124,22 +124,22 @@ All of these are inference, except the image and NDK sizes (F12) and the VPS fig
 
 | | V. VPS | G. GitHub |
 |---|---|---|
-| Peak VPS RAM | 3-5 GB, capped at 5 GB with no swap (Gradle `Xmx2g`, Kotlin in-process, 2 workers). Of 6.8 GB available, about 1.6 GB stays free, plus 4 GB swap. | under 0.5 GB |
-| One-time VPS disk | 4-6 GB build cache, plus about 1 GB publish image; the Flutter image is already there. 46 GB is free. | about 1 GB publish image |
-| Build time | 5-10 min for the image once; first APK 10-20 min, later 4-10 min | 3-8 min, plus about 1 min to fetch and publish |
+| Peak VPS RAM | 3-5 GB, capped at 5 GB with no swap (Gradle `-Xmx3g`, Kotlin in-process, 2 workers). Of 6.8 GB available, about 1.6 GB stays free, plus 4 GB swap. | under 0.5 GB |
+| One-time VPS disk | 4-6 GB build cache, about 1 GB publish image, and `flutter:3.44.0` (2.28 GB compressed), which the web build shares but the cleanup removed (F1). 57 GB is free. | about 1 GB publish image |
+| Build time | 5-10 min for the image once, plus the `flutter:3.44.0` pull unless a web deploy got there first; first APK 10-20 min, later 4-10 min | 3-8 min, plus about 1 min to fetch and publish |
 | Repo disk | 3 APKs of 10-20 MB each: under 100 MB | same |
 
 ## Phased plan
 
 1. **Phase 0: app prerequisites**, one frontend PR.
    a. Set the `applicationId` and namespace to `com.lcenzo.notif`, and move `MainActivity.kt`.
-   b. Make `build.gradle` fail when no versionCode is set, and raise `org.gradle.jvmargs` to 4G (R8; *inference*).
+   b. Make `build.gradle` fail when no versionCode is set, and set `org.gradle.jvmargs=-Xmx3g` (repo today 1536M, template 8G; R8 needs more, *inference*). That fits the 5 GB cap; Phase 1d measures it.
    c. Release builds keep the debug key; signing happens afterwards.
 2. **Phase 1: path V end to end** (the milestone).
    a. Generate the keys inside the publish image: `fdroid init --keystore /keys/repo-index.p12 --repo-keyalias notif-repo`, then `keytool -genkeypair -storetype pkcs12 -keyalg RSA -keysize 4096 -validity 10000`. Copy `/etc/notif/fdroid/` to `~/Documents` on Luka's PC and commit the fingerprints.
    b. Add `deploy/fdroid/`: two Dockerfiles, `build-apk.sh`, `notif-apk`, `config.yml`, `metadata/`. Add `--apk` to `deploy.sh`.
    c. Add the Caddy block and the compose mount. DNS and the origin cert already cover the host (F2).
-   d. Build and publish, then add the repo on the phone via the QR code in `index.html` and install.
+   d. Build and publish, then add the repo on the phone via the QR code in `index.html` and install. Record the first build's peak memory (`docker stats`, or the cgroup's `memory.peak`) and adjust the heap or the cap from it.
    e. Sign one APK built without the `API_URL` define, with a higher versionCode. Publish must refuse it and name check 3b.
    f. From the phone, check that the F-Droid client refreshes and the app logs in and loads data. A 403 or an HTML page where JSON belongs means a challenge (F17).
    g. Exit criterion: a trivial commit, rebuilt, shows up as an update after one refresh.
