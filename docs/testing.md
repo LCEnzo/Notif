@@ -204,7 +204,7 @@ The hook appends to `item.user_properties` before it yields, because each report
 
 #### Masking: why canaries and timeouts are recorded on the side
 
-`FailureGroup` derives from `BaseExceptionGroup`, not `Exception`, and Hypothesis treats only `Exception`, `SystemExit`, `GeneratorExit` and pytest's `Failed` as test failures (`failure_exceptions_to_catch` in `hypothesis/core.py`). It records a failing example of those and keeps generating and shrinking, but anything else ends the test at once: the explicit-example loop stops at the first `FailureGroup` (`execute_explicit_examples`), and the engine re-raises one from a generated example without shrinking it (`internal/conjecture/engine.py`). When one example fails with an ordinary exception and a later one raises a `FailureGroup`, pytest sees only the `FailureGroup`. A verdict read from the final exception alone would call that run a finding. Two earlier failures matter:
+`FailureGroup` derives from `BaseExceptionGroup`, not `Exception`, and Hypothesis treats only `Exception`, `SystemExit`, `GeneratorExit` and pytest's `Failed` as test failures (`failure_exceptions_to_catch` in `hypothesis/core.py`). It records a failing example of those and keeps generating and shrinking, but anything else ends the test at once: the explicit-example loop stops at the first `FailureGroup` (`execute_explicit_examples`), and the engine re-raises one from a generated example without shrinking it (`internal/conjecture/engine.py`). When one example fails with an ordinary exception and a later one raises a `FailureGroup`, pytest sees only the `FailureGroup`. A verdict read from the final exception alone would call that run a finding. Two earlier failures say the harness is broken, so they are recorded on the side:
 
 1. A canary. The test fires both through the `fuzz_canary` fixture in `backend/conftest.py`, which records `fuzz_canary=<name>` on the item before it raises `FuzzCanaryError`, so the record outlives whatever is raised later. The canaries run between `case.call` and `case.validate_response`, so a check failure on the same response cannot pre-empt them either.
 2. A timeout. On Linux, pytest-timeout's default signal method calls `pytest.fail` inside the running test (`timeout_sigalrm` in `pytest_timeout.py`), and Hypothesis treats that `Failed` as one more failing example and carries on. The hook therefore ignores the timeout's exception. It implements pytest-timeout's `pytest_timeout_set_timer` hook to note when the timer is armed and with what budget, and at teardown records `fuzz_timeout=<budget>` if that much time has passed. Unless `func_only` is set, the timer covers setup, call and teardown, and so does the elapsed time, so a timeout in any phase is recorded; with `func_only` the check only errs on the safe side. An item that reaches its budget before the alarm fires counts as timed out too, which also errs on the safe side. The thread method, the default on Windows, calls `os._exit(1)` instead (`timeout_timer`): no report gets written, or xdist reports the crashed worker without a verdict, and the run fails either way.
@@ -213,9 +213,11 @@ The hook appends to `item.user_properties` before it yields, because each report
 
 `case.call` followed by `case.validate_response` repeats `call_and_validate` (`schemathesis/generation/case.py`) with one omission: `reauth_and_replay`, which refreshes auth and replays the request when the status is one of `schema.reauth_retry_statuses`. Nothing configures reauth here, so the step is a no-op, and `test_no_auth_provider_expects_a_reauth_replay` fails if that changes. Everything else matches: the same `checks` and `excluded_checks`; the same hooks, since `call` fires `before_call`, `after_call` and `after_network_error` and `validate_response` fires `after_validate`; and the same headers, cookies and `transport_kwargs`, which `ignored_auth` needs to replay the request without its credential.
 
-#### Known limit
+#### Known limits
 
 A harness break that turns every response into a 5xx shows up as `ServerError` findings, not as a broken run. Only the live-server regression test and the canaries guard against that.
+
+Masking still hides every other earlier failure. A transport error or an unexpected exception on one example, followed by a `FailureGroup` on a later one, reads as a finding.
 
 ### Mutation sweep
 
