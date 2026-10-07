@@ -1,25 +1,9 @@
-* text=auto
+# LF in every working tree, whatever core.autocrlf says.
+* text=auto eol=lf
 
-*.sh text eol=lf
-*.py text eol=lf
-*.dart text eol=lf
-*.yaml text eol=lf
-*.yml text eol=lf
-*.toml text eol=lf
-*.json text eol=lf
-*.md text eol=lf
-*.html text eol=lf
-*.xml text eol=lf
-*.c text eol=lf
-*.cc text eol=lf
-*.cpp text eol=lf
-*.h text eol=lf
-*.cmake text eol=lf
-*.swift text eol=lf
-
+# cmd.exe can miss GOTO/CALL labels in LF-only batch files.
 *.bat text eol=crlf
 *.cmd text eol=crlf
-*.ps1 text eol=crlf
 
 *.png binary
 *.ico binary
