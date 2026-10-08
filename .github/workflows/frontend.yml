@@ -100,6 +100,14 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # The repo's 1536M Gradle heap fits the VPS build container; Jetifier
+      # over the debug engine jars runs out of it here. ~/.gradle wins over
+      # the project's gradle.properties, so this stays CI-only.
+      - name: Size the Gradle heap for the runner
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g' >> ~/.gradle/gradle.properties
+
       # Writes local.properties and the Gradle wrapper (both gitignored)
       # without building, so the Kotlin tests fail before the APK build.
       - name: Generate Gradle config
