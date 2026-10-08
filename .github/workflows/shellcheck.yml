@@ -10,8 +10,6 @@ on:
       # Explicit, as GitHub does not document whether ** enters dot-directories.
       - '.github/**/*.sh'
       - '.githooks/**'
-      # Extension-less scripts are listed by name, as in the run step.
-      - 'deploy/fdroid/notif-apk'
       - '.github/workflows/shellcheck.yml'
   pull_request:
     branches: [master]
@@ -19,8 +17,6 @@ on:
       - '**/*.sh'
       - '.github/**/*.sh'
       - '.githooks/**'
-      # Extension-less scripts are listed by name, as in the run step.
-      - 'deploy/fdroid/notif-apk'
       - '.github/workflows/shellcheck.yml'
 
 permissions:
@@ -38,11 +34,10 @@ jobs:
       # actions/runner-images toolset-2404.json), so there is no install step.
       # git ls-files picks up new scripts without editing this file.
       # Hooks have no extension; every file in .githooks/ is a bash script.
-      # Other extension-less scripts are named explicitly.
       # --verbose logs the command line, so a green run shows what it checked.
       - name: Shellcheck tracked scripts
         # Explicit bash adds pipefail: a failing git ls-files fails the step.
         shell: bash
         run: |
           shellcheck --version
-          git ls-files -z '*.sh' '.githooks/*' 'deploy/fdroid/notif-apk' | xargs -0 --verbose --no-run-if-empty shellcheck
+          git ls-files -z '*.sh' '.githooks/*' | xargs -0 --verbose --no-run-if-empty shellcheck

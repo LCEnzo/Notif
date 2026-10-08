@@ -22,7 +22,7 @@ improvise around it.
 | Key backups | `~/Documents/notif-fdroid-keys-<date>.tar` on Luka's PC |
 | Cert pins | `deploy/fdroid/pins/apk-cert.sha256`, `deploy/fdroid/pins/repo-index-cert.sha256` |
 | Served repo | `/srv/notif-fdroid/repo` (root, 0755), mounted read-only into Caddy at `/srv/fdroid/repo` |
-| Tool | `/usr/local/bin/notif-apk` -> `deploy/fdroid/notif-apk` in the checkout |
+| Tool | `/usr/local/bin/notif-apk` -> `deploy/fdroid/notif-apk` in the checkout; Python 3.13, standard library only (Debian 13's `python3`) |
 | Images | `notif-apk-publish` (built by `setup`), `notif-apk-build` (built by the first `notif-apk build`) |
 | Caches | Docker volumes `notif-apk-gradle`, `notif-apk-pub`; throwaway worktrees in `~/.cache/notif-apk` |
 

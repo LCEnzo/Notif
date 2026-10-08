@@ -1,6 +1,6 @@
-# fdroidserver 2.4.2 config for the Notif repo, used by publish-apk.sh.
+# fdroidserver 2.4.2 config for the Notif repo, used by publish_apk.py.
 # No secrets here: the password comes from the environment, which
-# publish-apk.sh fills from the mounted password file.
+# publish_apk.py fills from the mounted password file.
 repo_url: https://fdroid.lcenzo.com/repo
 repo_name: Notif
 repo_description: >-
