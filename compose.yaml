@@ -70,6 +70,7 @@ services:
       - FALLBACK_ROOT=/app/fallback
       - FALLBACK_TLS_CERT=${FALLBACK_TLS_CERT:-/etc/caddy/origin-certs/lcenzo.com.pem}
       - FALLBACK_TLS_KEY=${FALLBACK_TLS_KEY:-/etc/caddy/origin-certs/lcenzo.com.key}
+      - FDROID_ROOT=/srv/fdroid
     ports:
       - "80:80"
       - "443:443"
@@ -77,6 +78,8 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./deploy/fallback:/app/fallback:ro
       - /etc/caddy/origin-certs:/etc/caddy/origin-certs:ro
+      # F-Droid repo written by deploy/fdroid/notif-apk publish.
+      - /srv/notif-fdroid/repo:/srv/fdroid/repo:ro
       - staticfiles:/app/staticfiles:ro
       - frontend_dist:/web-dist:ro
       - caddy_data:/data
