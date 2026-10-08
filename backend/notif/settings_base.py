@@ -57,6 +57,7 @@ INSTALLED_APPS = [
 	"accounts",
 	"monitoring",
 	"ops",
+	"health",
 ]
 
 MIDDLEWARE = [
