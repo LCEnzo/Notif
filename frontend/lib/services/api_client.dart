@@ -593,6 +593,11 @@ bool isSessionChallenge(Response<dynamic>? response) {
       );
 }
 
+/// [isSessionChallenge] for an error a request threw, so callers outside this
+/// file can recognise a dead session without touching dio.
+bool isSessionChallengeError(Object error) =>
+    error is DioException && isSessionChallenge(error.response);
+
 /// Validates [response] is 200 and returns decoded JSON as `Map<String, dynamic>`.
 /// Throws a descriptive [Exception] on any non-200 status.
 Map<String, dynamic> expectSuccessJson(

@@ -35,6 +35,12 @@ class AppFailure implements Exception {
   });
 
   factory AppFailure.from(Object error, {String? endpoint}) {
+    // Already classified, e.g. a health sync failure handed to the
+    // client-event sink: reclassifying would turn it into unexpectedFailure.
+    if (error is AppFailure) {
+      return error;
+    }
+
     if (error is ContractViolation) {
       return AppFailure(
         category: FailureCategory.contractViolation,

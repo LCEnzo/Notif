@@ -54,8 +54,22 @@ class PreferenceStore {
     await _write('writeString $key', _prefs.setString(key, value));
   }
 
+  Future<void> writeInt(String key, int value) async {
+    await _write('writeInt $key', _prefs.setInt(key, value));
+  }
+
   Future<void> remove(String key) async {
     await _write('remove $key', _prefs.remove(key));
+  }
+
+  /// Re-reads values another isolate wrote: the plugin caches per isolate,
+  /// and the health sync's WorkManager isolate writes the same store.
+  Future<void> reload() async {
+    try {
+      await _prefs.reload();
+    } on Exception catch (error) {
+      throw PreferenceException('reload', error);
+    }
   }
 
   Future<void> _write(String operation, Future<bool> write) async {
