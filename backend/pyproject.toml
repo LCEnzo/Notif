@@ -16,6 +16,9 @@ dependencies = [
 	"pydantic-settings>=2.14.2,<3.0",
 	"python-dotenv>=1.1,<2.0",
 	"requests>=2.32,<3.0",
+	# zoneinfo's fallback where the image has no system zone database. No upper bound:
+	# each release only carries newer zone rules.
+	"tzdata>=2026.4",
 ]
 
 [dependency-groups]
