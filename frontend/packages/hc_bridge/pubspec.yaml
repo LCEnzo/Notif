@@ -1,0 +1,22 @@
+name: hc_bridge
+description: Notif's read-only bridge to Android Health Connect (connect-client 1.1.0).
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+  flutter: '>=3.38.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  very_good_analysis: ^10.2.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.lcenzo.notif.hc_bridge
+        pluginClass: HcBridgePlugin

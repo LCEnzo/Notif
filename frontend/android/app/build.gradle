@@ -56,7 +56,8 @@ android {
 
     defaultConfig {
         applicationId "com.lcenzo.notif"
-        minSdk flutter.minSdkVersion
+        // Health Connect's connect-client 1.1.0 needs 26; set explicitly rather than inherit Flutter's default.
+        minSdk 26
         targetSdk flutter.targetSdkVersion
         // Debug and profile builds may fall back to 1; release builds are stopped above.
         versionCode((flutterVersionCode ?: "1").toInteger())
