@@ -5,7 +5,7 @@
 [project]
 name = "notif-fdroid-tools"
 version = "0"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.13"
 dependencies = []
 
 [dependency-groups]
