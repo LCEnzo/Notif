@@ -34,7 +34,7 @@ The backend has the following apps:
 
 ### Prerequisites
 
-For the backend, use `uv` with Python 3.13.
+For the backend, use `uv` with Python 3.14.
 
 ### Installation and Setup
 
@@ -45,7 +45,7 @@ For the backend, use `uv` with Python 3.13.
 	```
 2. Sync the backend environment.
 	```bash
-	uv sync --python 3.13
+	uv sync --python 3.14
 	```
 3. Create an `.env` file.
 	```bash
