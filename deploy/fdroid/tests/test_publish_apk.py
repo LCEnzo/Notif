@@ -250,7 +250,9 @@ def repo(tmp_path: Path, monkeypatch):
 	(repo / "index-v2.json").write_text(json.dumps(index_with([2001, 2002, 2003])), encoding="utf-8")
 	(repo / "entry.jar").write_bytes(b"jar")
 	(repo / "icons" / "icon.png").write_bytes(b"png")
-	for path in repo.rglob("*"):
+	# Aged like a served repo/: rsync (3.5.0) does not carry over a directory
+	# mtime from the current second, so a fresh root would differ after restore.
+	for path in [*repo.rglob("*"), repo]:
 		os.utime(path, ns=(1_700_000_000_123_456_789, 1_700_000_000_123_456_789))
 	bin_dir = tmp_path / "bin"
 	bin_dir.mkdir()
@@ -285,6 +287,16 @@ def test_a_failed_fdroid_update_restores_repo_exactly(repo, mode):
 	assert journal.pruned == [apk(2001)]
 	assert journal.restored is True
 	assert fingerprint(repo["repo"]) == before
+
+
+def test_a_restore_in_the_same_second_still_restores_every_file(repo):
+	# The other side of the fixture's ageing: with repo/ changed this second,
+	# rsync leaves directory mtimes as they are, but every file comes back exactly.
+	os.utime(repo["repo"])
+	before = [e for e in fingerprint(repo["repo"]) if e[0] == "file"]
+	_, error = add(repo, "late")
+	assert isinstance(error, publish_apk.PublishError)
+	assert [e for e in fingerprint(repo["repo"]) if e[0] == "file"] == before
 
 
 def test_a_successful_update_prunes_and_publishes(repo):
