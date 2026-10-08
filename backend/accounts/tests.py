@@ -1146,6 +1146,50 @@ class SessionLifetimeTestCase(TestCase):
 		with override_settings(SESSION_IDLE_LIFETIME_DAYS=30):
 			self.assertIsNotNone(session_for_token("lifetime-token", transport=DeviceSession.Transport.BEARER))
 
+	def test_a_session_in_daily_use_lasts_a_year_and_no_longer(self):
+		"""Under the shipped defaults, not an override: a phone that syncs daily
+		keeps its session for a year, and no session is immortal."""
+		session = self._session(last_used_at=timezone.now() - timedelta(days=1))
+
+		for age_days, live in ((364, True), (366, False)):
+			with self.subTest(age_days=age_days):
+				DeviceSession.objects.filter(pk=session.pk).update(created_at=timezone.now() - timedelta(days=age_days))
+				found = session_for_token("lifetime-token", transport=DeviceSession.Transport.BEARER)
+				self.assertEqual(found is not None, live)
+
+	def test_an_authenticated_request_refreshes_the_idle_window(self):
+		"""Background use counts: any authenticated request restarts the idle clock."""
+		stale = timezone.now() - idle_lifetime() + timedelta(days=1)
+
+		for transport in DeviceSession.Transport:
+			with self.subTest(transport=transport):
+				token = f"refresh-{transport}"
+				session = self._session(token_hash=hash_token(token), transport=transport, last_used_at=stale)
+				client = APIClient()
+				if transport == DeviceSession.Transport.BEARER:
+					client.credentials(HTTP_AUTHORIZATION=f"Session {token}")
+				else:
+					client.cookies[settings.SESSION_TOKEN_COOKIE_NAME] = token
+				requested_at = timezone.now()
+
+				response = client.get(reverse("device-sessions-list"))
+
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+				session.refresh_from_db()
+				self.assertGreaterEqual(session.last_used_at, requested_at)
+
+	def test_a_request_cannot_revive_an_idle_expired_session(self):
+		expired = timezone.now() - idle_lifetime() - timedelta(minutes=1)
+		session = self._session(last_used_at=expired)
+		client = APIClient()
+		client.credentials(HTTP_AUTHORIZATION="Session lifetime-token")
+
+		response = client.get(reverse("device-sessions-list"))
+
+		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+		session.refresh_from_db()
+		self.assertEqual(session.last_used_at, expired)
+
 	def test_touch_advances_last_used_at_once_per_damping_interval(self):
 		session = self._session(last_used_at=timezone.now() - TOUCH_INTERVAL - timedelta(minutes=1))
 

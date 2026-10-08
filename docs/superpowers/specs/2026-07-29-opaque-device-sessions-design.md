@@ -50,9 +50,9 @@ Raw token: `secrets.token_urlsafe(32)`; only the hash is stored.
 `now < last_used_at + idle_lifetime`, and `now < created_at +
 absolute_lifetime`. Both lifetimes live in the existing pydantic env config
 (`SESSION_IDLE_LIFETIME_DAYS`, default 14; `SESSION_ABSOLUTE_LIFETIME_DAYS`,
-default 90), deliberately left unset in `.env` files so the defaults apply
-and tuning needs no code change. The cookie `Max-Age` follows the absolute
-lifetime. Server-side expiry is authoritative regardless of cookie lifetime.
+default 365; 90 when this spec was written), deliberately left unset in
+`.env` files so the defaults apply and tuning needs no code change. The
+cookie `Max-Age` follows the absolute lifetime. Server-side expiry is authoritative regardless of cookie lifetime.
 
 There is no remember-me split: every session is remembered, and the devices
 list is the answer to "I logged in somewhere I should not have" — revoke it.

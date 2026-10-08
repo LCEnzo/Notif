@@ -49,7 +49,9 @@ class Settings(BaseSettings):
 	# ── device sessions ────────────────────────────────────
 	# Deliberately absent from the .env files: the defaults are the intended
 	# values, and tuning a lifetime is a deploy-time knob rather than a code
-	# change. Both are bounded so a typo cannot mint an immortal session.
+	# change. Both are bounded so a typo cannot mint an immortal session. The
+	# absolute default sits at the cap: a device that syncs daily should be asked
+	# to sign in again at most once a year.
 	SESSION_IDLE_LIFETIME_DAYS: int = Field(
 		default=14,
 		ge=1,
@@ -57,7 +59,7 @@ class Settings(BaseSettings):
 		description="A session dies this long after its last use.",
 	)
 	SESSION_ABSOLUTE_LIFETIME_DAYS: int = Field(
-		default=90,
+		default=365,
 		ge=1,
 		le=365,
 		description="A session dies this long after it was created, however actively it is used.",
