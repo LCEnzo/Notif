@@ -264,8 +264,8 @@ def _ignore(_signum: int, _frame: FrameType | None) -> None:
 
 
 if __name__ == "__main__":
-	# PID 1 in its container. The shell version had no INT handler there, so
-	# Ctrl-C (which docker forwards) did not cut a key operation short; Python's
-	# default handler would. A handler, not SIG_IGN, so keytool keeps the default.
+	# PID 1 in its container, and docker forwards Ctrl-C to it. Ignored, so a
+	# key operation never stops halfway. A handler, not SIG_IGN, so keytool keeps
+	# the default disposition.
 	signal.signal(signal.SIGINT, _ignore)
 	sys.exit(main(sys.argv, os.environ))

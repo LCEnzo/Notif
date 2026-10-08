@@ -62,7 +62,6 @@ def test_extracts_a_gzipped_backup(tmp_path: Path, dest: Path):
 
 
 def test_the_last_of_duplicate_members_wins_like_tar(tmp_path: Path, dest: Path):
-	tar = make_tar(tmp_path / "b.tar", [("fdroid/apk.pass", b"first"), *key_members()[:1], *key_members()[2:]])
 	tar = make_tar(tmp_path / "b.tar", [("fdroid/apk.pass", b"first"), *key_members()])
 	container_keys.extract_keys(tar, dest)
 	assert (dest / "apk.pass").read_bytes() == CONTENT["apk.pass"]

@@ -420,8 +420,8 @@ if __name__ == "__main__":
 	# Line-buffered, so these lines and fdroid's output stay in order.
 	if isinstance(sys.stdout, io.TextIOWrapper):
 		sys.stdout.reconfigure(line_buffering=True)
-	# PID 1 in its container. The shell version had no INT handler there, so
-	# Ctrl-C (which docker forwards) did not interrupt a publish halfway; Python's
-	# default handler would. A handler, not SIG_IGN, so children keep the default.
+	# PID 1 in its container, and docker forwards Ctrl-C to it. Ignored, so a
+	# publish never stops between its steps, where no rollback would run. A
+	# handler, not SIG_IGN, so children keep the default disposition.
 	signal.signal(signal.SIGINT, _ignore)
 	sys.exit(main(sys.argv, os.environ))

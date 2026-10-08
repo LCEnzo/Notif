@@ -337,18 +337,24 @@ def test_setup_warns_about_a_leftover_export(vps: Host, capsys):
 
 
 @pytest.mark.parametrize(
-	("host", "message"),
+	("make_host", "message"),
 	[
-		(FakeHost(statuses={"inspect": 1}), "refused: cannot read the keys in {keys} (see above); not touching them"),
-		(FakeHost(inspect=deque(["what"])), "unexpected key inspection output: what"),
-		(FakeHost(inspect=deque(["absent"]), statuses={"generate": 1}), "generating the keys failed (see above)"),
-		(FakeHost(inspect=deque(["absent", "absent"])), "generating left {keys} absent"),
-		(FakeHost(inspect=deque(["absent"]), lock_free=False), "another notif-apk run is in progress"),
-		(FakeHost(statuses={"build": 1}), "docker build notif-apk-publish failed (see above)"),
+		(
+			lambda: FakeHost(statuses={"inspect": 1}),
+			"refused: cannot read the keys in {keys} (see above); not touching them",
+		),
+		(lambda: FakeHost(inspect=deque(["what"])), "unexpected key inspection output: what"),
+		(
+			lambda: FakeHost(inspect=deque(["absent"]), statuses={"generate": 1}),
+			"generating the keys failed (see above)",
+		),
+		(lambda: FakeHost(inspect=deque(["absent", "absent"])), "generating left {keys} absent"),
+		(lambda: FakeHost(inspect=deque(["absent"]), lock_free=False), "another notif-apk run is in progress"),
+		(lambda: FakeHost(statuses={"build": 1}), "docker build notif-apk-publish failed (see above)"),
 	],
 )
-def test_setup_failures(vps: Host, capsys, host, message):
-	assert vps.run("setup", host=host) == 1
+def test_setup_failures(vps: Host, capsys, make_host, message):
+	assert vps.run("setup", host=make_host()) == 1
 	assert capsys.readouterr().err.endswith(f"notif-apk: {message.format(keys=vps.keys)}\n")
 
 
@@ -390,21 +396,25 @@ def test_export_keys_refuses_a_dangling_symlink_pickup(vps: Host):
 
 
 @pytest.mark.parametrize(
-	("pins", "host", "message"),
+	("pins", "make_host", "message"),
 	[
-		(None, FakeHost(inspect=deque(["absent"])), "refused: {keys} holds no complete key set (absent)"),
-		((APK_PIN, REPO_PIN), FakeHost(inspect=deque([f"present {OTHER} {REPO_PIN}"])), "the APK key in {keys}"),
+		(None, lambda: FakeHost(inspect=deque(["absent"])), "refused: {keys} holds no complete key set (absent)"),
 		(
 			(APK_PIN, REPO_PIN),
-			FakeHost(inspect=deque([f"present {APK_PIN} {REPO_PIN}"]), statuses={"archive": 1}),
+			lambda: FakeHost(inspect=deque([f"present {OTHER} {REPO_PIN}"])),
+			"the APK key in {keys}",
+		),
+		(
+			(APK_PIN, REPO_PIN),
+			lambda: FakeHost(inspect=deque([f"present {APK_PIN} {REPO_PIN}"]), statuses={"archive": 1}),
 			"archiving the keys failed (see above)",
 		),
 	],
 )
-def test_export_keys_failures_leave_no_file(vps: Host, capsys, pins, host, message):
+def test_export_keys_failures_leave_no_file(vps: Host, capsys, pins, make_host, message):
 	if pins:
 		vps.set_pins(*pins)
-	assert vps.run("export-keys", host=host) == 1
+	assert vps.run("export-keys", host=make_host()) == 1
 	assert message.format(keys=vps.keys) in capsys.readouterr().err
 	assert list(vps.pickup.parent.iterdir()) == []
 
@@ -473,8 +483,8 @@ def test_publish_passes_the_container_status_through(vps: Host):
 	vps.set_pins(APK_PIN, REPO_PIN)
 	apk = vps.root / "x.apk"
 	apk.write_bytes(b"apk")
-	host = FakeHost(statuses={"/tool/publish_apk.py": 1})
-	assert vps.run("publish", str(apk), host=host) == 1
+	host = FakeHost(statuses={"/tool/publish_apk.py": 3})
+	assert vps.run("publish", str(apk), host=host) == 3
 	(publish,) = host.docker_runs()
 	assert publish[-3:] == ["python3", "/tool/publish_apk.py", "/in/notif.apk"]
 	assert [publish[i + 1] for i, word in enumerate(publish) if word == "--env"] == [
@@ -507,30 +517,61 @@ def local_host():
 	signal.signal(signal.SIGHUP, signal.SIG_DFL)
 
 
+def touch(marker: Path, delay: float = 0) -> list[str]:
+	return [sys.executable, "-c", f"import pathlib, time; time.sleep({delay}); pathlib.Path({str(marker)!r}).touch()"]
+
+
 @posix_only
-def test_a_signal_during_a_command_waits_for_it(local_host):
+def test_a_signal_during_a_command_waits_for_it_then_stops(local_host, tmp_path: Path):
 	threading.Timer(0.2, os.kill, (os.getpid(), signal.SIGTERM)).start()
 	with pytest.raises(notif_apk.Interrupted) as raised:
-		local_host.capture([sys.executable, "-c", "import time; time.sleep(1); print('finished')"])
+		local_host.call(touch(tmp_path / "finished", delay=1))
 	assert raised.value.signum == signal.SIGTERM
+	assert (tmp_path / "finished").exists()
 
 
 @posix_only
-def test_held_signals_are_only_recorded(local_host):
+def test_a_pending_signal_starts_no_further_command(local_host, tmp_path: Path):
+	os.kill(os.getpid(), signal.SIGINT)
+	with pytest.raises(notif_apk.Interrupted):
+		local_host.call(touch(tmp_path / "started"))
+	assert not (tmp_path / "started").exists()
+
+
+@posix_only
+def test_held_signals_are_only_recorded(local_host, tmp_path: Path):
 	local_host.hold_signals()
 	os.kill(os.getpid(), signal.SIGINT)
-	assert local_host.capture([sys.executable, "-c", "print('after')"]) == (0, "after")
+	assert local_host.call(touch(tmp_path / "cleanup")) == 0
+	assert (tmp_path / "cleanup").exists()
 	assert local_host.pending == signal.SIGINT
 
 
 @posix_only
-def test_the_lock_excludes_a_second_holder_and_is_inherited(tmp_path: Path):
+def test_a_signal_between_commands_ends_main_with_128_plus_n(vps: Host, local_host):
+	vps.set_pins(APK_PIN, REPO_PIN)
+	os.kill(os.getpid(), signal.SIGTERM)
+	status = notif_apk.main(["notif-apk", "build"], vps.environ, local_host, script=vps.script, as_root=False)
+	assert status == 128 + signal.SIGTERM
+	assert not vps.work.exists()  # stopped before git fetch, so before the work dir
+
+
+@posix_only
+def test_the_lock_is_exclusive_and_only_docker_inherits_it(tmp_path: Path, monkeypatch):
 	first = notif_apk.LocalHost()
 	assert first.lock(tmp_path) is True
 	assert notif_apk.LocalHost().lock(tmp_path) is False
-	fd = first._fds[0]
-	status, _ = first.capture([sys.executable, "-c", f"import os; os.fstat({fd})"])
-	assert status == 0
+	fd = first._lock_fds[0]
+	probe = f"import os, sys; os.fstat({fd})"
+	bin_dir = tmp_path / "bin"
+	bin_dir.mkdir()
+	docker = bin_dir / "docker"
+	docker.write_text(f"#!{sys.executable}\n{probe}\n", encoding="utf-8")
+	docker.chmod(0o755)
+	assert first.call([str(docker)]) != 0  # the path is not "docker"
+	assert first.call([sys.executable, "-c", probe]) != 0
+	monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+	assert first.call(["docker"]) == 0
 
 
 @posix_only

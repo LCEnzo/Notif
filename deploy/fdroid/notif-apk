@@ -256,16 +256,15 @@ def exit_status(returncode: int) -> int:
 
 class LocalHost:
 	"""Runs commands like the shell version: in the foreground, with this
-	process's stdio. HUP, INT and TERM behave like bash traps. While a command
-	runs, a signal waits for it to finish (Ctrl-C reached it too, and docker
-	forwards it to the container). Between commands, it ends notif-apk at once.
-	Either way the `finally` cleanups run, and the exit status is 128 + N."""
+	process's stdio. HUP, INT and TERM are recorded, never raised from the
+	handler: a running command is waited for (Ctrl-C reached it too, and docker
+	forwards it to the container), and no further command starts. notif-apk then
+	unwinds through its `finally` cleanups and exits 128 + N."""
 
 	def __init__(self) -> None:
 		self.pending: int | None = None
-		self._in_child = False
 		self._holding = False
-		self._fds: tuple[int, ...] = ()
+		self._lock_fds: tuple[int, ...] = ()
 
 	def install_signal_handlers(self) -> None:
 		for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
@@ -274,26 +273,27 @@ class LocalHost:
 	def _on_signal(self, signum: int, _frame: FrameType | None) -> None:
 		if self.pending is None:
 			self.pending = signum
-		if not (self._in_child or self._holding):
-			raise Interrupted(signum)
 
 	def hold_signals(self) -> None:
-		"""From now on signals are only recorded; main() exits with them after cleanup."""
+		"""For cleanup: commands run despite a pending signal; run() exits with it afterwards."""
 		self._holding = True
 
-	def _run(self, argv: Sequence[str], stdin: IO[bytes] | None, stdout: int | None) -> tuple[int, bytes | None]:
-		self._in_child = True
-		try:
-			try:
-				proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, pass_fds=self._fds)
-			except FileNotFoundError:
-				print(f"notif-apk: {argv[0]}: command not found", file=sys.stderr)
-				return 127, None
-			out, _ = proc.communicate()
-		finally:
-			self._in_child = False
+	def _check_signal(self) -> None:
 		if self.pending is not None and not self._holding:
 			raise Interrupted(self.pending)
+
+	def _run(self, argv: Sequence[str], stdin: IO[bytes] | None, stdout: int | None) -> tuple[int, bytes | None]:
+		self._check_signal()
+		# Only docker gets the lock: a docker run outliving a killed notif-apk keeps
+		# it, while a detached `git gc --auto` from git fetch does not.
+		fds = self._lock_fds if argv[0] == "docker" else ()
+		try:
+			proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, pass_fds=fds)
+		except FileNotFoundError:
+			print(f"notif-apk: {argv[0]}: command not found", file=sys.stderr)
+			return 127, None
+		out, _ = proc.communicate()
+		self._check_signal()
 		return exit_status(proc.returncode), out
 
 	def call(self, argv: Sequence[str], *, stdin: IO[bytes] | None = None, stdout: int | None = None) -> int:
@@ -305,9 +305,9 @@ class LocalHost:
 		return status, (out or b"").decode("utf-8", "replace").rstrip("\n")
 
 	def lock(self, directory: Path) -> bool:
-		"""flock(2) on the directory, like flock(1). Commands inherit the
-		descriptor, as they did from the shell, so a killed notif-apk keeps the
-		lock until its docker run ends. False if another process holds it."""
+		"""flock(2) on the directory, like flock(1). docker commands inherit the
+		descriptor, so a killed notif-apk keeps the lock until its docker run
+		ends. False if another process holds it."""
 		fd = os.open(directory, os.O_RDONLY)
 		try:
 			fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -315,7 +315,7 @@ class LocalHost:
 			os.close(fd)
 			return False
 		os.set_inheritable(fd, True)  # noqa: FBT003 - positional-only builtin
-		self._fds = (*self._fds, fd)
+		self._lock_fds = (*self._lock_fds, fd)
 		return True
 
 
@@ -677,9 +677,11 @@ def main(argv: Sequence[str], environ: Mapping[str, str], host: Host, *, script:
 
 
 def run() -> int:
-	# Line-buffered, so these lines and the commands' output stay in order in a pipe.
-	if isinstance(sys.stdout, io.TextIOWrapper):
-		sys.stdout.reconfigure(line_buffering=True)
+	# Line-buffered, so these lines and the commands' output stay in order in a
+	# pipe; surrogateescape writes a non-UTF-8 path back as the bytes it was.
+	for stream in (sys.stdout, sys.stderr):
+		if isinstance(stream, io.TextIOWrapper):
+			stream.reconfigure(line_buffering=True, errors="surrogateescape")
 	host = LocalHost()
 	host.install_signal_handlers()
 	# Symlinks resolved: setup points the link at this file, and the checkout is two levels up.
