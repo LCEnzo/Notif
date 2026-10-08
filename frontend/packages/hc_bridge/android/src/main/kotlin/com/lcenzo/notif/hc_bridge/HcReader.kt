@@ -4,26 +4,29 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.changes.DeletionChange
 import androidx.health.connect.client.changes.UpsertionChange
-import androidx.health.connect.client.records.RestingHeartRateRecord
-import androidx.health.connect.client.records.SleepSessionRecord
-import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.feature.ExperimentalMindfulnessSessionApi
 import androidx.health.connect.client.request.AggregateGroupByDurationRequest
-import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
 import androidx.health.connect.client.request.ChangesTokenRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDateTime
-import java.time.Period
 
 internal const val HOUR_MS = 3_600_000L
 internal const val MAX_WINDOW_HOURS = 744L
 internal const val MAX_PAGE_SIZE = 5_000
 
-/** First local month the coverage probe asks about. */
-internal val COVERAGE_FLOOR: LocalDateTime = LocalDateTime.of(2015, 1, 1, 0, 0)
+/** The HC features the app gates on, by the name the Dart side uses. */
+@OptIn(ExperimentalMindfulnessSessionApi::class)
+internal val FEATURES =
+    mapOf(
+        "history" to HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY,
+        "background" to HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND,
+        "skin_temperature" to HealthConnectFeatures.FEATURE_SKIN_TEMPERATURE,
+        "planned_exercise" to HealthConnectFeatures.FEATURE_PLANNED_EXERCISE,
+        "mindfulness" to HealthConnectFeatures.FEATURE_MINDFULNESS_SESSION,
+    )
 
 /**
  * Every Health Connect read Notif makes, as channel-ready maps. Pure over
@@ -41,8 +44,7 @@ internal class HcReader(
     suspend fun status(): Map<String, Any?> =
         mapOf(
             "sdk" to "available",
-            "history" to featureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY),
-            "background" to featureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND),
+            "features" to FEATURES.mapValues { (_, feature) -> featureStatus(feature) },
             "granted" to client.permissionController.getGrantedPermissions().sorted(),
         )
 
@@ -169,62 +171,7 @@ internal class HcReader(
         )
     }
 
-    /**
-     * Monthly totals per type since 2015, in local time. One request per
-     * calendar year keeps each answer to at most 12 slices.
-     */
-    suspend fun coverageProbe(kinds: Set<RecordKind>): Map<String, Any?> {
-        if (kinds.isEmpty()) throw BridgeArgumentException("types must not be empty")
-        val computedAtMs = clock.millis()
-        val now = LocalDateTime.now(clock)
-        val metrics =
-            kinds
-                .map {
-                    when (it) {
-                        RecordKind.STEPS -> StepsRecord.COUNT_TOTAL
-                        RecordKind.RESTING_HEART_RATE -> RestingHeartRateRecord.BPM_AVG
-                        RecordKind.SLEEP_SESSION -> SleepSessionRecord.SLEEP_DURATION_TOTAL
-                    }
-                }
-                .toSet()
-        val months = mutableListOf<Map<String, Any?>>()
-        var yearStart = COVERAGE_FLOOR
-        while (yearStart.isBefore(now)) {
-            val nextYear = yearStart.plusYears(1)
-            val yearEnd = if (nextYear.isBefore(now)) nextYear else now
-            val groups =
-                client.aggregateGroupByPeriod(
-                    AggregateGroupByPeriodRequest(
-                        metrics = metrics,
-                        timeRangeFilter = TimeRangeFilter.between(yearStart, yearEnd),
-                        timeRangeSlicer = Period.ofMonths(1),
-                    )
-                )
-            for (group in groups) {
-                val result = group.result
-                val steps = if (RecordKind.STEPS in kinds) result[StepsRecord.COUNT_TOTAL] else null
-                val restingHr =
-                    if (RecordKind.RESTING_HEART_RATE in kinds) result[RestingHeartRateRecord.BPM_AVG] else null
-                val sleepMs =
-                    if (RecordKind.SLEEP_SESSION in kinds) {
-                        result[SleepSessionRecord.SLEEP_DURATION_TOTAL]?.toMillis()
-                    } else {
-                        null
-                    }
-                if (steps == null && restingHr == null && sleepMs == null) continue
-                months +=
-                    mapOf(
-                        "year" to group.startTime.year,
-                        "month" to group.startTime.monthValue,
-                        "steps_total" to steps,
-                        "resting_hr_avg" to restingHr,
-                        "sleep_ms" to sleepMs,
-                    )
-            }
-            yearStart = nextYear
-        }
-        return mapOf("computed_at_ms" to computedAtMs, "months" to months)
-    }
+    suspend fun coverageProbe(kinds: Set<ProbeKind>): Map<String, Any?> = probeCoverage(client, clock, kinds)
 
     private fun requireRange(startMs: Long, endMs: Long) {
         if (startMs < 0 || endMs <= startMs) {

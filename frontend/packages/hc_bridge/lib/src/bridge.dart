@@ -32,8 +32,9 @@ abstract interface class HcBridge {
 
   Future<HcChangesPage> changes(String token);
 
-  /// `aggregateGroupByPeriod` by local calendar month since 2015 for [types].
-  Future<HcCoverage> coverageProbe(Set<HcRecordType> types);
+  /// Which of [types] hold data: months with data since 2015 where a
+  /// faithful aggregate exists, else a bounded record count.
+  Future<HcCoverage> coverageProbe(Set<HcDataType> types);
 }
 
 class MethodChannelHcBridge implements HcBridge {
@@ -112,7 +113,7 @@ class MethodChannelHcBridge implements HcBridge {
       HcChangesPage.decode(await _invoke('changes', {'token': token}));
 
   @override
-  Future<HcCoverage> coverageProbe(Set<HcRecordType> types) async =>
+  Future<HcCoverage> coverageProbe(Set<HcDataType> types) async =>
       HcCoverage.decode(
         await _invoke('coverageProbe', {
           'types': [for (final type in types) type.wire],

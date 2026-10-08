@@ -1,11 +1,9 @@
 package com.lcenzo.notif.hc_bridge
 
 import androidx.health.connect.client.aggregate.AggregationResultGroupedByDuration
-import androidx.health.connect.client.aggregate.AggregationResultGroupedByPeriod
 import androidx.health.connect.client.changes.DeletionChange
 import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.permission.HealthPermission
-import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
@@ -19,13 +17,10 @@ import androidx.health.connect.client.testing.stubs.Stub
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
-import java.time.LocalDateTime
 import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,8 +64,16 @@ class HcReaderTest {
             status["granted"],
         )
         // The fake implements no features; a real device answers per its HC version.
-        assertEquals("unavailable", status["history"])
-        assertEquals("unavailable", status["background"])
+        assertEquals(
+            mapOf(
+                "history" to "unavailable",
+                "background" to "unavailable",
+                "skin_temperature" to "unavailable",
+                "planned_exercise" to "unavailable",
+                "mindfulness" to "unavailable",
+            ),
+            status["features"],
+        )
     }
 
     @Test
@@ -235,85 +238,8 @@ class HcReaderTest {
     }
 
     @Test
-    fun coverageProbeAsksOneYearAtATimeAndSkipsEmptyMonths() = runTest {
-        var calls = 0
-        val responses =
-            ArrayDeque(
-                listOf(
-                    emptyList(),
-                    listOf(
-                        AggregationResultGroupedByPeriod(
-                            AggregationResult(metrics = mapOf(StepsRecord.COUNT_TOTAL to 12_345L)),
-                            LocalDateTime.of(2016, 6, 1, 0, 0),
-                            LocalDateTime.of(2016, 7, 1, 0, 0),
-                        )
-                    ),
-                )
-            )
-        client.overrides.aggregateGroupByPeriod = Stub {
-            calls++
-            responses.removeFirstOrNull()
-                ?: listOf(
-                    AggregationResultGroupedByPeriod(
-                        AggregationResult(
-                            metrics =
-                                mapOf(
-                                    RestingHeartRateRecord.BPM_AVG to 55L,
-                                    SleepSessionRecord.SLEEP_DURATION_TOTAL to Duration.ofHours(7),
-                                )
-                        ),
-                        LocalDateTime.of(2026, 9, 1, 0, 0),
-                        LocalDateTime.of(2026, 10, 1, 0, 0),
-                    ),
-                    AggregationResultGroupedByPeriod(
-                        AggregationResult(),
-                        LocalDateTime.of(2026, 10, 1, 0, 0),
-                        LocalDateTime.of(2026, 10, 8, 12, 0),
-                    ),
-                )
-        }
-
-        val probe =
-            reader.coverageProbe(setOf(RecordKind.STEPS, RecordKind.RESTING_HEART_RATE, RecordKind.SLEEP_SESSION))
-
-        // 2015 through 2026 inclusive.
-        assertEquals(12, calls)
-        @Suppress("UNCHECKED_CAST")
-        val months = probe["months"] as List<Map<String, Any?>>
-        val june2016 = months.first()
-        assertEquals(2016, june2016["year"])
-        assertEquals(6, june2016["month"])
-        assertEquals(12_345L, june2016["steps_total"])
-        assertNull(june2016["sleep_ms"])
-        val september2026 = months.first { it["year"] == 2026 && it["month"] == 9 }
-        assertEquals(55L, september2026["resting_hr_avg"])
-        assertEquals(7L * 3_600_000L, september2026["sleep_ms"])
-        // 2017..2025 echo the September answer; October 2026 had no metric and is absent.
-        assertFalse(months.any { it["month"] == 10 })
-    }
-
-    @Test
-    fun coverageProbeLeavesOutTypesItWasNotAskedFor() = runTest {
-        client.overrides.aggregateGroupByPeriod = Stub {
-            listOf(
-                AggregationResultGroupedByPeriod(
-                    AggregationResult(metrics = mapOf(StepsRecord.COUNT_TOTAL to 1L)),
-                    LocalDateTime.of(2020, 1, 1, 0, 0),
-                    LocalDateTime.of(2020, 2, 1, 0, 0),
-                )
-            )
-        }
-
-        val probe = reader.coverageProbe(setOf(RecordKind.SLEEP_SESSION))
-
-        @Suppress("UNCHECKED_CAST")
-        assertTrue((probe["months"] as List<Map<String, Any?>>).isEmpty())
-    }
-
-    @Test
     fun emptyTypeSetsAreRefused() {
         assertRefused { reader.changesToken(emptySet()) }
-        assertRefused { reader.coverageProbe(emptySet()) }
     }
 
     private fun assertRefused(block: suspend () -> Unit) {

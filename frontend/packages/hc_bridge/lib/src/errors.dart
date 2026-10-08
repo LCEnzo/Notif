@@ -15,8 +15,7 @@ enum HcErrorCode {
   /// Health Connect's database failed.
   io('io'),
 
-  /// The IPC to Health Connect failed. Before Android 14 this also covers an
-  /// outdated changes token, which the old client reports the same way.
+  /// The IPC to Health Connect failed.
   remote('remote'),
 
   /// A permission request needs a foreground activity and there is none.

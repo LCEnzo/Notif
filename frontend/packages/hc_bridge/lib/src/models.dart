@@ -1,16 +1,20 @@
 import 'package:hc_bridge/src/errors.dart';
 
-/// The record types Notif reads. The wire names are the ingest contract's list
-/// keys.
+const String _read = 'android.permission.health.READ_';
+
+/// The record types Notif uploads. The wire names are the ingest contract's
+/// list keys.
 enum HcRecordType {
-  steps('steps', HcPermissions.readSteps),
-  restingHeartRate('resting_heart_rate', HcPermissions.readRestingHeartRate),
-  sleepSession('sleep_session', HcPermissions.readSleep);
+  steps(HcDataType.steps),
+  restingHeartRate(HcDataType.restingHeartRate),
+  sleepSession(HcDataType.sleepSession);
 
-  const HcRecordType(this.wire, this.readPermission);
+  const HcRecordType(this.dataType);
 
-  final String wire;
-  final String readPermission;
+  final HcDataType dataType;
+
+  String get wire => dataType.wire;
+  String get readPermission => dataType.readPermission;
 }
 
 /// The hourly aggregates Notif uploads; wire names are the contract's
@@ -25,23 +29,110 @@ enum HcAggregateMetric {
   final HcRecordType recordType;
 }
 
-abstract final class HcPermissions {
-  static const String readSteps = 'android.permission.health.READ_STEPS';
-  static const String readRestingHeartRate =
-      'android.permission.health.READ_RESTING_HEART_RATE';
-  static const String readSleep = 'android.permission.health.READ_SLEEP';
-  static const String readHistory =
-      'android.permission.health.READ_HEALTH_DATA_HISTORY';
-  static const String readInBackground =
-      'android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND';
+/// Health Connect features the app gates on; wire names are the bridge's.
+enum HcFeature {
+  history('history'),
+  background('background'),
+  skinTemperature('skin_temperature'),
+  plannedExercise('planned_exercise'),
+  mindfulness('mindfulness');
 
-  /// Everything Notif asks for, in one sheet.
-  static const Set<String> all = {
-    readSteps,
-    readRestingHeartRate,
-    readSleep,
-    readHistory,
-    readInBackground,
+  const HcFeature(this.wire);
+
+  final String wire;
+}
+
+/// Every HC record type Notif may read, exercise routes aside (they have
+/// their own consent flow). Wire names match the bridge's `ProbeKind`; the
+/// second value is the `READ_*` permission's suffix.
+enum HcDataType {
+  activeCaloriesBurned('active_calories_burned', 'ACTIVE_CALORIES_BURNED'),
+  basalBodyTemperature('basal_body_temperature', 'BASAL_BODY_TEMPERATURE'),
+  basalMetabolicRate('basal_metabolic_rate', 'BASAL_METABOLIC_RATE'),
+  bloodGlucose('blood_glucose', 'BLOOD_GLUCOSE'),
+  bloodPressure('blood_pressure', 'BLOOD_PRESSURE'),
+  bodyFat('body_fat', 'BODY_FAT'),
+  bodyTemperature('body_temperature', 'BODY_TEMPERATURE'),
+  bodyWaterMass('body_water_mass', 'BODY_WATER_MASS'),
+  boneMass('bone_mass', 'BONE_MASS'),
+  cervicalMucus('cervical_mucus', 'CERVICAL_MUCUS'),
+  cyclingPedalingCadence('cycling_pedaling_cadence', 'EXERCISE'),
+  distance('distance', 'DISTANCE'),
+  elevationGained('elevation_gained', 'ELEVATION_GAINED'),
+  exerciseSession('exercise_session', 'EXERCISE'),
+  floorsClimbed('floors_climbed', 'FLOORS_CLIMBED'),
+  heartRate('heart_rate', 'HEART_RATE'),
+  heartRateVariabilityRmssd(
+    'heart_rate_variability_rmssd',
+    'HEART_RATE_VARIABILITY',
+  ),
+  height('height', 'HEIGHT'),
+  hydration('hydration', 'HYDRATION'),
+  intermenstrualBleeding('intermenstrual_bleeding', 'INTERMENSTRUAL_BLEEDING'),
+  leanBodyMass('lean_body_mass', 'LEAN_BODY_MASS'),
+  menstruationFlow('menstruation_flow', 'MENSTRUATION'),
+  menstruationPeriod('menstruation_period', 'MENSTRUATION'),
+  mindfulnessSession(
+    'mindfulness_session',
+    'MINDFULNESS',
+    HcFeature.mindfulness,
+  ),
+  nutrition('nutrition', 'NUTRITION'),
+  ovulationTest('ovulation_test', 'OVULATION_TEST'),
+  oxygenSaturation('oxygen_saturation', 'OXYGEN_SATURATION'),
+  plannedExerciseSession(
+    'planned_exercise_session',
+    'PLANNED_EXERCISE',
+    HcFeature.plannedExercise,
+  ),
+  power('power', 'POWER'),
+  respiratoryRate('respiratory_rate', 'RESPIRATORY_RATE'),
+  restingHeartRate('resting_heart_rate', 'RESTING_HEART_RATE'),
+  sexualActivity('sexual_activity', 'SEXUAL_ACTIVITY'),
+  skinTemperature(
+    'skin_temperature',
+    'SKIN_TEMPERATURE',
+    HcFeature.skinTemperature,
+  ),
+  sleepSession('sleep_session', 'SLEEP'),
+  speed('speed', 'SPEED'),
+  steps('steps', 'STEPS'),
+  stepsCadence('steps_cadence', 'STEPS'),
+  totalCaloriesBurned('total_calories_burned', 'TOTAL_CALORIES_BURNED'),
+  vo2Max('vo2_max', 'VO2_MAX'),
+  weight('weight', 'WEIGHT'),
+  wheelchairPushes('wheelchair_pushes', 'WHEELCHAIR_PUSHES');
+
+  const HcDataType(this.wire, String permission, [this.feature])
+    : readPermission = '$_read$permission';
+
+  final String wire;
+  final String readPermission;
+
+  /// The HC feature the type needs, if any.
+  final HcFeature? feature;
+}
+
+abstract final class HcPermissions {
+  static const String readSteps = '${_read}STEPS';
+  static const String readRestingHeartRate = '${_read}RESTING_HEART_RATE';
+  static const String readSleep = '${_read}SLEEP';
+  static const String readHistory = '${_read}HEALTH_DATA_HISTORY';
+  static const String readInBackground = '${_read}HEALTH_DATA_IN_BACKGROUND';
+
+  /// Every data-type read permission.
+  static final Set<String> dataReads = {
+    for (final type in HcDataType.values) type.readPermission,
+  };
+
+  /// Everything Notif asks for, in one sheet, minus what this Health Connect
+  /// cannot grant.
+  static Set<String> requestable(HcStatus status) => {
+    for (final type in HcDataType.values)
+      if (type.feature == null || status.supports(type.feature!))
+        type.readPermission,
+    if (status.supports(HcFeature.history)) readHistory,
+    if (status.supports(HcFeature.background)) readInBackground,
   };
 }
 
@@ -55,53 +146,50 @@ enum HcSdkStatus {
   final String wire;
 }
 
-enum HcFeatureStatus {
-  available('available'),
-  unavailable('unavailable');
-
-  const HcFeatureStatus(this.wire);
-
-  final String wire;
-}
-
 class HcStatus {
   const HcStatus({
     required this.sdk,
-    required this.historyFeature,
-    required this.backgroundFeature,
+    required this.features,
     required this.grantedPermissions,
   });
 
   factory HcStatus.decode(Object? raw) {
     final map = _WireMap.of(raw, 'status');
+    final features = _WireMap.of(map.raw('features'), 'status.features');
     return HcStatus(
       sdk: map.enumValue('sdk', HcSdkStatus.values, (s) => s.wire),
-      historyFeature: map.enumValue(
-        'history',
-        HcFeatureStatus.values,
-        (s) => s.wire,
-      ),
-      backgroundFeature: map.enumValue(
-        'background',
-        HcFeatureStatus.values,
-        (s) => s.wire,
-      ),
+      features: {
+        for (final feature in HcFeature.values)
+          if (features.optionalString(feature.wire) == 'available') feature,
+      },
       grantedPermissions: map.stringList('granted').toSet(),
     );
   }
 
   final HcSdkStatus sdk;
-  final HcFeatureStatus historyFeature;
-  final HcFeatureStatus backgroundFeature;
+
+  /// The features this Health Connect offers.
+  final Set<HcFeature> features;
   final Set<String> grantedPermissions;
 
   bool get available => sdk == HcSdkStatus.available;
+  bool supports(HcFeature feature) => features.contains(feature);
   bool get historyGranted =>
       grantedPermissions.contains(HcPermissions.readHistory);
   bool get backgroundGranted =>
       grantedPermissions.contains(HcPermissions.readInBackground);
 
-  /// The record types whose read permission is granted, in enum order.
+  /// Whether any data type is readable; HC anchors its 30-day window then.
+  bool get anyDataReadable =>
+      grantedPermissions.any(HcPermissions.dataReads.contains);
+
+  /// The data types whose read permission is granted, in enum order.
+  List<HcDataType> get readableDataTypes => [
+    for (final type in HcDataType.values)
+      if (grantedPermissions.contains(type.readPermission)) type,
+  ];
+
+  /// The uploaded record types whose read permission is granted.
   List<HcRecordType> get readableTypes => [
     for (final type in HcRecordType.values)
       if (grantedPermissions.contains(type.readPermission)) type,
@@ -413,56 +501,70 @@ class HcChangesPage {
   }
 }
 
-/// One local calendar month of the coverage probe. A null value means HC had
-/// no data of that type that month.
-class HcCoverageMonth {
-  const HcCoverageMonth({
-    required this.year,
-    required this.month,
-    this.stepsTotal,
-    this.restingHeartRateAvg,
-    this.sleepMs,
+/// One data type's answer from the coverage probe.
+class HcTypeCoverage {
+  const HcTypeCoverage({
+    required this.type,
+    required this.byAggregate,
+    required this.count,
+    this.capped = false,
+    this.firstMonth,
+    this.lastMonth,
   });
 
-  final int year;
-  final int month;
-  final int? stepsTotal;
-  final int? restingHeartRateAvg;
-  final int? sleepMs;
+  final HcDataType type;
 
-  bool has(HcRecordType type) => switch (type) {
-    HcRecordType.steps => stepsTotal != null,
-    HcRecordType.restingHeartRate => restingHeartRateAvg != null,
-    HcRecordType.sleepSession => sleepMs != null,
-  };
+  /// True: [count] is months with data, from monthly aggregates. False: it
+  /// is records, read in bounded pages.
+  final bool byAggregate;
+  final int count;
+
+  /// The record count stopped at the page bound; the true count is higher.
+  final bool capped;
+
+  /// `YYYY-MM`, local; aggregate path only.
+  final String? firstMonth;
+  final String? lastMonth;
+
+  bool get hasData => count > 0;
 }
 
 class HcCoverage {
-  const HcCoverage({required this.computedAtMs, required this.months});
+  const HcCoverage({required this.computedAtMs, required this.types});
 
   factory HcCoverage.decode(Object? raw) {
     final map = _WireMap.of(raw, 'coverageProbe');
     return HcCoverage(
       computedAtMs: map.integer('computed_at_ms'),
-      months: [
-        for (final month in map.list('months'))
-          _decodeMonth(_WireMap.of(month, 'coverageProbe.months[]')),
+      types: [
+        for (final entry in map.list('types'))
+          _decodeType(_WireMap.of(entry, 'coverageProbe.types[]')),
       ],
     );
   }
 
   final int computedAtMs;
+  final List<HcTypeCoverage> types;
 
-  /// Oldest first; months without any data are absent.
-  final List<HcCoverageMonth> months;
-
-  static HcCoverageMonth _decodeMonth(_WireMap map) => HcCoverageMonth(
-    year: map.integer('year'),
-    month: map.integer('month'),
-    stepsTotal: map.optionalInteger('steps_total'),
-    restingHeartRateAvg: map.optionalInteger('resting_hr_avg'),
-    sleepMs: map.optionalInteger('sleep_ms'),
-  );
+  static HcTypeCoverage _decodeType(_WireMap map) {
+    final type = map.enumValue('type', HcDataType.values, (t) => t.wire);
+    return switch (map.string('method')) {
+      'aggregate' => HcTypeCoverage(
+        type: type,
+        byAggregate: true,
+        count: map.integer('months'),
+        firstMonth: map.optionalString('first_month'),
+        lastMonth: map.optionalString('last_month'),
+      ),
+      'records' => HcTypeCoverage(
+        type: type,
+        byAggregate: false,
+        count: map.integer('records'),
+        capped: map.boolean('capped'),
+      ),
+      final other => throw map.malformed('method', 'unknown "$other"'),
+    };
+  }
 }
 
 /// Strict reads from a platform-channel map: a missing or mistyped field is a

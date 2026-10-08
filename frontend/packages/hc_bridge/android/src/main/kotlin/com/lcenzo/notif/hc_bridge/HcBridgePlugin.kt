@@ -95,7 +95,10 @@ class HcBridgePlugin :
                 }
             "changesToken" -> respond(result) { reader().changesToken(call.requireKinds()) }
             "changes" -> respond(result) { reader().changes(call.requireArgument("token")) }
-            "coverageProbe" -> respond(result) { reader().coverageProbe(call.requireKinds()) }
+            "coverageProbe" ->
+                respond(result) {
+                    reader().coverageProbe(call.requireStringList("types").map(ProbeKind::fromWire).toSet())
+                }
             else -> result.notImplemented()
         }
     }
