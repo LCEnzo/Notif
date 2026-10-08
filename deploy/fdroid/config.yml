@@ -1,0 +1,13 @@
+# fdroidserver 2.4.2 config for the Notif repo, used by publish_apk.py.
+# No secrets here: the password comes from the environment, which
+# publish_apk.py fills from the mounted password file.
+repo_url: https://fdroid.lcenzo.com/repo
+repo_name: Notif
+repo_description: >-
+  Release builds of Notif, from https://github.com/LCEnzo/Notif.
+archive_older: 0
+
+keystore: /run/secrets/repo-index.p12
+repo_keyalias: notif-repo
+keystorepass: {env: REPO_KS_PASS}
+keypass: {env: REPO_KS_PASS}
