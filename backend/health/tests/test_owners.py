@@ -4,6 +4,7 @@ Users are soft-deleted by ``User.delete`` (the API path) and hard-deleted by
 ``actually_delete`` or a queryset delete (the admin's bulk action); all three count.
 """
 
+import json
 import logging
 from collections.abc import Callable
 from io import StringIO
@@ -16,13 +17,14 @@ from django.db import OperationalError, transaction
 from django.db.models import QuerySet
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from accounts.models import User
 from commons.test_utils import login_client
 from commons.utils import create_users
-from health.ingest import Deletion, apply_batch
+from health.ingest import Deletion, IngestBatch, IngestOutcome, OwnerGoneError, apply_batch, apply_batch_for_live_owner
 from health.models import AggregateMetric, HealthSource
 from health.owners import OWNED_MODELS
 from health.tests.support import HEALTH_DATABASES, batch, steps_version, uid, window
@@ -170,3 +172,49 @@ def test_a_really_rolled_back_deletion_keeps_the_rows():
 
 	assert User.objects.filter(pk=user.pk).exists()
 	assert _rows(user.pk) == FULL
+
+
+class LiveOwnerGuardTestCase(TestCase):
+	"""A batch whose owner was deleted after authenticating must not outlive the purge."""
+
+	databases = HEALTH_DATABASES
+
+	def setUp(self):
+		self.user = create_users()[0]
+
+	def test_a_live_owner_is_stored(self):
+		apply_batch_for_live_owner(self.user.pk, batch(steps_version(uid(1), last_modified=1)))
+
+		assert _rows(self.user.pk)["HealthRecord"] == 1
+
+	def test_a_deleted_or_deactivated_owner_is_refused_and_nothing_is_stored(self):
+		changes: list[tuple[str, dict[str, Any]]] = [
+			("deleted", {"date_deleted": timezone.now()}),
+			("deactivated", {"is_active": False}),
+		]
+		for label, change in changes:
+			with self.subTest(label):
+				user = User.objects.create_user(email=f"{label}@example.com", username=label, password="x" * 12)
+				User._base_manager.filter(pk=user.pk).update(**change)
+
+				with pytest.raises(OwnerGoneError, match=f"User {user.pk} was deleted or deactivated"):
+					apply_batch_for_live_owner(user.pk, batch(steps_version(uid(1), last_modified=1)))
+
+				assert _rows(user.pk) == EMPTY
+
+	def test_a_deletion_between_authentication_and_ingest_is_a_401(self):
+		client = login_client(APIClient(), self.user.get_username())
+
+		def deleted_mid_request(owner_id: int, batch: IngestBatch) -> IngestOutcome:
+			# The deletion commits after the session authenticated this request.
+			User._base_manager.filter(pk=owner_id).update(is_active=False, date_deleted=timezone.now())
+			return apply_batch_for_live_owner(owner_id, batch)
+
+		with patch("health.views.apply_batch_for_live_owner", deleted_mid_request):
+			response = client.post(
+				reverse("health-ingest"), data=json.dumps({"coverage_start_ms": None}), content_type="application/json"
+			)
+
+		assert response.status_code == status.HTTP_401_UNAUTHORIZED
+		assert response["WWW-Authenticate"] == "Session"
+		assert _rows(self.user.pk) == EMPTY

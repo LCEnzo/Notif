@@ -17,6 +17,7 @@ from uuid import UUID
 
 from django.db import router, transaction
 
+from accounts.models import User
 from health.models import (
 	HOUR_MS,
 	AggregateMetric,
@@ -187,6 +188,23 @@ class _RecordCounts:
 class _AggregateCounts:
 	written: int
 	ignored: int
+
+
+class OwnerGoneError(Exception):
+	"""The owner was deleted or deactivated before the batch could be stored."""
+
+
+def apply_batch_for_live_owner(owner_id: int, batch: IngestBatch) -> IngestOutcome:
+	"""``apply_batch``, refused unless ``owner_id`` is an active, undeleted user.
+
+	Checked under the health write lock (transactions are IMMEDIATE). A deletion's purge
+	runs after the deletion commits and takes the same lock, so it either waits for this
+	batch and removes it, or ran first, and then this check sees the deletion.
+	"""
+	with transaction.atomic(using=router.db_for_write(HealthRecord)):
+		if not User.objects.filter(pk=owner_id, is_active=True).exists():
+			raise OwnerGoneError(f"User {owner_id} was deleted or deactivated; the batch was not stored.")
+		return apply_batch(owner_id, batch)
 
 
 def apply_batch(owner_id: int, batch: IngestBatch) -> IngestOutcome:

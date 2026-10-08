@@ -133,6 +133,8 @@ A window with no stored answer at all has no row: that is a gap. A complete wind
 
 Deleting a user deletes that user's `HealthRecord`, `HealthDeletion`, `HealthAggregate` and `HealthIngestBatch` rows (`backend/health/owners.py`). Users are soft-deleted (`User.delete`, which the API's `DELETE /api/v1/accounts/users/{id}/` calls, sets `date_deleted`) or hard-deleted (`actually_delete`, the admin's bulk delete). Either kind schedules the purge with `transaction.on_commit` on the user's database, so a deletion that rolls back keeps the rows. Deactivation (`is_active` false, no `date_deleted`) keeps them. `HealthSource` rows are shared across owners and stay.
 
+An ingest request that authenticated before the deletion committed cannot leave rows behind. Before writing, ingest checks under the health write lock that its owner is still active and undeleted (health transactions are `IMMEDIATE`). The purge takes the same lock after the deletion commits, so it either waits for the batch and removes it, or it ran first, and then the check sees the deletion and the request gets a 401. This ordering argument has not been exercised with two real concurrent connections.
+
 A purge that fails after the deletion committed is logged at ERROR, which makes it a `SystemEvent` naming the user id. `uv run python manage.py purge_health_orphans` then deletes the rows of every owner the default user manager no longer returns, which covers soft- and hard-deleted users.
 
 ## Known limits

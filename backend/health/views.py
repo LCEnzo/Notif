@@ -1,6 +1,7 @@
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -9,7 +10,7 @@ from rest_framework.views import APIView
 from accounts.models import User
 from commons.openapi import ErrorDetailSerializer
 from health import limits
-from health.ingest import IngestBatch, apply_batch
+from health.ingest import IngestBatch, OwnerGoneError, apply_batch_for_live_owner
 from health.parsers import BoundedJSONParser
 from health.serializers import HealthIngestResponseSerializer, HealthIngestSerializer
 
@@ -78,5 +79,9 @@ class HealthIngestView(APIView):
 		serializer.is_valid(raise_exception=True)
 		batch = serializer.validated_data
 		assert isinstance(batch, IngestBatch)
-		outcome = apply_batch(owner_id=user.pk, batch=batch)
+		try:
+			outcome = apply_batch_for_live_owner(owner_id=user.pk, batch=batch)
+		except OwnerGoneError as exc:
+			# The account was deleted after this request authenticated; its session is gone too.
+			raise AuthenticationFailed("The account was deleted or deactivated.") from exc
 		return Response(HealthIngestResponseSerializer(outcome).data, status=status.HTTP_200_OK)
