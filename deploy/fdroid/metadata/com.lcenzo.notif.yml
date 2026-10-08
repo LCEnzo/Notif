@@ -9,7 +9,7 @@ Summary: Personal super app
 Description: |-
   Notif collects updates from the sites, feeds and forums it monitors and
   shows them in one place. Also other stuff.
-  
+
   This build talks to https://notif.lcenzo.com.
 
 AutoUpdateMode: None
