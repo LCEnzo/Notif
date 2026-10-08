@@ -6,6 +6,7 @@ star-import this module and override explicitly. Nothing here may branch on
 DEBUG, test detection, or any other ambient environment value.
 """
 
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -57,6 +58,7 @@ INSTALLED_APPS = [
 	"accounts",
 	"monitoring",
 	"ops",
+	"health",
 ]
 
 MIDDLEWARE = [
@@ -125,6 +127,14 @@ DATABASES = {
 		},
 	}
 }
+# Health Connect data gets its own file, so a backfill never holds the main
+# writer lock and the file can be copied without account data. The router keeps
+# the health app here and everything else out; see docs/architecture/health-ingest.md.
+DATABASES["health"] = {
+	**deepcopy(DATABASES["default"]),
+	"NAME": settings.health_sqlite_path,
+}
+DATABASE_ROUTERS = ["health.routers.HealthRouter"]
 
 # Password validation
 # https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators
@@ -197,6 +207,8 @@ _REST_THROTTLE_RATES = {
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
 	"scrape": "12/min",
+	# Its own budget, not the shared user one: a backfill sends hundreds of batches.
+	"health_ingest": "2000/hour",
 }
 
 REST_FRAMEWORK: dict[str, Any] = {
@@ -229,6 +241,12 @@ SPECTACULAR_SETTINGS = {
 	# Separate request and response components: read-only fields leave requests,
 	# write-only fields leave responses, and request strings gain minLength 1.
 	"COMPONENT_SPLIT_REQUEST": True,
+	# Field names alone (type, stage, metric) would give these generic component names.
+	"ENUM_NAME_OVERRIDES": {
+		"HealthDeviceTypeEnum": "health.models.DeviceType",
+		"SleepStageEnum": "health.models.SleepStage",
+		"HealthAggregateMetricEnum": "health.models.AggregateMetric",
+	},
 }
 
 # Logs go to stdout/stderr so Docker's json-file driver and systemd's

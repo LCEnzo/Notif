@@ -44,6 +44,11 @@ class Settings(BaseSettings):
 		description="URL prefix for the Django admin (must end with '/'). Override in production to reduce brute-force log noise.",
 	)
 	SQLITE_PATH: str = Field(default="db.sqlite3", min_length=1)
+	HEALTH_SQLITE_PATH: str | None = Field(
+		default=None,
+		min_length=1,
+		description="Health Connect store. Defaults to health.sqlite3 beside SQLITE_PATH, so it shares its volume.",
+	)
 	CADDY_ACCESS_LOG_PATH: str = Field(default="/app/caddy-logs/access.json", min_length=1)
 
 	# ── device sessions ────────────────────────────────────
@@ -127,6 +132,14 @@ class Settings(BaseSettings):
 		if self.EMAIL_HOST_PASSWORD is None:
 			self.EMAIL_HOST_PASSWORD = self.RESEND_API_KEY
 
+		# One file for both aliases would share django_migrations: migrating either
+		# alias would mark the other's migrations applied without creating its tables.
+		if Path(self.health_sqlite_path).resolve() == Path(self.SQLITE_PATH).resolve():
+			raise ValueError(
+				f"HEALTH_SQLITE_PATH and SQLITE_PATH both point at {self.SQLITE_PATH}; "
+				"the Health Connect store needs its own file."
+			)
+
 		if self.NOTIF_ENV == Environment.PRODUCTION and self.DEBUG:
 			raise ValueError(
 				"NOTIF_ENV=production with DEBUG=true is not allowed: DEBUG marks a local "
@@ -140,6 +153,10 @@ class Settings(BaseSettings):
 				"it or set it to false."
 			)
 		return self
+
+	@property
+	def health_sqlite_path(self) -> str:
+		return self.HEALTH_SQLITE_PATH or str(Path(self.SQLITE_PATH).with_name("health.sqlite3"))
 
 	@property
 	def is_local(self) -> bool:
