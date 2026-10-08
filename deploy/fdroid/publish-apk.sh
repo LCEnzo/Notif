@@ -8,7 +8,8 @@
 #   /run/secrets/repo-index.pass
 #   APK_CERT_SHA256, REPO_CERT_SHA256   pinned cert digests from deploy/fdroid/pins
 #
-# Exit 0: published, or versionCode already published (no-op). Exit 1: refused.
+# Exit 0: published, or versionCode already published (no-op). Exit 1: refused, or
+# publishing failed and repo/ was restored to its state before the run.
 set -Eeuo pipefail
 
 readonly app_id=com.lcenzo.notif
@@ -106,22 +107,52 @@ if [[ -e $target || -L $target ]]; then
 fi
 info "check 3d passed: $(basename -- "$target") is new"
 
-install -m 0644 -- "$apk" "$target"
-
-# Keep the newest $keep APKs. Only names this script writes are candidates.
-mapfile -t codes < <(find "$repo" -maxdepth 1 -type f -name "${app_id}_*.apk" -printf '%f\n' \
-  | sed -nE "s/^${app_id//./\\.}_([0-9]+)\\.apk\$/\\1/p" | sort -rn)
-for code in "${codes[@]:keep}"; do
-  rm -f -- "$repo/${app_id}_$code.apk"
-  info "pruned ${app_id}_$code.apk"
-done
-
 install -d -m 0700 "$work/metadata"
 install -m 0600 /tool/config.yml "$work/config.yml"
 install -m 0644 "/tool/metadata/$app_id.yml" "$work/metadata/$app_id.yml"
-cd "$work"
-if ! fdroid update; then
-  rm -f -- "$target"
-  refuse "fdroid update failed; removed $(basename -- "$target") so a retry is not blocked by check 3d"
+
+# Keep the newest $keep APKs, counting the new one. Only names this script writes are candidates.
+mapfile -t codes < <({
+  find "$repo" -maxdepth 1 -type f -name "${app_id}_*.apk" -printf '%f\n'
+  printf '%s\n' "${app_id}_$version_code.apk"
+} | sed -nE "s/^${app_id//./\\.}_([0-9]+)\\.apk\$/\\1/p" | sort -rn)
+prune=("${codes[@]:keep}")
+
+# Everything below changes repo/, so first keep what is needed to put it back:
+# a copy of the non-APK files, and the pruned APKs, moved here instead of deleted.
+snapshot=$scratch/repo-before
+held=$scratch/pruned
+mkdir -- "$held"
+rsync -a --exclude='/*.apk' "$repo/" "$snapshot/" || refuse "cannot snapshot repo/"
+pruned=()
+
+# Runs as an if condition, where set -e is off; every step checks itself.
+apply() {
+  local code name
+  install -m 0644 -- "$apk" "$target" || return 1
+  for code in "${prune[@]}"; do
+    name=${app_id}_$code.apk
+    mv -- "$repo/$name" "$held/$name" || return 1
+    pruned+=("$name")
+  done
+  (cd "$work" && fdroid update) || return 1
+}
+
+rollback() {
+  local name ok=0
+  rm -f -- "$target" || ok=1
+  for name in "${pruned[@]}"; do
+    mv -- "$held/$name" "$repo/$name" || ok=1
+  done
+  rsync -a --delete --exclude='/*.apk' "$snapshot/" "$repo/" || ok=1
+  return "$ok"
+}
+
+if ! apply; then
+  rollback || refuse "publish failed, and so did restoring repo/; it is now inconsistent (see the errors above)"
+  refuse "publish failed (see the output above); restored repo/ to its state before this run"
 fi
+for name in "${pruned[@]}"; do
+  info "pruned $name"
+done
 info "published $(basename -- "$target")"

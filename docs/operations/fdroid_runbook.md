@@ -360,7 +360,8 @@ refresh F-Droid once: Notif must show an update. Install it and open the app.
 | `REFUSED: check 3c: ... lower than the newest published` | an older commit, or `master` was rewritten | build a newer commit; never force-push `master` |
 | `REFUSED: check 3d: ... already exists in repo/` | a stray APK not in the index, left by an interrupted publish | report; remove only after confirming it is not in `index-v2.json` |
 | `another notif-apk run is in progress` | another build or publish holds the lock | wait for it |
-| `REFUSED: fdroid update failed; removed ...` | indexing failed; the new APK was removed again | report the `fdroid` output above it |
+| `REFUSED: publish failed (see the output above); restored repo/ to its state before this run` | `fdroid update` (or moving an APK) failed after the checks passed; the new APK was removed, and the pruned APKs and the old index files were put back | report the `fdroid` output above it; the repo still serves what it served before |
+| `REFUSED: publish failed, and so did restoring repo/; it is now inconsistent` | the restore failed too; pruned APKs that were not put back are lost | stop; do not refresh F-Droid on the phone; report the whole output |
 
 To reset the build caches (for example after a Flutter upgrade):
 `docker volume rm notif-apk-gradle notif-apk-pub`.
