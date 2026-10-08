@@ -115,12 +115,170 @@ ErrorMessage _$ErrorMessageFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$ErrorMessageToJson(ErrorMessage instance) =>
     <String, dynamic>{'error': instance.error};
 
+HealthAggregateBucketRequest _$HealthAggregateBucketRequestFromJson(
+  Map<String, dynamic> json,
+) => HealthAggregateBucketRequest(
+  startMs: (json['start_ms'] as num).toInt(),
+  value: (json['value'] as num).toInt(),
+  dataOrigins:
+      (json['data_origins'] as List<dynamic>?)
+          ?.map((e) => e as String)
+          .toList() ??
+      [],
+);
+
+Map<String, dynamic> _$HealthAggregateBucketRequestToJson(
+  HealthAggregateBucketRequest instance,
+) => <String, dynamic>{
+  'start_ms': instance.startMs,
+  'value': instance.value,
+  'data_origins': instance.dataOrigins,
+};
+
+HealthAggregateWindowRequest _$HealthAggregateWindowRequestFromJson(
+  Map<String, dynamic> json,
+) => HealthAggregateWindowRequest(
+  metric: healthAggregateMetricEnumFromJson(json['metric']),
+  startMs: (json['start_ms'] as num).toInt(),
+  endMs: (json['end_ms'] as num).toInt(),
+  computedAtMs: (json['computed_at_ms'] as num).toInt(),
+  buckets:
+      (json['buckets'] as List<dynamic>?)
+          ?.map(
+            (e) => HealthAggregateBucketRequest.fromJson(
+              e as Map<String, dynamic>,
+            ),
+          )
+          .toList() ??
+      [],
+);
+
+Map<String, dynamic> _$HealthAggregateWindowRequestToJson(
+  HealthAggregateWindowRequest instance,
+) => <String, dynamic>{
+  'metric': healthAggregateMetricEnumToJson(instance.metric),
+  'start_ms': instance.startMs,
+  'end_ms': instance.endMs,
+  'computed_at_ms': instance.computedAtMs,
+  'buckets': instance.buckets.map((e) => e.toJson()).toList(),
+};
+
 HealthCheckResponse _$HealthCheckResponseFromJson(Map<String, dynamic> json) =>
     HealthCheckResponse(status: json['status'] as String);
 
 Map<String, dynamic> _$HealthCheckResponseToJson(
   HealthCheckResponse instance,
 ) => <String, dynamic>{'status': instance.status};
+
+HealthDeletionRequest _$HealthDeletionRequestFromJson(
+  Map<String, dynamic> json,
+) => HealthDeletionRequest(
+  hcId: json['hc_id'] as String,
+  observedAtMs: (json['observed_at_ms'] as num).toInt(),
+);
+
+Map<String, dynamic> _$HealthDeletionRequestToJson(
+  HealthDeletionRequest instance,
+) => <String, dynamic>{
+  'hc_id': instance.hcId,
+  'observed_at_ms': instance.observedAtMs,
+};
+
+HealthDeviceRequest _$HealthDeviceRequestFromJson(Map<String, dynamic> json) =>
+    HealthDeviceRequest(
+      type: healthDeviceTypeEnumFromJson(json['type']),
+      manufacturer: json['manufacturer'] as String?,
+      model: json['model'] as String?,
+    );
+
+Map<String, dynamic> _$HealthDeviceRequestToJson(
+  HealthDeviceRequest instance,
+) => <String, dynamic>{
+  'type': healthDeviceTypeEnumToJson(instance.type),
+  'manufacturer': instance.manufacturer,
+  'model': instance.model,
+};
+
+HealthIngestRequest _$HealthIngestRequestFromJson(
+  Map<String, dynamic> json,
+) => HealthIngestRequest(
+  coverageStartMs: (json['coverage_start_ms'] as num?)?.toInt(),
+  steps:
+      (json['steps'] as List<dynamic>?)
+          ?.map((e) => StepsRecordRequest.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      [],
+  restingHeartRate:
+      (json['resting_heart_rate'] as List<dynamic>?)
+          ?.map(
+            (e) => RestingHeartRateRecordRequest.fromJson(
+              e as Map<String, dynamic>,
+            ),
+          )
+          .toList() ??
+      [],
+  sleepSession:
+      (json['sleep_session'] as List<dynamic>?)
+          ?.map(
+            (e) =>
+                SleepSessionRecordRequest.fromJson(e as Map<String, dynamic>),
+          )
+          .toList() ??
+      [],
+  deletions:
+      (json['deletions'] as List<dynamic>?)
+          ?.map(
+            (e) => HealthDeletionRequest.fromJson(e as Map<String, dynamic>),
+          )
+          .toList() ??
+      [],
+  aggregateWindows:
+      (json['aggregate_windows'] as List<dynamic>?)
+          ?.map(
+            (e) => HealthAggregateWindowRequest.fromJson(
+              e as Map<String, dynamic>,
+            ),
+          )
+          .toList() ??
+      [],
+);
+
+Map<String, dynamic> _$HealthIngestRequestToJson(
+  HealthIngestRequest instance,
+) => <String, dynamic>{
+  'coverage_start_ms': instance.coverageStartMs,
+  'steps': instance.steps?.map((e) => e.toJson()).toList(),
+  'resting_heart_rate': instance.restingHeartRate
+      ?.map((e) => e.toJson())
+      .toList(),
+  'sleep_session': instance.sleepSession?.map((e) => e.toJson()).toList(),
+  'deletions': instance.deletions?.map((e) => e.toJson()).toList(),
+  'aggregate_windows': instance.aggregateWindows
+      ?.map((e) => e.toJson())
+      .toList(),
+};
+
+HealthIngestResponse _$HealthIngestResponseFromJson(
+  Map<String, dynamic> json,
+) => HealthIngestResponse(
+  batchId: (json['batch_id'] as num).toInt(),
+  recordsWritten: (json['records_written'] as num).toInt(),
+  recordsIgnored: (json['records_ignored'] as num).toInt(),
+  recordsDeleted: (json['records_deleted'] as num).toInt(),
+  aggregatesWritten: (json['aggregates_written'] as num).toInt(),
+  aggregatesIgnored: (json['aggregates_ignored'] as num).toInt(),
+);
+
+Map<String, dynamic> _$HealthIngestResponseToJson(
+  HealthIngestResponse instance,
+) => <String, dynamic>{
+  'batch_id': instance.batchId,
+  'records_written': instance.recordsWritten,
+  'records_ignored': instance.recordsIgnored,
+  'records_deleted': instance.recordsDeleted,
+  'aggregates_written': instance.aggregatesWritten,
+  'aggregates_ignored': instance.aggregatesIgnored,
+};
 
 Link _$LinkFromJson(Map<String, dynamic> json) => Link(
   id: (json['id'] as num?)?.toInt(),
@@ -383,6 +541,34 @@ Map<String, dynamic> _$PatchedUserCreationRequestToJson(
   'password': instance.password,
 };
 
+RestingHeartRateRecordRequest _$RestingHeartRateRecordRequestFromJson(
+  Map<String, dynamic> json,
+) => RestingHeartRateRecordRequest(
+  hcId: json['hc_id'] as String,
+  dataOrigin: json['data_origin'] as String,
+  lastModifiedMs: (json['last_modified_ms'] as num).toInt(),
+  recordingMethod: recordingMethodEnumFromJson(json['recording_method']),
+  device: json['device'] == null
+      ? null
+      : HealthDeviceRequest.fromJson(json['device'] as Map<String, dynamic>),
+  timeMs: (json['time_ms'] as num).toInt(),
+  offsetS: (json['offset_s'] as num?)?.toInt(),
+  beatsPerMinute: (json['beats_per_minute'] as num).toInt(),
+);
+
+Map<String, dynamic> _$RestingHeartRateRecordRequestToJson(
+  RestingHeartRateRecordRequest instance,
+) => <String, dynamic>{
+  'hc_id': instance.hcId,
+  'data_origin': instance.dataOrigin,
+  'last_modified_ms': instance.lastModifiedMs,
+  'recording_method': recordingMethodEnumToJson(instance.recordingMethod),
+  'device': instance.device?.toJson(),
+  'time_ms': instance.timeMs,
+  'offset_s': instance.offsetS,
+  'beats_per_minute': instance.beatsPerMinute,
+};
+
 SessionRevokeResponse _$SessionRevokeResponseFromJson(
   Map<String, dynamic> json,
 ) => SessionRevokeResponse(
@@ -393,6 +579,60 @@ SessionRevokeResponse _$SessionRevokeResponseFromJson(
 Map<String, dynamic> _$SessionRevokeResponseToJson(
   SessionRevokeResponse instance,
 ) => <String, dynamic>{'status': instance.status, 'revoked': instance.revoked};
+
+SleepSessionRecordRequest _$SleepSessionRecordRequestFromJson(
+  Map<String, dynamic> json,
+) => SleepSessionRecordRequest(
+  hcId: json['hc_id'] as String,
+  dataOrigin: json['data_origin'] as String,
+  lastModifiedMs: (json['last_modified_ms'] as num).toInt(),
+  recordingMethod: recordingMethodEnumFromJson(json['recording_method']),
+  device: json['device'] == null
+      ? null
+      : HealthDeviceRequest.fromJson(json['device'] as Map<String, dynamic>),
+  startMs: (json['start_ms'] as num).toInt(),
+  startOffsetS: (json['start_offset_s'] as num?)?.toInt(),
+  endMs: (json['end_ms'] as num).toInt(),
+  endOffsetS: (json['end_offset_s'] as num?)?.toInt(),
+  title: json['title'] as String?,
+  notes: json['notes'] as String?,
+  stages:
+      (json['stages'] as List<dynamic>?)
+          ?.map((e) => SleepStageRequest.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      [],
+);
+
+Map<String, dynamic> _$SleepSessionRecordRequestToJson(
+  SleepSessionRecordRequest instance,
+) => <String, dynamic>{
+  'hc_id': instance.hcId,
+  'data_origin': instance.dataOrigin,
+  'last_modified_ms': instance.lastModifiedMs,
+  'recording_method': recordingMethodEnumToJson(instance.recordingMethod),
+  'device': instance.device?.toJson(),
+  'start_ms': instance.startMs,
+  'start_offset_s': instance.startOffsetS,
+  'end_ms': instance.endMs,
+  'end_offset_s': instance.endOffsetS,
+  'title': instance.title,
+  'notes': instance.notes,
+  'stages': instance.stages.map((e) => e.toJson()).toList(),
+};
+
+SleepStageRequest _$SleepStageRequestFromJson(Map<String, dynamic> json) =>
+    SleepStageRequest(
+      startMs: (json['start_ms'] as num).toInt(),
+      endMs: (json['end_ms'] as num).toInt(),
+      stage: sleepStageEnumFromJson(json['stage']),
+    );
+
+Map<String, dynamic> _$SleepStageRequestToJson(SleepStageRequest instance) =>
+    <String, dynamic>{
+      'start_ms': instance.startMs,
+      'end_ms': instance.endMs,
+      'stage': sleepStageEnumToJson(instance.stage),
+    };
 
 StatusCheckResponse _$StatusCheckResponseFromJson(Map<String, dynamic> json) =>
     StatusCheckResponse(
@@ -418,6 +658,38 @@ StatusResponse _$StatusResponseFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$StatusResponseToJson(StatusResponse instance) =>
     <String, dynamic>{'status': instance.status};
+
+StepsRecordRequest _$StepsRecordRequestFromJson(Map<String, dynamic> json) =>
+    StepsRecordRequest(
+      hcId: json['hc_id'] as String,
+      dataOrigin: json['data_origin'] as String,
+      lastModifiedMs: (json['last_modified_ms'] as num).toInt(),
+      recordingMethod: recordingMethodEnumFromJson(json['recording_method']),
+      device: json['device'] == null
+          ? null
+          : HealthDeviceRequest.fromJson(
+              json['device'] as Map<String, dynamic>,
+            ),
+      startMs: (json['start_ms'] as num).toInt(),
+      startOffsetS: (json['start_offset_s'] as num?)?.toInt(),
+      endMs: (json['end_ms'] as num).toInt(),
+      endOffsetS: (json['end_offset_s'] as num?)?.toInt(),
+      count: (json['count'] as num).toInt(),
+    );
+
+Map<String, dynamic> _$StepsRecordRequestToJson(StepsRecordRequest instance) =>
+    <String, dynamic>{
+      'hc_id': instance.hcId,
+      'data_origin': instance.dataOrigin,
+      'last_modified_ms': instance.lastModifiedMs,
+      'recording_method': recordingMethodEnumToJson(instance.recordingMethod),
+      'device': instance.device?.toJson(),
+      'start_ms': instance.startMs,
+      'start_offset_s': instance.startOffsetS,
+      'end_ms': instance.endMs,
+      'end_offset_s': instance.endOffsetS,
+      'count': instance.count,
+    };
 
 Strategy _$StrategyFromJson(Map<String, dynamic> json) => Strategy(
   id: (json['id'] as num?)?.toInt(),
