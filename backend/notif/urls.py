@@ -33,6 +33,7 @@ urlpatterns = [
 	path("api/v1/accounts/", include("accounts.urls")),
 	path("api/v1/monitoring/", include("monitoring.urls")),
 	path("api/v1/ops/", include("ops.urls")),
+	path("api/v1/health/", include("health.urls")),
 	path("api/v1/client-events/", ClientEventView.as_view(), name="client-events"),
 	# OpenAPI schema & docs (public — no auth so agents can discover the API)
 	path("api/v1/schema/", SpectacularAPIView.as_view(permission_classes=[AllowAny]), name="schema"),

@@ -34,6 +34,48 @@ enum CategoryEnum {
   const CategoryEnum(this.value);
 }
 
+enum HealthAggregateMetricEnum {
+  @JsonValue(null)
+  swaggerGeneratedUnknown(null),
+
+  @JsonValue('steps_count_total')
+  stepsCountTotal('steps_count_total'),
+  @JsonValue('sleep_duration_total')
+  sleepDurationTotal('sleep_duration_total');
+
+  final String? value;
+
+  const HealthAggregateMetricEnum(this.value);
+}
+
+enum HealthDeviceTypeEnum {
+  @JsonValue(null)
+  swaggerGeneratedUnknown(null),
+
+  @JsonValue('unknown')
+  unknown('unknown'),
+  @JsonValue('watch')
+  watch('watch'),
+  @JsonValue('phone')
+  phone('phone'),
+  @JsonValue('scale')
+  scale('scale'),
+  @JsonValue('ring')
+  ring('ring'),
+  @JsonValue('head_mounted')
+  headMounted('head_mounted'),
+  @JsonValue('fitness_band')
+  fitnessBand('fitness_band'),
+  @JsonValue('chest_strap')
+  chestStrap('chest_strap'),
+  @JsonValue('smart_display')
+  smartDisplay('smart_display');
+
+  final String? value;
+
+  const HealthDeviceTypeEnum(this.value);
+}
+
 enum LevelEnum {
   @JsonValue(null)
   swaggerGeneratedUnknown(null),
@@ -52,6 +94,50 @@ enum LevelEnum {
   final String? value;
 
   const LevelEnum(this.value);
+}
+
+enum RecordingMethodEnum {
+  @JsonValue(null)
+  swaggerGeneratedUnknown(null),
+
+  @JsonValue('unknown')
+  unknown('unknown'),
+  @JsonValue('actively_recorded')
+  activelyRecorded('actively_recorded'),
+  @JsonValue('automatically_recorded')
+  automaticallyRecorded('automatically_recorded'),
+  @JsonValue('manual_entry')
+  manualEntry('manual_entry');
+
+  final String? value;
+
+  const RecordingMethodEnum(this.value);
+}
+
+enum SleepStageEnum {
+  @JsonValue(null)
+  swaggerGeneratedUnknown(null),
+
+  @JsonValue('unknown')
+  unknown('unknown'),
+  @JsonValue('awake')
+  awake('awake'),
+  @JsonValue('sleeping')
+  sleeping('sleeping'),
+  @JsonValue('out_of_bed')
+  outOfBed('out_of_bed'),
+  @JsonValue('light')
+  light('light'),
+  @JsonValue('deep')
+  deep('deep'),
+  @JsonValue('rem')
+  rem('rem'),
+  @JsonValue('awake_in_bed')
+  awakeInBed('awake_in_bed');
+
+  final String? value;
+
+  const SleepStageEnum(this.value);
 }
 
 enum StatusEnum {

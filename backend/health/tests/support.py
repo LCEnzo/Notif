@@ -76,3 +76,70 @@ def store(owner_id: int) -> dict[str, Any]:
 		for row in HealthAggregate.objects.filter(owner_id=owner_id)
 	}
 	return {"records": records, "tombstones": tombstones, "aggregates": aggregates}
+
+
+# ── wire payloads ────────────────────────────────────────────
+
+
+def device_wire(**overrides: Any) -> dict[str, Any]:
+	return {"type": "watch", "manufacturer": "Google", "model": "Pixel Watch 2", **overrides}
+
+
+def steps_wire(n: int, **overrides: Any) -> dict[str, Any]:
+	start = ms(2026, 10, 1, 8) + n * 60_000
+	return {
+		"hc_id": str(uid(n)),
+		"data_origin": ORIGIN,
+		"last_modified_ms": ms(2026, 10, 2),
+		"recording_method": "automatically_recorded",
+		"device": device_wire(),
+		"start_ms": start,
+		"start_offset_s": 7_200,
+		"end_ms": start + 60_000,
+		"end_offset_s": 7_200,
+		"count": 42,
+		**overrides,
+	}
+
+
+def resting_heart_rate_wire(n: int, **overrides: Any) -> dict[str, Any]:
+	return {
+		"hc_id": str(uid(10_000 + n)),
+		"data_origin": "com.fitbit.FitbitMobile",
+		"last_modified_ms": ms(2026, 10, 2),
+		"recording_method": "unknown",
+		"device": None,
+		"time_ms": ms(2026, 10, 1, 6) + n * HOUR,
+		"offset_s": 7_200,
+		"beats_per_minute": 54,
+		**overrides,
+	}
+
+
+def sleep_wire(n: int, **overrides: Any) -> dict[str, Any]:
+	start = ms(2026, 9, 30, 21) + n * 24 * HOUR
+	steps = {key: value for key, value in steps_wire(0).items() if key != "count"}
+	return {
+		**steps,
+		"hc_id": str(uid(20_000 + n)),
+		"start_ms": start,
+		"end_ms": start + 8 * HOUR,
+		"title": None,
+		"notes": "",
+		"stages": [
+			{"start_ms": start + HOUR, "end_ms": start + 2 * HOUR, "stage": "deep"},
+			{"start_ms": start, "end_ms": start + HOUR, "stage": "light"},
+		],
+		**overrides,
+	}
+
+
+def window_wire(start: int, hours: int, **overrides: Any) -> dict[str, Any]:
+	return {
+		"metric": "steps_count_total",
+		"start_ms": start,
+		"end_ms": start + hours * HOUR,
+		"computed_at_ms": ms(2026, 10, 2),
+		"buckets": [{"start_ms": start, "value": 321, "data_origins": [ORIGIN]}],
+		**overrides,
+	}

@@ -198,6 +198,8 @@ _REST_THROTTLE_RATES = {
 	"password_reset": "3/min",
 	"password_reset_confirm": "5/min",
 	"scrape": "12/min",
+	# Its own budget, not the shared user one: a backfill sends hundreds of batches.
+	"health_ingest": "2000/hour",
 }
 
 REST_FRAMEWORK: dict[str, Any] = {
@@ -230,6 +232,12 @@ SPECTACULAR_SETTINGS = {
 	# Separate request and response components: read-only fields leave requests,
 	# write-only fields leave responses, and request strings gain minLength 1.
 	"COMPONENT_SPLIT_REQUEST": True,
+	# Field names alone (type, stage, metric) would give these generic component names.
+	"ENUM_NAME_OVERRIDES": {
+		"HealthDeviceTypeEnum": "health.models.DeviceType",
+		"SleepStageEnum": "health.models.SleepStage",
+		"HealthAggregateMetricEnum": "health.models.AggregateMetric",
+	},
 }
 
 # Logs go to stdout/stderr so Docker's json-file driver and systemd's

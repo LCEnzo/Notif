@@ -15,8 +15,10 @@ from hypothesis import event, given, settings
 from hypothesis import strategies as st
 
 from health.ingest import AggregateBucket, AggregateWindow, Deletion, IngestBatch, RecordVersion, Source, apply_batch
+from health.limits import MAX_INGEST_ITEMS
 from health.models import AggregateMetric, RecordType
-from health.tests.support import HOUR, ORIGIN, owner, store, uid
+from health.serializers import HealthIngestSerializer
+from health.tests.support import HOUR, ORIGIN, owner, steps_wire, store, uid, window_wire
 
 IDS = [uid(n) for n in range(1, 5)]
 SOURCES = [
@@ -159,3 +161,23 @@ def test_any_order_and_duplication_converges(batches: list[IngestBatch], data: s
 			present = [answer for answer, at in answers[key] if at == newest and answer is not None]
 			assert (computed_at, value) == (newest, max(present) if present else None)
 		raise _RollbackError
+
+
+@pytest.mark.property
+@given(
+	total=st.integers(MAX_INGEST_ITEMS - 2, MAX_INGEST_ITEMS + 2),
+	steps=st.integers(0, 3),
+	window_hours=st.lists(st.integers(1, 744), max_size=6),
+)
+@settings(max_examples=25, deadline=None)
+def test_a_batch_is_accepted_iff_its_items_fit(total: int, steps: int, window_hours: list[int]):
+	deletions = max(0, total - steps - sum(window_hours))
+	body = {
+		"coverage_start_ms": None,
+		"steps": [steps_wire(n) for n in range(steps)],
+		"deletions": [{"hc_id": str(uid(n)), "observed_at_ms": 1} for n in range(deletions)],
+		"aggregate_windows": [window_wire(0, hours, buckets=[]) for hours in window_hours],
+	}
+	serializer = HealthIngestSerializer(data=body)
+
+	assert serializer.is_valid() is (steps + deletions + sum(window_hours) <= MAX_INGEST_ITEMS), serializer.errors
