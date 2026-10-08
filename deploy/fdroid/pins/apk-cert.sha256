@@ -1,0 +1,3 @@
+# SHA-256 of the APK signing certificate (DER), as 64 lowercase hex digits
+# on one line below. Empty until runbook step c; notif-apk refuses to run
+# while it is empty.

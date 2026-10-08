@@ -1,0 +1,14 @@
+Categories:
+  - Internet
+AuthorName: Luka Colić
+SourceCode: https://github.com/LCEnzo/Notif
+IssueTracker: https://github.com/LCEnzo/Notif/issues
+
+Name: Notif
+Summary: Updates from monitored sites, in one place
+Description: |-
+  Notif collects updates from the sites, feeds and forums it monitors and
+  shows them in one place. This build talks to https://notif.lcenzo.com.
+
+AutoUpdateMode: None
+UpdateCheckMode: None

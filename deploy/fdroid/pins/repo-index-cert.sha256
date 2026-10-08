@@ -1,0 +1,4 @@
+# SHA-256 of the repo index signing certificate (DER), as 64 lowercase hex
+# digits on one line below; the F-Droid client shows it as the repo
+# fingerprint. Empty until runbook step c; notif-apk refuses to run while
+# it is empty.

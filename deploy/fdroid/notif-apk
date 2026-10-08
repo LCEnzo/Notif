@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+# notif-apk: build Notif APKs and publish them to the self-hosted F-Droid repo.
+# Runbook: docs/operations/fdroid_runbook.md
+#
+# Runs on the VPS as a docker-group user. Fixed locations, overridable for tests:
+#   NOTIF_FDROID_KEYS  /etc/notif/fdroid    apk.p12, apk.pass, repo-index.p12, repo-index.pass
+#   NOTIF_FDROID_DATA  /srv/notif-fdroid    repo/ is what Caddy serves
+#   NOTIF_APK_WORK     ~/.cache/notif-apk   throwaway worktrees and build output
+set -Eeuo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  notif-apk build [commit]   Build <commit> (default: origin/master after a fetch)
+                             as a signed arm64 APK, then publish it.
+  notif-apk publish <apk>    Check a signed APK and add it to the F-Droid repo.
+USAGE
+}
+
+die() {
+  printf 'notif-apk: %s\n' "$*" >&2
+  exit 1
+}
+
+self=$(readlink -f -- "${BASH_SOURCE[0]}")
+fdroid_dir=${self%/*}
+checkout=$(cd -- "$fdroid_dir/../.." && pwd)
+readonly self fdroid_dir checkout
+readonly keys_dir=${NOTIF_FDROID_KEYS:-/etc/notif/fdroid}
+readonly data_dir=${NOTIF_FDROID_DATA:-/srv/notif-fdroid}
+readonly work_root=${NOTIF_APK_WORK:-${XDG_CACHE_HOME:-$HOME/.cache}/notif-apk}
+readonly build_image=notif-apk-build
+readonly publish_image=notif-apk-publish
+
+work=
+apk_pin=
+repo_pin=
+
+read_pin() {
+  local name=$1 file=$fdroid_dir/pins/$1 pin
+  [[ -f $file ]] || die "refused: pin file deploy/fdroid/pins/$name does not exist"
+  pin=$(sed '/^[[:space:]]*#/d' "$file" | tr -d '[:space:]')
+  [[ -n $pin ]] || die "refused: pin missing: deploy/fdroid/pins/$name has no value (runbook step c)"
+  [[ $pin =~ ^[0-9a-f]{64}$ ]] || die "refused: deploy/fdroid/pins/$name is not a lowercase SHA-256 hex digest"
+  printf '%s' "$pin"
+}
+
+read_pins() {
+  apk_pin=$(read_pin apk-cert.sha256)
+  repo_pin=$(read_pin repo-index-cert.sha256)
+}
+
+# One notif-apk at a time: two builds would need 2 x 5 GB.
+take_lock() {
+  [[ -d $data_dir/repo ]] || die "$data_dir/repo does not exist (runbook step d)"
+  exec 9<"$data_dir"
+  flock -n 9 || die "another notif-apk run is in progress"
+}
+
+ensure_image() {
+  local image=$1 dockerfile=$fdroid_dir/$2
+  printf 'notif-apk: docker build %s (cached after the first run)\n' "$image"
+  docker build --quiet --tag "$image" - <"$dockerfile" >/dev/null
+}
+
+cleanup() {
+  [[ -n $work ]] || return 0
+  if [[ -e $work/src ]]; then
+    git -C "$checkout" worktree remove --force "$work/src" \
+      || printf 'notif-apk: warning: could not remove worktree %s\n' "$work/src" >&2
+  fi
+  rm -rf -- "$work"
+}
+
+publish() {
+  local apk=$1
+  docker run --rm --name notif-apk-publish --network none \
+    --env "APK_CERT_SHA256=$apk_pin" \
+    --env "REPO_CERT_SHA256=$repo_pin" \
+    --mount "type=bind,src=$fdroid_dir,dst=/tool,readonly" \
+    --mount "type=bind,src=$data_dir/repo,dst=/work/repo" \
+    --mount "type=bind,src=$keys_dir/repo-index.p12,dst=/run/secrets/repo-index.p12,readonly" \
+    --mount "type=bind,src=$keys_dir/repo-index.pass,dst=/run/secrets/repo-index.pass,readonly" \
+    --mount "type=bind,src=$apk,dst=/in/notif.apk,readonly" \
+    "$publish_image" bash /tool/publish-apk.sh /in/notif.apk
+}
+
+cmd_build() {
+  (($# <= 1)) || die "usage: notif-apk build [commit]"
+  local rev=${1:-origin/master} commit version_code short_sha
+  [[ $rev != -* ]] || die "not a commit: $rev"
+  read_pins
+  take_lock
+
+  git -C "$checkout" fetch --quiet origin
+  commit=$(git -C "$checkout" rev-parse --verify --quiet "$rev^{commit}") || die "not a commit: $rev"
+  version_code=$(git -C "$checkout" rev-list --count "$commit")
+  short_sha=$(git -C "$checkout" rev-parse --short "$commit")
+  printf 'notif-apk: building %s, versionCode %s\n' "$short_sha" "$version_code"
+
+  ensure_image "$build_image" build.Dockerfile
+  ensure_image "$publish_image" publish.Dockerfile
+
+  mkdir -p -- "$work_root"
+  work=$(mktemp -d "$work_root/build.XXXXXX")
+  trap cleanup EXIT
+  git -C "$checkout" worktree add --detach --quiet "$work/src" "$commit"
+  mkdir -- "$work/out"
+
+  docker run --rm --name notif-apk-build \
+    --memory 5g --memory-swap 5g --cpus 3 \
+    --mount "type=bind,src=$work/src,dst=/src,readonly" \
+    --mount "type=bind,src=$work/out,dst=/out" \
+    --mount "type=bind,src=$fdroid_dir,dst=/tool,readonly" \
+    --mount "type=bind,src=$keys_dir/apk.p12,dst=/run/secrets/apk.p12,readonly" \
+    --mount "type=bind,src=$keys_dir/apk.pass,dst=/run/secrets/apk.pass,readonly" \
+    --mount type=volume,src=notif-apk-gradle,dst=/root/.gradle \
+    --mount type=volume,src=notif-apk-pub,dst=/root/.pub-cache \
+    "$build_image" bash /tool/container-build.sh "$version_code" "$short_sha"
+
+  publish "$work/out/notif-$version_code-$short_sha.apk"
+}
+
+cmd_publish() {
+  (($# == 1)) || die "usage: notif-apk publish <apk>"
+  local apk
+  apk=$(readlink -f -- "$1") || die "not a file: $1"
+  [[ -f $apk ]] || die "not a file: $1"
+  read_pins
+  take_lock
+  ensure_image "$publish_image" publish.Dockerfile
+  publish "$apk"
+}
+
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+case ${1:-} in
+  build)
+    shift
+    cmd_build "$@"
+    ;;
+  publish)
+    shift
+    cmd_publish "$@"
+    ;;
+  -h | --help | help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
