@@ -19,6 +19,7 @@ from uuid import UUID
 
 from django.db import transaction
 
+from accounts.models import User
 from health.models import (
 	AggregateMetric,
 	HealthAggregate,
@@ -162,9 +163,17 @@ class _Answer:
 	data_origins: tuple[str, ...]
 
 
+class OwnerGoneError(Exception):
+	"""The owner was deleted or deactivated; nothing was stored."""
+
+
 def apply_batch(owner_id: int, batch: IngestBatch) -> IngestOutcome:
 	"""Apply ``batch`` atomically for ``owner_id`` and log it."""
 	with transaction.atomic():
+		# Transactions are IMMEDIATE, so this runs under the write lock: a soft delete either
+		# committed before it (and is seen here) or waits and then deletes this batch too.
+		if not User.objects.filter(pk=owner_id, is_active=True).exists():
+			raise OwnerGoneError(f"User {owner_id} was deleted or deactivated; the batch was not stored.")
 		records_written, records_deleted = _apply_records(owner_id, batch.records, batch.deletions)
 		aggregates_written = _apply_aggregates(owner_id, batch.aggregate_windows, batch.coverage_start_ms)
 		logged = HealthIngestBatch.objects.create(
