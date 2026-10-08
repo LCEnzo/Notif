@@ -39,22 +39,25 @@ void main() {
         .where(
           (path) =>
               !path.endsWith('services/api_client.dart') &&
-              // These two read DioException to classify a failure — auth.dart
-              // into an auth state, data.dart into a message. Neither
-              // constructs a Dio or issues a request of its own, which is the
-              // thing this rule exists to prevent.
+              // These three read DioException to classify a failure — auth.dart
+              // into an auth state, data.dart into a message, failures.dart into
+              // an AppFailure category. None constructs a Dio or issues a
+              // request of its own, which is the thing this rule exists to
+              // prevent.
               !path.endsWith('services/auth.dart') &&
-              !path.endsWith('services/data.dart'),
+              !path.endsWith('services/data.dart') &&
+              !path.endsWith('services/failures.dart'),
         )
         .toList();
 
     // Guard the exemption: reading exception types is fine, owning a client is
-    // not.
+    // not. The word boundary keeps identifiers like `_fromDio(` from matching.
+    final constructsDio = RegExp(r'\bDio\(');
     for (final file in libFiles) {
       if (relative(file).endsWith('services/api_client.dart')) continue;
       expect(
-        read(file),
-        isNot(contains('Dio(')),
+        constructsDio.hasMatch(read(file)),
+        isFalse,
         reason: '${relative(file)} must not construct its own Dio.',
       );
     }

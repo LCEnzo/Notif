@@ -23,7 +23,7 @@ class StrategyRecord {
     // Parse through the schema-generated type first: field names and types
     // come from backend/openapi.json, not from a hand-rolled parser that can
     // silently drift from the contract.
-    final parsed = parseContract(() => api.Strategy.fromJson(json));
+    final parsed = parseContract('Strategy', () => api.Strategy.fromJson(json));
     // The generated enum is a closed set frozen at build time; a class the
     // backend added later parses as swaggerGeneratedUnknown (value == null).
     // Keep the raw wire name then: coercing to the general default would
@@ -76,7 +76,7 @@ class Link {
     Map<int, StrategyRecord> strategies,
   ) {
     // Parse through the schema-generated type first (see StrategyRecord).
-    final parsed = parseContract(() => api.Link.fromJson(json));
+    final parsed = parseContract('Link', () => api.Link.fromJson(json));
     final strategyId = parsed.strategy;
     final strategy = strategyId != null ? strategies[strategyId] : null;
 
@@ -136,7 +136,10 @@ class NotificationItem {
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
     // Parse through the schema-generated type first (see StrategyRecord).
-    final parsed = parseContract(() => api.Notification.fromJson(json));
+    final parsed = parseContract(
+      'Notification',
+      () => api.Notification.fromJson(json),
+    );
     final update = parsed.update;
     final title = update?.title?.trim() ?? '';
 

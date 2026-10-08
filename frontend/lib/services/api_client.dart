@@ -155,6 +155,22 @@ HttpClientAdapter get apiHttpClientAdapter => _dio.httpClientAdapter;
 set apiHttpClientAdapter(HttpClientAdapter adapter) =>
     _dio.httpClientAdapter = adapter;
 
+/// Reads the CSRF token echoed on unsafe methods; null when there is none.
+typedef CsrfTokenReader = String? Function();
+
+String? _browserCsrfToken() =>
+    kIsWeb ? readBrowserCookie(csrfCookieName) : null;
+
+CsrfTokenReader _csrfTokenReader = _browserCsrfToken;
+
+/// Lets a VM test stand in for the browser cookie jar, since `kIsWeb` is a
+/// compile-time constant there.
+@visibleForTesting
+CsrfTokenReader get apiCsrfTokenReader => _csrfTokenReader;
+
+@visibleForTesting
+set apiCsrfTokenReader(CsrfTokenReader reader) => _csrfTokenReader = reader;
+
 /// Sends a POST request to [path], respecting [BackendUrlMode] from [settings].
 ///
 /// In [BackendUrlMode.builtin] mode the built-in compile-time URL is used.
@@ -175,6 +191,70 @@ Future<Response<dynamic>> apiPost(
   body: body,
   fallbackPolicy: fallbackPolicy,
 );
+
+/// POST to a deliberately anonymous endpoint: no bearer credential, no
+/// auth-state side effects, no fallback to another origin.
+///
+/// On web this cannot shed the session cookie: `withCredentials` only governs
+/// cross-origin requests, and production is same-origin. A live cookie makes
+/// the server enforce CSRF, so the token is echoed here as on any unsafe
+/// request; without it the post is a 403. [describeUnsupportedOrigin] runs
+/// first and refuses cross-origin backends on web, so the token stays home.
+///
+/// [baseUrl] pins diagnostics to the API origin that produced the failure. If
+/// it is absent, the first configured origin is used and is still never
+/// retried elsewhere.
+Future<Response<dynamic>> apiPostWithoutSession(
+  String path, {
+  required AppSettingsController? settings,
+  required Map<String, String> headers,
+  required dynamic body,
+  String? baseUrl,
+}) async {
+  final baseUrls = baseUrl == null ? resolveUrls(path, settings) : [baseUrl];
+  if (baseUrls.isEmpty) {
+    throw MissingBackendUrlException(
+      'POST $path failed: no backend URL configured',
+    );
+  }
+  return _performRequest(
+    'POST',
+    baseUrls.first,
+    path,
+    headers: headers,
+    body: body,
+    sendCredentials: false,
+  );
+}
+
+/// Recover the configured API base that issued [error], if it is a Dio error.
+/// This keeps best-effort diagnostics on the same service boundary even when
+/// custom-with-fallback mode has more than one candidate origin.
+String? apiBaseUrlForError(
+  Object error,
+  AppSettingsController? settings,
+) {
+  if (error is! DioException) {
+    return null;
+  }
+  final requestUri = error.requestOptions.uri;
+  final candidates =
+      resolveUrls('', settings)
+          .map(Uri.tryParse)
+          .whereType<Uri>()
+          .where(
+            (candidate) =>
+                candidate.hasScheme &&
+                candidate.host.isNotEmpty &&
+                candidate.scheme == requestUri.scheme &&
+                candidate.host == requestUri.host &&
+                candidate.port == requestUri.port &&
+                _pathContains(candidate.path, requestUri.path),
+          )
+          .toList(growable: false)
+        ..sort((left, right) => right.path.length.compareTo(left.path.length));
+  return candidates.isEmpty ? null : candidates.first.toString();
+}
 
 /// Revoke a bearer session that was issued but could not be stored durably.
 ///
@@ -414,8 +494,11 @@ Future<Response<dynamic>> _performRequest(
   dynamic body,
   ResponseType? responseType,
   SessionCredential? credentialOverride,
+  bool sendCredentials = true,
 }) async {
-  final credential = credentialOverride ?? _credentialReader?.call();
+  final credential = sendCredentials
+      ? credentialOverride ?? _credentialReader?.call()
+      : null;
   final refusal = describeUnsupportedOrigin(baseUrl, credential: credential);
   if (refusal != null) {
     throw UnsupportedOriginException(refusal);
@@ -434,13 +517,15 @@ Future<Response<dynamic>> _performRequest(
         headers: _headersWithCredentials(method, headers, credential),
         responseType: responseType,
         // The browser adapter reads this per request; on other platforms it is
-        // inert. Set unconditionally so the cookie rides along on web without a
-        // conditional import just to configure the adapter.
-        extra: const {'withCredentials': true},
+        // inert. False only withholds cookies cross-origin (the loopback dev
+        // setup); same-origin requests carry them regardless.
+        extra: {'withCredentials': sendCredentials},
       ),
     );
   } on DioException catch (error) {
-    _sessionEndReporter?.call(error, generation: generation);
+    if (sendCredentials) {
+      _sessionEndReporter?.call(error, generation: generation);
+    }
     rethrow;
   }
 }
@@ -456,8 +541,8 @@ Map<String, String> _headersWithCredentials(
     result['Authorization'] = '$sessionAuthScheme ${credential.token}';
   }
 
-  if (kIsWeb && !_csrfSafeMethods.contains(method.toUpperCase())) {
-    final csrfToken = readBrowserCookie(csrfCookieName);
+  if (!_csrfSafeMethods.contains(method.toUpperCase())) {
+    final csrfToken = _csrfTokenReader();
     if (csrfToken != null) {
       result[csrfHeaderName] = csrfToken;
     }
@@ -467,6 +552,13 @@ Map<String, String> _headersWithCredentials(
   }
 
   return result;
+}
+
+bool _pathContains(String basePath, String requestPath) {
+  final normalized = basePath.replaceFirst(RegExp(r'/+$'), '');
+  return normalized.isEmpty ||
+      requestPath == normalized ||
+      requestPath.startsWith('$normalized/');
 }
 
 bool _isFallbackableNetworkError(DioException error) {
@@ -530,23 +622,51 @@ List<dynamic> expectSuccessList(Response<dynamic> response, String context) {
   );
 }
 
-/// Runs a schema-generated parse, converting any contract violation into an
-/// [Exception] the fetch sites' `on Exception` handlers catch.
+/// A response that breaks the schema's [schema] component.
+///
+/// A [FormatException], so existing `on FormatException` handling and the
+/// `contract violation` message prefix both still hold.
+class ContractViolation extends FormatException {
+  const ContractViolation({required this.schema, required this.detail})
+    : super('contract violation in $schema: $detail');
+
+  /// OpenAPI component name, e.g. `Link`.
+  final String schema;
+
+  /// What broke. A generated parser's error rarely names the field; the
+  /// stack trace [parseContract] keeps does.
+  final String detail;
+
+  String get contractPath => '#/components/schemas/$schema';
+
+  @override
+  String toString() => message;
+}
+
+/// Runs a schema-generated parse of the [schema] component, converting any
+/// contract violation into an [Exception] the fetch sites' `on Exception`
+/// handlers catch.
 ///
 /// The generated parsers throw `TypeError` (a Dart `Error`, not an
 /// `Exception`) when the wire diverges from the schema — e.g. a required
 /// field like `Link.name` going missing. Every fetch site catches
 /// `on Exception`, so a raw `TypeError` would escape as an unhandled zone
 /// error: the spinner clears but `_error` is never set, and the user sees a
-/// silently empty list. Rethrowing as [FormatException] keeps the failure
+/// silently empty list. Rethrowing as [ContractViolation] keeps the failure
 /// classified and visible.
-T parseContract<T>(T Function() parse) {
+///
+/// [schema] is spelled out rather than taken from `T`: release web builds
+/// minify type names.
+T parseContract<T>(String schema, T Function() parse) {
   try {
     return parse();
-  } on Object catch (error) {
+  } on Object catch (error, stackTrace) {
     // Generated code can throw arbitrary objects (TypeError, StateError, …);
     // this is the platform-boundary case for a bare catch.
-    throw FormatException('contract violation: $error');
+    Error.throwWithStackTrace(
+      ContractViolation(schema: schema, detail: '$error'),
+      stackTrace,
+    );
   }
 }
 
