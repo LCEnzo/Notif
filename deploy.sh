@@ -1,6 +1,19 @@
 #!/bin/sh
 set -eu
 
+# --apk: after the web deploy, build and publish the APK of the deployed commit
+# (deploy/fdroid/notif-apk; docs/operations/fdroid_runbook.md).
+BUILD_APK=false
+for arg in "$@"; do
+    case $arg in
+        --apk) BUILD_APK=true ;;
+        *)
+            echo "Usage: $0 [--apk]" >&2
+            exit 2
+            ;;
+    esac
+done
+
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 cd "$SCRIPT_DIR"
 
@@ -114,3 +127,19 @@ remove_legacy_cron_entry
 echo ""
 echo "=== Deploy complete ==="
 echo "Verify: curl https://notif.lcenzo.com/api/v1/monitoring/status/"
+
+# The web deploy is done by now; an APK failure must not undo or block it.
+if [ "$BUILD_APK" = true ]; then
+    DEPLOYED_SHA=$(git rev-parse HEAD)
+    echo ""
+    echo "=== Building and publishing the APK for $GIT_HASH ==="
+    if ! deploy/fdroid/notif-apk build "$DEPLOYED_SHA"; then
+        echo "" >&2
+        echo "################################################################" >&2
+        echo "  APK BUILD OR PUBLISH FAILED for $GIT_HASH" >&2
+        echo "  The web deploy above completed and stays in place." >&2
+        echo "  Retry with: deploy/fdroid/notif-apk build $DEPLOYED_SHA" >&2
+        echo "################################################################" >&2
+        exit 1
+    fi
+fi
