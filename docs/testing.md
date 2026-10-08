@@ -123,7 +123,7 @@ The default strategy, hypothesis-jsonschema's, is `https://` plus a generated do
 
 ### Per-test state across examples
 
-`live_server` is session-scoped, but the transactional database and the fuzz user's session are per test, and Hypothesis cannot reset them between examples. State therefore accumulates within one operation's run. That is acceptable here: each example is an independent request, and the transactional test flushes the database between operations. Hypothesis fails `HealthCheck.function_scoped_fixture` unless it is suppressed.
+`live_server` is session-scoped, but the transactional database and the fuzz user's session are per test, and Hypothesis cannot reset them between examples. State therefore accumulates within one operation's run. That is acceptable here: each example is an independent request, and the transactional test flushes the databases between operations. It declares every database (`databases="__all__"`): the server also writes to the health store, and a database the test does not declare is neither flushed nor allowed, so Django's per-test guard would turn those requests into 500s. Hypothesis fails `HealthCheck.function_scoped_fixture` unless it is suppressed.
 
 ### `localhost` resolves to IPv4 only
 
