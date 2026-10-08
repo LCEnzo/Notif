@@ -107,7 +107,7 @@ class ProbeTest {
 
     @Test
     fun recordCountsStopAtThePageBound() = runTest {
-        client.insertRecords((1L..(PROBE_MAX_PAGES * PROBE_PAGE_SIZE + 1).toLong()).map { bodyFat(it % 3_000) })
+        client.insertRecords((1L..(PROBE_MAX_PAGES * PROBE_PAGE_SIZE + 1).toLong()).map { bodyFat(1 + it % 3_000) })
 
         val bodyFat = types(probeCoverage(client, clock, setOf(ProbeKind.BODY_FAT)))["body_fat"]!!
 
