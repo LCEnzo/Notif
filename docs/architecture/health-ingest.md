@@ -21,3 +21,15 @@ The plan recommended a separate `health.sqlite3` behind a database router, so th
 | `HealthIngestBatch` | Accepted batch (a log) | `owner`, `received_at` |
 
 `owner` is a foreign key to the user with `on_delete=CASCADE`, so a hard-deleted user takes their rows along. `HealthSource` exists for the size budget: the origin, method and device would otherwise add about 90 bytes to every record, roughly 200 MB a year at the plan's heavy profile. Measured after VACUUM, a steps record costs about 157 bytes with its indexes.
+
+## Rules
+
+`health.ingest.apply_batch` applies one batch atomically and logs it. Applying batches in any order, any number of times, leaves the same rows, so a client may always retry.
+
+1. **Versions.** Per `hc_id` within the owner's rows, the version with the newest `last_modified_ms` is kept. Equal timestamps with different content resolve by content, so every order picks the same one.
+2. **Deletions.** A deletion removes every version of its id with `last_modified_ms <= observed_at_ms`, including versions that arrive later in another batch. A newer version still comes back, as it does when an app deletes and rewrites a record under the same client id. The tombstone keeps the latest `observed_at_ms`.
+3. **The client's side of rule 2.** `observed_at_ms` is when the phone read the change, on the clock HC stamps `last_modified` with. Within one `getChanges` stream, the client keeps the last change per id: a deletion followed by an upsert of the same id must not be sent as a deletion.
+4. **Aggregates.** Each hour of an aggregate window is an answer: a bucket's value, or "HC had nothing" for an hour HC omitted. Per metric and hour, the answer with the newest `computed_at_ms` is kept; on a tie a value beats nothing, then the larger value wins. A re-aggregation therefore clears an hour whose records were deleted in HC.
+5. **Coverage.** Silence before the batch's `coverage_start_ms` means nothing, since HC hid that data, so those hours are not stored. A bucket HC did return is stored wherever it lies.
+
+`test_properties.py` checks rules 1, 2, 4 and 5 against a reference model under random order and duplication; `test_ingest.py` pins their exact boundaries.
