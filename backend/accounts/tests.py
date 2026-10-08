@@ -32,7 +32,7 @@ from accounts.models import DeviceSession, User
 from accounts.models.password_reset import PASSWORD_RESET_CODE_MAX_ATTEMPTS, PasswordResetBudget, PasswordResetCode
 from accounts.serializers import UserCreationSerializer, UserFullReadSerializer, UserMinimalReadSerializer
 from accounts.views import _send_reset_email_in_background
-from commons.test_utils import SetupMixin, ViewSetMixin, login_client  # noqa: F401
+from commons.test_utils import SetupMixin, ViewSetMixin, login_client, production_throttling  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
 
 _VALID_TEST_PASSWORD = "N0tif-Test-Credential-2026!"
@@ -76,8 +76,48 @@ class UserViewSetTestCase(ViewSetMixin):
 		}
 		self._test_create_object(fields=fields)
 
+	def test_registration_spends_one_unit_of_its_budget_per_request(self):
+		# A second ScopedRateThrottle on create would charge each request twice,
+		# and the second registration would already be refused.
+		client = APIClient()
+		url = reverse(self.list_view_name)
+
+		def register(i: int) -> int:
+			fields = {
+				"username": f"throttled{i}",
+				"email": f"throttled{i}@example.com",
+				"password": _VALID_TEST_PASSWORD,
+			}
+			return client.post(url, fields, format="json").status_code
+
+		with production_throttling() as rates:
+			budget = int(rates["register"].split("/")[0])
+			for i in range(budget):
+				self.assertEqual(register(i), status.HTTP_201_CREATED)
+			self.assertEqual(register(budget), status.HTTP_429_TOO_MANY_REQUESTS)
+
 	def test_update_user(self):
 		self._test_update_object()
+
+	def test_put_is_not_routed_and_changes_nothing(self):
+		# Callers the permission admits, so the method, not a 403, decides the answer.
+		admin_client = login_client(APIClient(), self.superuser.get_username())
+		cases = [
+			("own row", self.api_client, self.regular_user),
+			("admin on another row", admin_client, self.secondary_user),
+		]
+		for label, client, target in cases:
+			with self.subTest(label):
+				url = reverse(self.detail_view_name, kwargs={self.lookup_url_kwarg: target.pk})
+				payload = {"username": target.username, "email": target.email, "name": "Renamed by PUT"}
+
+				response = client.put(url, payload, format="json")
+
+				self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+				self.assertNotIn("PUT", response["Allow"])
+				self.assertIn("PATCH", response["Allow"])
+				target.refresh_from_db()
+				self.assertNotEqual(target.name, "Renamed by PUT")
 
 	def test_admin_password_update_for_another_user_fails_explicitly(self):
 		admin_client = login_client(APIClient(), self.superuser.get_username())
@@ -188,6 +228,12 @@ class UserSerializerSelectionTestCase(TestCase):
 		self.assertIn("is_staff", response.data)
 		self.assertIn("is_superuser", response.data)
 
+	def test_get_my_info_is_read_only(self):
+		response = self.client_for_user.post(reverse("users-get-my-info"), {}, format="json")
+
+		self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+		self.assertEqual(response["Allow"], "GET, HEAD, OPTIONS")
+
 
 # Django's encoded form is "<algorithm>$<params...>$<hash>": md5$salt$hex,
 # pbkdf2_sha256$iterations$salt$b64, argon2$argon2id$v=19$..., bcrypt_sha256$$2b$...
@@ -197,7 +243,7 @@ _PASSWORD_HASH_SHAPE = re.compile(r"[a-z0-9_]+\$[^\s\"]*\$")
 class UserPasswordHashExposureTestCase(TestCase):
 	"""No user endpoint may ever answer with a stored password hash.
 
-	UserCreationSerializer serves POST, PUT and PATCH, so its responses are the
+	UserCreationSerializer serves POST and PATCH, so its responses are the
 	ones at risk; the read serializers and get_my_info are pinned too, so a
 	field added to them later cannot reintroduce the leak.
 	"""
@@ -267,38 +313,16 @@ class UserPasswordHashExposureTestCase(TestCase):
 				self.assertEqual(response.status_code, status.HTTP_200_OK)
 				self._assert_carries_no_hash(response)
 
-	def test_put_response_carries_no_hash(self):
-		# PUT cannot reach a 2xx today: the serializer requires password and
-		# update() refuses it. The 400s still pass through the same serializer,
-		# so they are held to the same rule.
-		profile = {"username": self.user.username, "email": self.user.email, "name": "Renamed"}
-		cases = [
-			("own row without password", self.client_for_user, self.user, profile),
-			("own row with password", self.client_for_user, self.user, {**profile, "password": _VALID_TEST_PASSWORD}),
-			(
-				"admin on another row",
-				self.client_for_admin,
-				self.other_user,
-				{"username": self.other_user.username, "email": self.other_user.email},
-			),
-		]
-		for label, client, target, payload in cases:
-			with self.subTest(label):
-				response = client.put(reverse("users-detail", kwargs={"pk": target.pk}), payload, format="json")
-
-				self._assert_carries_no_hash(response)
-
 	def test_read_endpoints_carry_no_hash(self):
 		cases = [
-			("list", "get", reverse("users-list")),
-			("own detail", "get", reverse("users-detail", kwargs={"pk": self.user.pk})),
-			("other detail", "get", reverse("users-detail", kwargs={"pk": self.other_user.pk})),
-			("get_my_info GET", "get", reverse("users-get-my-info")),
-			("get_my_info POST", "post", reverse("users-get-my-info")),
+			("list", reverse("users-list")),
+			("own detail", reverse("users-detail", kwargs={"pk": self.user.pk})),
+			("other detail", reverse("users-detail", kwargs={"pk": self.other_user.pk})),
+			("get_my_info", reverse("users-get-my-info")),
 		]
-		for label, method, url in cases:
+		for label, url in cases:
 			with self.subTest(label):
-				response = getattr(self.client_for_user, method)(url, format="json")
+				response = self.client_for_user.get(url, format="json")
 
 				self.assertEqual(response.status_code, status.HTTP_200_OK)
 				self._assert_carries_no_hash(response)
@@ -356,7 +380,7 @@ class UserDetailNonIntegerPkTestCase(TestCase):
 		for pk in self._non_integer_pks():
 			url = reverse("users-detail", kwargs={"pk": pk})
 			for caller, client, expected in callers:
-				for method in ("put", "patch", "delete"):
+				for method in ("patch", "delete"):
 					with self.subTest(pk=pk[:12], caller=caller, method=method):
 						response = getattr(client, method)(url, {"name": "Changed"}, format="json")
 
@@ -457,6 +481,19 @@ class LoginViewTestCase(TestCase):
 
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 		self.assertEqual(DeviceSession.objects.count(), 0)
+
+	def test_login_refuses_blank_credentials_before_checking_them(self):
+		# A 400 naming the field, not a credential 401; device_label, which takes "", is the control.
+		for field in ("username", "password"):
+			with self.subTest(field=field):
+				blank: dict[str, Any] = {field: ""}
+				response = self._login(**blank)
+
+				self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+				self.assertEqual(set(response.data), {field})
+		self.assertEqual(DeviceSession.objects.count(), 0)
+
+		self.assertEqual(self._login(device_label="").status_code, status.HTTP_200_OK)
 
 	def test_wrong_password_is_401_and_creates_no_session(self):
 		response = APIClient().post(
@@ -1436,7 +1473,14 @@ class ChangePasswordTestCase(TestCase):
 		self.assertTrue(self.user.check_password(_VALID_TEST_PASSWORD))
 
 	def test_requires_both_fields(self):
-		for payload in ({"new_password": _ALTERNATE_VALID_TEST_PASSWORD}, {"current_password": _VALID_TEST_PASSWORD}):
+		# An empty string counts as missing, which the schema states as minLength 1.
+		payloads = [
+			{"new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			{"current_password": _VALID_TEST_PASSWORD},
+			{"current_password": "", "new_password": _ALTERNATE_VALID_TEST_PASSWORD},
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": ""},
+		]
+		for payload in payloads:
 			with self.subTest(payload=payload):
 				response = self.authed.post(self.url, payload, format="json")
 

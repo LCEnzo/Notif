@@ -9,11 +9,13 @@ pass without exercising anything.
 
 import runpy
 import socket
+import warnings
 from pathlib import Path
 from typing import Any
 from unittest import mock
 
 import pytest
+from django.conf import Settings
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -110,5 +112,19 @@ def test_test_settings_refuse_a_production_environment(monkeypatch: pytest.Monke
 def test_suite_cannot_connect_beyond_loopback() -> None:
 	# pytest-socket (pyproject addopts) raises before a packet leaves. Without it this
 	# is a real attempt on TEST-NET-1, which nothing routes: an OSError instead.
-	with pytest.raises(RuntimeError, match=r"192\.0\.2\.1"):
-		socket.create_connection(("192.0.2.1", 9), timeout=1)
+	# Not create_connection: it closes its socket only on OSError, and pytest-socket raises RuntimeError.
+	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock, pytest.raises(RuntimeError, match=r"192\.0\.2\.1"):
+		sock.settimeout(1)
+		sock.connect(("192.0.2.1", 9))
+
+
+# Not settings_dev: importing it mutates INSTALLED_APPS, MIDDLEWARE and LOGGING, which the live settings share.
+@pytest.mark.parametrize("module", ["notif.settings_test", "notif.settings_prod"])
+def test_settings_load_without_warnings(module: str) -> None:
+	# Django's deprecation warnings and its EMAIL_*-beside-MAILERS refusal fire only in
+	# django.conf.Settings, which the suite otherwise applies to settings_test alone.
+	with warnings.catch_warnings(record=True) as caught:
+		warnings.simplefilter("always")
+		Settings(module)
+
+	assert [f"{warning.category.__name__}: {warning.message}" for warning in caught] == []

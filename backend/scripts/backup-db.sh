@@ -13,6 +13,9 @@ BACKUP_FILE="$BACKUP_DIR/db-$TIMESTAMP.sqlite3"
 sqlite3 "$DB_PATH" ".backup '$BACKUP_FILE'"
 
 # Rotate: keep only the $KEEP most recent backups
-ls -1t "$BACKUP_DIR"/db-*.sqlite3 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -f
+# shellcheck disable=SC2012 # ls -t is the POSIX mtime sort; only a newline in a path splits it
+ls -1t "$BACKUP_DIR"/db-*.sqlite3 2>/dev/null | tail -n +$((KEEP + 1)) | while IFS= read -r old; do
+    rm -f -- "$old"
+done
 
 echo "Backed up to $BACKUP_FILE (keeping $KEEP most recent)"

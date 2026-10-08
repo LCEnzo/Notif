@@ -22,7 +22,7 @@ class UserCreationSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
 		fields = ["username", "email", "name", "password"]
-		# This serializer also renders the POST/PUT/PATCH responses, and the
+		# This serializer also renders the POST/PATCH responses, and the
 		# stored password hash must never appear in one.
 		extra_kwargs = {"password": {"write_only": True}}
 
@@ -66,6 +66,21 @@ class UserCreationSerializer(_UserModelSerializer):
 		return attrs
 
 
+# Documents the body only: the view validates it itself, since a CharField would
+# coerce a number into a string and the view refuses one.
+class ChangePasswordSerializer(_AnySerializer):
+	"""The current password, and the one to replace it."""
+
+	current_password = serializers.CharField(write_only=True, min_length=1)
+	new_password = serializers.CharField(write_only=True, min_length=1)
+
+
+class ErrorMessageSerializer(_AnySerializer):
+	"""The ``{"error": ...}`` body account views answer a refused request with."""
+
+	error = serializers.CharField()
+
+
 class UserFullReadSerializer(_UserModelSerializer):
 	class Meta:
 		model = User
@@ -93,7 +108,7 @@ class UserMinimalReadSerializer(_UserModelSerializer):
 # ── device sessions ──────────────────────────────────────────
 
 
-class LoginRequestSerializer(_AnySerializer):
+class LoginSerializer(_AnySerializer):
 	username = serializers.CharField()
 	password = serializers.CharField(write_only=True)
 	transport = serializers.ChoiceField(
@@ -162,7 +177,7 @@ class SessionRevokeResponseSerializer(_AnySerializer):
 # ── password reset ───────────────────────────────────────────
 
 
-class PasswordResetRequestSerializer(_AnySerializer):
+class PasswordResetSerializer(_AnySerializer):
 	"""Accepts an email address for password reset."""
 
 	email = serializers.EmailField()

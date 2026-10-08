@@ -76,8 +76,116 @@ extension $CaddyAccessLogResponseExtension on CaddyAccessLogResponse {
 }
 
 @JsonSerializable(explicitToJson: true)
-class ClientEvent {
-  const ClientEvent({
+class ChangePasswordRequest {
+  const ChangePasswordRequest({this.currentPassword, this.newPassword});
+
+  factory ChangePasswordRequest.fromJson(Map<String, dynamic> json) =>
+      _$ChangePasswordRequestFromJson(json);
+
+  static const toJsonFactory = _$ChangePasswordRequestToJson;
+  Map<String, dynamic> toJson() => _$ChangePasswordRequestToJson(this);
+
+  @JsonKey(name: 'current_password')
+  final String? currentPassword;
+  @JsonKey(name: 'new_password')
+  final String? newPassword;
+  static const fromJsonFactory = _$ChangePasswordRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is ChangePasswordRequest &&
+            (identical(other.currentPassword, currentPassword) ||
+                const DeepCollectionEquality().equals(
+                  other.currentPassword,
+                  currentPassword,
+                )) &&
+            (identical(other.newPassword, newPassword) ||
+                const DeepCollectionEquality().equals(
+                  other.newPassword,
+                  newPassword,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(currentPassword) ^
+      const DeepCollectionEquality().hash(newPassword) ^
+      runtimeType.hashCode;
+}
+
+extension $ChangePasswordRequestExtension on ChangePasswordRequest {
+  ChangePasswordRequest copyWith({
+    String? currentPassword,
+    String? newPassword,
+  }) {
+    return ChangePasswordRequest(
+      currentPassword: currentPassword ?? this.currentPassword,
+      newPassword: newPassword ?? this.newPassword,
+    );
+  }
+
+  ChangePasswordRequest copyWithWrapped({
+    Wrapped<String?>? currentPassword,
+    Wrapped<String?>? newPassword,
+  }) {
+    return ChangePasswordRequest(
+      currentPassword: (currentPassword != null
+          ? currentPassword.value
+          : this.currentPassword),
+      newPassword: (newPassword != null ? newPassword.value : this.newPassword),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class ClientEventAccepted {
+  const ClientEventAccepted({required this.status});
+
+  factory ClientEventAccepted.fromJson(Map<String, dynamic> json) =>
+      _$ClientEventAcceptedFromJson(json);
+
+  static const toJsonFactory = _$ClientEventAcceptedToJson;
+  Map<String, dynamic> toJson() => _$ClientEventAcceptedToJson(this);
+
+  @JsonKey(name: 'status')
+  final String status;
+  static const fromJsonFactory = _$ClientEventAcceptedFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is ClientEventAccepted &&
+            (identical(other.status, status) ||
+                const DeepCollectionEquality().equals(other.status, status)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(status) ^ runtimeType.hashCode;
+}
+
+extension $ClientEventAcceptedExtension on ClientEventAccepted {
+  ClientEventAccepted copyWith({String? status}) {
+    return ClientEventAccepted(status: status ?? this.status);
+  }
+
+  ClientEventAccepted copyWithWrapped({Wrapped<String>? status}) {
+    return ClientEventAccepted(
+      status: (status != null ? status.value : this.status),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class ClientEventRequest {
+  const ClientEventRequest({
     required this.category,
     this.route,
     this.endpoint,
@@ -92,11 +200,11 @@ class ClientEvent {
     this.stack,
   });
 
-  factory ClientEvent.fromJson(Map<String, dynamic> json) =>
-      _$ClientEventFromJson(json);
+  factory ClientEventRequest.fromJson(Map<String, dynamic> json) =>
+      _$ClientEventRequestFromJson(json);
 
-  static const toJsonFactory = _$ClientEventToJson;
-  Map<String, dynamic> toJson() => _$ClientEventToJson(this);
+  static const toJsonFactory = _$ClientEventRequestToJson;
+  Map<String, dynamic> toJson() => _$ClientEventRequestToJson(this);
 
   @JsonKey(
     name: 'category',
@@ -126,12 +234,12 @@ class ClientEvent {
   final String? message;
   @JsonKey(name: 'stack')
   final String? stack;
-  static const fromJsonFactory = _$ClientEventFromJson;
+  static const fromJsonFactory = _$ClientEventRequestFromJson;
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
-        (other is ClientEvent &&
+        (other is ClientEventRequest &&
             (identical(other.category, category) ||
                 const DeepCollectionEquality().equals(
                   other.category,
@@ -205,8 +313,8 @@ class ClientEvent {
       runtimeType.hashCode;
 }
 
-extension $ClientEventExtension on ClientEvent {
-  ClientEvent copyWith({
+extension $ClientEventRequestExtension on ClientEventRequest {
+  ClientEventRequest copyWith({
     enums.CategoryEnum? category,
     String? route,
     String? endpoint,
@@ -220,7 +328,7 @@ extension $ClientEventExtension on ClientEvent {
     String? message,
     String? stack,
   }) {
-    return ClientEvent(
+    return ClientEventRequest(
       category: category ?? this.category,
       route: route ?? this.route,
       endpoint: endpoint ?? this.endpoint,
@@ -236,7 +344,7 @@ extension $ClientEventExtension on ClientEvent {
     );
   }
 
-  ClientEvent copyWithWrapped({
+  ClientEventRequest copyWithWrapped({
     Wrapped<enums.CategoryEnum>? category,
     Wrapped<String?>? route,
     Wrapped<String?>? endpoint,
@@ -250,7 +358,7 @@ extension $ClientEventExtension on ClientEvent {
     Wrapped<String?>? message,
     Wrapped<String?>? stack,
   }) {
-    return ClientEvent(
+    return ClientEventRequest(
       category: (category != null ? category.value : this.category),
       route: (route != null ? route.value : this.route),
       endpoint: (endpoint != null ? endpoint.value : this.endpoint),
@@ -265,48 +373,6 @@ extension $ClientEventExtension on ClientEvent {
       browser: (browser != null ? browser.value : this.browser),
       message: (message != null ? message.value : this.message),
       stack: (stack != null ? stack.value : this.stack),
-    );
-  }
-}
-
-@JsonSerializable(explicitToJson: true)
-class ClientEventAccepted {
-  const ClientEventAccepted({required this.status});
-
-  factory ClientEventAccepted.fromJson(Map<String, dynamic> json) =>
-      _$ClientEventAcceptedFromJson(json);
-
-  static const toJsonFactory = _$ClientEventAcceptedToJson;
-  Map<String, dynamic> toJson() => _$ClientEventAcceptedToJson(this);
-
-  @JsonKey(name: 'status')
-  final String status;
-  static const fromJsonFactory = _$ClientEventAcceptedFromJson;
-
-  @override
-  bool operator ==(Object other) {
-    return identical(this, other) ||
-        (other is ClientEventAccepted &&
-            (identical(other.status, status) ||
-                const DeepCollectionEquality().equals(other.status, status)));
-  }
-
-  @override
-  String toString() => jsonEncode(this);
-
-  @override
-  int get hashCode =>
-      const DeepCollectionEquality().hash(status) ^ runtimeType.hashCode;
-}
-
-extension $ClientEventAcceptedExtension on ClientEventAccepted {
-  ClientEventAccepted copyWith({String? status}) {
-    return ClientEventAccepted(status: status ?? this.status);
-  }
-
-  ClientEventAccepted copyWithWrapped({Wrapped<String>? status}) {
-    return ClientEventAccepted(
-      status: (status != null ? status.value : this.status),
     );
   }
 }
@@ -451,6 +517,86 @@ extension $DeviceSessionExtension on DeviceSession {
       userAgent: (userAgent != null ? userAgent.value : this.userAgent),
       current: (current != null ? current.value : this.current),
     );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class ErrorDetail {
+  const ErrorDetail({required this.detail});
+
+  factory ErrorDetail.fromJson(Map<String, dynamic> json) =>
+      _$ErrorDetailFromJson(json);
+
+  static const toJsonFactory = _$ErrorDetailToJson;
+  Map<String, dynamic> toJson() => _$ErrorDetailToJson(this);
+
+  @JsonKey(name: 'detail')
+  final String detail;
+  static const fromJsonFactory = _$ErrorDetailFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is ErrorDetail &&
+            (identical(other.detail, detail) ||
+                const DeepCollectionEquality().equals(other.detail, detail)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(detail) ^ runtimeType.hashCode;
+}
+
+extension $ErrorDetailExtension on ErrorDetail {
+  ErrorDetail copyWith({String? detail}) {
+    return ErrorDetail(detail: detail ?? this.detail);
+  }
+
+  ErrorDetail copyWithWrapped({Wrapped<String>? detail}) {
+    return ErrorDetail(detail: (detail != null ? detail.value : this.detail));
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class ErrorMessage {
+  const ErrorMessage({required this.error});
+
+  factory ErrorMessage.fromJson(Map<String, dynamic> json) =>
+      _$ErrorMessageFromJson(json);
+
+  static const toJsonFactory = _$ErrorMessageToJson;
+  Map<String, dynamic> toJson() => _$ErrorMessageToJson(this);
+
+  @JsonKey(name: 'error')
+  final String error;
+  static const fromJsonFactory = _$ErrorMessageFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is ErrorMessage &&
+            (identical(other.error, error) ||
+                const DeepCollectionEquality().equals(other.error, error)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(error) ^ runtimeType.hashCode;
+}
+
+extension $ErrorMessageExtension on ErrorMessage {
+  ErrorMessage copyWith({String? error}) {
+    return ErrorMessage(error: error ?? this.error);
+  }
+
+  ErrorMessage copyWithWrapped({Wrapped<String>? error}) {
+    return ErrorMessage(error: (error != null ? error.value : this.error));
   }
 }
 
@@ -694,6 +840,111 @@ extension $LinkExtension on Link {
 }
 
 @JsonSerializable(explicitToJson: true)
+class LinkRequest {
+  const LinkRequest({
+    required this.name,
+    required this.url,
+    this.strategy,
+    this.scrapeIntervalMinutes,
+    this.scrapeDisabled,
+  });
+
+  factory LinkRequest.fromJson(Map<String, dynamic> json) =>
+      _$LinkRequestFromJson(json);
+
+  static const toJsonFactory = _$LinkRequestToJson;
+  Map<String, dynamic> toJson() => _$LinkRequestToJson(this);
+
+  @JsonKey(name: 'name')
+  final String name;
+  @JsonKey(name: 'url')
+  final String url;
+  @JsonKey(name: 'strategy')
+  final int? strategy;
+  @JsonKey(name: 'scrape_interval_minutes')
+  final int? scrapeIntervalMinutes;
+  @JsonKey(name: 'scrape_disabled')
+  final bool? scrapeDisabled;
+  static const fromJsonFactory = _$LinkRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is LinkRequest &&
+            (identical(other.name, name) ||
+                const DeepCollectionEquality().equals(other.name, name)) &&
+            (identical(other.url, url) ||
+                const DeepCollectionEquality().equals(other.url, url)) &&
+            (identical(other.strategy, strategy) ||
+                const DeepCollectionEquality().equals(
+                  other.strategy,
+                  strategy,
+                )) &&
+            (identical(other.scrapeIntervalMinutes, scrapeIntervalMinutes) ||
+                const DeepCollectionEquality().equals(
+                  other.scrapeIntervalMinutes,
+                  scrapeIntervalMinutes,
+                )) &&
+            (identical(other.scrapeDisabled, scrapeDisabled) ||
+                const DeepCollectionEquality().equals(
+                  other.scrapeDisabled,
+                  scrapeDisabled,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(name) ^
+      const DeepCollectionEquality().hash(url) ^
+      const DeepCollectionEquality().hash(strategy) ^
+      const DeepCollectionEquality().hash(scrapeIntervalMinutes) ^
+      const DeepCollectionEquality().hash(scrapeDisabled) ^
+      runtimeType.hashCode;
+}
+
+extension $LinkRequestExtension on LinkRequest {
+  LinkRequest copyWith({
+    String? name,
+    String? url,
+    int? strategy,
+    int? scrapeIntervalMinutes,
+    bool? scrapeDisabled,
+  }) {
+    return LinkRequest(
+      name: name ?? this.name,
+      url: url ?? this.url,
+      strategy: strategy ?? this.strategy,
+      scrapeIntervalMinutes:
+          scrapeIntervalMinutes ?? this.scrapeIntervalMinutes,
+      scrapeDisabled: scrapeDisabled ?? this.scrapeDisabled,
+    );
+  }
+
+  LinkRequest copyWithWrapped({
+    Wrapped<String>? name,
+    Wrapped<String>? url,
+    Wrapped<int?>? strategy,
+    Wrapped<int?>? scrapeIntervalMinutes,
+    Wrapped<bool?>? scrapeDisabled,
+  }) {
+    return LinkRequest(
+      name: (name != null ? name.value : this.name),
+      url: (url != null ? url.value : this.url),
+      strategy: (strategy != null ? strategy.value : this.strategy),
+      scrapeIntervalMinutes: (scrapeIntervalMinutes != null
+          ? scrapeIntervalMinutes.value
+          : this.scrapeIntervalMinutes),
+      scrapeDisabled: (scrapeDisabled != null
+          ? scrapeDisabled.value
+          : this.scrapeDisabled),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
 class LoginRequest {
   const LoginRequest({
     required this.username,
@@ -872,6 +1123,51 @@ extension $LoginResponseExtension on LoginResponse {
 }
 
 @JsonSerializable(explicitToJson: true)
+class MarkAllReadResponse {
+  const MarkAllReadResponse({required this.markedRead});
+
+  factory MarkAllReadResponse.fromJson(Map<String, dynamic> json) =>
+      _$MarkAllReadResponseFromJson(json);
+
+  static const toJsonFactory = _$MarkAllReadResponseToJson;
+  Map<String, dynamic> toJson() => _$MarkAllReadResponseToJson(this);
+
+  @JsonKey(name: 'marked_read')
+  final int markedRead;
+  static const fromJsonFactory = _$MarkAllReadResponseFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is MarkAllReadResponse &&
+            (identical(other.markedRead, markedRead) ||
+                const DeepCollectionEquality().equals(
+                  other.markedRead,
+                  markedRead,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(markedRead) ^ runtimeType.hashCode;
+}
+
+extension $MarkAllReadResponseExtension on MarkAllReadResponse {
+  MarkAllReadResponse copyWith({int? markedRead}) {
+    return MarkAllReadResponse(markedRead: markedRead ?? this.markedRead);
+  }
+
+  MarkAllReadResponse copyWithWrapped({Wrapped<int>? markedRead}) {
+    return MarkAllReadResponse(
+      markedRead: (markedRead != null ? markedRead.value : this.markedRead),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
 class Notification {
   const Notification({this.id, this.update, this.status, this.readAt});
 
@@ -947,6 +1243,52 @@ extension $NotificationExtension on Notification {
       update: (update != null ? update.value : this.update),
       status: (status != null ? status.value : this.status),
       readAt: (readAt != null ? readAt.value : this.readAt),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class NotificationRequest {
+  const NotificationRequest({this.status});
+
+  factory NotificationRequest.fromJson(Map<String, dynamic> json) =>
+      _$NotificationRequestFromJson(json);
+
+  static const toJsonFactory = _$NotificationRequestToJson;
+  Map<String, dynamic> toJson() => _$NotificationRequestToJson(this);
+
+  @JsonKey(
+    name: 'status',
+    toJson: statusEnumNullableToJson,
+    fromJson: statusEnumNullableFromJson,
+  )
+  final enums.StatusEnum? status;
+  static const fromJsonFactory = _$NotificationRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is NotificationRequest &&
+            (identical(other.status, status) ||
+                const DeepCollectionEquality().equals(other.status, status)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(status) ^ runtimeType.hashCode;
+}
+
+extension $NotificationRequestExtension on NotificationRequest {
+  NotificationRequest copyWith({enums.StatusEnum? status}) {
+    return NotificationRequest(status: status ?? this.status);
+  }
+
+  NotificationRequest copyWithWrapped({Wrapped<enums.StatusEnum?>? status}) {
+    return NotificationRequest(
+      status: (status != null ? status.value : this.status),
     );
   }
 }
@@ -1204,18 +1546,18 @@ extension $PaginatedSystemEventListExtension on PaginatedSystemEventList {
 }
 
 @JsonSerializable(explicitToJson: true)
-class PasswordResetConfirm {
-  const PasswordResetConfirm({
+class PasswordResetConfirmRequest {
+  const PasswordResetConfirmRequest({
     required this.email,
     required this.code,
     required this.newPassword,
   });
 
-  factory PasswordResetConfirm.fromJson(Map<String, dynamic> json) =>
-      _$PasswordResetConfirmFromJson(json);
+  factory PasswordResetConfirmRequest.fromJson(Map<String, dynamic> json) =>
+      _$PasswordResetConfirmRequestFromJson(json);
 
-  static const toJsonFactory = _$PasswordResetConfirmToJson;
-  Map<String, dynamic> toJson() => _$PasswordResetConfirmToJson(this);
+  static const toJsonFactory = _$PasswordResetConfirmRequestToJson;
+  Map<String, dynamic> toJson() => _$PasswordResetConfirmRequestToJson(this);
 
   @JsonKey(name: 'email')
   final String email;
@@ -1223,12 +1565,12 @@ class PasswordResetConfirm {
   final String code;
   @JsonKey(name: 'new_password')
   final String newPassword;
-  static const fromJsonFactory = _$PasswordResetConfirmFromJson;
+  static const fromJsonFactory = _$PasswordResetConfirmRequestFromJson;
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
-        (other is PasswordResetConfirm &&
+        (other is PasswordResetConfirmRequest &&
             (identical(other.email, email) ||
                 const DeepCollectionEquality().equals(other.email, email)) &&
             (identical(other.code, code) ||
@@ -1251,25 +1593,25 @@ class PasswordResetConfirm {
       runtimeType.hashCode;
 }
 
-extension $PasswordResetConfirmExtension on PasswordResetConfirm {
-  PasswordResetConfirm copyWith({
+extension $PasswordResetConfirmRequestExtension on PasswordResetConfirmRequest {
+  PasswordResetConfirmRequest copyWith({
     String? email,
     String? code,
     String? newPassword,
   }) {
-    return PasswordResetConfirm(
+    return PasswordResetConfirmRequest(
       email: email ?? this.email,
       code: code ?? this.code,
       newPassword: newPassword ?? this.newPassword,
     );
   }
 
-  PasswordResetConfirm copyWithWrapped({
+  PasswordResetConfirmRequest copyWithWrapped({
     Wrapped<String>? email,
     Wrapped<String>? code,
     Wrapped<String>? newPassword,
   }) {
-    return PasswordResetConfirm(
+    return PasswordResetConfirmRequest(
       email: (email != null ? email.value : this.email),
       code: (code != null ? code.value : this.code),
       newPassword: (newPassword != null ? newPassword.value : this.newPassword),
@@ -1320,105 +1662,55 @@ extension $PasswordResetRequestExtension on PasswordResetRequest {
 }
 
 @JsonSerializable(explicitToJson: true)
-class PatchedLink {
-  const PatchedLink({
-    this.id,
+class PatchedLinkRequest {
+  const PatchedLinkRequest({
     this.name,
     this.url,
-    this.user,
     this.strategy,
-    this.lastScraped,
     this.scrapeIntervalMinutes,
-    this.nextScrapeAt,
     this.scrapeDisabled,
-    this.scrapeFailureCount,
-    this.lastScrapeError,
-    this.comparisonInfo,
   });
 
-  factory PatchedLink.fromJson(Map<String, dynamic> json) =>
-      _$PatchedLinkFromJson(json);
+  factory PatchedLinkRequest.fromJson(Map<String, dynamic> json) =>
+      _$PatchedLinkRequestFromJson(json);
 
-  static const toJsonFactory = _$PatchedLinkToJson;
-  Map<String, dynamic> toJson() => _$PatchedLinkToJson(this);
+  static const toJsonFactory = _$PatchedLinkRequestToJson;
+  Map<String, dynamic> toJson() => _$PatchedLinkRequestToJson(this);
 
-  @JsonKey(name: 'id')
-  final int? id;
   @JsonKey(name: 'name')
   final String? name;
   @JsonKey(name: 'url')
   final String? url;
-  @JsonKey(name: 'user')
-  final int? user;
   @JsonKey(name: 'strategy')
   final int? strategy;
-  @JsonKey(name: 'last_scraped')
-  final DateTime? lastScraped;
   @JsonKey(name: 'scrape_interval_minutes')
   final int? scrapeIntervalMinutes;
-  @JsonKey(name: 'next_scrape_at')
-  final DateTime? nextScrapeAt;
   @JsonKey(name: 'scrape_disabled')
   final bool? scrapeDisabled;
-  @JsonKey(name: 'scrape_failure_count')
-  final int? scrapeFailureCount;
-  @JsonKey(name: 'last_scrape_error')
-  final String? lastScrapeError;
-  @JsonKey(name: 'comparison_info')
-  final String? comparisonInfo;
-  static const fromJsonFactory = _$PatchedLinkFromJson;
+  static const fromJsonFactory = _$PatchedLinkRequestFromJson;
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
-        (other is PatchedLink &&
-            (identical(other.id, id) ||
-                const DeepCollectionEquality().equals(other.id, id)) &&
+        (other is PatchedLinkRequest &&
             (identical(other.name, name) ||
                 const DeepCollectionEquality().equals(other.name, name)) &&
             (identical(other.url, url) ||
                 const DeepCollectionEquality().equals(other.url, url)) &&
-            (identical(other.user, user) ||
-                const DeepCollectionEquality().equals(other.user, user)) &&
             (identical(other.strategy, strategy) ||
                 const DeepCollectionEquality().equals(
                   other.strategy,
                   strategy,
-                )) &&
-            (identical(other.lastScraped, lastScraped) ||
-                const DeepCollectionEquality().equals(
-                  other.lastScraped,
-                  lastScraped,
                 )) &&
             (identical(other.scrapeIntervalMinutes, scrapeIntervalMinutes) ||
                 const DeepCollectionEquality().equals(
                   other.scrapeIntervalMinutes,
                   scrapeIntervalMinutes,
                 )) &&
-            (identical(other.nextScrapeAt, nextScrapeAt) ||
-                const DeepCollectionEquality().equals(
-                  other.nextScrapeAt,
-                  nextScrapeAt,
-                )) &&
             (identical(other.scrapeDisabled, scrapeDisabled) ||
                 const DeepCollectionEquality().equals(
                   other.scrapeDisabled,
                   scrapeDisabled,
-                )) &&
-            (identical(other.scrapeFailureCount, scrapeFailureCount) ||
-                const DeepCollectionEquality().equals(
-                  other.scrapeFailureCount,
-                  scrapeFailureCount,
-                )) &&
-            (identical(other.lastScrapeError, lastScrapeError) ||
-                const DeepCollectionEquality().equals(
-                  other.lastScrapeError,
-                  lastScrapeError,
-                )) &&
-            (identical(other.comparisonInfo, comparisonInfo) ||
-                const DeepCollectionEquality().equals(
-                  other.comparisonInfo,
-                  comparisonInfo,
                 )));
   }
 
@@ -1427,132 +1719,77 @@ class PatchedLink {
 
   @override
   int get hashCode =>
-      const DeepCollectionEquality().hash(id) ^
       const DeepCollectionEquality().hash(name) ^
       const DeepCollectionEquality().hash(url) ^
-      const DeepCollectionEquality().hash(user) ^
       const DeepCollectionEquality().hash(strategy) ^
-      const DeepCollectionEquality().hash(lastScraped) ^
       const DeepCollectionEquality().hash(scrapeIntervalMinutes) ^
-      const DeepCollectionEquality().hash(nextScrapeAt) ^
       const DeepCollectionEquality().hash(scrapeDisabled) ^
-      const DeepCollectionEquality().hash(scrapeFailureCount) ^
-      const DeepCollectionEquality().hash(lastScrapeError) ^
-      const DeepCollectionEquality().hash(comparisonInfo) ^
       runtimeType.hashCode;
 }
 
-extension $PatchedLinkExtension on PatchedLink {
-  PatchedLink copyWith({
-    int? id,
+extension $PatchedLinkRequestExtension on PatchedLinkRequest {
+  PatchedLinkRequest copyWith({
     String? name,
     String? url,
-    int? user,
     int? strategy,
-    DateTime? lastScraped,
     int? scrapeIntervalMinutes,
-    DateTime? nextScrapeAt,
     bool? scrapeDisabled,
-    int? scrapeFailureCount,
-    String? lastScrapeError,
-    String? comparisonInfo,
   }) {
-    return PatchedLink(
-      id: id ?? this.id,
+    return PatchedLinkRequest(
       name: name ?? this.name,
       url: url ?? this.url,
-      user: user ?? this.user,
       strategy: strategy ?? this.strategy,
-      lastScraped: lastScraped ?? this.lastScraped,
       scrapeIntervalMinutes:
           scrapeIntervalMinutes ?? this.scrapeIntervalMinutes,
-      nextScrapeAt: nextScrapeAt ?? this.nextScrapeAt,
       scrapeDisabled: scrapeDisabled ?? this.scrapeDisabled,
-      scrapeFailureCount: scrapeFailureCount ?? this.scrapeFailureCount,
-      lastScrapeError: lastScrapeError ?? this.lastScrapeError,
-      comparisonInfo: comparisonInfo ?? this.comparisonInfo,
     );
   }
 
-  PatchedLink copyWithWrapped({
-    Wrapped<int?>? id,
+  PatchedLinkRequest copyWithWrapped({
     Wrapped<String?>? name,
     Wrapped<String?>? url,
-    Wrapped<int?>? user,
     Wrapped<int?>? strategy,
-    Wrapped<DateTime?>? lastScraped,
     Wrapped<int?>? scrapeIntervalMinutes,
-    Wrapped<DateTime?>? nextScrapeAt,
     Wrapped<bool?>? scrapeDisabled,
-    Wrapped<int?>? scrapeFailureCount,
-    Wrapped<String?>? lastScrapeError,
-    Wrapped<String?>? comparisonInfo,
   }) {
-    return PatchedLink(
-      id: (id != null ? id.value : this.id),
+    return PatchedLinkRequest(
       name: (name != null ? name.value : this.name),
       url: (url != null ? url.value : this.url),
-      user: (user != null ? user.value : this.user),
       strategy: (strategy != null ? strategy.value : this.strategy),
-      lastScraped: (lastScraped != null ? lastScraped.value : this.lastScraped),
       scrapeIntervalMinutes: (scrapeIntervalMinutes != null
           ? scrapeIntervalMinutes.value
           : this.scrapeIntervalMinutes),
-      nextScrapeAt: (nextScrapeAt != null
-          ? nextScrapeAt.value
-          : this.nextScrapeAt),
       scrapeDisabled: (scrapeDisabled != null
           ? scrapeDisabled.value
           : this.scrapeDisabled),
-      scrapeFailureCount: (scrapeFailureCount != null
-          ? scrapeFailureCount.value
-          : this.scrapeFailureCount),
-      lastScrapeError: (lastScrapeError != null
-          ? lastScrapeError.value
-          : this.lastScrapeError),
-      comparisonInfo: (comparisonInfo != null
-          ? comparisonInfo.value
-          : this.comparisonInfo),
     );
   }
 }
 
 @JsonSerializable(explicitToJson: true)
-class PatchedNotification {
-  const PatchedNotification({this.id, this.update, this.status, this.readAt});
+class PatchedNotificationRequest {
+  const PatchedNotificationRequest({this.status});
 
-  factory PatchedNotification.fromJson(Map<String, dynamic> json) =>
-      _$PatchedNotificationFromJson(json);
+  factory PatchedNotificationRequest.fromJson(Map<String, dynamic> json) =>
+      _$PatchedNotificationRequestFromJson(json);
 
-  static const toJsonFactory = _$PatchedNotificationToJson;
-  Map<String, dynamic> toJson() => _$PatchedNotificationToJson(this);
+  static const toJsonFactory = _$PatchedNotificationRequestToJson;
+  Map<String, dynamic> toJson() => _$PatchedNotificationRequestToJson(this);
 
-  @JsonKey(name: 'id')
-  final int? id;
-  @JsonKey(name: 'update')
-  final Update? update;
   @JsonKey(
     name: 'status',
     toJson: statusEnumNullableToJson,
     fromJson: statusEnumNullableFromJson,
   )
   final enums.StatusEnum? status;
-  @JsonKey(name: 'read_at')
-  final DateTime? readAt;
-  static const fromJsonFactory = _$PatchedNotificationFromJson;
+  static const fromJsonFactory = _$PatchedNotificationRequestFromJson;
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
-        (other is PatchedNotification &&
-            (identical(other.id, id) ||
-                const DeepCollectionEquality().equals(other.id, id)) &&
-            (identical(other.update, update) ||
-                const DeepCollectionEquality().equals(other.update, update)) &&
+        (other is PatchedNotificationRequest &&
             (identical(other.status, status) ||
-                const DeepCollectionEquality().equals(other.status, status)) &&
-            (identical(other.readAt, readAt) ||
-                const DeepCollectionEquality().equals(other.readAt, readAt)));
+                const DeepCollectionEquality().equals(other.status, status)));
   }
 
   @override
@@ -1560,57 +1797,33 @@ class PatchedNotification {
 
   @override
   int get hashCode =>
-      const DeepCollectionEquality().hash(id) ^
-      const DeepCollectionEquality().hash(update) ^
-      const DeepCollectionEquality().hash(status) ^
-      const DeepCollectionEquality().hash(readAt) ^
-      runtimeType.hashCode;
+      const DeepCollectionEquality().hash(status) ^ runtimeType.hashCode;
 }
 
-extension $PatchedNotificationExtension on PatchedNotification {
-  PatchedNotification copyWith({
-    int? id,
-    Update? update,
-    enums.StatusEnum? status,
-    DateTime? readAt,
-  }) {
-    return PatchedNotification(
-      id: id ?? this.id,
-      update: update ?? this.update,
-      status: status ?? this.status,
-      readAt: readAt ?? this.readAt,
-    );
+extension $PatchedNotificationRequestExtension on PatchedNotificationRequest {
+  PatchedNotificationRequest copyWith({enums.StatusEnum? status}) {
+    return PatchedNotificationRequest(status: status ?? this.status);
   }
 
-  PatchedNotification copyWithWrapped({
-    Wrapped<int?>? id,
-    Wrapped<Update?>? update,
+  PatchedNotificationRequest copyWithWrapped({
     Wrapped<enums.StatusEnum?>? status,
-    Wrapped<DateTime?>? readAt,
   }) {
-    return PatchedNotification(
-      id: (id != null ? id.value : this.id),
-      update: (update != null ? update.value : this.update),
+    return PatchedNotificationRequest(
       status: (status != null ? status.value : this.status),
-      readAt: (readAt != null ? readAt.value : this.readAt),
     );
   }
 }
 
 @JsonSerializable(explicitToJson: true)
-class PatchedStrategy {
-  const PatchedStrategy({this.id, this.user, this.stratCls, this.data});
+class PatchedStrategyRequest {
+  const PatchedStrategyRequest({this.stratCls, this.data});
 
-  factory PatchedStrategy.fromJson(Map<String, dynamic> json) =>
-      _$PatchedStrategyFromJson(json);
+  factory PatchedStrategyRequest.fromJson(Map<String, dynamic> json) =>
+      _$PatchedStrategyRequestFromJson(json);
 
-  static const toJsonFactory = _$PatchedStrategyToJson;
-  Map<String, dynamic> toJson() => _$PatchedStrategyToJson(this);
+  static const toJsonFactory = _$PatchedStrategyRequestToJson;
+  Map<String, dynamic> toJson() => _$PatchedStrategyRequestToJson(this);
 
-  @JsonKey(name: 'id')
-  final int? id;
-  @JsonKey(name: 'user')
-  final int? user;
   @JsonKey(
     name: 'strat_cls',
     toJson: stratClsEnumNullableToJson,
@@ -1619,16 +1832,12 @@ class PatchedStrategy {
   final enums.StratClsEnum? stratCls;
   @JsonKey(name: 'data')
   final dynamic data;
-  static const fromJsonFactory = _$PatchedStrategyFromJson;
+  static const fromJsonFactory = _$PatchedStrategyRequestFromJson;
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
-        (other is PatchedStrategy &&
-            (identical(other.id, id) ||
-                const DeepCollectionEquality().equals(other.id, id)) &&
-            (identical(other.user, user) ||
-                const DeepCollectionEquality().equals(other.user, user)) &&
+        (other is PatchedStrategyRequest &&
             (identical(other.stratCls, stratCls) ||
                 const DeepCollectionEquality().equals(
                   other.stratCls,
@@ -1643,37 +1852,27 @@ class PatchedStrategy {
 
   @override
   int get hashCode =>
-      const DeepCollectionEquality().hash(id) ^
-      const DeepCollectionEquality().hash(user) ^
       const DeepCollectionEquality().hash(stratCls) ^
       const DeepCollectionEquality().hash(data) ^
       runtimeType.hashCode;
 }
 
-extension $PatchedStrategyExtension on PatchedStrategy {
-  PatchedStrategy copyWith({
-    int? id,
-    int? user,
+extension $PatchedStrategyRequestExtension on PatchedStrategyRequest {
+  PatchedStrategyRequest copyWith({
     enums.StratClsEnum? stratCls,
     dynamic data,
   }) {
-    return PatchedStrategy(
-      id: id ?? this.id,
-      user: user ?? this.user,
+    return PatchedStrategyRequest(
       stratCls: stratCls ?? this.stratCls,
       data: data ?? this.data,
     );
   }
 
-  PatchedStrategy copyWithWrapped({
-    Wrapped<int?>? id,
-    Wrapped<int?>? user,
+  PatchedStrategyRequest copyWithWrapped({
     Wrapped<enums.StratClsEnum?>? stratCls,
     Wrapped<dynamic>? data,
   }) {
-    return PatchedStrategy(
-      id: (id != null ? id.value : this.id),
-      user: (user != null ? user.value : this.user),
+    return PatchedStrategyRequest(
       stratCls: (stratCls != null ? stratCls.value : this.stratCls),
       data: (data != null ? data.value : this.data),
     );
@@ -1681,19 +1880,19 @@ extension $PatchedStrategyExtension on PatchedStrategy {
 }
 
 @JsonSerializable(explicitToJson: true)
-class PatchedUserCreation {
-  const PatchedUserCreation({
+class PatchedUserCreationRequest {
+  const PatchedUserCreationRequest({
     this.username,
     this.email,
     this.name,
     this.password,
   });
 
-  factory PatchedUserCreation.fromJson(Map<String, dynamic> json) =>
-      _$PatchedUserCreationFromJson(json);
+  factory PatchedUserCreationRequest.fromJson(Map<String, dynamic> json) =>
+      _$PatchedUserCreationRequestFromJson(json);
 
-  static const toJsonFactory = _$PatchedUserCreationToJson;
-  Map<String, dynamic> toJson() => _$PatchedUserCreationToJson(this);
+  static const toJsonFactory = _$PatchedUserCreationRequestToJson;
+  Map<String, dynamic> toJson() => _$PatchedUserCreationRequestToJson(this);
 
   @JsonKey(name: 'username')
   final String? username;
@@ -1703,12 +1902,12 @@ class PatchedUserCreation {
   final String? name;
   @JsonKey(name: 'password')
   final String? password;
-  static const fromJsonFactory = _$PatchedUserCreationFromJson;
+  static const fromJsonFactory = _$PatchedUserCreationRequestFromJson;
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
-        (other is PatchedUserCreation &&
+        (other is PatchedUserCreationRequest &&
             (identical(other.username, username) ||
                 const DeepCollectionEquality().equals(
                   other.username,
@@ -1737,14 +1936,14 @@ class PatchedUserCreation {
       runtimeType.hashCode;
 }
 
-extension $PatchedUserCreationExtension on PatchedUserCreation {
-  PatchedUserCreation copyWith({
+extension $PatchedUserCreationRequestExtension on PatchedUserCreationRequest {
+  PatchedUserCreationRequest copyWith({
     String? username,
     String? email,
     String? name,
     String? password,
   }) {
-    return PatchedUserCreation(
+    return PatchedUserCreationRequest(
       username: username ?? this.username,
       email: email ?? this.email,
       name: name ?? this.name,
@@ -1752,13 +1951,13 @@ extension $PatchedUserCreationExtension on PatchedUserCreation {
     );
   }
 
-  PatchedUserCreation copyWithWrapped({
+  PatchedUserCreationRequest copyWithWrapped({
     Wrapped<String?>? username,
     Wrapped<String?>? email,
     Wrapped<String?>? name,
     Wrapped<String?>? password,
   }) {
-    return PatchedUserCreation(
+    return PatchedUserCreationRequest(
       username: (username != null ? username.value : this.username),
       email: (email != null ? email.value : this.email),
       name: (name != null ? name.value : this.name),
@@ -2038,6 +2237,68 @@ extension $StrategyExtension on Strategy {
     return Strategy(
       id: (id != null ? id.value : this.id),
       user: (user != null ? user.value : this.user),
+      stratCls: (stratCls != null ? stratCls.value : this.stratCls),
+      data: (data != null ? data.value : this.data),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class StrategyRequest {
+  const StrategyRequest({required this.stratCls, this.data});
+
+  factory StrategyRequest.fromJson(Map<String, dynamic> json) =>
+      _$StrategyRequestFromJson(json);
+
+  static const toJsonFactory = _$StrategyRequestToJson;
+  Map<String, dynamic> toJson() => _$StrategyRequestToJson(this);
+
+  @JsonKey(
+    name: 'strat_cls',
+    toJson: stratClsEnumToJson,
+    fromJson: stratClsEnumFromJson,
+  )
+  final enums.StratClsEnum stratCls;
+  @JsonKey(name: 'data')
+  final dynamic data;
+  static const fromJsonFactory = _$StrategyRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is StrategyRequest &&
+            (identical(other.stratCls, stratCls) ||
+                const DeepCollectionEquality().equals(
+                  other.stratCls,
+                  stratCls,
+                )) &&
+            (identical(other.data, data) ||
+                const DeepCollectionEquality().equals(other.data, data)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(stratCls) ^
+      const DeepCollectionEquality().hash(data) ^
+      runtimeType.hashCode;
+}
+
+extension $StrategyRequestExtension on StrategyRequest {
+  StrategyRequest copyWith({enums.StratClsEnum? stratCls, dynamic data}) {
+    return StrategyRequest(
+      stratCls: stratCls ?? this.stratCls,
+      data: data ?? this.data,
+    );
+  }
+
+  StrategyRequest copyWithWrapped({
+    Wrapped<enums.StratClsEnum>? stratCls,
+    Wrapped<dynamic>? data,
+  }) {
+    return StrategyRequest(
       stratCls: (stratCls != null ? stratCls.value : this.stratCls),
       data: (data != null ? data.value : this.data),
     );
@@ -2483,12 +2744,7 @@ extension $UpdateExtension on Update {
 
 @JsonSerializable(explicitToJson: true)
 class UserCreation {
-  const UserCreation({
-    required this.username,
-    required this.email,
-    this.name,
-    this.password,
-  });
+  const UserCreation({required this.username, required this.email, this.name});
 
   factory UserCreation.fromJson(Map<String, dynamic> json) =>
       _$UserCreationFromJson(json);
@@ -2502,14 +2758,85 @@ class UserCreation {
   final String email;
   @JsonKey(name: 'name')
   final String? name;
-  @JsonKey(name: 'password')
-  final String? password;
   static const fromJsonFactory = _$UserCreationFromJson;
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
         (other is UserCreation &&
+            (identical(other.username, username) ||
+                const DeepCollectionEquality().equals(
+                  other.username,
+                  username,
+                )) &&
+            (identical(other.email, email) ||
+                const DeepCollectionEquality().equals(other.email, email)) &&
+            (identical(other.name, name) ||
+                const DeepCollectionEquality().equals(other.name, name)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(username) ^
+      const DeepCollectionEquality().hash(email) ^
+      const DeepCollectionEquality().hash(name) ^
+      runtimeType.hashCode;
+}
+
+extension $UserCreationExtension on UserCreation {
+  UserCreation copyWith({String? username, String? email, String? name}) {
+    return UserCreation(
+      username: username ?? this.username,
+      email: email ?? this.email,
+      name: name ?? this.name,
+    );
+  }
+
+  UserCreation copyWithWrapped({
+    Wrapped<String>? username,
+    Wrapped<String>? email,
+    Wrapped<String?>? name,
+  }) {
+    return UserCreation(
+      username: (username != null ? username.value : this.username),
+      email: (email != null ? email.value : this.email),
+      name: (name != null ? name.value : this.name),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class UserCreationRequest {
+  const UserCreationRequest({
+    required this.username,
+    required this.email,
+    this.name,
+    this.password,
+  });
+
+  factory UserCreationRequest.fromJson(Map<String, dynamic> json) =>
+      _$UserCreationRequestFromJson(json);
+
+  static const toJsonFactory = _$UserCreationRequestToJson;
+  Map<String, dynamic> toJson() => _$UserCreationRequestToJson(this);
+
+  @JsonKey(name: 'username')
+  final String username;
+  @JsonKey(name: 'email')
+  final String email;
+  @JsonKey(name: 'name')
+  final String? name;
+  @JsonKey(name: 'password')
+  final String? password;
+  static const fromJsonFactory = _$UserCreationRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is UserCreationRequest &&
             (identical(other.username, username) ||
                 const DeepCollectionEquality().equals(
                   other.username,
@@ -2538,14 +2865,14 @@ class UserCreation {
       runtimeType.hashCode;
 }
 
-extension $UserCreationExtension on UserCreation {
-  UserCreation copyWith({
+extension $UserCreationRequestExtension on UserCreationRequest {
+  UserCreationRequest copyWith({
     String? username,
     String? email,
     String? name,
     String? password,
   }) {
-    return UserCreation(
+    return UserCreationRequest(
       username: username ?? this.username,
       email: email ?? this.email,
       name: name ?? this.name,
@@ -2553,17 +2880,168 @@ extension $UserCreationExtension on UserCreation {
     );
   }
 
-  UserCreation copyWithWrapped({
+  UserCreationRequest copyWithWrapped({
     Wrapped<String>? username,
     Wrapped<String>? email,
     Wrapped<String?>? name,
     Wrapped<String?>? password,
   }) {
-    return UserCreation(
+    return UserCreationRequest(
       username: (username != null ? username.value : this.username),
       email: (email != null ? email.value : this.email),
       name: (name != null ? name.value : this.name),
       password: (password != null ? password.value : this.password),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class UserFullRead {
+  const UserFullRead({
+    this.id,
+    this.name,
+    required this.email,
+    required this.username,
+    this.isStaff,
+    this.isSuperuser,
+    this.dateCreated,
+    this.dateModified,
+    this.dateDeleted,
+  });
+
+  factory UserFullRead.fromJson(Map<String, dynamic> json) =>
+      _$UserFullReadFromJson(json);
+
+  static const toJsonFactory = _$UserFullReadToJson;
+  Map<String, dynamic> toJson() => _$UserFullReadToJson(this);
+
+  @JsonKey(name: 'id')
+  final int? id;
+  @JsonKey(name: 'name')
+  final String? name;
+  @JsonKey(name: 'email')
+  final String email;
+  @JsonKey(name: 'username')
+  final String username;
+  @JsonKey(name: 'is_staff')
+  final bool? isStaff;
+  @JsonKey(name: 'is_superuser')
+  final bool? isSuperuser;
+  @JsonKey(name: 'date_created')
+  final DateTime? dateCreated;
+  @JsonKey(name: 'date_modified')
+  final DateTime? dateModified;
+  @JsonKey(name: 'date_deleted')
+  final DateTime? dateDeleted;
+  static const fromJsonFactory = _$UserFullReadFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is UserFullRead &&
+            (identical(other.id, id) ||
+                const DeepCollectionEquality().equals(other.id, id)) &&
+            (identical(other.name, name) ||
+                const DeepCollectionEquality().equals(other.name, name)) &&
+            (identical(other.email, email) ||
+                const DeepCollectionEquality().equals(other.email, email)) &&
+            (identical(other.username, username) ||
+                const DeepCollectionEquality().equals(
+                  other.username,
+                  username,
+                )) &&
+            (identical(other.isStaff, isStaff) ||
+                const DeepCollectionEquality().equals(
+                  other.isStaff,
+                  isStaff,
+                )) &&
+            (identical(other.isSuperuser, isSuperuser) ||
+                const DeepCollectionEquality().equals(
+                  other.isSuperuser,
+                  isSuperuser,
+                )) &&
+            (identical(other.dateCreated, dateCreated) ||
+                const DeepCollectionEquality().equals(
+                  other.dateCreated,
+                  dateCreated,
+                )) &&
+            (identical(other.dateModified, dateModified) ||
+                const DeepCollectionEquality().equals(
+                  other.dateModified,
+                  dateModified,
+                )) &&
+            (identical(other.dateDeleted, dateDeleted) ||
+                const DeepCollectionEquality().equals(
+                  other.dateDeleted,
+                  dateDeleted,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(id) ^
+      const DeepCollectionEquality().hash(name) ^
+      const DeepCollectionEquality().hash(email) ^
+      const DeepCollectionEquality().hash(username) ^
+      const DeepCollectionEquality().hash(isStaff) ^
+      const DeepCollectionEquality().hash(isSuperuser) ^
+      const DeepCollectionEquality().hash(dateCreated) ^
+      const DeepCollectionEquality().hash(dateModified) ^
+      const DeepCollectionEquality().hash(dateDeleted) ^
+      runtimeType.hashCode;
+}
+
+extension $UserFullReadExtension on UserFullRead {
+  UserFullRead copyWith({
+    int? id,
+    String? name,
+    String? email,
+    String? username,
+    bool? isStaff,
+    bool? isSuperuser,
+    DateTime? dateCreated,
+    DateTime? dateModified,
+    DateTime? dateDeleted,
+  }) {
+    return UserFullRead(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      username: username ?? this.username,
+      isStaff: isStaff ?? this.isStaff,
+      isSuperuser: isSuperuser ?? this.isSuperuser,
+      dateCreated: dateCreated ?? this.dateCreated,
+      dateModified: dateModified ?? this.dateModified,
+      dateDeleted: dateDeleted ?? this.dateDeleted,
+    );
+  }
+
+  UserFullRead copyWithWrapped({
+    Wrapped<int?>? id,
+    Wrapped<String?>? name,
+    Wrapped<String>? email,
+    Wrapped<String>? username,
+    Wrapped<bool?>? isStaff,
+    Wrapped<bool?>? isSuperuser,
+    Wrapped<DateTime?>? dateCreated,
+    Wrapped<DateTime?>? dateModified,
+    Wrapped<DateTime?>? dateDeleted,
+  }) {
+    return UserFullRead(
+      id: (id != null ? id.value : this.id),
+      name: (name != null ? name.value : this.name),
+      email: (email != null ? email.value : this.email),
+      username: (username != null ? username.value : this.username),
+      isStaff: (isStaff != null ? isStaff.value : this.isStaff),
+      isSuperuser: (isSuperuser != null ? isSuperuser.value : this.isSuperuser),
+      dateCreated: (dateCreated != null ? dateCreated.value : this.dateCreated),
+      dateModified: (dateModified != null
+          ? dateModified.value
+          : this.dateModified),
+      dateDeleted: (dateDeleted != null ? dateDeleted.value : this.dateDeleted),
     );
   }
 }

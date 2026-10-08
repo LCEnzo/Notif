@@ -42,11 +42,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # After pub get: trailing_commas comes from very_good_analysis through a
+      # package: include, and the language version from package_config.json.
+      # Before codegen and builds: `.` skips hidden dirs (.dart_tool/) but not
+      # build/, so here it sees exactly the tracked Dart.
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed .
+
       # The generated Dart models must track backend/openapi.json. The refresh
-      # script re-copies the schema and regenerates; a diff (including
-      # untracked files via intent-to-add, in case a generator version emits a
-      # new file) means the committed artifacts are stale and this PR/commit
-      # must include them.
+      # script copies the schema into the gitignored swagger/ and regenerates;
+      # a diff (including untracked files via intent-to-add, in case a
+      # generator version emits a new file) means the committed models are
+      # stale and this PR/commit must include them.
       - name: Contract freshness (generated models match backend schema)
         run: |
           python3 scripts/refresh_contract.py

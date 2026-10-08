@@ -22,22 +22,44 @@ Map<String, dynamic> _$CaddyAccessLogResponseToJson(
   'results': instance.results,
 };
 
-ClientEvent _$ClientEventFromJson(Map<String, dynamic> json) => ClientEvent(
-  category: categoryEnumFromJson(json['category']),
-  route: json['route'] as String?,
-  endpoint: json['endpoint'] as String?,
-  requestId: json['request_id'] as String?,
-  contractPath: json['contract_path'] as String?,
-  expected: json['expected'] as String?,
-  actual: json['actual'] as String?,
-  appVersion: json['app_version'] as String?,
-  gitHash: json['git_hash'] as String?,
-  browser: json['browser'] as String?,
-  message: json['message'] as String?,
-  stack: json['stack'] as String?,
+ChangePasswordRequest _$ChangePasswordRequestFromJson(
+  Map<String, dynamic> json,
+) => ChangePasswordRequest(
+  currentPassword: json['current_password'] as String?,
+  newPassword: json['new_password'] as String?,
 );
 
-Map<String, dynamic> _$ClientEventToJson(ClientEvent instance) =>
+Map<String, dynamic> _$ChangePasswordRequestToJson(
+  ChangePasswordRequest instance,
+) => <String, dynamic>{
+  'current_password': instance.currentPassword,
+  'new_password': instance.newPassword,
+};
+
+ClientEventAccepted _$ClientEventAcceptedFromJson(Map<String, dynamic> json) =>
+    ClientEventAccepted(status: json['status'] as String);
+
+Map<String, dynamic> _$ClientEventAcceptedToJson(
+  ClientEventAccepted instance,
+) => <String, dynamic>{'status': instance.status};
+
+ClientEventRequest _$ClientEventRequestFromJson(Map<String, dynamic> json) =>
+    ClientEventRequest(
+      category: categoryEnumFromJson(json['category']),
+      route: json['route'] as String?,
+      endpoint: json['endpoint'] as String?,
+      requestId: json['request_id'] as String?,
+      contractPath: json['contract_path'] as String?,
+      expected: json['expected'] as String?,
+      actual: json['actual'] as String?,
+      appVersion: json['app_version'] as String?,
+      gitHash: json['git_hash'] as String?,
+      browser: json['browser'] as String?,
+      message: json['message'] as String?,
+      stack: json['stack'] as String?,
+    );
+
+Map<String, dynamic> _$ClientEventRequestToJson(ClientEventRequest instance) =>
     <String, dynamic>{
       'category': categoryEnumToJson(instance.category),
       'route': instance.route,
@@ -52,13 +74,6 @@ Map<String, dynamic> _$ClientEventToJson(ClientEvent instance) =>
       'message': instance.message,
       'stack': instance.stack,
     };
-
-ClientEventAccepted _$ClientEventAcceptedFromJson(Map<String, dynamic> json) =>
-    ClientEventAccepted(status: json['status'] as String);
-
-Map<String, dynamic> _$ClientEventAcceptedToJson(
-  ClientEventAccepted instance,
-) => <String, dynamic>{'status': instance.status};
 
 DeviceSession _$DeviceSessionFromJson(Map<String, dynamic> json) =>
     DeviceSession(
@@ -87,6 +102,18 @@ Map<String, dynamic> _$DeviceSessionToJson(DeviceSession instance) =>
       'user_agent': instance.userAgent,
       'current': instance.current,
     };
+
+ErrorDetail _$ErrorDetailFromJson(Map<String, dynamic> json) =>
+    ErrorDetail(detail: json['detail'] as String);
+
+Map<String, dynamic> _$ErrorDetailToJson(ErrorDetail instance) =>
+    <String, dynamic>{'detail': instance.detail};
+
+ErrorMessage _$ErrorMessageFromJson(Map<String, dynamic> json) =>
+    ErrorMessage(error: json['error'] as String);
+
+Map<String, dynamic> _$ErrorMessageToJson(ErrorMessage instance) =>
+    <String, dynamic>{'error': instance.error};
 
 HealthCheckResponse _$HealthCheckResponseFromJson(Map<String, dynamic> json) =>
     HealthCheckResponse(status: json['status'] as String);
@@ -129,6 +156,23 @@ Map<String, dynamic> _$LinkToJson(Link instance) => <String, dynamic>{
   'comparison_info': instance.comparisonInfo,
 };
 
+LinkRequest _$LinkRequestFromJson(Map<String, dynamic> json) => LinkRequest(
+  name: json['name'] as String,
+  url: json['url'] as String,
+  strategy: (json['strategy'] as num?)?.toInt(),
+  scrapeIntervalMinutes: (json['scrape_interval_minutes'] as num?)?.toInt(),
+  scrapeDisabled: json['scrape_disabled'] as bool?,
+);
+
+Map<String, dynamic> _$LinkRequestToJson(LinkRequest instance) =>
+    <String, dynamic>{
+      'name': instance.name,
+      'url': instance.url,
+      'strategy': instance.strategy,
+      'scrape_interval_minutes': instance.scrapeIntervalMinutes,
+      'scrape_disabled': instance.scrapeDisabled,
+    };
+
 LoginRequest _$LoginRequestFromJson(Map<String, dynamic> json) => LoginRequest(
   username: json['username'] as String,
   password: json['password'] as String?,
@@ -158,6 +202,13 @@ Map<String, dynamic> _$LoginResponseToJson(LoginResponse instance) =>
       'token': instance.token,
     };
 
+MarkAllReadResponse _$MarkAllReadResponseFromJson(Map<String, dynamic> json) =>
+    MarkAllReadResponse(markedRead: (json['marked_read'] as num).toInt());
+
+Map<String, dynamic> _$MarkAllReadResponseToJson(
+  MarkAllReadResponse instance,
+) => <String, dynamic>{'marked_read': instance.markedRead};
+
 Notification _$NotificationFromJson(Map<String, dynamic> json) => Notification(
   id: (json['id'] as num?)?.toInt(),
   update: json['update'] == null
@@ -176,6 +227,13 @@ Map<String, dynamic> _$NotificationToJson(Notification instance) =>
       'status': statusEnumNullableToJson(instance.status),
       'read_at': instance.readAt?.toIso8601String(),
     };
+
+NotificationRequest _$NotificationRequestFromJson(Map<String, dynamic> json) =>
+    NotificationRequest(status: statusEnumNullableFromJson(json['status']));
+
+Map<String, dynamic> _$NotificationRequestToJson(
+  NotificationRequest instance,
+) => <String, dynamic>{'status': statusEnumNullableToJson(instance.status)};
 
 PaginatedLinkList _$PaginatedLinkListFromJson(Map<String, dynamic> json) =>
     PaginatedLinkList(
@@ -241,16 +299,16 @@ Map<String, dynamic> _$PaginatedSystemEventListToJson(
   'results': instance.results.map((e) => e.toJson()).toList(),
 };
 
-PasswordResetConfirm _$PasswordResetConfirmFromJson(
+PasswordResetConfirmRequest _$PasswordResetConfirmRequestFromJson(
   Map<String, dynamic> json,
-) => PasswordResetConfirm(
+) => PasswordResetConfirmRequest(
   email: json['email'] as String,
   code: json['code'] as String,
   newPassword: json['new_password'] as String,
 );
 
-Map<String, dynamic> _$PasswordResetConfirmToJson(
-  PasswordResetConfirm instance,
+Map<String, dynamic> _$PasswordResetConfirmRequestToJson(
+  PasswordResetConfirmRequest instance,
 ) => <String, dynamic>{
   'email': instance.email,
   'code': instance.code,
@@ -265,88 +323,59 @@ Map<String, dynamic> _$PasswordResetRequestToJson(
   PasswordResetRequest instance,
 ) => <String, dynamic>{'email': instance.email};
 
-PatchedLink _$PatchedLinkFromJson(Map<String, dynamic> json) => PatchedLink(
-  id: (json['id'] as num?)?.toInt(),
-  name: json['name'] as String?,
-  url: json['url'] as String?,
-  user: (json['user'] as num?)?.toInt(),
-  strategy: (json['strategy'] as num?)?.toInt(),
-  lastScraped: json['last_scraped'] == null
-      ? null
-      : DateTime.parse(json['last_scraped'] as String),
-  scrapeIntervalMinutes: (json['scrape_interval_minutes'] as num?)?.toInt(),
-  nextScrapeAt: json['next_scrape_at'] == null
-      ? null
-      : DateTime.parse(json['next_scrape_at'] as String),
-  scrapeDisabled: json['scrape_disabled'] as bool?,
-  scrapeFailureCount: (json['scrape_failure_count'] as num?)?.toInt(),
-  lastScrapeError: json['last_scrape_error'] as String?,
-  comparisonInfo: json['comparison_info'] as String?,
-);
+PatchedLinkRequest _$PatchedLinkRequestFromJson(Map<String, dynamic> json) =>
+    PatchedLinkRequest(
+      name: json['name'] as String?,
+      url: json['url'] as String?,
+      strategy: (json['strategy'] as num?)?.toInt(),
+      scrapeIntervalMinutes: (json['scrape_interval_minutes'] as num?)?.toInt(),
+      scrapeDisabled: json['scrape_disabled'] as bool?,
+    );
 
-Map<String, dynamic> _$PatchedLinkToJson(PatchedLink instance) =>
+Map<String, dynamic> _$PatchedLinkRequestToJson(PatchedLinkRequest instance) =>
     <String, dynamic>{
-      'id': instance.id,
       'name': instance.name,
       'url': instance.url,
-      'user': instance.user,
       'strategy': instance.strategy,
-      'last_scraped': instance.lastScraped?.toIso8601String(),
       'scrape_interval_minutes': instance.scrapeIntervalMinutes,
-      'next_scrape_at': instance.nextScrapeAt?.toIso8601String(),
       'scrape_disabled': instance.scrapeDisabled,
-      'scrape_failure_count': instance.scrapeFailureCount,
-      'last_scrape_error': instance.lastScrapeError,
-      'comparison_info': instance.comparisonInfo,
     };
 
-PatchedNotification _$PatchedNotificationFromJson(Map<String, dynamic> json) =>
-    PatchedNotification(
-      id: (json['id'] as num?)?.toInt(),
-      update: json['update'] == null
-          ? null
-          : Update.fromJson(json['update'] as Map<String, dynamic>),
-      status: statusEnumNullableFromJson(json['status']),
-      readAt: json['read_at'] == null
-          ? null
-          : DateTime.parse(json['read_at'] as String),
-    );
+PatchedNotificationRequest _$PatchedNotificationRequestFromJson(
+  Map<String, dynamic> json,
+) => PatchedNotificationRequest(
+  status: statusEnumNullableFromJson(json['status']),
+);
 
-Map<String, dynamic> _$PatchedNotificationToJson(
-  PatchedNotification instance,
+Map<String, dynamic> _$PatchedNotificationRequestToJson(
+  PatchedNotificationRequest instance,
+) => <String, dynamic>{'status': statusEnumNullableToJson(instance.status)};
+
+PatchedStrategyRequest _$PatchedStrategyRequestFromJson(
+  Map<String, dynamic> json,
+) => PatchedStrategyRequest(
+  stratCls: stratClsEnumNullableFromJson(json['strat_cls']),
+  data: json['data'],
+);
+
+Map<String, dynamic> _$PatchedStrategyRequestToJson(
+  PatchedStrategyRequest instance,
 ) => <String, dynamic>{
-  'id': instance.id,
-  'update': instance.update?.toJson(),
-  'status': statusEnumNullableToJson(instance.status),
-  'read_at': instance.readAt?.toIso8601String(),
+  'strat_cls': stratClsEnumNullableToJson(instance.stratCls),
+  'data': instance.data,
 };
 
-PatchedStrategy _$PatchedStrategyFromJson(Map<String, dynamic> json) =>
-    PatchedStrategy(
-      id: (json['id'] as num?)?.toInt(),
-      user: (json['user'] as num?)?.toInt(),
-      stratCls: stratClsEnumNullableFromJson(json['strat_cls']),
-      data: json['data'],
-    );
+PatchedUserCreationRequest _$PatchedUserCreationRequestFromJson(
+  Map<String, dynamic> json,
+) => PatchedUserCreationRequest(
+  username: json['username'] as String?,
+  email: json['email'] as String?,
+  name: json['name'] as String?,
+  password: json['password'] as String?,
+);
 
-Map<String, dynamic> _$PatchedStrategyToJson(PatchedStrategy instance) =>
-    <String, dynamic>{
-      'id': instance.id,
-      'user': instance.user,
-      'strat_cls': stratClsEnumNullableToJson(instance.stratCls),
-      'data': instance.data,
-    };
-
-PatchedUserCreation _$PatchedUserCreationFromJson(Map<String, dynamic> json) =>
-    PatchedUserCreation(
-      username: json['username'] as String?,
-      email: json['email'] as String?,
-      name: json['name'] as String?,
-      password: json['password'] as String?,
-    );
-
-Map<String, dynamic> _$PatchedUserCreationToJson(
-  PatchedUserCreation instance,
+Map<String, dynamic> _$PatchedUserCreationRequestToJson(
+  PatchedUserCreationRequest instance,
 ) => <String, dynamic>{
   'username': instance.username,
   'email': instance.email,
@@ -403,6 +432,18 @@ Map<String, dynamic> _$StrategyToJson(Strategy instance) => <String, dynamic>{
   'strat_cls': stratClsEnumToJson(instance.stratCls),
   'data': instance.data,
 };
+
+StrategyRequest _$StrategyRequestFromJson(Map<String, dynamic> json) =>
+    StrategyRequest(
+      stratCls: stratClsEnumFromJson(json['strat_cls']),
+      data: json['data'],
+    );
+
+Map<String, dynamic> _$StrategyRequestToJson(StrategyRequest instance) =>
+    <String, dynamic>{
+      'strat_cls': stratClsEnumToJson(instance.stratCls),
+      'data': instance.data,
+    };
 
 SystemEvent _$SystemEventFromJson(Map<String, dynamic> json) => SystemEvent(
   id: (json['id'] as num?)?.toInt(),
@@ -493,7 +534,6 @@ UserCreation _$UserCreationFromJson(Map<String, dynamic> json) => UserCreation(
   username: json['username'] as String,
   email: json['email'] as String,
   name: json['name'] as String?,
-  password: json['password'] as String?,
 );
 
 Map<String, dynamic> _$UserCreationToJson(UserCreation instance) =>
@@ -501,7 +541,54 @@ Map<String, dynamic> _$UserCreationToJson(UserCreation instance) =>
       'username': instance.username,
       'email': instance.email,
       'name': instance.name,
-      'password': instance.password,
+    };
+
+UserCreationRequest _$UserCreationRequestFromJson(Map<String, dynamic> json) =>
+    UserCreationRequest(
+      username: json['username'] as String,
+      email: json['email'] as String,
+      name: json['name'] as String?,
+      password: json['password'] as String?,
+    );
+
+Map<String, dynamic> _$UserCreationRequestToJson(
+  UserCreationRequest instance,
+) => <String, dynamic>{
+  'username': instance.username,
+  'email': instance.email,
+  'name': instance.name,
+  'password': instance.password,
+};
+
+UserFullRead _$UserFullReadFromJson(Map<String, dynamic> json) => UserFullRead(
+  id: (json['id'] as num?)?.toInt(),
+  name: json['name'] as String?,
+  email: json['email'] as String,
+  username: json['username'] as String,
+  isStaff: json['is_staff'] as bool?,
+  isSuperuser: json['is_superuser'] as bool?,
+  dateCreated: json['date_created'] == null
+      ? null
+      : DateTime.parse(json['date_created'] as String),
+  dateModified: json['date_modified'] == null
+      ? null
+      : DateTime.parse(json['date_modified'] as String),
+  dateDeleted: json['date_deleted'] == null
+      ? null
+      : DateTime.parse(json['date_deleted'] as String),
+);
+
+Map<String, dynamic> _$UserFullReadToJson(UserFullRead instance) =>
+    <String, dynamic>{
+      'id': instance.id,
+      'name': instance.name,
+      'email': instance.email,
+      'username': instance.username,
+      'is_staff': instance.isStaff,
+      'is_superuser': instance.isSuperuser,
+      'date_created': instance.dateCreated?.toIso8601String(),
+      'date_modified': instance.dateModified?.toIso8601String(),
+      'date_deleted': instance.dateDeleted?.toIso8601String(),
     };
 
 UserMinimalRead _$UserMinimalReadFromJson(Map<String, dynamic> json) =>

@@ -159,7 +159,9 @@ def _selector_comparison_state(selector_state: Mapping[str, SelectorDigestState]
 
 def _html_to_readable_text(html_content: str) -> str:
 	"""Convert feed HTML into bounded readable text for notification bodies."""
-	soup = BeautifulSoup(html_content, "html.parser")
+	# A stream parses identically but skips Beautiful Soup's warning that a short
+	# tag-free string looks like a URL or file name; such feed bodies are content.
+	soup = BeautifulSoup(io.StringIO(html_content), "html.parser")
 
 	for tag in soup(_NON_CONTENT_TAGS):
 		tag.decompose()

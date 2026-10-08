@@ -11,26 +11,6 @@ const Duration _strategyCacheTtl = Duration(minutes: 2);
 
 const List<String> defaultStrategyChoices = <String>[generalSelectorStrategy];
 
-/// Runs a schema-generated parse, converting any contract violation into an
-/// [Exception] the fetch sites' `on Exception` handlers catch.
-///
-/// The generated parsers throw `TypeError` (a Dart `Error`, not an
-/// `Exception`) when the wire diverges from the schema — e.g. a required
-/// field like `Link.name` going missing. Every fetch site catches
-/// `on Exception`, so a raw `TypeError` would escape as an unhandled zone
-/// error: the spinner clears but `_error` is never set, and the user sees a
-/// silently empty list. Rethrowing as [FormatException] keeps the failure
-/// classified and visible.
-T _parseContract<T>(T Function() parse) {
-  try {
-    return parse();
-  } on Object catch (error) {
-    // Generated code can throw arbitrary objects (TypeError, StateError, …);
-    // this is the platform-boundary case for a bare catch.
-    throw FormatException('contract violation: $error');
-  }
-}
-
 @immutable
 class StrategyRecord {
   const StrategyRecord({
@@ -43,7 +23,7 @@ class StrategyRecord {
     // Parse through the schema-generated type first: field names and types
     // come from backend/openapi.json, not from a hand-rolled parser that can
     // silently drift from the contract.
-    final parsed = _parseContract(() => api.Strategy.fromJson(json));
+    final parsed = parseContract(() => api.Strategy.fromJson(json));
     // The generated enum is a closed set frozen at build time; a class the
     // backend added later parses as swaggerGeneratedUnknown (value == null).
     // Keep the raw wire name then: coercing to the general default would
@@ -96,7 +76,7 @@ class Link {
     Map<int, StrategyRecord> strategies,
   ) {
     // Parse through the schema-generated type first (see StrategyRecord).
-    final parsed = _parseContract(() => api.Link.fromJson(json));
+    final parsed = parseContract(() => api.Link.fromJson(json));
     final strategyId = parsed.strategy;
     final strategy = strategyId != null ? strategies[strategyId] : null;
 
@@ -156,7 +136,7 @@ class NotificationItem {
 
   factory NotificationItem.fromJson(Map<String, dynamic> json) {
     // Parse through the schema-generated type first (see StrategyRecord).
-    final parsed = _parseContract(() => api.Notification.fromJson(json));
+    final parsed = parseContract(() => api.Notification.fromJson(json));
     final update = parsed.update;
     final title = update?.title?.trim() ?? '';
 

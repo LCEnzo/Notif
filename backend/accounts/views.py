@@ -43,11 +43,13 @@ from accounts.device_sessions import (
 from accounts.models import DeviceSession, User
 from accounts.models.password_reset import PASSWORD_RESET_CODE_LENGTH, PasswordResetBudget, PasswordResetCode
 from accounts.serializers import (
+	ChangePasswordSerializer,
 	DeviceSessionSerializer,
-	LoginRequestSerializer,
+	ErrorMessageSerializer,
 	LoginResponseSerializer,
+	LoginSerializer,
 	PasswordResetConfirmSerializer,
-	PasswordResetRequestSerializer,
+	PasswordResetSerializer,
 	SessionRevokeResponseSerializer,
 	StatusResponseSerializer,
 	UserCreationSerializer,
@@ -302,7 +304,7 @@ class LoginView(AuthThrottleMixin, APIView):
 	throttle_scope = "login"
 
 	@extend_schema(
-		request=LoginRequestSerializer,
+		request=LoginSerializer,
 		responses={
 			status.HTTP_200_OK: LoginResponseSerializer,
 			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
@@ -315,7 +317,7 @@ class LoginView(AuthThrottleMixin, APIView):
 	)
 	def post(self, request: Request) -> Response:
 		_require_json_request(request)
-		serializer = LoginRequestSerializer(data=request.data)
+		serializer = LoginSerializer(data=request.data)
 		serializer.is_valid(raise_exception=True)
 		username = serializer.validated_data["username"]
 		password = serializer.validated_data["password"]
@@ -514,12 +516,17 @@ class DeviceSessionViewSet(ListModelMixin, _DeviceSessionGenericViewSet):
 class UserViewSet(_UserModelViewSet):
 	permission_classes = [IsAuthenticated, (ReadOnly | IsRequestingThemselves | IsAdminUser)]
 	queryset = User.objects.all()
+	# No PUT: a full replacement requires password, which update() refuses.
+	http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
 	def get_throttles(self) -> list[BaseThrottle]:
-		"""Apply stricter 'register' throttle on account creation."""
+		"""Apply the stricter 'register' scope on account creation.
+
+		The default ScopedRateThrottle reads the scope; appending another one here
+		would charge every registration against the budget twice.
+		"""
 		if self.action == "create":
 			self.throttle_scope = "register"
-			return [*super().get_throttles(), ScopedRateThrottle()]
 		return super().get_throttles()
 
 	def get_serializer_class(self) -> type[BaseSerializer[User]]:
@@ -535,7 +542,7 @@ class UserViewSet(_UserModelViewSet):
 		# full serializer. Comparing under a different name, and as strings
 		# since kwargs["pk"] is a string, keeps this a real equality check.
 		match (self.request.method, requester_pk):
-			case ("POST" | "PUT" | "PATCH", _):
+			case ("POST" | "PATCH", _):
 				return UserCreationSerializer
 			case ("GET", requester) if requester is not None and wanted_pk is not None and str(requester) == wanted_pk:
 				return UserFullReadSerializer
@@ -543,23 +550,35 @@ class UserViewSet(_UserModelViewSet):
 				return UserMinimalReadSerializer
 
 	def get_permissions(self) -> Sequence[Any]:
-		# Account creation, ie. registration, needs to work for visitors without an
-		# account. This is keyed on the action rather than the HTTP method because
-		# keying on the method also stripped IsAuthenticated off every POST @action
-		# on this viewset — change_password and get_my_info — which then reached
-		# their `assert isinstance(user, User)` with an AnonymousUser and returned
-		# 500 to unauthenticated callers.
+		# Registration is open to anyone. Keyed on the action, not the method, so the
+		# POST @actions keep IsAuthenticated; AllowAny rather than [] so the schema
+		# marks the operation anonymous.
 		if self.action == "create":
-			return []
+			return [AllowAny()]
 
 		return super().get_permissions()
 
-	@action(detail=False, methods=["get", "post"], permission_classes=[IsAuthenticated])
+	# Overrides the minimal read get_serializer_class() would give the schema.
+	@extend_schema(responses=UserFullReadSerializer)
+	@action(detail=False, methods=["get"], permission_classes=[IsAuthenticated])
 	def get_my_info(self, request: Request) -> Response:
 		user = request.user
 		assert isinstance(user, User)
 		return Response(status=status.HTTP_200_OK, data=UserFullReadSerializer(user).data)
 
+	@extend_schema(
+		request=ChangePasswordSerializer,
+		responses={
+			status.HTTP_200_OK: StatusResponseSerializer,
+			status.HTTP_400_BAD_REQUEST: OpenApiResponse(
+				response=ErrorMessageSerializer,
+				description=(
+					"A field is missing, empty or not a string, the current password is wrong, "
+					"or the password validators refused the new one."
+				),
+			),
+		},
+	)
 	@action(detail=False, methods=["post"], permission_classes=[IsAuthenticated])
 	def change_password(self, request: Request) -> Response:
 		"""Change the authenticated user's password.
@@ -645,7 +664,7 @@ class PasswordResetRequestView(APIView):
 		return [UserRateThrottle(), ScopedRateThrottle()]
 
 	@extend_schema(
-		request=PasswordResetRequestSerializer,
+		request=PasswordResetSerializer,
 		responses={status.HTTP_200_OK: StatusResponseSerializer},
 	)
 	def post(self, request: Request) -> Response:
@@ -655,7 +674,7 @@ class PasswordResetRequestView(APIView):
 		# spending the per-IP throttle budget from the victim's IP.
 		_require_json_request(request)
 
-		serializer = PasswordResetRequestSerializer(data=request.data)
+		serializer = PasswordResetSerializer(data=request.data)
 		if not serializer.is_valid():
 			# Return 200 to prevent enumeration via validation errors
 			return Response({"status": "ok"})

@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 def send_password_reset_email(to_email: str, code: str) -> None:
 	"""Send a 6-digit password reset code.
 
-	The actual transport is controlled by Django EMAIL_* settings. Local
-	development defaults to the console backend, while production can use
-	Resend's SMTP endpoint or any other SMTP provider.
+	The transport is Django's default mailer (MAILERS). Local development
+	defaults to the console backend, while production can use Resend's SMTP
+	endpoint or any other SMTP provider.
 	"""
 	try:
 		text_body = (
@@ -41,7 +41,7 @@ def send_password_reset_email(to_email: str, code: str) -> None:
 			to=[to_email],
 		)
 		message.attach_alternative(html_body, "text/html")
-		message.send(fail_silently=False)
+		message.send()
 	except Exception:
 		logger.exception("Failed to send password reset email to %s", to_email)
 		raise

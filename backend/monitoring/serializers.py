@@ -124,7 +124,7 @@ class NotificationSerializer(_NotificationModelSerializer):
 		read_only_fields = ["id", "update", "read_at"]
 
 
-class TriggerScrapeRequestSerializer(_AnySerializer):
+class TriggerScrapeSerializer(_AnySerializer):
 	link_id = serializers.IntegerField(min_value=1, required=False)
 
 
@@ -161,6 +161,13 @@ class TriggerScrapeResponseSerializer(_AnySerializer):
 		child=TriggerScrapeLinkResultSerializer(),
 		required=False,
 		help_text="Scrape-all only: per-link outcome keyed by stringified link id.",
+	)
+
+
+class MarkAllReadResponseSerializer(_AnySerializer):
+	marked_read = serializers.IntegerField(
+		min_value=0,
+		help_text="How many of the caller's unread notifications this call marked read.",
 	)
 
 

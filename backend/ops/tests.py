@@ -94,6 +94,18 @@ class OpsApiTestCase(SetupMixin, TestCase):
 		self.assertEqual(len(response.data["results"]), 1)
 		self.assertEqual(response.data["results"][0]["request"]["uri"], "/new")
 
+	def test_caddy_log_limit_is_held_to_its_documented_range(self):
+		client = login_client(APIClient(), self.superuser.get_username())
+		# A missing log answers 200 with no rows, so only the limit decides the status.
+		with override_settings(CADDY_ACCESS_LOG_PATH="/tmp/notif-missing-caddy-access.json"):
+			for limit, expected in (("1", 200), ("200", 200), ("0", 400), ("201", 400), ("abc", 400)):
+				with self.subTest(limit=limit):
+					response = client.get(reverse("caddy-access-logs"), {"limit": limit})
+
+					self.assertEqual(response.status_code, expected)
+					if expected == 400:
+						self.assertEqual(set(response.data), {"detail"})
+
 	def test_missing_caddy_log_returns_empty_results(self):
 		client = login_client(APIClient(), self.superuser.get_username())
 		with override_settings(CADDY_ACCESS_LOG_PATH="/tmp/notif-missing-caddy-access.json"):

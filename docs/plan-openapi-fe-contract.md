@@ -2,6 +2,9 @@
 
 Status: **implemented — PR #81 (`impl/openapi-fe-contract`)** · Date: 2026-08-02
 
+Amended 2026-10-06: the schema copy `frontend/swagger/openapi.json` is no
+longer committed; it is gitignored, and the refresh script writes it.
+
 ## Why
 
 The frontend and backend are built against the same API, but nothing connects the
@@ -29,15 +32,16 @@ bytes match the schema with a single trial test.
   `very_good_analysis`. `openapi-generator`'s Dart output is the dated
   "Dart 1.x" client style, and its strengths (multi-language, huge config) are
   irrelevant here. No docker/Java needed.
-- **`build_only_models: true` on the generator, fed the committed schema
-  copy.** `swagger_dart_code_generator` emits models *and* chopper/dio API
+- **`build_only_models: true` on the generator, fed a schema copy.**
+  `swagger_dart_code_generator` emits models *and* chopper/dio API
   classes together by default. The architecture test
   (`frontend/test/architecture_test.dart`) bans `package:dio` outside
   `api_client`/`auth`/`data`/`failures`. `build_only_models` makes it emit
   models only — dio-free, architecture-test-clean — so no schema surgery is
   needed (the plan's earlier "strip `paths`" idea was superseded by this
-  native flag). The generator reads `frontend/swagger/openapi.json`, a copy
-  of the backend file refreshed by `frontend/scripts/refresh_contract.py`.
+  native flag). The generator reads `frontend/swagger/openapi.json`, a
+  gitignored copy of the backend file written by
+  `frontend/scripts/refresh_contract.py`.
 - **Generated code is committed** so FE builds/CI never need codegen to run.
   CI regenerates and fails on diff (mirrors the backend drift check).
 - **Adoption starts with `Strategy`/`Link` in `data.dart`** — the exact models
@@ -69,7 +73,7 @@ bytes match the schema with a single trial test.
 - Fetch latest master; `git worktree add .claude/worktrees/openapi-fe-contract
   -b impl/openapi-fe-contract origin/master`
 - Add `swagger_dart_code_generator` + `build_runner` to `frontend/pubspec.yaml`
-  dev deps; add `build.yaml` with `input_folder: swagger` (a committed copy of
+  dev deps; add `build.yaml` with `input_folder: swagger` (holding a copy of
   `backend/openapi.json`) and output to `lib/generated/`, plus
   `build_only_models: true`
 - Add `frontend/scripts/refresh_contract.py`: copies `backend/openapi.json` →
