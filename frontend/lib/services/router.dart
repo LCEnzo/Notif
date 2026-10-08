@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:notif/screens/about.dart';
 import 'package:notif/screens/account.dart';
 import 'package:notif/screens/forgot_password.dart';
+import 'package:notif/screens/health.dart';
 import 'package:notif/screens/homescreen.dart';
 import 'package:notif/screens/login.dart';
 import 'package:notif/screens/ops.dart';
@@ -85,6 +86,10 @@ GoRouter createRouter(AuthService authService) {
         builder: (context, state) => const AccountPage(),
       ),
       GoRoute(path: '/ops', builder: (context, state) => const OpsPage()),
+      GoRoute(
+        path: '/health',
+        builder: (context, state) => const HealthPage(),
+      ),
     ],
   );
 }

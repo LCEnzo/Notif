@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:notif/commons/components/primitives.dart';
@@ -48,6 +49,11 @@ class _SettingsPageState extends State<SettingsPage> {
         final userData = context.watch<UserDataService?>()?.userData;
         final hasOpsAccess =
             userData?.isStaff == true || userData?.isSuperuser == true;
+        // Health Connect is Android-only, and the health screen needs a session.
+        final healthSyncSupported =
+            !kIsWeb &&
+            defaultTargetPlatform == TargetPlatform.android &&
+            userData != null;
 
         return Scaffold(
           backgroundColor: tokens.bg1,
@@ -122,6 +128,15 @@ class _SettingsPageState extends State<SettingsPage> {
                           icon: Icons.person_outline,
                           onPressed: () => context.push('/account'),
                         ),
+                        if (healthSyncSupported) ...[
+                          const SizedBox(height: 12),
+                          NotifButton(
+                            label: 'Health sync',
+                            icon: Icons.favorite_border,
+                            variant: NotifButtonVariant.ghost,
+                            onPressed: () => context.push('/health'),
+                          ),
+                        ],
                         if (hasOpsAccess) ...[
                           const SizedBox(height: 12),
                           NotifButton(

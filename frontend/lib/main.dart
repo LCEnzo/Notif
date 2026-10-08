@@ -11,6 +11,7 @@ import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
 import 'package:notif/services/data.dart';
 import 'package:notif/services/device_sessions.dart';
+import 'package:notif/services/health/health_service.dart';
 import 'package:notif/services/ops.dart';
 import 'package:notif/services/router.dart';
 import 'package:provider/provider.dart';
@@ -73,6 +74,18 @@ void main() {
           create: (context) => OpsService(context.read<AuthService>()),
           update: (_, auth, settings, opsService) =>
               opsService!..updateDependencies(auth, settings),
+        ),
+        ChangeNotifierProxyProvider2<
+          AuthService,
+          AppSettingsController,
+          HealthService
+        >(
+          // Eager: it has to see the sign-in that clears a "sign in to resume
+          // health sync" marker, which happens before anyone opens the screen.
+          lazy: false,
+          create: (context) => HealthService(context.read<AuthService>()),
+          update: (_, auth, settings, health) =>
+              health!..updateDependencies(auth, settings),
         ),
       ],
       child: const App(),
