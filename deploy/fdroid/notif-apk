@@ -1,25 +1,42 @@
 #!/usr/bin/env bash
-# notif-apk: build Notif APKs and publish them to the self-hosted F-Droid repo.
-# Runbook: docs/operations/fdroid_runbook.md
+# notif-apk: set up the self-hosted F-Droid repo on the VPS, build Notif APKs,
+# and publish them to it. Runbook: docs/operations/fdroid_runbook.md
 #
-# Runs on the VPS as a docker-group user. Fixed locations, overridable for tests:
-#   NOTIF_FDROID_KEYS  /etc/notif/fdroid    apk.p12, apk.pass, repo-index.p12, repo-index.pass
-#   NOTIF_FDROID_DATA  /srv/notif-fdroid    repo/ is what Caddy serves
-#   NOTIF_APK_WORK     ~/.cache/notif-apk   throwaway worktrees and build output
+# Runs on the VPS as a docker-group user; `setup` also uses sudo. Fixed
+# locations, overridable for tests:
+#   NOTIF_FDROID_KEYS    /etc/notif/fdroid         apk.p12, apk.pass, repo-index.p12, repo-index.pass
+#   NOTIF_FDROID_DATA    /srv/notif-fdroid         repo/ is what Caddy serves
+#   NOTIF_APK_WORK       ~/.cache/notif-apk        throwaway worktrees and build output
+#   NOTIF_APK_LINK       /usr/local/bin/notif-apk  the link `setup` points at this file
+#   NOTIF_FDROID_PICKUP  ~/notif-fdroid-keys.tar   the key backup `export-keys` writes
 set -Eeuo pipefail
 
 usage() {
   cat <<'USAGE'
 Usage:
+  notif-apk setup [--restore <tar>]
+                             Create the F-Droid directories, this command's link
+                             and the publish image; generate, restore or verify
+                             the signing keys. ./deploy.sh runs it every time.
   notif-apk build [commit]   Build <commit> (default: origin/master after a fetch)
                              as a signed arm64 APK, then publish it.
   notif-apk publish <apk>    Check a signed APK and add it to the F-Droid repo.
+  notif-apk export-keys      Write the signing keys to ~/notif-fdroid-keys.tar,
+                             for deploy/fdroid/backup-keys.sh to copy off.
 USAGE
 }
 
 die() {
   printf 'notif-apk: %s\n' "$*" >&2
   exit 1
+}
+
+info() {
+  printf 'notif-apk: %s\n' "$*"
+}
+
+warn() {
+  printf 'notif-apk: warning: %s\n' "$*" >&2
 }
 
 self=$(readlink -f -- "${BASH_SOURCE[0]}")
@@ -29,30 +46,57 @@ readonly self fdroid_dir checkout
 readonly keys_dir=${NOTIF_FDROID_KEYS:-/etc/notif/fdroid}
 readonly data_dir=${NOTIF_FDROID_DATA:-/srv/notif-fdroid}
 readonly work_root=${NOTIF_APK_WORK:-${XDG_CACHE_HOME:-$HOME/.cache}/notif-apk}
+readonly link=${NOTIF_APK_LINK:-/usr/local/bin/notif-apk}
+readonly pickup=${NOTIF_FDROID_PICKUP:-$HOME/notif-fdroid-keys.tar}
 readonly build_image=notif-apk-build
 readonly publish_image=notif-apk-publish
 
 work=
+pickup_tmp=
 apk_pin=
 repo_pin=
+key_state=
+key_detail=
+disk_apk=
+disk_repo=
 
-read_pin() {
+# Same convention as deploy.sh.
+sudo_cmd() {
+  if ((EUID == 0)); then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+# Prints the pin, or nothing while it is unset.
+pin_value() {
   local name=$1 file=$fdroid_dir/pins/$1 pin
   [[ -f $file ]] || die "refused: pin file deploy/fdroid/pins/$name does not exist"
   pin=$(sed '/^[[:space:]]*#/d' "$file" | tr -d '[:space:]')
-  [[ -n $pin ]] || die "refused: pin missing: deploy/fdroid/pins/$name has no value (runbook step c)"
-  [[ $pin =~ ^[0-9a-f]{64}$ ]] || die "refused: deploy/fdroid/pins/$name is not a lowercase SHA-256 hex digest"
+  [[ -z $pin || $pin =~ ^[0-9a-f]{64}$ ]] \
+    || die "refused: deploy/fdroid/pins/$name is not a lowercase SHA-256 hex digest"
   printf '%s' "$pin"
 }
 
+# Both pins are set, or both are empty (before the first-ever setup).
 read_pins() {
-  apk_pin=$(read_pin apk-cert.sha256)
-  repo_pin=$(read_pin repo-index-cert.sha256)
+  apk_pin=$(pin_value apk-cert.sha256)
+  repo_pin=$(pin_value repo-index-cert.sha256)
+  if [[ -n $apk_pin && -z $repo_pin || -z $apk_pin && -n $repo_pin ]]; then
+    die "refused: only one of deploy/fdroid/pins/{apk-cert,repo-index-cert}.sha256 has a value; set both or neither"
+  fi
+}
+
+require_pins() {
+  read_pins
+  [[ -n $apk_pin ]] \
+    || die "refused: pin missing: deploy/fdroid/pins/*.sha256 have no value (runbook: first-ever setup)"
 }
 
 # One notif-apk at a time: two builds would need 2 x 5 GB.
 take_lock() {
-  [[ -d $data_dir/repo ]] || die "$data_dir/repo does not exist (runbook step d)"
+  [[ -d $data_dir/repo ]] || die "$data_dir/repo does not exist (./deploy.sh runs notif-apk setup, which creates it)"
   exec 9<"$data_dir"
   flock -n 9 || die "another notif-apk run is in progress"
 }
@@ -60,16 +104,163 @@ take_lock() {
 ensure_image() {
   local image=$1 dockerfile=$fdroid_dir/$2
   printf 'notif-apk: docker build %s (cached after the first run)\n' "$image"
-  docker build --quiet --tag "$image" - <"$dockerfile" >/dev/null
+  docker build --quiet --tag "$image" - <"$dockerfile" >/dev/null || die "docker build $image failed (see above)"
 }
 
 cleanup() {
+  [[ -z $pickup_tmp ]] || rm -f -- "$pickup_tmp"
   [[ -n $work ]] || return 0
   if [[ -e $work/src ]]; then
     git -C "$checkout" worktree remove --force "$work/src" \
       || printf 'notif-apk: warning: could not remove worktree %s\n' "$work/src" >&2
   fi
   rm -rf -- "$work"
+}
+
+# keys_container <ro|rw> [docker run options] -- <container-keys.sh arguments>
+keys_container() {
+  local mount="type=bind,src=$keys_dir,dst=/keys" opts=()
+  [[ $1 == rw ]] || mount+=,readonly
+  shift
+  while (($#)) && [[ $1 != -- ]]; do
+    opts+=("$1")
+    shift
+  done
+  shift
+  docker run --rm --network none \
+    --mount "$mount" \
+    --mount "type=bind,src=$fdroid_dir,dst=/tool,readonly" \
+    "${opts[@]}" "$publish_image" bash /tool/container-keys.sh "$@"
+}
+
+# Sets key_state (absent, partial, present), key_detail (the files present,
+# when partial), and disk_apk and disk_repo (the cert digests, when present).
+inspect_keys() {
+  local out
+  out=$(keys_container ro -- inspect) \
+    || die "refused: cannot read the keys in $keys_dir (see above); not touching them"
+  read -r key_state key_detail <<<"$out"
+  disk_apk=
+  disk_repo=
+  case $key_state in
+    absent | partial) ;;
+    present)
+      read -r disk_apk disk_repo <<<"$key_detail"
+      [[ $disk_apk =~ ^[0-9a-f]{64}$ && $disk_repo =~ ^[0-9a-f]{64}$ ]] || die "unexpected key inspection output: $out"
+      ;;
+    *) die "unexpected key inspection output: $out" ;;
+  esac
+}
+
+verify_disk_keys() {
+  [[ $disk_apk == "$apk_pin" ]] \
+    || die "refused: the APK key in $keys_dir has cert SHA-256 $disk_apk, but the pin is $apk_pin; not touching it (runbook: refusals)"
+  [[ $disk_repo == "$repo_pin" ]] \
+    || die "refused: the repo index key in $keys_dir has cert SHA-256 $disk_repo, but the pin is $repo_pin; not touching it (runbook: refusals)"
+}
+
+report_unpinned() {
+  cat <<EOF
+notif-apk: ################################################################
+notif-apk: The signing keys are not pinned yet; build and publish refuse
+notif-apk: until they are. Next, in this order:
+notif-apk:  1. Back them up. On the PC, in Git Bash, in the repo:
+notif-apk:       deploy/fdroid/backup-keys.sh
+notif-apk:  2. Commit the pins, merge, and run ./deploy.sh again:
+notif-apk:       echo $disk_apk >>deploy/fdroid/pins/apk-cert.sha256
+notif-apk:       echo $disk_repo >>deploy/fdroid/pins/repo-index-cert.sha256
+notif-apk: The second digest is the repo fingerprint the F-Droid client shows.
+notif-apk: ################################################################
+EOF
+}
+
+restore_keys() {
+  local tar=$1
+  take_lock
+  info "restoring the signing keys from $tar"
+  keys_container rw \
+    --env "APK_CERT_SHA256=$apk_pin" --env "REPO_CERT_SHA256=$repo_pin" \
+    --mount "type=bind,src=$tar,dst=/in/backup.tar,readonly" \
+    -- restore /in/backup.tar \
+    || die "refused: restoring from $tar failed (see above)"
+  inspect_keys
+  [[ $key_state == present ]] || die "restoring left $keys_dir $key_state"
+  if [[ -n $apk_pin ]]; then
+    verify_disk_keys
+    info "restored; the keys in $keys_dir match the pins"
+  else
+    report_unpinned
+  fi
+  info "$tar holds the private keys; unless it is your only copy, shred it: shred -u -- $tar"
+}
+
+# The key state machine; the runbook has it as a table.
+setup_keys() {
+  local restore=$1
+  read_pins
+  inspect_keys
+  case $key_state in
+    present)
+      [[ -z $restore ]] || warn "--restore ignored: $keys_dir already holds keys"
+      if [[ -n $apk_pin ]]; then
+        verify_disk_keys
+        info "the keys in $keys_dir match the pins"
+      else
+        report_unpinned
+      fi
+      ;;
+    partial)
+      die "refused: $keys_dir holds only $key_detail of the four key files; not touching it (runbook: refusals)"
+      ;;
+    absent)
+      if [[ -n $restore ]]; then
+        restore_keys "$restore"
+      elif [[ -n $apk_pin ]]; then
+        die "refused: $keys_dir holds no keys, but the pins are set; restore them with ./deploy.sh --fdroid-restore <backup tar> (runbook: restore on a fresh VPS)"
+      else
+        take_lock
+        info "generating new signing keys in $keys_dir"
+        keys_container rw -- generate || die "generating the keys failed (see above)"
+        inspect_keys
+        [[ $key_state == present ]] || die "generating left $keys_dir $key_state"
+        report_unpinned
+      fi
+      ;;
+  esac
+  if [[ -e $pickup || -L $pickup ]]; then
+    warn "$pickup still holds a copy of the keys; finish deploy/fdroid/backup-keys.sh on the PC, or shred it"
+  fi
+}
+
+cmd_setup() {
+  local restore=
+  if (($# == 2)) && [[ $1 == --restore ]]; then
+    restore=$(readlink -f -- "$2") || die "not a file: $2"
+    [[ -f $restore ]] || die "not a file: $2"
+  elif (($# != 0)); then
+    die "usage: notif-apk setup [--restore <tar>]"
+  fi
+  info "setup: $keys_dir, $data_dir/repo, $link"
+  sudo_cmd install -d -m 0700 -o root -g root -- "$keys_dir"
+  sudo_cmd install -d -m 0755 -o root -g root -- "$data_dir" "$data_dir/repo"
+  sudo_cmd ln -sfT -- "$self" "$link"
+  ensure_image "$publish_image" publish.Dockerfile
+  setup_keys "$restore"
+}
+
+cmd_export_keys() {
+  (($# == 0)) || die "usage: notif-apk export-keys"
+  [[ ! -e $pickup && ! -L $pickup ]] \
+    || die "refused: $pickup exists, left by an earlier export; shred it, then run this again"
+  read_pins
+  inspect_keys
+  [[ $key_state == present ]] || die "refused: $keys_dir holds no complete key set ($key_state)"
+  [[ -z $apk_pin ]] || verify_disk_keys
+  trap cleanup EXIT
+  pickup_tmp=$(mktemp -- "$pickup.XXXXXX")
+  keys_container ro -- archive >"$pickup_tmp" || die "archiving the keys failed (see above)"
+  ln -- "$pickup_tmp" "$pickup" || die "cannot create $pickup"
+  info "wrote $pickup (APK cert $disk_apk, repo index cert $disk_repo)"
 }
 
 publish() {
@@ -89,7 +280,7 @@ cmd_build() {
   (($# <= 1)) || die "usage: notif-apk build [commit]"
   local rev=${1:-origin/master} commit version_code short_sha
   [[ $rev != -* ]] || die "not a commit: $rev"
-  read_pins
+  require_pins
   take_lock
 
   git -C "$checkout" fetch --quiet origin
@@ -126,7 +317,7 @@ cmd_publish() {
   local apk
   apk=$(readlink -f -- "$1") || die "not a file: $1"
   [[ -f $apk ]] || die "not a file: $1"
-  read_pins
+  require_pins
   take_lock
   ensure_image "$publish_image" publish.Dockerfile
   publish "$apk"
@@ -137,6 +328,10 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 
 case ${1:-} in
+  setup)
+    shift
+    cmd_setup "$@"
+    ;;
   build)
     shift
     cmd_build "$@"
@@ -144,6 +339,10 @@ case ${1:-} in
   publish)
     shift
     cmd_publish "$@"
+    ;;
+  export-keys)
+    shift
+    cmd_export_keys "$@"
     ;;
   -h | --help | help)
     usage

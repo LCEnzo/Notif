@@ -1,17 +1,29 @@
 #!/bin/sh
 set -eu
 
-# --apk: after the web deploy, build and publish the APK of the deployed commit
-# (deploy/fdroid/notif-apk; docs/operations/fdroid_runbook.md).
+# --apk: after the web deploy, build and publish the APK of the deployed commit.
+# --fdroid-restore <tar>: restore the F-Droid signing keys from a backup.
+# See deploy/fdroid/notif-apk and docs/operations/fdroid_runbook.md.
+usage() {
+    echo "Usage: $0 [--apk] [--fdroid-restore <backup tar>]" >&2
+    exit 2
+}
 BUILD_APK=false
-for arg in "$@"; do
-    case $arg in
+FDROID_RESTORE=
+while [ $# -gt 0 ]; do
+    case $1 in
         --apk) BUILD_APK=true ;;
-        *)
-            echo "Usage: $0 [--apk]" >&2
-            exit 2
+        --fdroid-restore)
+            [ $# -ge 2 ] || usage
+            case $2 in
+                /*) FDROID_RESTORE=$2 ;;
+                *) FDROID_RESTORE=$PWD/$2 ;;
+            esac
+            shift
             ;;
+        *) usage ;;
     esac
+    shift
 done
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
@@ -128,18 +140,39 @@ echo ""
 echo "=== Deploy complete ==="
 echo "Verify: curl https://notif.lcenzo.com/api/v1/monitoring/status/"
 
-# The web deploy is done by now; an APK failure must not undo or block it.
+banner() {
+    echo "" >&2
+    echo "################################################################" >&2
+    printf '  %s\n' "$@" >&2
+    echo "################################################################" >&2
+}
+
+# F-Droid runs after the web deploy, so its failures cannot block or undo it.
+# They still make the exit status 1: the host did not fully converge.
+echo ""
+echo "=== F-Droid host setup ==="
+if [ -n "$FDROID_RESTORE" ]; then
+    set -- --restore "$FDROID_RESTORE"
+else
+    set --
+fi
+if ! deploy/fdroid/notif-apk setup "$@"; then
+    skipped=
+    [ "$BUILD_APK" = false ] || skipped=" The APK build was skipped."
+    banner "F-DROID HOST SETUP FAILED (see the output above).$skipped" \
+        "The web deploy above completed and stays in place." \
+        "Fix the cause, then run ./deploy.sh again."
+    exit 1
+fi
+
 if [ "$BUILD_APK" = true ]; then
     DEPLOYED_SHA=$(git rev-parse HEAD)
     echo ""
     echo "=== Building and publishing the APK for $GIT_HASH ==="
     if ! deploy/fdroid/notif-apk build "$DEPLOYED_SHA"; then
-        echo "" >&2
-        echo "################################################################" >&2
-        echo "  APK BUILD OR PUBLISH FAILED for $GIT_HASH" >&2
-        echo "  The web deploy above completed and stays in place." >&2
-        echo "  Retry with: deploy/fdroid/notif-apk build $DEPLOYED_SHA" >&2
-        echo "################################################################" >&2
+        banner "APK BUILD OR PUBLISH FAILED for $GIT_HASH" \
+            "The web deploy above completed and stays in place." \
+            "Retry with: deploy/fdroid/notif-apk build $DEPLOYED_SHA"
         exit 1
     fi
 fi
