@@ -132,8 +132,9 @@ the one that added this file.
    Expect `notif-apk: the keys in /etc/notif/fdroid match the pins`, then the first build.
    It builds `notif-apk-build` (pulls `ghcr.io/cirruslabs/flutter:3.44.0`, about 2.3 GB
    compressed, unless a web deploy already has it, plus the NDK, about 0.7 GB) and fills
-   the Gradle and pub caches. On disk the two images take about 13 GB together (the Flutter
-   base about 7 GB of that, shared with the web build). Expect, near the end:
+   the Gradle and pub caches. On the VPS this took about 22 GB of disk in all: images about
+   12.6 GB, caches about 2.6 GB, and the rest build cache and layer storage. Expect, near
+   the end:
 
    ```text
    build-apk: signed /build/out/notif-<versionCode>-<sha>.apk
@@ -173,7 +174,9 @@ the one that added this file.
 and its duration, in the Phase 1 notes; `anon peak` is the number to size the heap and the
 cap from. `memory.peak` counts page cache, which grows until the 5 GB limit, so it says
 little on its own. The build runs under `--memory 5g --memory-swap 5g --cpus 3`; if
-`oom_kill` is not 0 or the build died, stop and report the line.
+`oom_kill` is not 0 or the build died, stop and report the line. For reference, Phase 0's
+tree on the VPS under these limits: `assembleRelease` 438 s cold and 258-270 s warm, anon
+peak 3389-4187 MiB (the top with `-Xmx3g`, cold).
 
 **Caching.** Check what Cloudflare and Caddy serve:
 
