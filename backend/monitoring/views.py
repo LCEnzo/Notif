@@ -365,28 +365,34 @@ def health_check(request: Request) -> Response:
 	return Response({"status": "ok"})
 
 
-@extend_schema(responses={200: StatusCheckResponseSerializer, 503: StatusCheckResponseSerializer})
-@api_view(["GET"])
-@permission_classes([AllowAny])
-def status_check(request: Request) -> Response:
-	"""Readiness probe — checks DB connectivity and returns build metadata.
-
-	Returns 200 if all dependencies are healthy, 503 otherwise.
-	Used by load balancers and operators to confirm the service can handle traffic
-	and to verify which code is deployed.
-	"""
+def _database_answers(alias: str) -> bool:
 	try:
-		with connections["default"].cursor() as cursor:
+		with connections[alias].cursor() as cursor:
 			cursor.execute("SELECT 1")
-		db_status = "ok"
-		status_code = 200
 	except DbError:
 		# django.db.Error, not DatabaseError: Django wraps every driver failure into this
 		# hierarchy, and InterfaceError (e.g. a closed connection) sits outside DatabaseError.
 		# The response stays opaque because the endpoint is public; the log keeps the cause.
-		logger.exception("Readiness probe: database check failed")
-		db_status = "down"
-		status_code = 503
+		logger.exception("Readiness probe: database %r check failed", alias)
+		return False
+	return True
+
+
+@extend_schema(responses={200: StatusCheckResponseSerializer, 503: StatusCheckResponseSerializer})
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def status_check(request: Request) -> Response:
+	"""Readiness probe — checks every database and returns build metadata.
+
+	`db` is "ok" only when every configured database (the main one and the health
+	store) opens and answers. Returns 200 if all dependencies are healthy, 503 otherwise.
+	Used by load balancers and operators to confirm the service can handle traffic
+	and to verify which code is deployed.
+	"""
+	# A list, not any(): every database is checked, so each failure is logged.
+	answers = [_database_answers(alias) for alias in connections]
+	db_status = "ok" if all(answers) else "down"
+	status_code = 200 if all(answers) else 503
 
 	return Response(
 		{

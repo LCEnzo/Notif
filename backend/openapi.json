@@ -1864,7 +1864,7 @@
         "/api/v1/monitoring/status/": {
             "get": {
                 "operationId": "monitoring_status_retrieve",
-                "description": "Readiness probe — checks DB connectivity and returns build metadata.\n\nReturns 200 if all dependencies are healthy, 503 otherwise.\nUsed by load balancers and operators to confirm the service can handle traffic\nand to verify which code is deployed.",
+                "description": "Readiness probe — checks every database and returns build metadata.\n\n`db` is \"ok\" only when every configured database (the main one and the health\nstore) opens and answers. Returns 200 if all dependencies are healthy, 503 otherwise.\nUsed by load balancers and operators to confirm the service can handle traffic\nand to verify which code is deployed.",
                 "tags": [
                     "monitoring"
                 ],

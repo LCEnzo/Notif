@@ -12,7 +12,7 @@ The `health` app keeps its tables in their own SQLite file. `HealthRouter` (`bac
 
 `migrate` handles one database per run, so every place that migrates runs it twice: `migrate` and `migrate --database health`. That covers `backend/docker-entrypoint.sh`, both READMEs and `deploy.md`. pytest-django creates the second test database for any test that declares `databases = {"default", "health"}`.
 
-Users live in the other file, so rows carry `owner_id` without a foreign key. A deleted user's health rows stay behind (see Known limits). Ids are never reused: Django's SQLite primary keys are `AUTOINCREMENT`.
+Users live in the other file, so rows carry `owner_id` without a foreign key. Ids are never reused: Django's SQLite primary keys are `AUTOINCREMENT`. `/api/v1/monitoring/status/` reports `db: down` unless both files open and answer `SELECT 1`.
 
 To fold the store back into `db.sqlite3`, delete the `health` alias and `DATABASE_ROUTERS` from `settings_base.py`, then copy the rows across. The code only ever names the alias through `router.db_for_write(...)`.
 
@@ -129,11 +129,17 @@ Every file has the columns `date, type, value, unit, window_start_utc, window_en
 
 A window with no stored answer at all has no row: that is a gap. A complete window where HC had nothing gets `value` 0 with `partial` false: that is a real zero. Local days run 23 or 25 hours across DST changes, which `window_*_utc` shows. Each hourly bucket goes to the window containing its start. That is exact for a zone with whole-hour offsets such as `Europe/Belgrade`; in a half-hour zone, buckets straddle window boundaries.
 
+## Deleting an account
+
+Deleting a user deletes that user's `HealthRecord`, `HealthDeletion`, `HealthAggregate` and `HealthIngestBatch` rows (`backend/health/owners.py`). Users are soft-deleted (`User.delete`, which the API's `DELETE /api/v1/accounts/users/{id}/` calls, sets `date_deleted`) or hard-deleted (`actually_delete`, the admin's bulk delete). Either kind schedules the purge with `transaction.on_commit` on the user's database, so a deletion that rolls back keeps the rows. Deactivation (`is_active` false, no `date_deleted`) keeps them. `HealthSource` rows are shared across owners and stay.
+
+A purge that fails after the deletion committed is logged at ERROR, which makes it a `SystemEvent` naming the user id. `uv run python manage.py purge_health_orphans` then deletes the rows of every owner the default user manager no longer returns, which covers soft- and hard-deleted users.
+
 ## Known limits
 
 1. **One phone per account.** Two phones would each report hourly aggregates for the same hours, and the later computation would win, hour by hour.
-2. **A deleted user's rows stay.** Nothing removes health rows when an account is deleted, because the user table is in the other file. They are unreachable through the API, since ids are never reused.
+2. **Purging a large account holds the health write lock.** The purge deletes each table in one transaction, so ingest from other accounts waits behind it, up to the 20 s busy timeout.
 3. **No backup.** `scripts/backup-db.sh` and the ops backup endpoint cover `db.sqlite3` only (plan Phase 3).
 4. **Tombstones are never collected.** They grow by one row per deleted id. Collecting them would let a stale batch replayed late resurrect a record.
 5. **Overlapping sleep stages are accepted.** Only stages outside the session are refused.
-6. **The readiness probe checks only `default`.** `/api/v1/monitoring/status/` does not open the health file.
+6. **The readiness probe does not see a missing migration.** A health file that was never migrated still answers `SELECT 1`; ingest then fails with 500s.
