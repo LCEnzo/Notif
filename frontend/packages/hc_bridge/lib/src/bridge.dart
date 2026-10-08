@@ -7,6 +7,14 @@ import 'package:hc_bridge/src/models.dart';
 abstract interface class HcBridge {
   Future<HcStatus> status();
 
+  /// Whether Android exempts this app from battery optimization, which
+  /// vendor builds such as HyperOS need before background work runs.
+  Future<bool> batteryOptimizationExempt();
+
+  /// Opens the system dialog that grants that exemption. Needs a foreground
+  /// activity; read [batteryOptimizationExempt] again on resume.
+  Future<void> requestBatteryOptimizationExemption();
+
   /// Shows Health Connect's permission sheet for [permissions] and returns the
   /// ones granted afterwards. Needs a foreground activity.
   Future<Set<String>> requestPermissions(Set<String> permissions);
@@ -49,6 +57,22 @@ class MethodChannelHcBridge implements HcBridge {
   @override
   Future<HcStatus> status() async =>
       HcStatus.decode(await _invoke('status', null));
+
+  @override
+  Future<bool> batteryOptimizationExempt() async {
+    final raw = await _invoke('batteryOptimizationExempt', null);
+    if (raw is bool) return raw;
+    throw const HcBridgeException(
+      HcErrorCode.malformedResponse,
+      'expected a bool',
+      operation: 'batteryOptimizationExempt',
+    );
+  }
+
+  @override
+  Future<void> requestBatteryOptimizationExemption() async {
+    await _invoke('requestBatteryOptimizationExemption', null);
+  }
 
   @override
   Future<Set<String>> requestPermissions(Set<String> permissions) async {

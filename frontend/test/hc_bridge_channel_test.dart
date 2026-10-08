@@ -236,4 +236,24 @@ void main() {
     });
     expect(HcPermissions.dataReads, hasLength(38));
   });
+
+  test('battery exemption: a bool, or a typed error', () async {
+    final calls = <String>[];
+    _answer((call) {
+      calls.add(call.method);
+      return call.method == 'batteryOptimizationExempt' ? true : null;
+    });
+    expect(await bridge.batteryOptimizationExempt(), isTrue);
+    await bridge.requestBatteryOptimizationExemption();
+    expect(calls, [
+      'batteryOptimizationExempt',
+      'requestBatteryOptimizationExemption',
+    ]);
+
+    _answer((call) => 'yes');
+    await expectLater(
+      bridge.batteryOptimizationExempt(),
+      throwsA(_bridgeError(HcErrorCode.malformedResponse)),
+    );
+  });
 }

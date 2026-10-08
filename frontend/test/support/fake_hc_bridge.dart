@@ -88,6 +88,16 @@ class FakeHcBridge implements HcBridge {
     return currentStatus;
   }
 
+  bool batteryExempt = false;
+  int batteryExemptionRequests = 0;
+
+  @override
+  Future<bool> batteryOptimizationExempt() async => batteryExempt;
+
+  @override
+  Future<void> requestBatteryOptimizationExemption() async =>
+      batteryExemptionRequests++;
+
   @override
   Future<Set<String>> requestPermissions(Set<String> permissions) async {
     permissionRequests.add(permissions);

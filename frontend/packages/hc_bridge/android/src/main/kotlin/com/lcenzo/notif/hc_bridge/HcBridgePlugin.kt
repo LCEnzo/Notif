@@ -1,9 +1,13 @@
 package com.lcenzo.notif.hc_bridge
 
 import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -73,7 +77,14 @@ class HcBridgePlugin :
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "status" -> respond(result) { status() }
+                        "status" -> respond(result) { status() }
+            "batteryOptimizationExempt" ->
+                respond(result) {
+                    val context = requireContext()
+                    val power = context.getSystemService(PowerManager::class.java) ?: error("no PowerManager")
+                    power.isIgnoringBatteryOptimizations(context.packageName)
+                }
+            "requestBatteryOptimizationExemption" -> requestBatteryExemption(result)
             "requestPermissions" -> requestPermissions(call, result)
             "readRecords" ->
                 respond(result) {
@@ -178,6 +189,22 @@ class HcBridgePlugin :
             val error = classify(e)
             result.error(error.code, error.message, null)
         }
+    }
+
+        /** Opens the system dialog that exempts this app from battery optimization. */
+    private fun requestBatteryExemption(result: MethodChannel.Result) {
+        val activity =
+            activityBinding?.activity
+                ?: return result.error("no_activity", "the exemption dialog needs a foreground activity", null)
+        try {
+            activity.startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${activity.packageName}"))
+            )
+        } catch (e: ActivityNotFoundException) {
+            // Some vendor builds drop the direct dialog; the list still exists.
+            activity.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+        }
+        result.success(null)
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?): Boolean {

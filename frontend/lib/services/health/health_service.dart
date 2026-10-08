@@ -124,6 +124,7 @@ class HealthService extends ChangeNotifier {
   HealthAvailability _availability = const HealthChecking();
   HealthSnapshot _snapshot = const HealthSnapshot();
   AppFailure? _actionFailure;
+  bool? _batteryExempt;
   bool _granting = false;
   bool _probing = false;
 
@@ -134,6 +135,9 @@ class HealthService extends ChangeNotifier {
   /// The last failed button press: grant, probe, sync now or backfill.
   AppFailure? get actionFailure => _actionFailure;
   bool get granting => _granting;
+
+  /// Null until read, or when the read failed.
+  bool? get batteryExempt => _batteryExempt;
   bool get probing => _probing;
 
   HcStatus? get status => switch (availability) {
@@ -204,6 +208,7 @@ class HealthService extends ChangeNotifier {
     try {
       final status = await (await _engine()).observe();
       _availability = HealthKnown(status);
+      _batteryExempt = await _readBatteryExempt();
       await reloadSnapshot();
       await _syncSchedules(status);
     } on HcBridgeException catch (error) {
@@ -276,6 +281,19 @@ class HealthService extends ChangeNotifier {
     await _scheduler.enqueueSyncNow();
     await reloadSnapshot();
   });
+
+  Future<bool?> _readBatteryExempt() async {
+    try {
+      return await _bridge.batteryOptimizationExempt();
+    } on HcBridgeException {
+      // Informational only; the screen shows "unknown".
+      return null;
+    }
+  }
+
+  /// Opens the system exemption dialog; the screen re-reads on resume.
+  Future<void> requestBatteryExemption() =>
+      _action(_bridge.requestBatteryOptimizationExemption);
 
   Future<void> startBackfill() => _action(() async {
     final store = await _openStore();

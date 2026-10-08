@@ -329,4 +329,35 @@ void main() {
 
     expect(find.text('50%'), findsOneWidget);
   });
+
+  testWidgets('battery optimization: a button while restricted, none after', (
+    tester,
+  ) async {
+    final bridge = FakeHcBridge();
+    final (health, _) = await _pump(tester, bridge: bridge);
+
+    expect(
+      find.text('optimized: background sync may be delayed or killed'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Autostart'), findsOneWidget);
+    await tester.ensureVisible(
+      find.byKey(const Key('health-allow-background')),
+    );
+    await tester.tap(find.byKey(const Key('health-allow-background')));
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
+    expect(bridge.batteryExemptionRequests, 1);
+
+    // Back from the system dialog, exempted: the resume refresh shows it.
+    bridge.batteryExempt = true;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pumpAndSettle();
+
+    expect(health.batteryExempt, isTrue);
+    expect(find.text('unrestricted'), findsOneWidget);
+    expect(find.byKey(const Key('health-allow-background')), findsNothing);
+  });
 }

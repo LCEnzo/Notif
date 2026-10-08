@@ -25,12 +25,13 @@ class HealthPage extends StatefulWidget {
   State<HealthPage> createState() => _HealthPageState();
 }
 
-class _HealthPageState extends State<HealthPage> {
+class _HealthPageState extends State<HealthPage> with WidgetsBindingObserver {
   Timer? _poll;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final health = context.read<HealthService>();
@@ -42,8 +43,17 @@ class _HealthPageState extends State<HealthPage> {
     });
   }
 
+  // Back from Health Connect's or Android's settings: grants may differ.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(context.read<HealthService>().refresh());
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _poll?.cancel();
     super.dispose();
   }
@@ -159,6 +169,8 @@ class _HealthBody extends StatelessWidget {
             const SizedBox(height: 32),
             const IndexRule(index: 2, title: 'Sync'),
             _Sync(health: health),
+            const SizedBox(height: 24),
+            _Reliability(health: health),
           ],
           if (status.anyDataReadable) ...[
             const SizedBox(height: 32),
@@ -396,6 +408,50 @@ class _Coverage extends StatelessWidget {
           icon: Icons.query_stats,
           variant: NotifButtonVariant.ghost,
           onPressed: health.probing ? null : () => unawaited(health.runProbe()),
+        ),
+      ],
+    );
+  }
+}
+
+/// HyperOS and other vendor builds stop WorkManager without these.
+class _Reliability extends StatelessWidget {
+  const _Reliability({required this.health});
+
+  final HealthService health;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = NotifTokens.of(context);
+    final text$ = NotifTextTheme.of(context);
+    final exempt = health.batteryExempt;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        KV.text(
+          key: const Key('health-battery'),
+          label: 'Battery',
+          value: switch (exempt) {
+            true => 'unrestricted',
+            false => 'optimized: background sync may be delayed or killed',
+            null => 'unknown',
+          },
+        ),
+        if (exempt == false) ...[
+          const SizedBox(height: 8),
+          NotifButton(
+            key: const Key('health-allow-background'),
+            label: 'Allow background',
+            icon: Icons.battery_charging_full,
+            variant: NotifButtonVariant.ghost,
+            onPressed: () => unawaited(health.requestBatteryExemption()),
+          ),
+        ],
+        const SizedBox(height: 8),
+        Text(
+          'On Xiaomi (HyperOS), also turn on Autostart: Settings, Apps, '
+          'Manage apps, Notif, Autostart.',
+          style: text$.micro.copyWith(color: tokens.inkMute),
         ),
       ],
     );

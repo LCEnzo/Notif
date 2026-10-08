@@ -43,6 +43,11 @@
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
+        <!-- The Health screen's "allow background" button: a sideloaded app may ask
+         for an exemption from battery optimization, which HyperOS needs before
+         it lets WorkManager run. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- Lets getSdkStatus see the Health Connect app on Android 13 and lower. -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
