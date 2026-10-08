@@ -1,6 +1,9 @@
 name: Frontend CI
 
 on:
+  # Manual runs on any branch, e.g. a feature branch whose PR does not target
+  # master yet: `gh workflow run frontend.yml --ref <branch>`.
+  workflow_dispatch:
   # `push` only fires on long-lived branches; pull_request covers feature
   # branches so we don't double-run CI for every PR push.
   push:
@@ -68,3 +71,51 @@ jobs:
 
       - name: Build web (smoke test)
         run: flutter build web --no-pub
+
+  # The Kotlin side: the hc_bridge plugin's unit tests and a debug APK.
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Writes local.properties and the Gradle wrapper (both gitignored)
+      # without building, so the Kotlin tests fail before the APK build.
+      - name: Generate Gradle config
+        run: flutter build apk --config-only --no-pub
+
+      - name: hc_bridge unit tests
+        working-directory: frontend/android
+        run: ./gradlew :hc_bridge:testDebugUnitTest --console=plain
+
+      - name: Build debug APK
+        run: flutter build apk --debug --no-pub
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hc-bridge-test-reports
+          path: frontend/build/hc_bridge/reports/tests/
+          if-no-files-found: ignore
