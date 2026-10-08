@@ -846,6 +846,97 @@
                 }
             }
         },
+        "/api/v1/health/ingest/": {
+            "post": {
+                "operationId": "health_ingest",
+                "description": "Upload one batch of Health Connect data read by the phone. Idempotent: replaying a batch, or sending batches in any order, leaves the same rows.\n\nRecords are matched by `hc_id` within the caller's account. A record replaces the stored one only if its `last_modified_ms` is newer; equal timestamps resolve by content. A deletion removes every version of that id modified at or before its `observed_at_ms`, including versions that arrive later. Each aggregate hour keeps the answer with the newest `computed_at_ms`; an hour inside a window without a bucket is stored as \"HC had nothing\", unless it lies before `coverage_start_ms`.\n\nLimits: a body of at most 4194304 bytes (413 beyond it) and at most 5000 items, counting records, deletions and aggregate-window hours together (400 beyond it). Unknown fields anywhere, including unsupported record types, are a 400. The batch applies atomically. Requests draw on their own `health_ingest` throttle scope, not on the general per-user budget.\n\nSee docs/architecture/health-ingest.md.",
+                "summary": "Ingest a batch of Health Connect data",
+                "tags": [
+                    "health"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/HealthIngestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "sessionBearer": []
+                    },
+                    {
+                        "sessionCookie": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HealthIngestResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "400": {
+                        "description": "The body does not parse, fails validation, holds an unknown field or record type, or holds more than 5000 items. Field errors name the list index."
+                    },
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The session token is missing where one is required, or is invalid or expired."
+                    },
+                    "403": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Forbidden: a cookie session sent this write without a valid CSRF token."
+                    },
+                    "413": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "The body exceeds 4194304 bytes."
+                    },
+                    "429": {
+                        "headers": {
+                            "Retry-After": {
+                                "schema": {
+                                    "type": "integer"
+                                },
+                                "description": "Seconds until the throttle admits another request."
+                            }
+                        },
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErrorDetail"
+                                }
+                            }
+                        },
+                        "description": "Over the health_ingest budget; retry after Retry-After seconds."
+                    }
+                }
+            }
+        },
         "/api/v1/monitoring/health/": {
             "get": {
                 "operationId": "monitoring_health_retrieve",
@@ -1773,7 +1864,7 @@
         "/api/v1/monitoring/status/": {
             "get": {
                 "operationId": "monitoring_status_retrieve",
-                "description": "Readiness probe — checks DB connectivity and returns build metadata.\n\nReturns 200 if all dependencies are healthy, 503 otherwise.\nUsed by load balancers and operators to confirm the service can handle traffic\nand to verify which code is deployed.",
+                "description": "Readiness probe — checks every database and returns build metadata.\n\n`db` is \"ok\" only when every configured database (the main one and the health\nstore) opens and answers. Returns 200 if all dependencies are healthy, 503 otherwise.\nUsed by load balancers and operators to confirm the service can handle traffic\nand to verify which code is deployed.",
                 "tags": [
                     "monitoring"
                 ],
@@ -2865,6 +2956,91 @@
                     "error"
                 ]
             },
+            "HealthAggregateBucketRequest": {
+                "type": "object",
+                "properties": {
+                    "start_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "On a UTC hour; the bucket is one hour long."
+                    },
+                    "value": {
+                        "type": "integer",
+                        "maximum": 1000000000,
+                        "minimum": 0,
+                        "description": "Steps, or milliseconds of sleep."
+                    },
+                    "data_origins": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 255
+                        },
+                        "maxItems": 100
+                    }
+                },
+                "required": [
+                    "data_origins",
+                    "start_ms",
+                    "value"
+                ]
+            },
+            "HealthAggregateMetricEnum": {
+                "enum": [
+                    "steps_count_total",
+                    "sleep_duration_total"
+                ],
+                "type": "string",
+                "description": "* `steps_count_total` - StepsRecord.COUNT_TOTAL (count)\n* `sleep_duration_total` - SleepSessionRecord.SLEEP_DURATION_TOTAL (ms)"
+            },
+            "HealthAggregateWindowRequest": {
+                "type": "object",
+                "description": "One `aggregateGroupByDuration` answer over whole UTC hours.",
+                "properties": {
+                    "metric": {
+                        "$ref": "#/components/schemas/HealthAggregateMetricEnum"
+                    },
+                    "start_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "On a UTC hour."
+                    },
+                    "end_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "On a UTC hour, exclusive."
+                    },
+                    "computed_at_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "When the client ran the aggregation; the newest answer per hour wins."
+                    },
+                    "buckets": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/HealthAggregateBucketRequest"
+                        },
+                        "description": "Hours HC returned. An hour in the window without a bucket had no data.",
+                        "maxItems": 744
+                    }
+                },
+                "required": [
+                    "buckets",
+                    "computed_at_ms",
+                    "end_ms",
+                    "metric",
+                    "start_ms"
+                ]
+            },
             "HealthCheckResponse": {
                 "type": "object",
                 "properties": {
@@ -2874,6 +3050,153 @@
                 },
                 "required": [
                     "status"
+                ]
+            },
+            "HealthDeletionRequest": {
+                "type": "object",
+                "properties": {
+                    "hc_id": {
+                        "type": "string",
+                        "format": "uuid"
+                    },
+                    "observed_at_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "When the client learned of the deletion, on the clock HC's last_modified uses. Removes versions modified at or before it, including ones that arrive later."
+                    }
+                },
+                "required": [
+                    "hc_id",
+                    "observed_at_ms"
+                ]
+            },
+            "HealthDeviceRequest": {
+                "type": "object",
+                "description": "HC `Metadata.device`.",
+                "properties": {
+                    "type": {
+                        "$ref": "#/components/schemas/HealthDeviceTypeEnum"
+                    },
+                    "manufacturer": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 255
+                    },
+                    "model": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 255
+                    }
+                },
+                "required": [
+                    "manufacturer",
+                    "model",
+                    "type"
+                ]
+            },
+            "HealthDeviceTypeEnum": {
+                "enum": [
+                    "unknown",
+                    "watch",
+                    "phone",
+                    "scale",
+                    "ring",
+                    "head_mounted",
+                    "fitness_band",
+                    "chest_strap",
+                    "smart_display"
+                ],
+                "type": "string",
+                "description": "* `unknown` - Unknown\n* `watch` - Watch\n* `phone` - Phone\n* `scale` - Scale\n* `ring` - Ring\n* `head_mounted` - Head mounted\n* `fitness_band` - Fitness band\n* `chest_strap` - Chest strap\n* `smart_display` - Smart display"
+            },
+            "HealthIngestRequest": {
+                "type": "object",
+                "description": "One batch. Every list is optional; `coverage_start_ms` is required.",
+                "properties": {
+                    "coverage_start_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "nullable": true,
+                        "description": "The earliest instant HC let this client read (first grant minus 30 days without the history permission); null when the history permission is granted. Silence before it is a gap, not a zero."
+                    },
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StepsRecordRequest"
+                        },
+                        "maxItems": 5000
+                    },
+                    "resting_heart_rate": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/RestingHeartRateRecordRequest"
+                        },
+                        "maxItems": 5000
+                    },
+                    "sleep_session": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SleepSessionRecordRequest"
+                        },
+                        "maxItems": 5000
+                    },
+                    "deletions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/HealthDeletionRequest"
+                        },
+                        "maxItems": 5000
+                    },
+                    "aggregate_windows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/HealthAggregateWindowRequest"
+                        },
+                        "maxItems": 5000
+                    }
+                },
+                "required": [
+                    "coverage_start_ms"
+                ]
+            },
+            "HealthIngestResponse": {
+                "type": "object",
+                "properties": {
+                    "batch_id": {
+                        "type": "integer"
+                    },
+                    "records_written": {
+                        "type": "integer",
+                        "description": "Records created or replaced by a newer version."
+                    },
+                    "records_ignored": {
+                        "type": "integer",
+                        "description": "Records not newer than what is stored, or already deleted."
+                    },
+                    "records_deleted": {
+                        "type": "integer",
+                        "description": "Stored records removed by this batch's deletions."
+                    },
+                    "aggregates_written": {
+                        "type": "integer",
+                        "description": "Aggregate hours created or replaced."
+                    },
+                    "aggregates_ignored": {
+                        "type": "integer",
+                        "description": "Aggregate hours not newer than what is stored, or before coverage_start_ms."
+                    }
+                },
+                "required": [
+                    "aggregates_ignored",
+                    "aggregates_written",
+                    "batch_id",
+                    "records_deleted",
+                    "records_ignored",
+                    "records_written"
                 ]
             },
             "LevelEnum": {
@@ -3302,6 +3625,79 @@
                     }
                 }
             },
+            "RecordingMethodEnum": {
+                "enum": [
+                    "unknown",
+                    "actively_recorded",
+                    "automatically_recorded",
+                    "manual_entry"
+                ],
+                "type": "string",
+                "description": "* `unknown` - Unknown\n* `actively_recorded` - Actively recorded\n* `automatically_recorded` - Automatically recorded\n* `manual_entry` - Manual entry"
+            },
+            "RestingHeartRateRecordRequest": {
+                "type": "object",
+                "description": "HC `RestingHeartRateRecord`, an instantaneous record.",
+                "properties": {
+                    "hc_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "HC Metadata.id."
+                    },
+                    "data_origin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Package name of the writing app.",
+                        "maxLength": 255
+                    },
+                    "last_modified_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "HC Metadata.lastModifiedTime, epoch ms."
+                    },
+                    "recording_method": {
+                        "$ref": "#/components/schemas/RecordingMethodEnum"
+                    },
+                    "device": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/HealthDeviceRequest"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "time_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64"
+                    },
+                    "offset_s": {
+                        "type": "integer",
+                        "maximum": 64800,
+                        "minimum": -64800,
+                        "nullable": true,
+                        "description": "Zone offset in seconds, as HC recorded it; null when HC has none."
+                    },
+                    "beats_per_minute": {
+                        "type": "integer",
+                        "maximum": 1000,
+                        "minimum": 0
+                    }
+                },
+                "required": [
+                    "beats_per_minute",
+                    "data_origin",
+                    "device",
+                    "hc_id",
+                    "last_modified_ms",
+                    "offset_s",
+                    "recording_method",
+                    "time_ms"
+                ]
+            },
             "SessionRevokeResponse": {
                 "type": "object",
                 "description": "Result of revoking one session or all of them.",
@@ -3317,6 +3713,139 @@
                 "required": [
                     "revoked",
                     "status"
+                ]
+            },
+            "SleepSessionRecordRequest": {
+                "type": "object",
+                "description": "HC `SleepSessionRecord`. Stages must lie within the session.",
+                "properties": {
+                    "hc_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "HC Metadata.id."
+                    },
+                    "data_origin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Package name of the writing app.",
+                        "maxLength": 255
+                    },
+                    "last_modified_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "HC Metadata.lastModifiedTime, epoch ms."
+                    },
+                    "recording_method": {
+                        "$ref": "#/components/schemas/RecordingMethodEnum"
+                    },
+                    "device": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/HealthDeviceRequest"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "start_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64"
+                    },
+                    "start_offset_s": {
+                        "type": "integer",
+                        "maximum": 64800,
+                        "minimum": -64800,
+                        "nullable": true,
+                        "description": "Zone offset in seconds, as HC recorded it; null when HC has none."
+                    },
+                    "end_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "Exclusive; after start_ms."
+                    },
+                    "end_offset_s": {
+                        "type": "integer",
+                        "maximum": 64800,
+                        "minimum": -64800,
+                        "nullable": true,
+                        "description": "Zone offset in seconds, as HC recorded it; null when HC has none."
+                    },
+                    "title": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 10000
+                    },
+                    "notes": {
+                        "type": "string",
+                        "nullable": true,
+                        "maxLength": 10000
+                    },
+                    "stages": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/SleepStageRequest"
+                        },
+                        "maxItems": 10000
+                    }
+                },
+                "required": [
+                    "data_origin",
+                    "device",
+                    "end_ms",
+                    "end_offset_s",
+                    "hc_id",
+                    "last_modified_ms",
+                    "notes",
+                    "recording_method",
+                    "stages",
+                    "start_ms",
+                    "start_offset_s",
+                    "title"
+                ]
+            },
+            "SleepStageEnum": {
+                "enum": [
+                    "unknown",
+                    "awake",
+                    "sleeping",
+                    "out_of_bed",
+                    "light",
+                    "deep",
+                    "rem",
+                    "awake_in_bed"
+                ],
+                "type": "string",
+                "description": "* `unknown` - Unknown\n* `awake` - Awake\n* `sleeping` - Sleeping\n* `out_of_bed` - Out of bed\n* `light` - Light\n* `deep` - Deep\n* `rem` - REM\n* `awake_in_bed` - Awake in bed"
+            },
+            "SleepStageRequest": {
+                "type": "object",
+                "properties": {
+                    "start_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64"
+                    },
+                    "end_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "Exclusive; after start_ms."
+                    },
+                    "stage": {
+                        "$ref": "#/components/schemas/SleepStageEnum"
+                    }
+                },
+                "required": [
+                    "end_ms",
+                    "stage",
+                    "start_ms"
                 ]
             },
             "StatusCheckResponse": {
@@ -3364,6 +3893,85 @@
                 },
                 "required": [
                     "status"
+                ]
+            },
+            "StepsRecordRequest": {
+                "type": "object",
+                "description": "HC `StepsRecord`.",
+                "properties": {
+                    "hc_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "HC Metadata.id."
+                    },
+                    "data_origin": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Package name of the writing app.",
+                        "maxLength": 255
+                    },
+                    "last_modified_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "HC Metadata.lastModifiedTime, epoch ms."
+                    },
+                    "recording_method": {
+                        "$ref": "#/components/schemas/RecordingMethodEnum"
+                    },
+                    "device": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/HealthDeviceRequest"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "start_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64"
+                    },
+                    "start_offset_s": {
+                        "type": "integer",
+                        "maximum": 64800,
+                        "minimum": -64800,
+                        "nullable": true,
+                        "description": "Zone offset in seconds, as HC recorded it; null when HC has none."
+                    },
+                    "end_ms": {
+                        "type": "integer",
+                        "maximum": 4102444800000,
+                        "minimum": 0,
+                        "format": "int64",
+                        "description": "Exclusive; after start_ms."
+                    },
+                    "end_offset_s": {
+                        "type": "integer",
+                        "maximum": 64800,
+                        "minimum": -64800,
+                        "nullable": true,
+                        "description": "Zone offset in seconds, as HC recorded it; null when HC has none."
+                    },
+                    "count": {
+                        "type": "integer",
+                        "maximum": 10000000,
+                        "minimum": 0
+                    }
+                },
+                "required": [
+                    "count",
+                    "data_origin",
+                    "device",
+                    "end_ms",
+                    "end_offset_s",
+                    "hc_id",
+                    "last_modified_ms",
+                    "recording_method",
+                    "start_ms",
+                    "start_offset_s"
                 ]
             },
             "StratClsEnum": {

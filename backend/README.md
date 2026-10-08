@@ -8,8 +8,13 @@ This backend now uses `uv` and the `pyproject.toml` in this directory as the sou
 uv sync --python 3.14
 cp .env.example .env
 uv run python manage.py migrate
+uv run python manage.py migrate --database health
 uv run python manage.py runserver
 ```
+
+Health Connect data lives in its own SQLite file, `health.sqlite3` beside `SQLITE_PATH`
+(override with `HEALTH_SQLITE_PATH`), so it needs the second `migrate`. See
+`docs/architecture/health-ingest.md`.
 
 By default, the development server listens on `http://localhost:8000`.
 For a local-only override, set `BACKEND_PORT` in `backend/.env`.
@@ -71,5 +76,5 @@ Notes:
 
 - The backend reads environment variables from `backend/.env`.
 - The compose setup stores the SQLite database in a named Docker volume.
-- Container startup runs `python manage.py migrate` before starting the Django dev server on the port from `BACKEND_PORT` or `8000`.
+- Container startup runs `python manage.py migrate` (once per database) before starting the Django dev server on the port from `BACKEND_PORT` or `8000`.
 - The image installs dependencies from `pyproject.toml` and `uv.lock`, not from `requirements.txt`.

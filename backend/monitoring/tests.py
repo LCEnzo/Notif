@@ -1363,6 +1363,8 @@ class StratChoicesViewTestCase(SetupMixin, TestCase):
 
 
 class StatusCheckViewTestCase(TestCase):
+	databases = {"default", "health"}
+
 	def test_reports_ok_when_the_database_answers(self):
 		response = APIClient().get(reverse("status-check"))
 
@@ -1388,6 +1390,30 @@ class StatusCheckViewTestCase(TestCase):
 				self.assertEqual(len(logs.records), 1)
 				exc_info = logs.records[0].exc_info or (None, None, None)
 				self.assertIs(exc_info[1], exc)
+
+	def test_the_health_store_is_checked_too(self):
+		with (
+			patch.object(connections["health"], "cursor", side_effect=OperationalError("unable to open database file")),
+			self.assertLogs("monitoring.views", level=logging.ERROR) as logs,
+		):
+			response = APIClient().get(reverse("status-check"))
+
+		self.assertEqual(response.status_code, 503)
+		self.assertEqual(response.data["db"], "down")
+		self.assertEqual(
+			[record.getMessage() for record in logs.records], ["Readiness probe: database 'health' check failed"]
+		)
+
+	def test_every_failing_database_is_logged(self):
+		with (
+			patch.object(connections["default"], "cursor", side_effect=OperationalError("default gone")),
+			patch.object(connections["health"], "cursor", side_effect=OperationalError("health gone")),
+			self.assertLogs("monitoring.views", level=logging.ERROR) as logs,
+		):
+			response = APIClient().get(reverse("status-check"))
+
+		self.assertEqual(response.status_code, 503)
+		self.assertEqual(len(logs.records), 2)
 
 	def test_non_database_errors_are_not_reported_as_database_down(self):
 		with (

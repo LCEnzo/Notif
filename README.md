@@ -55,6 +55,7 @@ For the backend, use `uv` with Python 3.13.
 	```bash
 	uv run python manage.py makemigrations
 	uv run python manage.py migrate
+	uv run python manage.py migrate --database health
 	```
 5. Run the Django development server.
 	```bash

@@ -292,6 +292,7 @@ sudo -u notif -H .venv/bin/python manage.py regenerate_secret_key --update-env
 
 # Migrate + collect static
 sudo -u notif -H .venv/bin/python manage.py migrate --noinput
+sudo -u notif -H .venv/bin/python manage.py migrate --database health --noinput
 sudo -u notif -H .venv/bin/python manage.py collectstatic --noinput
 ```
 
@@ -438,6 +439,7 @@ sudo -u notif git pull
 cd /opt/notif/backend
 sudo -u notif -H uv sync --frozen --no-dev --python 3.14
 sudo -u notif -H .venv/bin/python manage.py migrate --noinput
+sudo -u notif -H .venv/bin/python manage.py migrate --database health --noinput
 sudo -u notif -H .venv/bin/python manage.py collectstatic --noinput
 systemctl restart notif
 systemctl reload caddy

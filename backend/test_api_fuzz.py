@@ -265,7 +265,8 @@ def test_a_mismatched_csrf_header_fires_the_csrf_canary(live_server: Any, profil
 	suppress_health_check=[HealthCheck.function_scoped_fixture, HealthCheck.too_slow],
 )
 @pytest.mark.timeout(TIMEOUT_SECONDS)
-@pytest.mark.django_db(transaction=True)
+# Every database: the server writes to the health store too, which must be allowed and flushed.
+@pytest.mark.django_db(transaction=True, databases="__all__")
 @pytest.mark.fuzz
 @pytest.mark.usefixtures("ipv4_localhost", "fuzz_user")
 def test_operation_survives_generated_input(case: Case[Any], live_server: Any) -> None:
