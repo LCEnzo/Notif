@@ -20,9 +20,8 @@ from django.db.models import Model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from hypothesis import given, settings
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
-from hypothesis.extra.django import TestCase as HypothesisTestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -552,16 +551,16 @@ class KemonoFavouritesMarkupTestCase(TestCase):
 _naive_datetimes = st.datetimes()
 
 
-class KemonoCardTimestampPropertyTestCase(HypothesisTestCase):
-	@pytest.mark.property
-	@given(moment=st.one_of(_naive_datetimes, _naive_datetimes.map(lambda d: d.replace(microsecond=0))))
-	@settings(max_examples=200)
-	def test_round_trips_python_datetime_str(self, moment: datetime):
-		# The site prints str(datetime), whose ".ffffff" appears only for non-zero microseconds; the
-		# second strategy branch forces the zero case so both shapes are always exercised.
-		[card] = KemonoFavouritesStrategy()._extract_kemono_profile_cards(_kemono_card_html(str(moment)))
+# Plain function, not a TestCase method: see docs/testing.md.
+@pytest.mark.property
+@given(moment=st.one_of(_naive_datetimes, _naive_datetimes.map(lambda d: d.replace(microsecond=0))))
+@settings(max_examples=200)
+def test_kemono_card_timestamp_round_trips_python_datetime_str(moment: datetime):
+	# The site prints str(datetime), whose ".ffffff" appears only for non-zero microseconds; the
+	# second strategy branch forces the zero case so both shapes are always exercised.
+	[card] = KemonoFavouritesStrategy()._extract_kemono_profile_cards(_kemono_card_html(str(moment)))
 
-		assert card.date_time == moment.replace(tzinfo=UTC)
+	assert card.date_time == moment.replace(tzinfo=UTC)
 
 
 class SBSVThreadmarksStrategyTestCase(TestCase):
@@ -2096,36 +2095,32 @@ def _atom_feed_xml(draw, min_items=1, max_items=20):
 </feed>"""
 
 
-class FeedStrategyDedupPropertyTestCase(HypothesisTestCase):
-	"""Property-based tests for FeedStrategy dedup invariant."""
+# Plain function, not a TestCase method, and timing checks off: see docs/testing.md.
+@pytest.mark.property
+@given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
+@settings(max_examples=200, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+def test_feed_strategy_dedup_is_idempotent(feed_xml):
+	"""Second scrape with first scrape's comparison data returns zero new entries."""
+	strategy = FeedStrategy()
+	url = URL("https://example.com/feed")
 
-	def setUp(self):
-		self.strategy = FeedStrategy()
+	with requests_mock.Mocker() as mocker:
+		mocker.get(url, text=feed_xml)
 
-	@pytest.mark.property
-	@given(feed_xml=st.one_of(_rss_feed_xml(), _atom_feed_xml()))
-	@settings(max_examples=200)
-	def test_dedup_is_idempotent(self, feed_xml):
-		"""Second scrape with first scrape's comparison data returns zero new entries."""
-		url = URL("https://example.com/feed")
+		# First scrape
+		result1 = strategy.scrape(url, {}, {})
+		assert isinstance(result1, Ok), f"First scrape failed: {result1}"
+		assert len(result1.value.updates) > 0, f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
+		comparison1 = result1.value.comparison_state_update
+		assert comparison1 is not None
 
-		with requests_mock.Mocker() as mocker:
-			mocker.get(url, text=feed_xml)
-
-			# First scrape
-			result1 = self.strategy.scrape(url, {}, {})
-			assert isinstance(result1, Ok), f"First scrape failed: {result1}"
-			assert len(result1.value.updates) > 0, f"Feed has items but scrape returned 0. Feed: {feed_xml[:200]}..."
-			comparison1 = result1.value.comparison_state_update
-			assert comparison1 is not None
-
-			# Second scrape with comparison data from first
-			result2 = self.strategy.scrape(url, {}, comparison1)
-			assert isinstance(result2, Ok), f"Second scrape failed: {result2}"
-			assert len(result2.value.updates) == 0, (
-				f"Dedup invariant violated: second scrape returned "
-				f"{len(result2.value.updates)} entries. comparison1: {comparison1}"
-			)
-			assert result2.value.comparison_state_update is None, (
-				f"Expected None comparison on dedup hit, got: {result2.value.comparison_state_update}"
-			)
+		# Second scrape with comparison data from first
+		result2 = strategy.scrape(url, {}, comparison1)
+		assert isinstance(result2, Ok), f"Second scrape failed: {result2}"
+		assert len(result2.value.updates) == 0, (
+			f"Dedup invariant violated: second scrape returned "
+			f"{len(result2.value.updates)} entries. comparison1: {comparison1}"
+		)
+		assert result2.value.comparison_state_update is None, (
+			f"Expected None comparison on dedup hit, got: {result2.value.comparison_state_update}"
+		)
