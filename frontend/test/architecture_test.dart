@@ -100,4 +100,63 @@ void main() {
 
     expect(offenders, isEmpty);
   });
+
+  test('only the health services reach Health Connect', () {
+    final offenders = libFiles
+        .where((file) => read(file).contains('package:hc_bridge/'))
+        .map(relative)
+        .where((path) => !path.startsWith('lib/services/health/'))
+        .toList();
+
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'Screens get Health Connect types through health_service.dart, so '
+          'every HC call goes through the code that records grants and '
+          'classifies failures.',
+    );
+  });
+
+  test(
+    'only the health scheduler owns WorkManager and a second auth wiring',
+    () {
+      final scheduler = libFiles
+          .where((file) => read(file).contains('package:workmanager/'))
+          .map(relative)
+          .toList();
+      expect(scheduler, ['lib/services/health/scheduler.dart']);
+
+      final wiring = libFiles
+          .where((file) => read(file).contains('configureApiAuth('))
+          .map(relative)
+          .toSet();
+      expect(
+        wiring,
+        {
+          'lib/services/api_client.dart',
+          'lib/services/auth.dart',
+          'lib/services/health/scheduler.dart',
+        },
+        reason:
+            'The WorkManager isolate has no AuthService, so the scheduler wires '
+            'the stored credential itself. Anything else doing so is a second '
+            'auth stack.',
+      );
+    },
+  );
+
+  test('health state goes through PreferenceStore, not raw preferences', () {
+    final offenders = libFiles
+        .map(relative)
+        .where((path) => path.startsWith('lib/services/health/'))
+        .where(
+          (path) => File(path).readAsStringSync().contains(
+            'package:shared_preferences/',
+          ),
+        )
+        .toList();
+
+    expect(offenders, isEmpty);
+  });
 }
