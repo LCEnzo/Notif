@@ -12,9 +12,23 @@ if (localPropertiesFile.exists()) {
     }
 }
 
+// `flutter build` sets this from --build-number (or pubspec's +N) and removes it when neither is given.
 def flutterVersionCode = localProperties.getProperty("flutter.versionCode")
-if (flutterVersionCode == null) {
-    flutterVersionCode = "1"
+
+def requireReleaseVersionCode = tasks.register("requireReleaseVersionCode") {
+    def versionCodeGiven = flutterVersionCode != null
+    doLast {
+        if (!versionCodeGiven) {
+            throw new GradleException(
+                "Release builds need an explicit versionCode: pass --build-number to `flutter build`. " +
+                "Without it the APK would silently get versionCode 1."
+            )
+        }
+    }
+}
+// Also hooked to the Dart compile so the check fails before the slow AOT step.
+tasks.matching { it.name in ["preReleaseBuild", "compileFlutterBuildRelease"] }.configureEach {
+    dependsOn requireReleaseVersionCode
 }
 
 def flutterVersionName = localProperties.getProperty("flutter.versionName")
@@ -23,7 +37,7 @@ if (flutterVersionName == null) {
 }
 
 android {
-    namespace "com.example.notif"
+    namespace "com.lcenzo.notif"
     compileSdk flutter.compileSdkVersion
     ndkVersion flutter.ndkVersion
 
@@ -41,17 +55,17 @@ android {
     }
 
     defaultConfig {
-        applicationId "com.example.notif"
+        applicationId "com.lcenzo.notif"
         minSdk flutter.minSdkVersion
         targetSdk flutter.targetSdkVersion
-        versionCode flutterVersionCode.toInteger()
+        // Debug and profile builds may fall back to 1; release builds are stopped above.
+        versionCode((flutterVersionCode ?: "1").toInteger())
         versionName flutterVersionName
     }
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Debug-signed on purpose: the release key is applied after the build, with apksigner.
             signingConfig signingConfigs.debug
         }
     }

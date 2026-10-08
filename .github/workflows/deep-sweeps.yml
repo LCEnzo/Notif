@@ -1,0 +1,174 @@
+name: Deep Test Sweeps
+
+# Non-gating sweeps: weekly schedule, each sweep at most fortnightly, or on demand. See docs/testing.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sweeps:
+        description: 'Which sweeps to run'
+        type: choice
+        default: 'both'
+        options: ['both', 'fuzz', 'mutation']
+  schedule:
+    # Saturdays 02:17 UTC: 04:17 in Belgrade in summer, 03:17 in winter.
+    - cron: '17 2 * * 6'
+
+permissions:
+  contents: read
+
+# One run at a time: a second run waits for the first instead of paying for the
+# same hours of sweeping twice in parallel.
+concurrency:
+  group: deep-sweeps
+  cancel-in-progress: false
+
+env:
+  # A scheduled run starts a sweep only when its last successful run is at least
+  # MIN_DAYS_SINCE_LAST_SWEEP old and CHANGE_THRESHOLD lines of non-test backend
+  # source changed since that run's commit.
+  CHANGE_THRESHOLD: 200
+  MIN_DAYS_SINCE_LAST_SWEEP: 13
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      # Reads this workflow's earlier runs and their jobs.
+      actions: read
+    outputs:
+      fuzz_should_run: ${{ steps.check.outputs.fuzz_should_run }}
+      fuzz_churn: ${{ steps.check.outputs.fuzz_churn }}
+      mutation_should_run: ${{ steps.check.outputs.mutation_should_run }}
+      mutation_churn: ${{ steps.check.outputs.mutation_churn }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The gate diffs against the commit of each sweep's last successful run.
+          fetch-depth: 0
+
+      - name: Decide which sweeps run
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SWEEPS_INPUT: ${{ inputs.sweeps }}
+        run: .github/scripts/deep-sweeps-gate.sh
+
+  fuzz-deep:
+    needs: gate
+    if: needs.gate.outputs.fuzz_should_run == 'true'
+    runs-on: ubuntu-latest
+    # Every operation is also capped by its own pytest timeout; this bounds the
+    # whole job well below GitHub's 6-hour default.
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod  # pragma: allowlist secret
+      DJANGO_SETTINGS_MODULE: notif.settings_test
+      NOTIF_FUZZ_PROFILE: deep
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Findings are expected, so pytest's exit status goes to the classifier below: see docs/testing.md.
+      - name: Deep schema fuzz
+        id: fuzz
+        run: |
+          set -o pipefail
+          status=0
+          uv run pytest -q test_api_fuzz.py --junitxml=../fuzz-report.xml | tee ../fuzz-report.txt || status=$?
+          echo "pytest_exit=$status" >> "$GITHUB_OUTPUT"
+
+      # Fails the run unless every failure is a finding: see docs/testing.md.
+      - name: Classify fuzz report
+        env:
+          PYTEST_EXIT: ${{ steps.fuzz.outputs.pytest_exit }}
+        run: |
+          set -o pipefail
+          uv run python scripts/classify_fuzz_report.py ../fuzz-report.xml --pytest-exit-code "$PYTEST_EXIT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload fuzz report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-fuzz-report
+          path: |
+            fuzz-report.txt
+            fuzz-report.xml
+          retention-days: 30
+
+  mutation:
+    needs: gate
+    if: needs.gate.outputs.mutation_should_run == 'true'
+    runs-on: ubuntu-latest
+    # GitHub's limit for hosted runners. A full sweep is expected to take hours,
+    # and mutmut leaves the mutants with the slowest covering tests for last.
+    timeout-minutes: 360
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DJANGO_SECRET_KEY: notif-ci-dummy-key-do-not-use-in-prod  # pragma: allowlist secret
+      DJANGO_SETTINGS_MODULE: notif.settings_test
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        run: uv sync --frozen --group mutation
+
+      # Survivors exit 0; a broken baseline or the step timeout fails the run. See docs/testing.md.
+      - name: Mutation sweep
+        timeout-minutes: 330
+        run: uv run --frozen --group mutation mutmut run
+
+      - name: Collect results
+        if: always()
+        run: |
+          set -o pipefail
+          uv run --frozen --group mutation mutmut results | tee ../mutation-results.txt
+          uv run --frozen --group mutation mutmut export-cicd-stats
+          cp mutants/mutmut-cicd-stats.json ../mutation-stats.json
+          jq -r '
+            "### Mutation sweep", "",
+            "| Killed | Survived | Timed out | Other | Total |", "|---:|---:|---:|---:|---:|",
+            "| \(.killed) | \(.survived) | \(.timeout) | \(.total - .killed - .survived - .timeout) | \(.total) |", "",
+            "Other is every remaining mutmut status, such as not checked or no tests. Survivors are in the `mutation-report` artifact."
+          ' ../mutation-stats.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: |
+            mutation-results.txt
+            mutation-stats.json
+          retention-days: 30

@@ -258,6 +258,36 @@ void main() {
       expect(ops.events, isEmpty);
     });
 
+    final malformed = <String, Object?>{
+      'missing field': _event()..remove('message'),
+      'mistyped field': _event()..['id'] = 'seven',
+      'non-object event': 'not an event',
+    };
+    for (final MapEntry(key: label, value: item) in malformed.entries) {
+      test('a $label is shown and reported as a contract violation', () async {
+        final ops = await signedInOps();
+        replyEvents([_event(), item]);
+        adapter.enqueue('/client-events/', const FakeReply(statusCode: 202));
+
+        await ops.fetchEvents();
+        // The report is fire-and-forget; give it a bounded number of turns.
+        for (
+          var i = 0;
+          i < 50 && !adapter.sawRequestFor('/client-events/');
+          i++
+        ) {
+          await pumpEventQueue();
+        }
+
+        expect(ops.error, contains('contract violation in SystemEvent'));
+        final report =
+            adapter.requestFor('/client-events/').body! as Map<String, dynamic>;
+        expect(report['category'], 'contract_violation');
+        expect(report['contract_path'], '#/components/schemas/SystemEvent');
+        expect(report['endpoint'], 'GET /ops/events/');
+      });
+    }
+
     test('a failed refresh keeps the last complete list', () async {
       final ops = await signedInOps();
       replyEvents([_event(), _event(id: 2)]);

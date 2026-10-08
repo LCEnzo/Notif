@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:notif/commons/download_helper.dart';
 import 'package:notif/generated/openapi.swagger.dart' as api;
 import 'package:notif/services/api_client.dart';
 import 'package:notif/services/app_settings.dart';
 import 'package:notif/services/auth.dart';
+import 'package:notif/services/client_events.dart';
 
 class SystemEvent {
   const SystemEvent({
@@ -19,7 +22,10 @@ class SystemEvent {
   factory SystemEvent.fromJson(Map<String, dynamic> json) {
     // Parse through the schema-generated type first (see data.dart). The
     // generator makes readOnly fields nullable, so `required` is checked here.
-    final parsed = parseContract(() => api.SystemEvent.fromJson(json));
+    final parsed = parseContract(
+      'SystemEvent',
+      () => api.SystemEvent.fromJson(json),
+    );
     // The generated enum maps unknown levels to null; keep the wire string so
     // a level added server-side still renders.
     final level = json['level'];
@@ -45,8 +51,9 @@ class SystemEvent {
 
 T _required<T extends Object>(T? value, String field) =>
     value ??
-    (throw FormatException(
-      'contract violation: SystemEvent.$field is missing or mistyped',
+    (throw ContractViolation(
+      schema: 'SystemEvent',
+      detail: '$field is missing or mistyped',
     ));
 
 class CaddyLogEntry {
@@ -142,9 +149,9 @@ class OpsService extends ChangeNotifier {
           .map(
             (item) => item is Map<String, dynamic>
                 ? SystemEvent.fromJson(item)
-                : throw FormatException(
-                    'contract violation: event is ${item.runtimeType}, '
-                    'not an object',
+                : throw ContractViolation(
+                    schema: 'SystemEvent',
+                    detail: 'event is ${item.runtimeType}, not an object',
                   ),
           )
           .toList(growable: false);
@@ -152,6 +159,7 @@ class OpsService extends ChangeNotifier {
         ..clear()
         ..addAll(events);
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/events/');
       _error = error.toString();
     } finally {
       _loading = false;
@@ -183,6 +191,7 @@ class OpsService extends ChangeNotifier {
           ),
         );
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/logs/caddy/');
       _error = error.toString();
     } finally {
       _caddyLogsLoading = false;
@@ -216,6 +225,7 @@ class OpsService extends ChangeNotifier {
         mimeType: 'application/vnd.sqlite3',
       );
     } on Exception catch (error) {
+      _recordFailure(error, endpoint: 'GET /ops/backup/sqlite/');
       _error = error.toString();
     } finally {
       _downloading = false;
@@ -229,4 +239,14 @@ class OpsService extends ChangeNotifier {
   bool get caddyLogsLoading => _caddyLogsLoading;
   bool get downloading => _downloading;
   String? get error => _error;
+
+  void _recordFailure(Object error, {required String endpoint}) {
+    unawaited(
+      reportClientFailure(
+        settings: _settings,
+        error: error,
+        endpoint: endpoint,
+      ),
+    );
+  }
 }
