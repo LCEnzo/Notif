@@ -1,28 +1,29 @@
-# F-Droid repo: Phase 1 runbook
+# F-Droid repo runbook
 
-This runbook brings up the self-hosted F-Droid repo at `https://fdroid.lcenzo.com/repo`
-(Phase 1 of the plan in PR #113, `docs/plans/fdroid-self-hosting.md` on branch
-`docs/plan-fdroid-hosting`). Each step is written to be run as is. If a step's output
-differs from what it says to expect, stop and report; do not improvise around it.
+The self-hosted F-Droid repo at `https://fdroid.lcenzo.com/repo` (Phase 1 of the plan in
+PR #113, `docs/plans/fdroid-self-hosting.md` on branch `docs/plan-fdroid-hosting`).
+`./deploy.sh` sets up and checks the VPS side on every run, through
+`deploy/fdroid/notif-apk setup`. This runbook covers only what code cannot do: moving the
+keys to and from Luka's PC, committing the pins, the phone, and the one-time Phase 1
+checks. If a step's output differs from what it says to expect, stop and report; do not
+improvise around it.
 
-Three places are involved:
-
-| Where | How | Steps |
-|---|---|---|
-| VPS | `ssh notif`, as `luka` (docker group); `sudo` asks for the password | 0, a-f, the diagnosis in h, i |
-| Luka's PC | Git Bash | b, c |
-| Phone | the F-Droid client | g, h, i |
+| Where | How |
+|---|---|
+| VPS | `ssh notif`, as `luka`; `./deploy.sh` asks for the sudo password |
+| Luka's PC | Git Bash, in the repo checkout |
+| Phone | the F-Droid client |
 
 ## Layout
 
 | What | Where |
 |---|---|
 | Signing keys | `/etc/notif/fdroid/` (root, 0700): `apk.p12`, `apk.pass`, `repo-index.p12`, `repo-index.pass` (root, 0600) |
-| Key backup | `~/Documents/notif-fdroid-keys-<date>.tar` on Luka's PC |
+| Key backups | `~/Documents/notif-fdroid-keys-<date>.tar` on Luka's PC |
 | Cert pins | `deploy/fdroid/pins/apk-cert.sha256`, `deploy/fdroid/pins/repo-index-cert.sha256` |
-| Served repo | `/srv/notif-fdroid/repo`, mounted read-only into Caddy at `/srv/fdroid/repo` |
-| Tool | `/usr/local/bin/notif-apk` -> `/home/luka/notif/deploy/fdroid/notif-apk` |
-| Images | `notif-apk-build`, `notif-apk-publish`; `notif-apk` rebuilds them from `deploy/fdroid/*.Dockerfile` (cached) |
+| Served repo | `/srv/notif-fdroid/repo` (root, 0755), mounted read-only into Caddy at `/srv/fdroid/repo` |
+| Tool | `/usr/local/bin/notif-apk` -> `deploy/fdroid/notif-apk` in the checkout |
+| Images | `notif-apk-publish` (built by `setup`), `notif-apk-build` (built by the first `notif-apk build`) |
 | Caches | Docker volumes `notif-apk-gradle`, `notif-apk-pub`; throwaway worktrees in `~/.cache/notif-apk` |
 
 The build container gets only `apk.p12` and `apk.pass`; the publish container gets only
@@ -30,206 +31,151 @@ The build container gets only `apk.p12` and `apk.pass`; the publish container ge
 containers and never appear on a command line: `repo/status/*.json` is public and records
 the `fdroid` command line.
 
-## 0. Preconditions
+## What `./deploy.sh` does
 
-Both PRs are merged to `master`: Phase 0 (app ID `com.lcenzo.notif`) and the one that added
-this file. Deploy them, which also brings the Caddy site block and the compose mount:
+After the web deploy (`=== Deploy complete ===`), `deploy.sh` runs
+`deploy/fdroid/notif-apk setup`, which:
 
-```bash
-ssh notif
-cd /home/luka/notif
-./deploy.sh
-```
+1. creates `/etc/notif/fdroid` and `/srv/notif-fdroid/repo` with the owners and modes above.
+   On a fresh VPS, Compose creates `/srv/notif-fdroid/repo` first, as root 0755, when it
+   starts Caddy with the mount;
+2. points `/usr/local/bin/notif-apk` at the checkout's `deploy/fdroid/notif-apk`;
+3. builds the `notif-apk-publish` image (a cached no-op after the first time);
+4. brings the signing keys to the state the pins describe:
 
-Expect `=== Deploy complete ===`. Then check:
+| Keys in `/etc/notif/fdroid` | Pins | `setup` |
+|---|---|---|
+| all four files | set | checks both certs against the pins; refuses on a mismatch, never overwrites |
+| none | empty | generates both keys and prints their digests and the next steps |
+| none | set | with `--fdroid-restore <tar>`, restores from that backup and checks it against the pins; without it, refuses |
+| all four files | empty | prints the digests and the next steps; never regenerates |
+| none | empty, with `--fdroid-restore <tar>` | restores from that backup without a check, then prints the digests |
+| one to three files | any | refuses |
+| any | only one set | refuses |
 
-```bash
-grep -c 'applicationId "com.lcenzo.notif"' frontend/android/app/build.gradle
-test -x deploy/fdroid/notif-apk && echo notif-apk present
-docker compose -f compose.yaml --profile prod exec -T caddy ls -ld /srv/fdroid/repo
-```
+The keys are RSA 4096, SHA256withRSA, 10000 days, PKCS12, with aliases `notif-apk`
+(`CN=Notif APK`) and `notif-repo` (`CN=notif-repo, OU=F-Droid`); the index key uses the
+parameters `fdroid init` would. Each password is 32 random bytes in base64, in its `.pass`
+file. `fdroid init` itself is not used: in fdroidserver 2.4.2 it ignores `--keystore` when
+generating, writing `./keystore.p12` while `config.yml` points elsewhere, and it stores the
+password in `config.yml`.
 
-Expect `1`, `notif-apk present`, and a directory listing for `/srv/fdroid/repo`.
+If `setup` fails, `deploy.sh` prints an `F-DROID HOST SETUP FAILED` banner and exits 1.
+The web deploy has already completed and stays in place. With `--apk`, the build is
+skipped. Fix the cause and run `./deploy.sh` again; nothing has to be undone first.
 
-## a. Generate the keys (root)
+## First-ever setup
 
-Build the publish image, create the key directory, and check it is empty:
+Preconditions: both PRs are merged to `master`: Phase 0 (app ID `com.lcenzo.notif`) and
+the one that added this file.
 
-```bash
-cd /home/luka/notif
-docker build --quiet --tag notif-apk-publish - < deploy/fdroid/publish.Dockerfile
-sudo install -d -m 0700 -o root -g root /etc/notif/fdroid
-sudo ls -A /etc/notif/fdroid
-```
+1. On the VPS, deploy:
 
-The last command must print nothing. If it lists files, stop: keys already exist.
+   ```bash
+   cd /home/luka/notif
+   ./deploy.sh
+   ```
 
-Generate both keys inside the publish image. Each password is 32 random bytes in base64,
-written straight to its file:
+   After `=== Deploy complete ===` and `=== F-Droid host setup ===`, expect two
+   `Generating 4,096 bit RSA key pair` lines and a framed block naming
+   `deploy/fdroid/backup-keys.sh` and two `echo <64 hex> >>deploy/fdroid/pins/...` lines.
+   The two digests must differ. `deploy.sh` exits 0.
 
-```bash
-docker run --rm --network none \
-  --mount type=bind,src=/etc/notif/fdroid,dst=/keys \
-  notif-apk-publish bash -euo pipefail -c '
-umask 077
-cd /keys
-for f in apk.p12 apk.pass repo-index.p12 repo-index.pass; do
-  if [ -e "$f" ]; then echo "refusing: /etc/notif/fdroid/$f exists" >&2; exit 1; fi
-done
-head -c 32 /dev/urandom | base64 -w0 >apk.pass
-head -c 32 /dev/urandom | base64 -w0 >repo-index.pass
-keytool -genkeypair -keystore apk.p12 -storetype pkcs12 -alias notif-apk \
-  -keyalg RSA -keysize 4096 -sigalg SHA256withRSA -validity 10000 \
-  -dname "CN=Notif APK" -storepass:file apk.pass -keypass:file apk.pass
-keytool -genkeypair -keystore repo-index.p12 -storetype pkcs12 -alias notif-repo \
-  -keyalg RSA -keysize 4096 -sigalg SHA256withRSA -validity 10000 \
-  -dname "CN=notif-repo, OU=F-Droid" -storepass:file repo-index.pass -keypass:file repo-index.pass
-chmod 0600 apk.p12 apk.pass repo-index.p12 repo-index.pass'
-sudo ls -la /etc/notif/fdroid
-```
+2. On the PC, back the keys up:
 
-Expect two `Generating 4,096 bit RSA key pair` lines, then `drwx------ root root` for the
-directory and `-rw------- root root` for the four files.
+   ```bash
+   cd ~/"Notif - Copy"
+   deploy/fdroid/backup-keys.sh
+   ```
 
-The index key uses the parameters `fdroid init` would use (RSA 4096, SHA256withRSA,
-10000 days, PKCS12, `CN=notif-repo, OU=F-Droid`). `fdroid init` itself is not used:
-in fdroidserver 2.4.2 it ignores `--keystore` when generating, writing `./keystore.p12`
-while `config.yml` points elsewhere, and it stores the password in `config.yml`.
+   It runs `notif-apk export-keys` on the VPS, copies the tar to
+   `~/Documents/notif-fdroid-keys-<date>.tar`, and shreds the VPS copy. Expect two
+   `backup-keys: sha256 <hash>` lines with the same hash, a listing of `fdroid/apk.p12`,
+   `fdroid/apk.pass`, `fdroid/repo-index.p12` and `fdroid/repo-index.pass`, and
+   `backup-keys: backed up to ...`. `~/Documents` is the local `C:\Users\LCEnzo\Documents`
+   (checked 2026-10-08; it is not redirected to OneDrive). Back up first: once the pins are
+   committed, a lost key can only be replaced by a rotation.
 
-## b. Back up the keys to Luka's PC
+3. On the PC, commit the pins on a branch, using the two `echo` lines from step 1:
 
-On the VPS, pack the directory into a file only `luka` can read, and print its hash:
+   ```bash
+   git fetch origin
+   git worktree add .claude/worktrees/fdroid-pins -b chore/fdroid-pins origin/master
+   cd .claude/worktrees/fdroid-pins
+   echo <APK digest> >>deploy/fdroid/pins/apk-cert.sha256
+   echo <repo index digest> >>deploy/fdroid/pins/repo-index-cert.sha256
+   git diff
+   ```
 
-```bash
-sudo tar -C /etc/notif -cf /home/luka/notif-fdroid-keys.tar fdroid
-sudo chown luka:luka /home/luka/notif-fdroid-keys.tar
-chmod 0600 /home/luka/notif-fdroid-keys.tar
-sha256sum /home/luka/notif-fdroid-keys.tar
-```
+   `git diff` must show exactly one added line of 64 hex digits in each file. Then:
 
-On the PC, in Git Bash:
+   ```bash
+   git commit -a -F - <<'EOF'
+   Pin the F-Droid signing cert digests
 
-```bash
-backup=~/Documents/notif-fdroid-keys-$(date +%F).tar
-if [ -e "$backup" ]; then echo "exists, stop: $backup"; else scp notif:notif-fdroid-keys.tar "$backup"; fi
-sha256sum "$backup"
-tar -tvf "$backup"
-```
+   Adds the SHA-256s of the APK and repo index signing certs that
+   notif-apk setup generated on the VPS. notif-apk refuses to build or
+   publish until both are set.
+   EOF
+   git push -u origin chore/fdroid-pins
+   gh pr create --base master --title "Pin the F-Droid signing cert digests" \
+     --body "Adds the cert SHA-256s from docs/operations/fdroid_runbook.md, first-ever setup."
+   ```
 
-If the first line prints `exists, stop`, stop: an earlier backup has that name. The hash
-must equal the VPS hash. The listing must show `fdroid/` and the four files.
-`~/Documents` is the local `C:\Users\LCEnzo\Documents` (checked 2026-10-08; it is not
-redirected to OneDrive).
+4. After Luka merges the PR, on the VPS:
 
-Back on the VPS, delete the temporary copy:
+   ```bash
+   cd /home/luka/notif
+   ./deploy.sh --apk
+   ```
 
-```bash
-shred -u /home/luka/notif-fdroid-keys.tar
-```
+   Expect `notif-apk: the keys in /etc/notif/fdroid match the pins`, then the first build.
+   It builds `notif-apk-build` (pulls `ghcr.io/cirruslabs/flutter:3.44.0`, about 2.3 GB
+   compressed, unless a web deploy already has it, plus the NDK, about 0.7 GB) and fills
+   the Gradle and pub caches. On disk the two images take about 13 GB together (the Flutter
+   base about 7 GB of that, shared with the web build). Expect, near the end:
 
-## c. Commit the fingerprints
+   ```text
+   build-apk: signed /build/out/notif-<versionCode>-<sha>.apk
+   notif-apk: build memory: anon peak <A> MiB (sampled every 2 s), memory.peak <P> MiB (includes page cache); memory.events: low 0 high 0 max <M> oom 0 oom_kill 0 oom_group_kill 0
+   publish: check 3a passed: signed by the pinned APK key
+   publish: check 3b passed: built against https://notif.lcenzo.com/api/v1
+   publish: check 3c passed: versionCode <versionCode> (<versionName>) > 0
+   publish: check 3d passed: com.lcenzo.notif_<versionCode>.apk is new
+   <date> WARNING: repo_icon "repo/icons/icon.png" does not exist! Check "config.yml".
+   <date> INFO: Creating signed index with this key (SHA256):
+   <date> INFO: <the repo index pin, in upper case, in pairs>
+   <date> WARNING: repo_icon "repo/icons/icon.png" does not exist, generating placeholder.
+   <date> INFO: Finished
+   publish: published com.lcenzo.notif_<versionCode>.apk
+   ```
 
-On the VPS, write both cert SHA-256s (not secret) to files `luka` can read:
+   The two `repo_icon` warnings appear on the first publish only.
 
-```bash
-install -d -m 0755 /home/luka/notif-fdroid-pins
-docker run --rm --network none \
-  --mount type=bind,src=/etc/notif/fdroid,dst=/keys,readonly \
-  --mount type=bind,src=/home/luka/notif-fdroid-pins,dst=/out \
-  notif-apk-publish bash -euo pipefail -c '
-keytool -exportcert -keystore /keys/apk.p12 -alias notif-apk -storepass:file /keys/apk.pass \
-  | sha256sum | cut -d" " -f1 >/out/apk-cert.sha256
-keytool -exportcert -keystore /keys/repo-index.p12 -alias notif-repo -storepass:file /keys/repo-index.pass \
-  | sha256sum | cut -d" " -f1 >/out/repo-index-cert.sha256'
-cat /home/luka/notif-fdroid-pins/apk-cert.sha256 /home/luka/notif-fdroid-pins/repo-index-cert.sha256
-```
+5. Add the repo on the phone (below), then run the Phase 1 checks.
 
-Expect two lines of 64 lowercase hex digits, and they must differ.
+## Phone: add the repo and install
 
-On the PC, in Git Bash, append them to the committed pin files on a new branch and open a PR:
+1. On the PC, open `https://fdroid.lcenzo.com/repo/` in a browser. The page shows a QR
+   code (`index.png`) for `https://fdroid.lcenzo.com/repo?fingerprint=<FINGERPRINT>`, the
+   repo index pin in upper case.
+2. On the phone, in F-Droid: Settings, Repositories, the `+` button, and scan the QR code.
+   These menu labels were not checked against a phone; if they differ, use the client's
+   "add repository" entry.
+3. Before confirming, compare the fingerprint the client shows with
+   `deploy/fdroid/pins/repo-index-cert.sha256`, ignoring case and spacing. They must match.
+4. Confirm, wait for the refresh, find Notif, and install it. Android asks once to allow
+   F-Droid to install apps.
 
-```bash
-cd ~/"Notif - Copy"
-git fetch origin
-git worktree add .claude/worktrees/fdroid-pins -b chore/fdroid-pins origin/master
-cd .claude/worktrees/fdroid-pins
-ssh notif cat notif-fdroid-pins/apk-cert.sha256 >> deploy/fdroid/pins/apk-cert.sha256
-ssh notif cat notif-fdroid-pins/repo-index-cert.sha256 >> deploy/fdroid/pins/repo-index-cert.sha256
-git diff
-```
+## Phase 1 checks (once)
 
-`git diff` must show exactly one added line of 64 hex digits in each file. Then:
+**Memory and time (plan 1d).** Record the `anon peak` from the first build's memory line,
+and its duration, in the Phase 1 notes; `anon peak` is the number to size the heap and the
+cap from. `memory.peak` counts page cache, which grows until the 5 GB limit, so it says
+little on its own. The build runs under `--memory 5g --memory-swap 5g --cpus 3`; if
+`oom_kill` is not 0 or the build died, stop and report the line.
 
-```bash
-git commit -a -F - <<'EOF'
-Pin the F-Droid signing cert digests
-
-Adds the SHA-256s of the APK and repo index signing certs that step a
-of docs/operations/fdroid_runbook.md generated on the VPS. notif-apk
-refuses to build or publish until both are set.
-EOF
-git push -u origin chore/fdroid-pins
-gh pr create --base master --title "Pin the F-Droid signing cert digests" \
-  --body "Adds the cert SHA-256s from docs/operations/fdroid_runbook.md step c."
-```
-
-After Luka merges the PR, on the VPS:
-
-```bash
-git -C /home/luka/notif pull --ff-only
-grep -hv '^#' /home/luka/notif/deploy/fdroid/pins/*.sha256
-rm -r /home/luka/notif-fdroid-pins
-```
-
-`grep` must print the same two lines as above, in the order apk, then repo index.
-
-## d. Install notif-apk on the VPS
-
-```bash
-sudo ln -sfn /home/luka/notif/deploy/fdroid/notif-apk /usr/local/bin/notif-apk
-sudo install -d -m 0755 -o root -g root /srv/notif-fdroid /srv/notif-fdroid/repo
-command -v notif-apk
-notif-apk --help
-```
-
-Expect `/usr/local/bin/notif-apk` and the usage text. The symlink means `git pull` and
-`./deploy.sh` keep the installed tool current; there is nothing to reinstall later.
-
-## e. First build and publish (plan 1d)
-
-```bash
-time notif-apk build
-```
-
-The first run builds `notif-apk-build` (pulls `ghcr.io/cirruslabs/flutter:3.44.0`, about
-2.3 GB compressed, unless a web deploy already has it, plus the NDK, about 0.7 GB) and
-fills the Gradle and pub caches. On disk the two images take about 13 GB together (the
-Flutter base about 7 GB of that, shared with the web build). Expect, near the end:
-
-```text
-build-apk: signed /build/out/notif-<versionCode>-<sha>.apk
-notif-apk: build memory: anon peak <A> MiB (sampled every 2 s), memory.peak <P> MiB (includes page cache); memory.events: low 0 high 0 max <M> oom 0 oom_kill 0 oom_group_kill 0
-publish: check 3a passed: signed by the pinned APK key
-publish: check 3b passed: built against https://notif.lcenzo.com/api/v1
-publish: check 3c passed: versionCode <versionCode> (<versionName>) > 0
-publish: check 3d passed: com.lcenzo.notif_<versionCode>.apk is new
-<date> WARNING: repo_icon "repo/icons/icon.png" does not exist! Check "config.yml".
-<date> INFO: Creating signed index with this key (SHA256):
-<date> INFO: <the repo index pin, in upper case, in pairs>
-<date> WARNING: repo_icon "repo/icons/icon.png" does not exist, generating placeholder.
-<date> INFO: Finished
-publish: published com.lcenzo.notif_<versionCode>.apk
-```
-
-The two `repo_icon` warnings appear on the first publish only.
-
-Record the `anon peak` and the `real` time from `time` in the Phase 1 notes; `anon peak`
-is the number to size the heap and the cap from. `memory.peak` counts page cache, which
-grows until the 5 GB limit, so it says little on its own. The build runs under
-`--memory 5g --memory-swap 5g --cpus 3`; if `oom_kill` is not 0 or the build died, stop
-and report the line.
-
-Check what Cloudflare and Caddy serve:
+**Caching.** Check what Cloudflare and Caddy serve:
 
 ```bash
 n=$(git -C /home/luka/notif rev-list --count origin/master)
@@ -244,7 +190,7 @@ Expect `HTTP/2 200` for each. `index-v2.json`, `entry.jar`, `index.jar` and `ind
 carry `cache-control: no-cache` and a `cf-cache-status` other than `HIT`. The APK carries
 `cache-control: public, max-age=31536000, immutable`; its second request may show `HIT`.
 
-Check that nothing is left behind:
+**Leftovers.**
 
 ```bash
 docker ps -a --filter name=notif-apk --format '{{.Names}}'
@@ -254,11 +200,10 @@ git -C /home/luka/notif worktree list
 
 Expect no containers, an empty directory, and only `/home/luka/notif` in the worktree list.
 
-## f. Negative test: a build without the API URL (plan 1e)
-
-Build an APK without the `API_URL` define, signed with the real APK key and with a
-versionCode one above the published one, then try to publish it. This bypasses
-`build-apk.sh` on purpose, since that script always passes the define.
+**Negative test: a build without the API URL (plan 1e).** Build an APK without the
+`API_URL` define, signed with the real APK key and with a versionCode one above the
+published one, then try to publish it. This bypasses `build-apk.sh` on purpose, since that
+script always passes the define.
 
 ```bash
 cd /home/luka/notif
@@ -305,20 +250,7 @@ rm -rf "$neg"
 If publish did not refuse, the repo now offers a broken APK. Do not install it; stop and
 report, and leave the repo as it is for diagnosis.
 
-## g. Add the repo on the phone
-
-1. On the PC, open `https://fdroid.lcenzo.com/repo/` in a browser. The page shows a QR
-   code (`index.png`) for `https://fdroid.lcenzo.com/repo?fingerprint=<FINGERPRINT>`, the
-   repo index pin in upper case.
-2. On the phone, in F-Droid: Settings, Repositories, the `+` button, and scan the QR code.
-   These menu labels were not checked against a phone; if they differ, use the client's
-   "add repository" entry.
-3. Before confirming, compare the fingerprint the client shows with
-   `deploy/fdroid/pins/repo-index-cert.sha256`, ignoring case and spacing. They must match.
-4. Confirm, wait for the refresh, find Notif, and install it. Android asks once to allow
-   F-Droid to install apps.
-
-## h. Phone check (plan 1f)
+**Phone check (plan 1f).**
 
 1. In F-Droid, pull down on the Latest or Updates tab to refresh. It must finish without
    an error about the Notif repo.
@@ -336,30 +268,89 @@ No lines while the app shows an error means Cloudflare stopped the requests; lin
 `"status":403` or HTML responses mean the same at the edge or a WAF rule. Report what you
 see; do not change Cloudflare settings from this runbook.
 
-## i. Exit criterion (plan 1g)
+**Exit criterion (plan 1g).** Merge any trivial commit to `master`, then on the VPS run
+`./deploy.sh --apk`. Expect the publish lines from step 4 of the first-ever setup. On the
+phone, refresh F-Droid once: Notif must show an update. Install it and open the app.
 
-Merge any trivial commit to `master`, then on the VPS:
+## Restore on a fresh VPS
 
-```bash
-cd /home/luka/notif
-./deploy.sh --apk
-```
+Preconditions: the host is set up as in `deploy.md` up to its first `./deploy.sh` (checkout
+at `/home/luka/notif`, `.env` files, origin certificates), and the pins are on `master`.
 
-Expect `=== Deploy complete ===` followed by the publish lines from step e. On the phone,
-refresh F-Droid once: Notif must show an update. Install it and open the app.
+1. On the PC, copy the newest backup to the VPS:
+
+   ```bash
+   scp ~/Documents/notif-fdroid-keys-<date>.tar notif:
+   ```
+
+2. On the VPS, deploy with the restore, and the APK build, since a fresh repo is empty:
+
+   ```bash
+   cd /home/luka/notif
+   ./deploy.sh --apk --fdroid-restore ~/notif-fdroid-keys-<date>.tar
+   ```
+
+   Expect `notif-apk: restored; the keys in /etc/notif/fdroid match the pins`, then the
+   build and publish lines from step 4 of the first-ever setup.
+
+3. On the VPS, remove the copy: `shred -u ~/notif-fdroid-keys-<date>.tar`.
+
+The phone needs nothing: the repo fingerprint and the APK key are the same, so a refresh
+in F-Droid picks the repo up again.
+
+## Key rotation
+
+Rotate both keys together, and only for a reason (a leaked key, or a lost key with the
+pins already committed). Every phone has to uninstall Notif, losing its local data, and
+add the repo again: Android refuses an update signed by another key, and the F-Droid client
+refuses an index signed by another key.
+
+1. On a branch, delete the 64-hex line from both pin files, and merge.
+2. On the VPS, retire the old keys and the APKs they signed. The repo directory stays,
+   because Caddy's mount holds on to it; only its contents move:
+
+   ```bash
+   d=$(date +%F)
+   sudo mv /etc/notif/fdroid "/etc/notif/fdroid.retired-$d"
+   sudo install -d -m 0700 "/srv/notif-fdroid/repo.retired-$d"
+   sudo find /srv/notif-fdroid/repo -mindepth 1 -maxdepth 1 -exec mv -t "/srv/notif-fdroid/repo.retired-$d" -- {} +
+   ```
+
+3. Run the first-ever setup from step 1. Its step 4 publishes into the empty repo.
+4. On each phone: uninstall Notif, remove the repo in F-Droid, then add the repo and
+   install as above.
+5. Once the new setup works, delete the retired directories on the VPS. Keep the old
+   backup tars only as long as a rollback is worth it.
+
+## Another backup copy
+
+Run `deploy/fdroid/backup-keys.sh` on the PC at any time. A second run on the same day
+refuses, because the file name exists; rename the first one.
 
 ## Refusals and what they mean
 
 | Message | Meaning | Action |
 |---|---|---|
-| `refused: pin missing: ...` | step c is not done, or the pin file was edited | finish step c |
-| `REFUSED: repo index key cert SHA-256 ... does not match the pin` | `/etc/notif/fdroid/repo-index.p12` is not the pinned key | stop; restore from the backup |
+| `refused: pin missing: ...` | the pins are not committed yet | finish the first-ever setup |
+| `refused: only one of deploy/fdroid/pins/... has a value` | a pin file was edited by hand | set both pins or neither |
+| `refused: ... is not a lowercase SHA-256 hex digest` | a malformed pin | fix the pin file |
+| `refused: the APK key in /etc/notif/fdroid has cert SHA-256 X, but the pin is Y` (or `the repo index key`) | the keys on disk are not the pinned ones; `setup` never overwrites them | report. If the pins are right, set the keys aside with `sudo mv /etc/notif/fdroid /etc/notif/fdroid.aside-$(date +%F)` and restore (restore on a fresh VPS, steps 1-3). Never edit the pins to match unknown keys |
+| `refused: /etc/notif/fdroid holds no keys, but the pins are set` | a fresh VPS, or the keys were removed | restore on a fresh VPS |
+| `refused: /etc/notif/fdroid holds only ... of the four key files` | an interrupted restore or a manual change | report; then set the directory aside and restore, as two rows up |
+| `refused: cannot read the keys in /etc/notif/fdroid` | a keystore does not open with its password file | report; then set the directory aside and restore, as three rows up |
+| `notif-apk keys: the backup's ... cert SHA-256 is X, the pin is Y; installed nothing` | the tar given to `--fdroid-restore` is from another key set | use the backup that matches the pins |
+| `notif-apk keys: the backup does not hold ...` or `cannot read ... with ...` | the tar is damaged or not a key backup | use another backup |
+| `refused: ... notif-fdroid-keys.tar exists, left by an earlier export` | an earlier `backup-keys.sh` run stopped half-way | `ssh notif shred -u notif-fdroid-keys.tar`, then run `backup-keys.sh` again |
+| `warning: ... notif-fdroid-keys.tar still holds a copy of the keys` | the same, noticed by `setup` | the same |
+| `backup-keys: refused: ... exists; an earlier backup has that name` | a second backup on the same day | rename the first one |
+| `backup-keys: the hashes differ` or `does not hold exactly the four key files` | the copy is damaged; both copies are left | report |
+| `REFUSED: repo index key cert SHA-256 ... does not match the pin` | `/etc/notif/fdroid/repo-index.p12` is not the pinned key | stop; restore from a backup |
 | `REFUSED: check 3a: ...` | debug-signed, signed with another key, or more than one signer | stop; the APK key or the build is wrong |
 | `REFUSED: check 3b: ...` | built without the production `API_URL` | rebuild with `notif-apk build` |
 | `check 3c: versionCode N is already published; nothing to do` | same commit published before (exit 0) | none |
 | `REFUSED: check 3c: ... lower than the newest published` | an older commit, or `master` was rewritten | build a newer commit; never force-push `master` |
 | `REFUSED: check 3d: ... already exists in repo/` | a stray APK not in the index, left by an interrupted publish | report; remove only after confirming it is not in `index-v2.json` |
-| `another notif-apk run is in progress` | another build or publish holds the lock | wait for it |
+| `another notif-apk run is in progress` | another build, publish, key generation or restore holds the lock | wait for it |
 | `REFUSED: publish failed (see the output above); restored repo/ to its state before this run` | `fdroid update` (or moving an APK) failed after the checks passed; the new APK was removed, and the pruned APKs and the old index files were put back | report the `fdroid` output above it; the repo still serves what it served before |
 | `REFUSED: publish failed, and so did restoring repo/; it is now inconsistent` | the restore failed too; pruned APKs that were not put back are lost | stop; do not refresh F-Droid on the phone; report the whole output |
 
