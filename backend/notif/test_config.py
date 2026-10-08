@@ -3,6 +3,8 @@
 * DEBUG and the dev bootstrap login are off when nothing sets them.
 * A production environment refuses to run with DEBUG on.
 * The dev bootstrap login is only legal in a local DEBUG environment.
+* Session lifetimes are capped at a year, so no configuration mints an
+  immortal session.
 
 The invariants are driven through environment variables, the way a container
 supplies them, with ``_env_file=None`` and the relevant variables cleared so a
@@ -20,6 +22,8 @@ _AMBIENT_KEYS = (
 	"NOTIF_ENV",
 	"DEV_BOOTSTRAP_LOGIN_ENABLED",
 	"DJANGO_SECRET_KEY",
+	"SESSION_IDLE_LIFETIME_DAYS",
+	"SESSION_ABSOLUTE_LIFETIME_DAYS",
 )
 
 # DJANGO_SECRET_KEY is required by the model.
@@ -38,6 +42,25 @@ def test_debug_and_bootstrap_login_default_off() -> None:
 
 	assert settings.DEBUG is False
 	assert settings.DEV_BOOTSTRAP_LOGIN_ENABLED is False
+
+
+def test_session_lifetime_defaults() -> None:
+	settings = Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
+
+	assert (settings.SESSION_IDLE_LIFETIME_DAYS, settings.SESSION_ABSOLUTE_LIFETIME_DAYS) == (14, 365)
+
+
+@pytest.mark.parametrize("key", ["SESSION_IDLE_LIFETIME_DAYS", "SESSION_ABSOLUTE_LIFETIME_DAYS"])
+@pytest.mark.parametrize(("days", "accepted"), [(0, False), (1, True), (365, True), (366, False)])
+def test_session_lifetimes_are_bounded(key: str, days: int, *, accepted: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+	monkeypatch.setenv(key, str(days))
+
+	if accepted:
+		assert getattr(Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET), key) == days
+	else:
+		with pytest.raises(ValidationError) as excinfo:
+			Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
+		assert [error["loc"] for error in excinfo.value.errors()] == [(key,)]
 
 
 @pytest.mark.parametrize("env", list(Environment))

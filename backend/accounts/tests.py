@@ -1146,6 +1146,17 @@ class SessionLifetimeTestCase(TestCase):
 		with override_settings(SESSION_IDLE_LIFETIME_DAYS=30):
 			self.assertIsNotNone(session_for_token("lifetime-token", transport=DeviceSession.Transport.BEARER))
 
+	def test_a_session_in_daily_use_lasts_a_year_and_no_longer(self):
+		"""Under the shipped defaults, not an override: a phone that syncs daily
+		keeps its session for a year, and no session is immortal."""
+		session = self._session(last_used_at=timezone.now() - timedelta(days=1))
+
+		for age_days, live in ((364, True), (366, False)):
+			with self.subTest(age_days=age_days):
+				DeviceSession.objects.filter(pk=session.pk).update(created_at=timezone.now() - timedelta(days=age_days))
+				found = session_for_token("lifetime-token", transport=DeviceSession.Transport.BEARER)
+				self.assertEqual(found is not None, live)
+
 	def test_touch_advances_last_used_at_once_per_damping_interval(self):
 		session = self._session(last_used_at=timezone.now() - TOUCH_INTERVAL - timedelta(minutes=1))
 
