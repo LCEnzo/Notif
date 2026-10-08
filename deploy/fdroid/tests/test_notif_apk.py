@@ -455,6 +455,40 @@ def test_build_mounts_only_the_apk_key_and_publish_only_the_index_key(vps: Host,
 	assert "notif-apk: building c0ffeec, versionCode 674" in capsys.readouterr().out
 
 
+def writable_binds(argv: list[str]) -> list[str]:
+	"""The dst= of every bind mount without ,readonly."""
+	binds = [m for m in mounts(argv) if m.startswith("type=bind,")]
+	return [m.split(",")[2] for m in binds if not m.endswith(",readonly")]
+
+
+def test_only_the_intended_mounts_are_writable(vps: Host):
+	a, b = "1" * 64, "2" * 64
+	vps.set_pins(APK_PIN, REPO_PIN)
+	host = FakeHost()
+	assert vps.run("build", host=host) == 0
+	build, publish = host.docker_runs()
+	assert writable_binds(build) == ["dst=/out"]
+	assert writable_binds(publish) == ["dst=/work/repo"]
+
+	vps.set_pins("", "")
+	host = FakeHost(inspect=deque(["absent", f"present {a} {b}"]))
+	assert vps.run("setup", host=host) == 0
+	inspect, generate, inspect_again = host.docker_runs()
+	assert writable_binds(inspect) == writable_binds(inspect_again) == []
+	assert writable_binds(generate) == ["dst=/keys"]
+
+	host = FakeHost(inspect=deque([f"present {a} {b}"]))
+	assert vps.run("export-keys", host=host) == 0
+	assert [writable_binds(r) for r in host.docker_runs()] == [[], []]
+
+	tar = vps.root / "backup.tar"
+	tar.write_bytes(b"x")
+
+	host = FakeHost(inspect=deque(["absent", f"present {a} {b}"]))
+	assert vps.run("setup", "--restore", str(tar), host=host) == 0
+	assert writable_binds(host.docker_runs()[1]) == ["dst=/keys"]
+
+
 def test_a_failed_build_exits_with_its_status_and_cleans_up(vps: Host):
 	vps.set_pins(APK_PIN, REPO_PIN)
 	host = FakeHost(statuses={"/tool/container-build.sh": 3})
