@@ -37,7 +37,7 @@ uv run mypy .
 		"password": "$PASSWORD"
 	}
     ```
-	> Note: name is an optional field, so is the password. 
+	> Note: name is an optional field; the password is required.
 	> `$PASSWORD` stands for the password you choose; the login body below sends the same one.
 
 
