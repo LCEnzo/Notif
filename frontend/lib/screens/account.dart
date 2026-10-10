@@ -133,6 +133,7 @@ class _AccountPageState extends State<AccountPage> {
 
     if (newPw != confirm) {
       setState(() {
+        // pragma: allowlist nextline secret
         _passwordError = 'New passwords do not match.';
       });
       return;

@@ -194,8 +194,8 @@ _REST_THROTTLE_RATES = {
 	# leaves a live session behind, which is the failure mode worth avoiding.
 	"logout": "20/min",
 	"client_events": "30/min",
-	"password_reset": "3/min",
-	"password_reset_confirm": "5/min",
+	"password_reset": "3/min",  # pragma: whitelist secret
+	"password_reset_confirm": "5/min",  # pragma: whitelist secret
 	"scrape": "12/min",
 }
 

@@ -68,7 +68,7 @@ def test_strategy_round_trip_conforms_to_openapi(
 	# (unlike Chromium's loopback exception), so the login cookie would never
 	# be sent back. The flag is read from settings at response time.
 	username = "conformance"
-	password = "conformance-pass-123"
+	password = "conformance-pass-123"  # pragma: whitelist secret
 	django_user_model.objects.create_user(
 		username=username,
 		password=password,

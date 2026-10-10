@@ -34,10 +34,11 @@ uv run mypy .
     {
 		"username": "new_user",
 		"email": "newuser@example.com",
-		"password": "securepassword123 securepassword123"
+		"password": "$PASSWORD"
 	}
     ```
-	> Note: name is an optional field, so is the password. 
+	> Note: name is an optional field; the password is required.
+	> `$PASSWORD` stands for the password you choose; the login body below sends the same one.
 
 
 ### User Login:
@@ -47,7 +48,7 @@ uv run mypy .
     ```json
     {
         "username": "new_user",
-        "password": "securepassword123 securepassword123",
+        "password": "$PASSWORD",
         "transport": "bearer",
         "device_label": "Pixel 8"
     }

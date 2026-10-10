@@ -465,15 +465,23 @@ curl https://notif.lcenzo.com/api/v1/monitoring/status/
 # API docs (public)
 open https://notif.lcenzo.com/api/v1/docs/
 
-# Register a user
-curl -X POST https://notif.lcenzo.com/api/v1/accounts/ \
-  -H "Content-Type: application/json" \
-  -d '{"username":"test","email":"test@example.com","password": "correct horse battery staple"}'
+# Pick a throwaway test password (typed, not echoed); both calls below use it
+read -rs PASSWORD
 
-# Get a token
-curl -X POST https://notif.lcenzo.com/api/v1/token/ \
+# Register a user
+curl -X POST https://notif.lcenzo.com/api/v1/accounts/users/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"test","password": "correct horse battery staple"}'
+  -d @- <<EOF
+{"username": "test", "email": "test@example.com", "password": "$PASSWORD"}
+EOF
+
+# Log in; "token" in the response is the session token, sent back as
+# "Authorization: Session <token>"
+curl -X POST https://notif.lcenzo.com/api/v1/auth/login/ \
+  -H "Content-Type: application/json" \
+  -d @- <<EOF
+{"username": "test", "password": "$PASSWORD", "transport": "bearer"}
+EOF
 ```
 
 ---

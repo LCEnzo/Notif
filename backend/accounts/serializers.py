@@ -49,6 +49,7 @@ class UserCreationSerializer(_UserModelSerializer):
 		# frontend post to change_password.
 		if "password" in validated_data:
 			raise serializers.ValidationError(
+				# pragma: allowlist nextline secret
 				{"password": "Use the change_password endpoint, which verifies the current password."}
 			)
 
@@ -58,7 +59,7 @@ class UserCreationSerializer(_UserModelSerializer):
 		# This will only validate password during creation and not during update.
 		password = attrs.get("password")
 		if self.instance is None and password is None:
-			raise serializers.ValidationError({"password": "Password is required."})
+			raise serializers.ValidationError({"password": "Password is required."})  # pragma: whitelist secret
 
 		if password is not None:
 			validate_password(password)
