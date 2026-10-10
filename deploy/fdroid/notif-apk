@@ -22,12 +22,20 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import FrameType
-from typing import IO, ClassVar, NoReturn, Protocol, Self
+from typing import IO, ClassVar, NoReturn, Protocol, Self, assert_never
+
+# POSIX-only; guarded so that the unit tests can import this file on Windows.
+if sys.platform != "win32":
+	import fcntl
 
 USAGE = """\
 Usage:
+  notif-apk setup [--restore <tar>]
+                             Create the F-Droid directories, this command's link
+                             and the publish image; generate, restore or verify
+                             the signing keys. ./deploy.sh runs it every time.
   notif-apk export-keys      Write the signing keys to ~/notif-fdroid-keys.tar,
-                             to copy off the VPS.
+                             for deploy/fdroid/backup-keys.sh to copy off.
 """
 
 PUBLISH_IMAGE = "notif-apk-publish"
@@ -41,6 +49,14 @@ _PIN_SPACE = re.compile(r"[ \t\r\v\f]")
 
 class FatalError(Exception):
 	"""Ends notif-apk with `notif-apk: <message>` on stderr and exit 1."""
+
+
+class CommandError(Exception):
+	"""A command failed; notif-apk exits with its status, as `set -e` did."""
+
+	def __init__(self, status: int) -> None:
+		super().__init__(status)
+		self.status = status
 
 
 class Interrupted(BaseException):
@@ -57,6 +73,10 @@ def die(message: str) -> NoReturn:
 
 def info(message: str) -> None:
 	print(f"notif-apk: {message}")
+
+
+def warn(message: str) -> None:
+	print(f"notif-apk: warning: {message}", file=sys.stderr)
 
 
 @dataclass(frozen=True)
@@ -159,6 +179,8 @@ class Host(Protocol):
 
 	def capture(self, argv: Sequence[str]) -> tuple[int, str]: ...
 
+	def lock(self, directory: Path) -> bool: ...
+
 	def hold_signals(self) -> None: ...
 
 
@@ -177,6 +199,7 @@ class LocalHost:
 	def __init__(self) -> None:
 		self.pending: int | None = None
 		self._holding = False
+		self._lock_fds: tuple[int, ...] = ()
 
 	def install_signal_handlers(self) -> None:
 		for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
@@ -196,12 +219,11 @@ class LocalHost:
 
 	def _run(self, argv: Sequence[str], stdin: IO[bytes] | None, stdout: int | None) -> tuple[int, bytes | None]:
 		self._check_signal()
+		# Only docker gets the lock: a docker run outliving a killed notif-apk keeps
+		# it, while a detached `git gc --auto` from git fetch does not.
+		fds = self._lock_fds if argv[0] == "docker" else ()
 		try:
-			proc = subprocess.Popen(
-				argv,
-				stdin=stdin,
-				stdout=stdout,
-			)
+			proc = subprocess.Popen(argv, stdin=stdin, stdout=stdout, pass_fds=fds)
 		except FileNotFoundError:
 			print(f"notif-apk: {argv[0]}: command not found", file=sys.stderr)
 			return 127, None
@@ -217,12 +239,35 @@ class LocalHost:
 		status, out = self._run(argv, None, subprocess.PIPE)
 		return status, (out or b"").decode("utf-8", "replace").rstrip("\n")
 
+	def lock(self, directory: Path) -> bool:
+		"""flock(2) on the directory, like flock(1). docker commands inherit the
+		descriptor, so a killed notif-apk keeps the lock until its docker run
+		ends. False if another process holds it."""
+		fd = os.open(directory, os.O_RDONLY)
+		try:
+			fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+		except BlockingIOError:
+			os.close(fd)
+			return False
+		os.set_inheritable(fd, True)  # noqa: FBT003 - positional-only builtin
+		self._lock_fds = (*self._lock_fds, fd)
+		return True
+
 
 class NotifApk:
 	def __init__(self, paths: Paths, host: Host, *, as_root: bool) -> None:
 		self.paths = paths
 		self.host = host
 		self.as_root = as_root
+
+	# Same convention as deploy.sh.
+	def sudo(self, argv: Sequence[str]) -> None:
+		self.check([*argv] if self.as_root else ["sudo", *argv])
+
+	def check(self, argv: Sequence[str]) -> None:
+		status = self.host.call(argv)
+		if status != 0:
+			raise CommandError(status)
 
 	def pin_value(self, name: str) -> str:
 		file = self.paths.fdroid_dir / "pins" / name
@@ -247,6 +292,31 @@ class NotifApk:
 				" set both or neither"
 			)
 		return Pins(apk, repo) if apk else None
+
+	# One notif-apk at a time: two builds would need 2 x 5 GB.
+	def take_lock(self) -> None:
+		data_dir = self.paths.data_dir
+		if not self.paths.repo_dir.is_dir():
+			die(f"{data_dir}/repo does not exist (./deploy.sh runs notif-apk setup, which creates it)")
+		try:
+			locked = self.host.lock(data_dir)
+		except OSError as e:
+			die(f"cannot lock {data_dir}: {e.strerror}")
+		if not locked:
+			die("another notif-apk run is in progress")
+
+	def ensure_image(self, image: str, dockerfile: str) -> None:
+		print(f"notif-apk: docker build {image} (cached after the first run)")
+		try:
+			with (self.paths.fdroid_dir / dockerfile).open("rb") as f:
+				status = self.host.call(
+					["docker", "build", "--quiet", "--tag", image, "-"], stdin=f, stdout=subprocess.DEVNULL
+				)
+		except OSError as e:
+			print(f"notif-apk: {e}", file=sys.stderr)
+			status = 1
+		if status != 0:
+			die(f"docker build {image} failed (see above)")
 
 	def keys_argv(self, args: Sequence[str], *, writable: bool, options: Sequence[str] = ()) -> list[str]:
 		"""A container_keys.py run in the publish image. Only generate and restore get /keys writable."""
@@ -280,6 +350,111 @@ class NotifApk:
 				f"refused: the repo index key in {keys_dir} has cert SHA-256 {state.repo}, but the pin is {pins.repo};"
 				" not touching it (runbook: refusals)"
 			)
+
+	@staticmethod
+	def report_unpinned(state: Present) -> None:
+		print(
+			"notif-apk: ################################################################\n"
+			"notif-apk: The signing keys are not pinned yet; build and publish refuse\n"
+			"notif-apk: until they are. Next, in this order:\n"
+			"notif-apk:  1. Back them up. On the PC, in Git Bash, in the repo:\n"
+			"notif-apk:       deploy/fdroid/backup-keys.sh\n"
+			"notif-apk:  2. Commit the pins, merge, and run ./deploy.sh again:\n"
+			f"notif-apk:       echo {state.apk} >>deploy/fdroid/pins/apk-cert.sha256\n"
+			f"notif-apk:       echo {state.repo} >>deploy/fdroid/pins/repo-index-cert.sha256\n"
+			"notif-apk: The second digest is the repo fingerprint the F-Droid client shows.\n"
+			"notif-apk: ################################################################"
+		)
+
+	def restore_keys(self, tar: Path, pins: Pins | None) -> None:
+		keys_dir = self.paths.keys_dir
+		self.take_lock()
+		info(f"restoring the signing keys from {tar}")
+		argv = self.keys_argv(
+			["restore", "/in/backup.tar"],
+			writable=True,
+			options=[
+				"--env", f"APK_CERT_SHA256={pins.apk if pins else ''}",
+				"--env", f"REPO_CERT_SHA256={pins.repo if pins else ''}",
+				"--mount", f"type=bind,src={tar},dst=/in/backup.tar,readonly",
+			],
+		)  # fmt: skip
+		if self.host.call(argv) != 0:
+			die(f"refused: restoring from {tar} failed (see above)")
+		state = self.inspect_keys()
+		if not isinstance(state, Present):
+			die(f"restoring left {keys_dir} {state.word}")
+		if pins is not None:
+			self.verify_disk_keys(state, pins)
+			info(f"restored; the keys in {keys_dir} match the pins")
+		else:
+			self.report_unpinned(state)
+		info(f"{tar} holds the private keys; unless it is your only copy, shred it: shred -u -- {tar}")
+
+	def generate_keys(self) -> None:
+		keys_dir = self.paths.keys_dir
+		self.take_lock()
+		info(f"generating new signing keys in {keys_dir}")
+		if self.host.call(self.keys_argv(["generate"], writable=True)) != 0:
+			die("generating the keys failed (see above)")
+		state = self.inspect_keys()
+		if not isinstance(state, Present):
+			die(f"generating left {keys_dir} {state.word}")
+		self.report_unpinned(state)
+
+	def setup_keys(self, restore: Path | None) -> None:
+		"""The key state machine; the runbook has it as a table."""
+		keys_dir = self.paths.keys_dir
+		pins = self.read_pins()
+		match self.inspect_keys():
+			case Present() as keys:
+				if restore is not None:
+					warn(f"--restore ignored: {keys_dir} already holds keys")
+				if pins is None:
+					self.report_unpinned(keys)
+				else:
+					self.verify_disk_keys(keys, pins)
+					info(f"the keys in {keys_dir} match the pins")
+			case Partial(files):
+				die(
+					f"refused: {keys_dir} holds only {files} of the four key files; not touching it (runbook: refusals)"
+				)
+			case Absent():
+				if restore is not None:
+					self.restore_keys(restore, pins)
+				elif pins is not None:
+					die(
+						f"refused: {keys_dir} holds no keys, but the pins are set; restore them with"
+						" ./deploy.sh --fdroid-restore <backup tar> (runbook: restore on a fresh VPS)"
+					)
+				else:
+					self.generate_keys()
+			case unknown:
+				assert_never(unknown)
+		pickup = self.paths.pickup
+		if pickup.exists(follow_symlinks=False):
+			warn(f"{pickup} still holds a copy of the keys; finish deploy/fdroid/backup-keys.sh on the PC, or shred it")
+
+	def cmd_setup(self, args: Sequence[str]) -> None:
+		paths = self.paths
+		restore: Path | None = None
+		match args:
+			case ["--restore", tar]:
+				restore = Path(tar).resolve()
+				if not restore.is_file():
+					die(f"not a file: {tar}")
+			case []:
+				pass
+			case _:
+				die("usage: notif-apk setup [--restore <tar>]")
+		info(f"setup: {paths.keys_dir}, {paths.data_dir}/repo, {paths.link}")
+		self.sudo(["install", "-d", "-m", "0700", "-o", "root", "-g", "root", "--", str(paths.keys_dir)])
+		self.sudo(
+			["install", "-d", "-m", "0755", "-o", "root", "-g", "root", "--", str(paths.data_dir), str(paths.repo_dir)]
+		)
+		self.sudo(["ln", "-sfT", "--", str(paths.script), str(paths.link)])
+		self.ensure_image(PUBLISH_IMAGE, "publish.Dockerfile")
+		self.setup_keys(restore)
 
 	def cmd_export_keys(self, args: Sequence[str]) -> None:
 		paths = self.paths
@@ -320,6 +495,8 @@ def main(argv: Sequence[str], environ: Mapping[str, str], host: Host, *, script:
 	command, args = (argv[1], argv[2:]) if len(argv) > 1 else ("", [])
 	try:
 		match command:
+			case "setup":
+				app.cmd_setup(args)
 			case "export-keys":
 				app.cmd_export_keys(args)
 			case "-h" | "--help" | "help":
@@ -330,6 +507,8 @@ def main(argv: Sequence[str], environ: Mapping[str, str], host: Host, *, script:
 	except FatalError as e:
 		print(f"notif-apk: {e}", file=sys.stderr)
 		return 1
+	except CommandError as e:
+		return e.status
 	except Interrupted as e:
 		return 128 + e.signum
 	return 0
