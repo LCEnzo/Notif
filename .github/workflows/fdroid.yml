@@ -1,0 +1,66 @@
+name: F-Droid tools
+
+on:
+  # `push` only fires on long-lived branches; pull_request covers feature
+  # branches so we don't double-run CI for every PR push.
+  push:
+    branches: [master]
+    paths:
+      - 'deploy/fdroid/**'
+      # ruff extends the backend's config.
+      - 'backend/pyproject.toml'
+      - '.github/workflows/fdroid.yml'
+  # Any base branch, so stacked PRs get CI too.
+  pull_request:
+    paths:
+      - 'deploy/fdroid/**'
+      - 'backend/pyproject.toml'
+      - '.github/workflows/fdroid.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: deploy/fdroid
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: deploy/fdroid/uv.lock
+
+      # The VPS and the publish image both run Debian 13's Python 3.13.
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Verify lockfile
+        run: uv lock --check
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Format (ruff)
+        run: uv run ruff format --check .
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Type check (mypy)
+        run: uv run mypy
+
+      # The differential tests (against sed, tr and sort) and the rollback
+      # tests (rsync) skip on Windows; here a missing tool fails the run.
+      - name: Test (pytest)
+        env:
+          FDROID_TESTS_REQUIRE_POSIX: '1'
+        run: uv run pytest -v

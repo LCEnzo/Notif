@@ -20,6 +20,10 @@ All Python commands run under `uv run` so they pick up the locked environment. R
 - Tests: `uv run pytest -q` for the full suite
 - Migrations: if a model changes, run `uv run python manage.py makemigrations` and commit the migration. CI fails on missing migrations
 
+### F-Droid tooling
+
+`deploy/fdroid/` holds its own uv project (Python 3.13, the VPS's and the publish image's version) for its scripts. From `deploy/fdroid/`: `uv run ruff format .`, `uv run ruff check .`, `uv run mypy`, `uv run pytest -q`. The unit tests cover the logic without Docker or the VPS.
+
 ### Frontend tooling
 
 Dart / Flutter commands run from `frontend/`.
