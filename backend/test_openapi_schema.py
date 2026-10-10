@@ -8,6 +8,8 @@ from typing import Any
 import pytest
 from drf_spectacular.generators import SchemaGenerator
 
+from health.limits import MAX_EPOCH_MS, MAX_INGEST_BYTES, MAX_INGEST_ITEMS
+from health.models import AggregateMetric, DeviceType, RecordingMethod, SleepStage
 from monitoring.models import Notification
 
 USERS_LIST = "/api/v1/accounts/users/"
@@ -25,6 +27,7 @@ OPS_CADDY_LOGS = "/api/v1/ops/logs/caddy/"
 OPS_SQLITE_BACKUP = "/api/v1/ops/backup/sqlite/"
 STRATEGY_DETAIL = "/api/v1/monitoring/strategies/{id}/"
 LOGIN = "/api/v1/auth/login/"
+HEALTH_INGEST = "/api/v1/health/ingest/"
 
 _HTTP_METHODS = {"get", "put", "patch", "post", "delete", "head", "options", "trace"}
 _ERROR_STATUSES = {"400", "401", "403", "404"}
@@ -128,6 +131,8 @@ def test_registration_is_documented_as_open_to_anonymous_callers(schema: dict[st
 		(HEALTH, "get", {"401"}),
 		# No authenticators: login documents its own 400 and 401 and gains nothing.
 		(LOGIN, "post", {"400", "401"}),
+		# Its own 400 wording; the 401 and CSRF 403 still come from the rules.
+		(HEALTH_INGEST, "post", {"400", "401", "403"}),
 	],
 )
 def test_framework_error_statuses_are_documented(
@@ -278,3 +283,58 @@ def test_request_components_are_named_once(schema: dict[str, Any]) -> None:
 	assert _json_body(schema["paths"][LOGIN]["post"]["requestBody"]) == _ref("LoginRequest")
 	# The control: a serializer that also serves responses gets the suffix once too.
 	assert _json_body(schema["paths"][LINKS_LIST]["post"]["requestBody"]) == _ref("LinkRequest")
+
+
+_INGEST_LISTS = {"steps", "resting_heart_rate", "sleep_session", "deletions", "aggregate_windows"}
+
+
+def test_health_ingest_documents_its_body_caps_and_answers(schema: dict[str, Any]) -> None:
+	operation = schema["paths"][HEALTH_INGEST]["post"]
+	body = _component(schema, "HealthIngestRequest")
+
+	assert (_methods(schema, HEALTH_INGEST), operation["operationId"]) == ({"post"}, "health_ingest")
+	assert _json_body(operation["requestBody"]) == _ref("HealthIngestRequest")
+	assert set(body["properties"]) == {"coverage_start_ms", *_INGEST_LISTS}
+	# Every list may be left out, so adding a record type does not break older clients.
+	assert body["required"] == ["coverage_start_ms"]
+	assert body["properties"]["coverage_start_ms"]["nullable"] is True
+	assert {body["properties"][name]["maxItems"] for name in _INGEST_LISTS} == {MAX_INGEST_ITEMS}
+	assert str(MAX_INGEST_ITEMS) in operation["description"]
+	assert str(MAX_INGEST_BYTES) in operation["description"]
+
+	responses = operation["responses"]
+	assert _json_body(responses["200"]) == _ref("HealthIngestResponse")
+	assert set(_component(schema, "HealthIngestResponse")["required"]) == {
+		"batch_id",
+		"records_written",
+		"records_deleted",
+		"aggregates_written",
+	}
+	assert "content" not in responses["400"]
+	for code in ("401", "403", "413", "429"):
+		assert _json_body(responses[code]) == _ref("ErrorDetail"), code
+	assert responses["429"]["headers"]["Retry-After"]["schema"] == {"type": "integer"}
+
+
+@pytest.mark.parametrize(
+	("component", "values"),
+	[
+		("HealthDeviceTypeEnum", DeviceType.values),
+		("SleepStageEnum", SleepStage.values),
+		("HealthAggregateMetricEnum", AggregateMetric.values),
+		("RecordingMethodEnum", RecordingMethod.values),
+	],
+)
+def test_health_vocabularies_are_named_enum_components(
+	schema: dict[str, Any], component: str, values: list[str]
+) -> None:
+	assert _component(schema, component)["enum"] == values
+
+
+def test_health_times_are_bounded_64_bit_epoch_milliseconds(schema: dict[str, Any]) -> None:
+	steps = _component(schema, "StepsRecordRequest")["properties"]
+
+	for name in ("start_ms", "end_ms", "last_modified_ms"):
+		assert (steps[name]["format"], steps[name]["minimum"], steps[name]["maximum"]) == ("int64", 0, MAX_EPOCH_MS)
+	assert steps["start_offset_s"]["nullable"] is True
+	assert steps["device"]["nullable"] is True

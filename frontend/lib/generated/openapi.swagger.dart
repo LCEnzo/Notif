@@ -601,6 +601,188 @@ extension $ErrorMessageExtension on ErrorMessage {
 }
 
 @JsonSerializable(explicitToJson: true)
+class HealthAggregateBucketRequest {
+  const HealthAggregateBucketRequest({
+    required this.startMs,
+    required this.value,
+    required this.dataOrigins,
+  });
+
+  factory HealthAggregateBucketRequest.fromJson(Map<String, dynamic> json) =>
+      _$HealthAggregateBucketRequestFromJson(json);
+
+  static const toJsonFactory = _$HealthAggregateBucketRequestToJson;
+  Map<String, dynamic> toJson() => _$HealthAggregateBucketRequestToJson(this);
+
+  @JsonKey(name: 'start_ms')
+  final int startMs;
+  @JsonKey(name: 'value')
+  final int value;
+  @JsonKey(name: 'data_origins', defaultValue: <String>[])
+  final List<String> dataOrigins;
+  static const fromJsonFactory = _$HealthAggregateBucketRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is HealthAggregateBucketRequest &&
+            (identical(other.startMs, startMs) ||
+                const DeepCollectionEquality().equals(
+                  other.startMs,
+                  startMs,
+                )) &&
+            (identical(other.value, value) ||
+                const DeepCollectionEquality().equals(other.value, value)) &&
+            (identical(other.dataOrigins, dataOrigins) ||
+                const DeepCollectionEquality().equals(
+                  other.dataOrigins,
+                  dataOrigins,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(startMs) ^
+      const DeepCollectionEquality().hash(value) ^
+      const DeepCollectionEquality().hash(dataOrigins) ^
+      runtimeType.hashCode;
+}
+
+extension $HealthAggregateBucketRequestExtension
+    on HealthAggregateBucketRequest {
+  HealthAggregateBucketRequest copyWith({
+    int? startMs,
+    int? value,
+    List<String>? dataOrigins,
+  }) {
+    return HealthAggregateBucketRequest(
+      startMs: startMs ?? this.startMs,
+      value: value ?? this.value,
+      dataOrigins: dataOrigins ?? this.dataOrigins,
+    );
+  }
+
+  HealthAggregateBucketRequest copyWithWrapped({
+    Wrapped<int>? startMs,
+    Wrapped<int>? value,
+    Wrapped<List<String>>? dataOrigins,
+  }) {
+    return HealthAggregateBucketRequest(
+      startMs: (startMs != null ? startMs.value : this.startMs),
+      value: (value != null ? value.value : this.value),
+      dataOrigins: (dataOrigins != null ? dataOrigins.value : this.dataOrigins),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class HealthAggregateWindowRequest {
+  const HealthAggregateWindowRequest({
+    required this.metric,
+    required this.startMs,
+    required this.endMs,
+    required this.computedAtMs,
+    required this.buckets,
+  });
+
+  factory HealthAggregateWindowRequest.fromJson(Map<String, dynamic> json) =>
+      _$HealthAggregateWindowRequestFromJson(json);
+
+  static const toJsonFactory = _$HealthAggregateWindowRequestToJson;
+  Map<String, dynamic> toJson() => _$HealthAggregateWindowRequestToJson(this);
+
+  @JsonKey(
+    name: 'metric',
+    toJson: healthAggregateMetricEnumToJson,
+    fromJson: healthAggregateMetricEnumFromJson,
+  )
+  final enums.HealthAggregateMetricEnum metric;
+  @JsonKey(name: 'start_ms')
+  final int startMs;
+  @JsonKey(name: 'end_ms')
+  final int endMs;
+  @JsonKey(name: 'computed_at_ms')
+  final int computedAtMs;
+  @JsonKey(name: 'buckets', defaultValue: <HealthAggregateBucketRequest>[])
+  final List<HealthAggregateBucketRequest> buckets;
+  static const fromJsonFactory = _$HealthAggregateWindowRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is HealthAggregateWindowRequest &&
+            (identical(other.metric, metric) ||
+                const DeepCollectionEquality().equals(other.metric, metric)) &&
+            (identical(other.startMs, startMs) ||
+                const DeepCollectionEquality().equals(
+                  other.startMs,
+                  startMs,
+                )) &&
+            (identical(other.endMs, endMs) ||
+                const DeepCollectionEquality().equals(other.endMs, endMs)) &&
+            (identical(other.computedAtMs, computedAtMs) ||
+                const DeepCollectionEquality().equals(
+                  other.computedAtMs,
+                  computedAtMs,
+                )) &&
+            (identical(other.buckets, buckets) ||
+                const DeepCollectionEquality().equals(other.buckets, buckets)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(metric) ^
+      const DeepCollectionEquality().hash(startMs) ^
+      const DeepCollectionEquality().hash(endMs) ^
+      const DeepCollectionEquality().hash(computedAtMs) ^
+      const DeepCollectionEquality().hash(buckets) ^
+      runtimeType.hashCode;
+}
+
+extension $HealthAggregateWindowRequestExtension
+    on HealthAggregateWindowRequest {
+  HealthAggregateWindowRequest copyWith({
+    enums.HealthAggregateMetricEnum? metric,
+    int? startMs,
+    int? endMs,
+    int? computedAtMs,
+    List<HealthAggregateBucketRequest>? buckets,
+  }) {
+    return HealthAggregateWindowRequest(
+      metric: metric ?? this.metric,
+      startMs: startMs ?? this.startMs,
+      endMs: endMs ?? this.endMs,
+      computedAtMs: computedAtMs ?? this.computedAtMs,
+      buckets: buckets ?? this.buckets,
+    );
+  }
+
+  HealthAggregateWindowRequest copyWithWrapped({
+    Wrapped<enums.HealthAggregateMetricEnum>? metric,
+    Wrapped<int>? startMs,
+    Wrapped<int>? endMs,
+    Wrapped<int>? computedAtMs,
+    Wrapped<List<HealthAggregateBucketRequest>>? buckets,
+  }) {
+    return HealthAggregateWindowRequest(
+      metric: (metric != null ? metric.value : this.metric),
+      startMs: (startMs != null ? startMs.value : this.startMs),
+      endMs: (endMs != null ? endMs.value : this.endMs),
+      computedAtMs: (computedAtMs != null
+          ? computedAtMs.value
+          : this.computedAtMs),
+      buckets: (buckets != null ? buckets.value : this.buckets),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
 class HealthCheckResponse {
   const HealthCheckResponse({required this.status});
 
@@ -638,6 +820,375 @@ extension $HealthCheckResponseExtension on HealthCheckResponse {
   HealthCheckResponse copyWithWrapped({Wrapped<String>? status}) {
     return HealthCheckResponse(
       status: (status != null ? status.value : this.status),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class HealthDeletionRequest {
+  const HealthDeletionRequest({required this.hcId, required this.observedAtMs});
+
+  factory HealthDeletionRequest.fromJson(Map<String, dynamic> json) =>
+      _$HealthDeletionRequestFromJson(json);
+
+  static const toJsonFactory = _$HealthDeletionRequestToJson;
+  Map<String, dynamic> toJson() => _$HealthDeletionRequestToJson(this);
+
+  @JsonKey(name: 'hc_id')
+  final String hcId;
+  @JsonKey(name: 'observed_at_ms')
+  final int observedAtMs;
+  static const fromJsonFactory = _$HealthDeletionRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is HealthDeletionRequest &&
+            (identical(other.hcId, hcId) ||
+                const DeepCollectionEquality().equals(other.hcId, hcId)) &&
+            (identical(other.observedAtMs, observedAtMs) ||
+                const DeepCollectionEquality().equals(
+                  other.observedAtMs,
+                  observedAtMs,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(hcId) ^
+      const DeepCollectionEquality().hash(observedAtMs) ^
+      runtimeType.hashCode;
+}
+
+extension $HealthDeletionRequestExtension on HealthDeletionRequest {
+  HealthDeletionRequest copyWith({String? hcId, int? observedAtMs}) {
+    return HealthDeletionRequest(
+      hcId: hcId ?? this.hcId,
+      observedAtMs: observedAtMs ?? this.observedAtMs,
+    );
+  }
+
+  HealthDeletionRequest copyWithWrapped({
+    Wrapped<String>? hcId,
+    Wrapped<int>? observedAtMs,
+  }) {
+    return HealthDeletionRequest(
+      hcId: (hcId != null ? hcId.value : this.hcId),
+      observedAtMs: (observedAtMs != null
+          ? observedAtMs.value
+          : this.observedAtMs),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class HealthDeviceRequest {
+  const HealthDeviceRequest({
+    required this.type,
+    this.manufacturer,
+    this.model,
+  });
+
+  factory HealthDeviceRequest.fromJson(Map<String, dynamic> json) =>
+      _$HealthDeviceRequestFromJson(json);
+
+  static const toJsonFactory = _$HealthDeviceRequestToJson;
+  Map<String, dynamic> toJson() => _$HealthDeviceRequestToJson(this);
+
+  @JsonKey(
+    name: 'type',
+    toJson: healthDeviceTypeEnumToJson,
+    fromJson: healthDeviceTypeEnumFromJson,
+  )
+  final enums.HealthDeviceTypeEnum type;
+  @JsonKey(name: 'manufacturer')
+  final String? manufacturer;
+  @JsonKey(name: 'model')
+  final String? model;
+  static const fromJsonFactory = _$HealthDeviceRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is HealthDeviceRequest &&
+            (identical(other.type, type) ||
+                const DeepCollectionEquality().equals(other.type, type)) &&
+            (identical(other.manufacturer, manufacturer) ||
+                const DeepCollectionEquality().equals(
+                  other.manufacturer,
+                  manufacturer,
+                )) &&
+            (identical(other.model, model) ||
+                const DeepCollectionEquality().equals(other.model, model)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(type) ^
+      const DeepCollectionEquality().hash(manufacturer) ^
+      const DeepCollectionEquality().hash(model) ^
+      runtimeType.hashCode;
+}
+
+extension $HealthDeviceRequestExtension on HealthDeviceRequest {
+  HealthDeviceRequest copyWith({
+    enums.HealthDeviceTypeEnum? type,
+    String? manufacturer,
+    String? model,
+  }) {
+    return HealthDeviceRequest(
+      type: type ?? this.type,
+      manufacturer: manufacturer ?? this.manufacturer,
+      model: model ?? this.model,
+    );
+  }
+
+  HealthDeviceRequest copyWithWrapped({
+    Wrapped<enums.HealthDeviceTypeEnum>? type,
+    Wrapped<String?>? manufacturer,
+    Wrapped<String?>? model,
+  }) {
+    return HealthDeviceRequest(
+      type: (type != null ? type.value : this.type),
+      manufacturer: (manufacturer != null
+          ? manufacturer.value
+          : this.manufacturer),
+      model: (model != null ? model.value : this.model),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class HealthIngestRequest {
+  const HealthIngestRequest({
+    this.coverageStartMs,
+    this.steps,
+    this.restingHeartRate,
+    this.sleepSession,
+    this.deletions,
+    this.aggregateWindows,
+  });
+
+  factory HealthIngestRequest.fromJson(Map<String, dynamic> json) =>
+      _$HealthIngestRequestFromJson(json);
+
+  static const toJsonFactory = _$HealthIngestRequestToJson;
+  Map<String, dynamic> toJson() => _$HealthIngestRequestToJson(this);
+
+  @JsonKey(name: 'coverage_start_ms')
+  final int? coverageStartMs;
+  @JsonKey(name: 'steps', defaultValue: <StepsRecordRequest>[])
+  final List<StepsRecordRequest>? steps;
+  @JsonKey(
+    name: 'resting_heart_rate',
+    defaultValue: <RestingHeartRateRecordRequest>[],
+  )
+  final List<RestingHeartRateRecordRequest>? restingHeartRate;
+  @JsonKey(name: 'sleep_session', defaultValue: <SleepSessionRecordRequest>[])
+  final List<SleepSessionRecordRequest>? sleepSession;
+  @JsonKey(name: 'deletions', defaultValue: <HealthDeletionRequest>[])
+  final List<HealthDeletionRequest>? deletions;
+  @JsonKey(
+    name: 'aggregate_windows',
+    defaultValue: <HealthAggregateWindowRequest>[],
+  )
+  final List<HealthAggregateWindowRequest>? aggregateWindows;
+  static const fromJsonFactory = _$HealthIngestRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is HealthIngestRequest &&
+            (identical(other.coverageStartMs, coverageStartMs) ||
+                const DeepCollectionEquality().equals(
+                  other.coverageStartMs,
+                  coverageStartMs,
+                )) &&
+            (identical(other.steps, steps) ||
+                const DeepCollectionEquality().equals(other.steps, steps)) &&
+            (identical(other.restingHeartRate, restingHeartRate) ||
+                const DeepCollectionEquality().equals(
+                  other.restingHeartRate,
+                  restingHeartRate,
+                )) &&
+            (identical(other.sleepSession, sleepSession) ||
+                const DeepCollectionEquality().equals(
+                  other.sleepSession,
+                  sleepSession,
+                )) &&
+            (identical(other.deletions, deletions) ||
+                const DeepCollectionEquality().equals(
+                  other.deletions,
+                  deletions,
+                )) &&
+            (identical(other.aggregateWindows, aggregateWindows) ||
+                const DeepCollectionEquality().equals(
+                  other.aggregateWindows,
+                  aggregateWindows,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(coverageStartMs) ^
+      const DeepCollectionEquality().hash(steps) ^
+      const DeepCollectionEquality().hash(restingHeartRate) ^
+      const DeepCollectionEquality().hash(sleepSession) ^
+      const DeepCollectionEquality().hash(deletions) ^
+      const DeepCollectionEquality().hash(aggregateWindows) ^
+      runtimeType.hashCode;
+}
+
+extension $HealthIngestRequestExtension on HealthIngestRequest {
+  HealthIngestRequest copyWith({
+    int? coverageStartMs,
+    List<StepsRecordRequest>? steps,
+    List<RestingHeartRateRecordRequest>? restingHeartRate,
+    List<SleepSessionRecordRequest>? sleepSession,
+    List<HealthDeletionRequest>? deletions,
+    List<HealthAggregateWindowRequest>? aggregateWindows,
+  }) {
+    return HealthIngestRequest(
+      coverageStartMs: coverageStartMs ?? this.coverageStartMs,
+      steps: steps ?? this.steps,
+      restingHeartRate: restingHeartRate ?? this.restingHeartRate,
+      sleepSession: sleepSession ?? this.sleepSession,
+      deletions: deletions ?? this.deletions,
+      aggregateWindows: aggregateWindows ?? this.aggregateWindows,
+    );
+  }
+
+  HealthIngestRequest copyWithWrapped({
+    Wrapped<int?>? coverageStartMs,
+    Wrapped<List<StepsRecordRequest>?>? steps,
+    Wrapped<List<RestingHeartRateRecordRequest>?>? restingHeartRate,
+    Wrapped<List<SleepSessionRecordRequest>?>? sleepSession,
+    Wrapped<List<HealthDeletionRequest>?>? deletions,
+    Wrapped<List<HealthAggregateWindowRequest>?>? aggregateWindows,
+  }) {
+    return HealthIngestRequest(
+      coverageStartMs: (coverageStartMs != null
+          ? coverageStartMs.value
+          : this.coverageStartMs),
+      steps: (steps != null ? steps.value : this.steps),
+      restingHeartRate: (restingHeartRate != null
+          ? restingHeartRate.value
+          : this.restingHeartRate),
+      sleepSession: (sleepSession != null
+          ? sleepSession.value
+          : this.sleepSession),
+      deletions: (deletions != null ? deletions.value : this.deletions),
+      aggregateWindows: (aggregateWindows != null
+          ? aggregateWindows.value
+          : this.aggregateWindows),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class HealthIngestResponse {
+  const HealthIngestResponse({
+    required this.batchId,
+    required this.recordsWritten,
+    required this.recordsDeleted,
+    required this.aggregatesWritten,
+  });
+
+  factory HealthIngestResponse.fromJson(Map<String, dynamic> json) =>
+      _$HealthIngestResponseFromJson(json);
+
+  static const toJsonFactory = _$HealthIngestResponseToJson;
+  Map<String, dynamic> toJson() => _$HealthIngestResponseToJson(this);
+
+  @JsonKey(name: 'batch_id')
+  final int batchId;
+  @JsonKey(name: 'records_written')
+  final int recordsWritten;
+  @JsonKey(name: 'records_deleted')
+  final int recordsDeleted;
+  @JsonKey(name: 'aggregates_written')
+  final int aggregatesWritten;
+  static const fromJsonFactory = _$HealthIngestResponseFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is HealthIngestResponse &&
+            (identical(other.batchId, batchId) ||
+                const DeepCollectionEquality().equals(
+                  other.batchId,
+                  batchId,
+                )) &&
+            (identical(other.recordsWritten, recordsWritten) ||
+                const DeepCollectionEquality().equals(
+                  other.recordsWritten,
+                  recordsWritten,
+                )) &&
+            (identical(other.recordsDeleted, recordsDeleted) ||
+                const DeepCollectionEquality().equals(
+                  other.recordsDeleted,
+                  recordsDeleted,
+                )) &&
+            (identical(other.aggregatesWritten, aggregatesWritten) ||
+                const DeepCollectionEquality().equals(
+                  other.aggregatesWritten,
+                  aggregatesWritten,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(batchId) ^
+      const DeepCollectionEquality().hash(recordsWritten) ^
+      const DeepCollectionEquality().hash(recordsDeleted) ^
+      const DeepCollectionEquality().hash(aggregatesWritten) ^
+      runtimeType.hashCode;
+}
+
+extension $HealthIngestResponseExtension on HealthIngestResponse {
+  HealthIngestResponse copyWith({
+    int? batchId,
+    int? recordsWritten,
+    int? recordsDeleted,
+    int? aggregatesWritten,
+  }) {
+    return HealthIngestResponse(
+      batchId: batchId ?? this.batchId,
+      recordsWritten: recordsWritten ?? this.recordsWritten,
+      recordsDeleted: recordsDeleted ?? this.recordsDeleted,
+      aggregatesWritten: aggregatesWritten ?? this.aggregatesWritten,
+    );
+  }
+
+  HealthIngestResponse copyWithWrapped({
+    Wrapped<int>? batchId,
+    Wrapped<int>? recordsWritten,
+    Wrapped<int>? recordsDeleted,
+    Wrapped<int>? aggregatesWritten,
+  }) {
+    return HealthIngestResponse(
+      batchId: (batchId != null ? batchId.value : this.batchId),
+      recordsWritten: (recordsWritten != null
+          ? recordsWritten.value
+          : this.recordsWritten),
+      recordsDeleted: (recordsDeleted != null
+          ? recordsDeleted.value
+          : this.recordsDeleted),
+      aggregatesWritten: (aggregatesWritten != null
+          ? aggregatesWritten.value
+          : this.aggregatesWritten),
     );
   }
 }
@@ -1967,6 +2518,153 @@ extension $PatchedUserCreationRequestExtension on PatchedUserCreationRequest {
 }
 
 @JsonSerializable(explicitToJson: true)
+class RestingHeartRateRecordRequest {
+  const RestingHeartRateRecordRequest({
+    required this.hcId,
+    required this.dataOrigin,
+    required this.lastModifiedMs,
+    required this.recordingMethod,
+    this.device,
+    required this.timeMs,
+    this.offsetS,
+    required this.beatsPerMinute,
+  });
+
+  factory RestingHeartRateRecordRequest.fromJson(Map<String, dynamic> json) =>
+      _$RestingHeartRateRecordRequestFromJson(json);
+
+  static const toJsonFactory = _$RestingHeartRateRecordRequestToJson;
+  Map<String, dynamic> toJson() => _$RestingHeartRateRecordRequestToJson(this);
+
+  @JsonKey(name: 'hc_id')
+  final String hcId;
+  @JsonKey(name: 'data_origin')
+  final String dataOrigin;
+  @JsonKey(name: 'last_modified_ms')
+  final int lastModifiedMs;
+  @JsonKey(
+    name: 'recording_method',
+    toJson: recordingMethodEnumToJson,
+    fromJson: recordingMethodEnumFromJson,
+  )
+  final enums.RecordingMethodEnum recordingMethod;
+  @JsonKey(name: 'device')
+  final HealthDeviceRequest? device;
+  @JsonKey(name: 'time_ms')
+  final int timeMs;
+  @JsonKey(name: 'offset_s')
+  final int? offsetS;
+  @JsonKey(name: 'beats_per_minute')
+  final int beatsPerMinute;
+  static const fromJsonFactory = _$RestingHeartRateRecordRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is RestingHeartRateRecordRequest &&
+            (identical(other.hcId, hcId) ||
+                const DeepCollectionEquality().equals(other.hcId, hcId)) &&
+            (identical(other.dataOrigin, dataOrigin) ||
+                const DeepCollectionEquality().equals(
+                  other.dataOrigin,
+                  dataOrigin,
+                )) &&
+            (identical(other.lastModifiedMs, lastModifiedMs) ||
+                const DeepCollectionEquality().equals(
+                  other.lastModifiedMs,
+                  lastModifiedMs,
+                )) &&
+            (identical(other.recordingMethod, recordingMethod) ||
+                const DeepCollectionEquality().equals(
+                  other.recordingMethod,
+                  recordingMethod,
+                )) &&
+            (identical(other.device, device) ||
+                const DeepCollectionEquality().equals(other.device, device)) &&
+            (identical(other.timeMs, timeMs) ||
+                const DeepCollectionEquality().equals(other.timeMs, timeMs)) &&
+            (identical(other.offsetS, offsetS) ||
+                const DeepCollectionEquality().equals(
+                  other.offsetS,
+                  offsetS,
+                )) &&
+            (identical(other.beatsPerMinute, beatsPerMinute) ||
+                const DeepCollectionEquality().equals(
+                  other.beatsPerMinute,
+                  beatsPerMinute,
+                )));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(hcId) ^
+      const DeepCollectionEquality().hash(dataOrigin) ^
+      const DeepCollectionEquality().hash(lastModifiedMs) ^
+      const DeepCollectionEquality().hash(recordingMethod) ^
+      const DeepCollectionEquality().hash(device) ^
+      const DeepCollectionEquality().hash(timeMs) ^
+      const DeepCollectionEquality().hash(offsetS) ^
+      const DeepCollectionEquality().hash(beatsPerMinute) ^
+      runtimeType.hashCode;
+}
+
+extension $RestingHeartRateRecordRequestExtension
+    on RestingHeartRateRecordRequest {
+  RestingHeartRateRecordRequest copyWith({
+    String? hcId,
+    String? dataOrigin,
+    int? lastModifiedMs,
+    enums.RecordingMethodEnum? recordingMethod,
+    HealthDeviceRequest? device,
+    int? timeMs,
+    int? offsetS,
+    int? beatsPerMinute,
+  }) {
+    return RestingHeartRateRecordRequest(
+      hcId: hcId ?? this.hcId,
+      dataOrigin: dataOrigin ?? this.dataOrigin,
+      lastModifiedMs: lastModifiedMs ?? this.lastModifiedMs,
+      recordingMethod: recordingMethod ?? this.recordingMethod,
+      device: device ?? this.device,
+      timeMs: timeMs ?? this.timeMs,
+      offsetS: offsetS ?? this.offsetS,
+      beatsPerMinute: beatsPerMinute ?? this.beatsPerMinute,
+    );
+  }
+
+  RestingHeartRateRecordRequest copyWithWrapped({
+    Wrapped<String>? hcId,
+    Wrapped<String>? dataOrigin,
+    Wrapped<int>? lastModifiedMs,
+    Wrapped<enums.RecordingMethodEnum>? recordingMethod,
+    Wrapped<HealthDeviceRequest?>? device,
+    Wrapped<int>? timeMs,
+    Wrapped<int?>? offsetS,
+    Wrapped<int>? beatsPerMinute,
+  }) {
+    return RestingHeartRateRecordRequest(
+      hcId: (hcId != null ? hcId.value : this.hcId),
+      dataOrigin: (dataOrigin != null ? dataOrigin.value : this.dataOrigin),
+      lastModifiedMs: (lastModifiedMs != null
+          ? lastModifiedMs.value
+          : this.lastModifiedMs),
+      recordingMethod: (recordingMethod != null
+          ? recordingMethod.value
+          : this.recordingMethod),
+      device: (device != null ? device.value : this.device),
+      timeMs: (timeMs != null ? timeMs.value : this.timeMs),
+      offsetS: (offsetS != null ? offsetS.value : this.offsetS),
+      beatsPerMinute: (beatsPerMinute != null
+          ? beatsPerMinute.value
+          : this.beatsPerMinute),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
 class SessionRevokeResponse {
   const SessionRevokeResponse({required this.status, required this.revoked});
 
@@ -2017,6 +2715,273 @@ extension $SessionRevokeResponseExtension on SessionRevokeResponse {
     return SessionRevokeResponse(
       status: (status != null ? status.value : this.status),
       revoked: (revoked != null ? revoked.value : this.revoked),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class SleepSessionRecordRequest {
+  const SleepSessionRecordRequest({
+    required this.hcId,
+    required this.dataOrigin,
+    required this.lastModifiedMs,
+    required this.recordingMethod,
+    this.device,
+    required this.startMs,
+    this.startOffsetS,
+    required this.endMs,
+    this.endOffsetS,
+    this.title,
+    this.notes,
+    required this.stages,
+  });
+
+  factory SleepSessionRecordRequest.fromJson(Map<String, dynamic> json) =>
+      _$SleepSessionRecordRequestFromJson(json);
+
+  static const toJsonFactory = _$SleepSessionRecordRequestToJson;
+  Map<String, dynamic> toJson() => _$SleepSessionRecordRequestToJson(this);
+
+  @JsonKey(name: 'hc_id')
+  final String hcId;
+  @JsonKey(name: 'data_origin')
+  final String dataOrigin;
+  @JsonKey(name: 'last_modified_ms')
+  final int lastModifiedMs;
+  @JsonKey(
+    name: 'recording_method',
+    toJson: recordingMethodEnumToJson,
+    fromJson: recordingMethodEnumFromJson,
+  )
+  final enums.RecordingMethodEnum recordingMethod;
+  @JsonKey(name: 'device')
+  final HealthDeviceRequest? device;
+  @JsonKey(name: 'start_ms')
+  final int startMs;
+  @JsonKey(name: 'start_offset_s')
+  final int? startOffsetS;
+  @JsonKey(name: 'end_ms')
+  final int endMs;
+  @JsonKey(name: 'end_offset_s')
+  final int? endOffsetS;
+  @JsonKey(name: 'title')
+  final String? title;
+  @JsonKey(name: 'notes')
+  final String? notes;
+  @JsonKey(name: 'stages', defaultValue: <SleepStageRequest>[])
+  final List<SleepStageRequest> stages;
+  static const fromJsonFactory = _$SleepSessionRecordRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is SleepSessionRecordRequest &&
+            (identical(other.hcId, hcId) ||
+                const DeepCollectionEquality().equals(other.hcId, hcId)) &&
+            (identical(other.dataOrigin, dataOrigin) ||
+                const DeepCollectionEquality().equals(
+                  other.dataOrigin,
+                  dataOrigin,
+                )) &&
+            (identical(other.lastModifiedMs, lastModifiedMs) ||
+                const DeepCollectionEquality().equals(
+                  other.lastModifiedMs,
+                  lastModifiedMs,
+                )) &&
+            (identical(other.recordingMethod, recordingMethod) ||
+                const DeepCollectionEquality().equals(
+                  other.recordingMethod,
+                  recordingMethod,
+                )) &&
+            (identical(other.device, device) ||
+                const DeepCollectionEquality().equals(other.device, device)) &&
+            (identical(other.startMs, startMs) ||
+                const DeepCollectionEquality().equals(
+                  other.startMs,
+                  startMs,
+                )) &&
+            (identical(other.startOffsetS, startOffsetS) ||
+                const DeepCollectionEquality().equals(
+                  other.startOffsetS,
+                  startOffsetS,
+                )) &&
+            (identical(other.endMs, endMs) ||
+                const DeepCollectionEquality().equals(other.endMs, endMs)) &&
+            (identical(other.endOffsetS, endOffsetS) ||
+                const DeepCollectionEquality().equals(
+                  other.endOffsetS,
+                  endOffsetS,
+                )) &&
+            (identical(other.title, title) ||
+                const DeepCollectionEquality().equals(other.title, title)) &&
+            (identical(other.notes, notes) ||
+                const DeepCollectionEquality().equals(other.notes, notes)) &&
+            (identical(other.stages, stages) ||
+                const DeepCollectionEquality().equals(other.stages, stages)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(hcId) ^
+      const DeepCollectionEquality().hash(dataOrigin) ^
+      const DeepCollectionEquality().hash(lastModifiedMs) ^
+      const DeepCollectionEquality().hash(recordingMethod) ^
+      const DeepCollectionEquality().hash(device) ^
+      const DeepCollectionEquality().hash(startMs) ^
+      const DeepCollectionEquality().hash(startOffsetS) ^
+      const DeepCollectionEquality().hash(endMs) ^
+      const DeepCollectionEquality().hash(endOffsetS) ^
+      const DeepCollectionEquality().hash(title) ^
+      const DeepCollectionEquality().hash(notes) ^
+      const DeepCollectionEquality().hash(stages) ^
+      runtimeType.hashCode;
+}
+
+extension $SleepSessionRecordRequestExtension on SleepSessionRecordRequest {
+  SleepSessionRecordRequest copyWith({
+    String? hcId,
+    String? dataOrigin,
+    int? lastModifiedMs,
+    enums.RecordingMethodEnum? recordingMethod,
+    HealthDeviceRequest? device,
+    int? startMs,
+    int? startOffsetS,
+    int? endMs,
+    int? endOffsetS,
+    String? title,
+    String? notes,
+    List<SleepStageRequest>? stages,
+  }) {
+    return SleepSessionRecordRequest(
+      hcId: hcId ?? this.hcId,
+      dataOrigin: dataOrigin ?? this.dataOrigin,
+      lastModifiedMs: lastModifiedMs ?? this.lastModifiedMs,
+      recordingMethod: recordingMethod ?? this.recordingMethod,
+      device: device ?? this.device,
+      startMs: startMs ?? this.startMs,
+      startOffsetS: startOffsetS ?? this.startOffsetS,
+      endMs: endMs ?? this.endMs,
+      endOffsetS: endOffsetS ?? this.endOffsetS,
+      title: title ?? this.title,
+      notes: notes ?? this.notes,
+      stages: stages ?? this.stages,
+    );
+  }
+
+  SleepSessionRecordRequest copyWithWrapped({
+    Wrapped<String>? hcId,
+    Wrapped<String>? dataOrigin,
+    Wrapped<int>? lastModifiedMs,
+    Wrapped<enums.RecordingMethodEnum>? recordingMethod,
+    Wrapped<HealthDeviceRequest?>? device,
+    Wrapped<int>? startMs,
+    Wrapped<int?>? startOffsetS,
+    Wrapped<int>? endMs,
+    Wrapped<int?>? endOffsetS,
+    Wrapped<String?>? title,
+    Wrapped<String?>? notes,
+    Wrapped<List<SleepStageRequest>>? stages,
+  }) {
+    return SleepSessionRecordRequest(
+      hcId: (hcId != null ? hcId.value : this.hcId),
+      dataOrigin: (dataOrigin != null ? dataOrigin.value : this.dataOrigin),
+      lastModifiedMs: (lastModifiedMs != null
+          ? lastModifiedMs.value
+          : this.lastModifiedMs),
+      recordingMethod: (recordingMethod != null
+          ? recordingMethod.value
+          : this.recordingMethod),
+      device: (device != null ? device.value : this.device),
+      startMs: (startMs != null ? startMs.value : this.startMs),
+      startOffsetS: (startOffsetS != null
+          ? startOffsetS.value
+          : this.startOffsetS),
+      endMs: (endMs != null ? endMs.value : this.endMs),
+      endOffsetS: (endOffsetS != null ? endOffsetS.value : this.endOffsetS),
+      title: (title != null ? title.value : this.title),
+      notes: (notes != null ? notes.value : this.notes),
+      stages: (stages != null ? stages.value : this.stages),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class SleepStageRequest {
+  const SleepStageRequest({
+    required this.startMs,
+    required this.endMs,
+    required this.stage,
+  });
+
+  factory SleepStageRequest.fromJson(Map<String, dynamic> json) =>
+      _$SleepStageRequestFromJson(json);
+
+  static const toJsonFactory = _$SleepStageRequestToJson;
+  Map<String, dynamic> toJson() => _$SleepStageRequestToJson(this);
+
+  @JsonKey(name: 'start_ms')
+  final int startMs;
+  @JsonKey(name: 'end_ms')
+  final int endMs;
+  @JsonKey(
+    name: 'stage',
+    toJson: sleepStageEnumToJson,
+    fromJson: sleepStageEnumFromJson,
+  )
+  final enums.SleepStageEnum stage;
+  static const fromJsonFactory = _$SleepStageRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is SleepStageRequest &&
+            (identical(other.startMs, startMs) ||
+                const DeepCollectionEquality().equals(
+                  other.startMs,
+                  startMs,
+                )) &&
+            (identical(other.endMs, endMs) ||
+                const DeepCollectionEquality().equals(other.endMs, endMs)) &&
+            (identical(other.stage, stage) ||
+                const DeepCollectionEquality().equals(other.stage, stage)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(startMs) ^
+      const DeepCollectionEquality().hash(endMs) ^
+      const DeepCollectionEquality().hash(stage) ^
+      runtimeType.hashCode;
+}
+
+extension $SleepStageRequestExtension on SleepStageRequest {
+  SleepStageRequest copyWith({
+    int? startMs,
+    int? endMs,
+    enums.SleepStageEnum? stage,
+  }) {
+    return SleepStageRequest(
+      startMs: startMs ?? this.startMs,
+      endMs: endMs ?? this.endMs,
+      stage: stage ?? this.stage,
+    );
+  }
+
+  SleepStageRequest copyWithWrapped({
+    Wrapped<int>? startMs,
+    Wrapped<int>? endMs,
+    Wrapped<enums.SleepStageEnum>? stage,
+  }) {
+    return SleepStageRequest(
+      startMs: (startMs != null ? startMs.value : this.startMs),
+      endMs: (endMs != null ? endMs.value : this.endMs),
+      stage: (stage != null ? stage.value : this.stage),
     );
   }
 }
@@ -2156,6 +3121,175 @@ extension $StatusResponseExtension on StatusResponse {
   StatusResponse copyWithWrapped({Wrapped<String>? status}) {
     return StatusResponse(
       status: (status != null ? status.value : this.status),
+    );
+  }
+}
+
+@JsonSerializable(explicitToJson: true)
+class StepsRecordRequest {
+  const StepsRecordRequest({
+    required this.hcId,
+    required this.dataOrigin,
+    required this.lastModifiedMs,
+    required this.recordingMethod,
+    this.device,
+    required this.startMs,
+    this.startOffsetS,
+    required this.endMs,
+    this.endOffsetS,
+    required this.count,
+  });
+
+  factory StepsRecordRequest.fromJson(Map<String, dynamic> json) =>
+      _$StepsRecordRequestFromJson(json);
+
+  static const toJsonFactory = _$StepsRecordRequestToJson;
+  Map<String, dynamic> toJson() => _$StepsRecordRequestToJson(this);
+
+  @JsonKey(name: 'hc_id')
+  final String hcId;
+  @JsonKey(name: 'data_origin')
+  final String dataOrigin;
+  @JsonKey(name: 'last_modified_ms')
+  final int lastModifiedMs;
+  @JsonKey(
+    name: 'recording_method',
+    toJson: recordingMethodEnumToJson,
+    fromJson: recordingMethodEnumFromJson,
+  )
+  final enums.RecordingMethodEnum recordingMethod;
+  @JsonKey(name: 'device')
+  final HealthDeviceRequest? device;
+  @JsonKey(name: 'start_ms')
+  final int startMs;
+  @JsonKey(name: 'start_offset_s')
+  final int? startOffsetS;
+  @JsonKey(name: 'end_ms')
+  final int endMs;
+  @JsonKey(name: 'end_offset_s')
+  final int? endOffsetS;
+  @JsonKey(name: 'count')
+  final int count;
+  static const fromJsonFactory = _$StepsRecordRequestFromJson;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other is StepsRecordRequest &&
+            (identical(other.hcId, hcId) ||
+                const DeepCollectionEquality().equals(other.hcId, hcId)) &&
+            (identical(other.dataOrigin, dataOrigin) ||
+                const DeepCollectionEquality().equals(
+                  other.dataOrigin,
+                  dataOrigin,
+                )) &&
+            (identical(other.lastModifiedMs, lastModifiedMs) ||
+                const DeepCollectionEquality().equals(
+                  other.lastModifiedMs,
+                  lastModifiedMs,
+                )) &&
+            (identical(other.recordingMethod, recordingMethod) ||
+                const DeepCollectionEquality().equals(
+                  other.recordingMethod,
+                  recordingMethod,
+                )) &&
+            (identical(other.device, device) ||
+                const DeepCollectionEquality().equals(other.device, device)) &&
+            (identical(other.startMs, startMs) ||
+                const DeepCollectionEquality().equals(
+                  other.startMs,
+                  startMs,
+                )) &&
+            (identical(other.startOffsetS, startOffsetS) ||
+                const DeepCollectionEquality().equals(
+                  other.startOffsetS,
+                  startOffsetS,
+                )) &&
+            (identical(other.endMs, endMs) ||
+                const DeepCollectionEquality().equals(other.endMs, endMs)) &&
+            (identical(other.endOffsetS, endOffsetS) ||
+                const DeepCollectionEquality().equals(
+                  other.endOffsetS,
+                  endOffsetS,
+                )) &&
+            (identical(other.count, count) ||
+                const DeepCollectionEquality().equals(other.count, count)));
+  }
+
+  @override
+  String toString() => jsonEncode(this);
+
+  @override
+  int get hashCode =>
+      const DeepCollectionEquality().hash(hcId) ^
+      const DeepCollectionEquality().hash(dataOrigin) ^
+      const DeepCollectionEquality().hash(lastModifiedMs) ^
+      const DeepCollectionEquality().hash(recordingMethod) ^
+      const DeepCollectionEquality().hash(device) ^
+      const DeepCollectionEquality().hash(startMs) ^
+      const DeepCollectionEquality().hash(startOffsetS) ^
+      const DeepCollectionEquality().hash(endMs) ^
+      const DeepCollectionEquality().hash(endOffsetS) ^
+      const DeepCollectionEquality().hash(count) ^
+      runtimeType.hashCode;
+}
+
+extension $StepsRecordRequestExtension on StepsRecordRequest {
+  StepsRecordRequest copyWith({
+    String? hcId,
+    String? dataOrigin,
+    int? lastModifiedMs,
+    enums.RecordingMethodEnum? recordingMethod,
+    HealthDeviceRequest? device,
+    int? startMs,
+    int? startOffsetS,
+    int? endMs,
+    int? endOffsetS,
+    int? count,
+  }) {
+    return StepsRecordRequest(
+      hcId: hcId ?? this.hcId,
+      dataOrigin: dataOrigin ?? this.dataOrigin,
+      lastModifiedMs: lastModifiedMs ?? this.lastModifiedMs,
+      recordingMethod: recordingMethod ?? this.recordingMethod,
+      device: device ?? this.device,
+      startMs: startMs ?? this.startMs,
+      startOffsetS: startOffsetS ?? this.startOffsetS,
+      endMs: endMs ?? this.endMs,
+      endOffsetS: endOffsetS ?? this.endOffsetS,
+      count: count ?? this.count,
+    );
+  }
+
+  StepsRecordRequest copyWithWrapped({
+    Wrapped<String>? hcId,
+    Wrapped<String>? dataOrigin,
+    Wrapped<int>? lastModifiedMs,
+    Wrapped<enums.RecordingMethodEnum>? recordingMethod,
+    Wrapped<HealthDeviceRequest?>? device,
+    Wrapped<int>? startMs,
+    Wrapped<int?>? startOffsetS,
+    Wrapped<int>? endMs,
+    Wrapped<int?>? endOffsetS,
+    Wrapped<int>? count,
+  }) {
+    return StepsRecordRequest(
+      hcId: (hcId != null ? hcId.value : this.hcId),
+      dataOrigin: (dataOrigin != null ? dataOrigin.value : this.dataOrigin),
+      lastModifiedMs: (lastModifiedMs != null
+          ? lastModifiedMs.value
+          : this.lastModifiedMs),
+      recordingMethod: (recordingMethod != null
+          ? recordingMethod.value
+          : this.recordingMethod),
+      device: (device != null ? device.value : this.device),
+      startMs: (startMs != null ? startMs.value : this.startMs),
+      startOffsetS: (startOffsetS != null
+          ? startOffsetS.value
+          : this.startOffsetS),
+      endMs: (endMs != null ? endMs.value : this.endMs),
+      endOffsetS: (endOffsetS != null ? endOffsetS.value : this.endOffsetS),
+      count: (count != null ? count.value : this.count),
     );
   }
 }
@@ -3173,6 +4307,163 @@ List<enums.CategoryEnum>? categoryEnumNullableListFromJson(
   return categoryEnum.map((e) => categoryEnumFromJson(e.toString())).toList();
 }
 
+String? healthAggregateMetricEnumNullableToJson(
+  enums.HealthAggregateMetricEnum? healthAggregateMetricEnum,
+) {
+  return healthAggregateMetricEnum?.value;
+}
+
+String? healthAggregateMetricEnumToJson(
+  enums.HealthAggregateMetricEnum healthAggregateMetricEnum,
+) {
+  return healthAggregateMetricEnum.value;
+}
+
+enums.HealthAggregateMetricEnum healthAggregateMetricEnumFromJson(
+  Object? healthAggregateMetricEnum, [
+  enums.HealthAggregateMetricEnum? defaultValue,
+]) {
+  return enums.HealthAggregateMetricEnum.values.firstWhereOrNull(
+        (e) => e.value == healthAggregateMetricEnum,
+      ) ??
+      defaultValue ??
+      enums.HealthAggregateMetricEnum.swaggerGeneratedUnknown;
+}
+
+enums.HealthAggregateMetricEnum? healthAggregateMetricEnumNullableFromJson(
+  Object? healthAggregateMetricEnum, [
+  enums.HealthAggregateMetricEnum? defaultValue,
+]) {
+  if (healthAggregateMetricEnum == null) {
+    return null;
+  }
+  return enums.HealthAggregateMetricEnum.values.firstWhereOrNull(
+        (e) => e.value == healthAggregateMetricEnum,
+      ) ??
+      defaultValue;
+}
+
+String healthAggregateMetricEnumExplodedListToJson(
+  List<enums.HealthAggregateMetricEnum>? healthAggregateMetricEnum,
+) {
+  return healthAggregateMetricEnum?.map((e) => e.value!).join(',') ?? '';
+}
+
+List<String> healthAggregateMetricEnumListToJson(
+  List<enums.HealthAggregateMetricEnum>? healthAggregateMetricEnum,
+) {
+  if (healthAggregateMetricEnum == null) {
+    return [];
+  }
+
+  return healthAggregateMetricEnum.map((e) => e.value!).toList();
+}
+
+List<enums.HealthAggregateMetricEnum> healthAggregateMetricEnumListFromJson(
+  List? healthAggregateMetricEnum, [
+  List<enums.HealthAggregateMetricEnum>? defaultValue,
+]) {
+  if (healthAggregateMetricEnum == null) {
+    return defaultValue ?? [];
+  }
+
+  return healthAggregateMetricEnum
+      .map((e) => healthAggregateMetricEnumFromJson(e.toString()))
+      .toList();
+}
+
+List<enums.HealthAggregateMetricEnum>?
+healthAggregateMetricEnumNullableListFromJson(
+  List? healthAggregateMetricEnum, [
+  List<enums.HealthAggregateMetricEnum>? defaultValue,
+]) {
+  if (healthAggregateMetricEnum == null) {
+    return defaultValue;
+  }
+
+  return healthAggregateMetricEnum
+      .map((e) => healthAggregateMetricEnumFromJson(e.toString()))
+      .toList();
+}
+
+String? healthDeviceTypeEnumNullableToJson(
+  enums.HealthDeviceTypeEnum? healthDeviceTypeEnum,
+) {
+  return healthDeviceTypeEnum?.value;
+}
+
+String? healthDeviceTypeEnumToJson(
+  enums.HealthDeviceTypeEnum healthDeviceTypeEnum,
+) {
+  return healthDeviceTypeEnum.value;
+}
+
+enums.HealthDeviceTypeEnum healthDeviceTypeEnumFromJson(
+  Object? healthDeviceTypeEnum, [
+  enums.HealthDeviceTypeEnum? defaultValue,
+]) {
+  return enums.HealthDeviceTypeEnum.values.firstWhereOrNull(
+        (e) => e.value == healthDeviceTypeEnum,
+      ) ??
+      defaultValue ??
+      enums.HealthDeviceTypeEnum.swaggerGeneratedUnknown;
+}
+
+enums.HealthDeviceTypeEnum? healthDeviceTypeEnumNullableFromJson(
+  Object? healthDeviceTypeEnum, [
+  enums.HealthDeviceTypeEnum? defaultValue,
+]) {
+  if (healthDeviceTypeEnum == null) {
+    return null;
+  }
+  return enums.HealthDeviceTypeEnum.values.firstWhereOrNull(
+        (e) => e.value == healthDeviceTypeEnum,
+      ) ??
+      defaultValue;
+}
+
+String healthDeviceTypeEnumExplodedListToJson(
+  List<enums.HealthDeviceTypeEnum>? healthDeviceTypeEnum,
+) {
+  return healthDeviceTypeEnum?.map((e) => e.value!).join(',') ?? '';
+}
+
+List<String> healthDeviceTypeEnumListToJson(
+  List<enums.HealthDeviceTypeEnum>? healthDeviceTypeEnum,
+) {
+  if (healthDeviceTypeEnum == null) {
+    return [];
+  }
+
+  return healthDeviceTypeEnum.map((e) => e.value!).toList();
+}
+
+List<enums.HealthDeviceTypeEnum> healthDeviceTypeEnumListFromJson(
+  List? healthDeviceTypeEnum, [
+  List<enums.HealthDeviceTypeEnum>? defaultValue,
+]) {
+  if (healthDeviceTypeEnum == null) {
+    return defaultValue ?? [];
+  }
+
+  return healthDeviceTypeEnum
+      .map((e) => healthDeviceTypeEnumFromJson(e.toString()))
+      .toList();
+}
+
+List<enums.HealthDeviceTypeEnum>? healthDeviceTypeEnumNullableListFromJson(
+  List? healthDeviceTypeEnum, [
+  List<enums.HealthDeviceTypeEnum>? defaultValue,
+]) {
+  if (healthDeviceTypeEnum == null) {
+    return defaultValue;
+  }
+
+  return healthDeviceTypeEnum
+      .map((e) => healthDeviceTypeEnumFromJson(e.toString()))
+      .toList();
+}
+
 String? levelEnumNullableToJson(enums.LevelEnum? levelEnum) {
   return levelEnum?.value;
 }
@@ -3233,6 +4524,158 @@ List<enums.LevelEnum>? levelEnumNullableListFromJson(
   }
 
   return levelEnum.map((e) => levelEnumFromJson(e.toString())).toList();
+}
+
+String? recordingMethodEnumNullableToJson(
+  enums.RecordingMethodEnum? recordingMethodEnum,
+) {
+  return recordingMethodEnum?.value;
+}
+
+String? recordingMethodEnumToJson(
+  enums.RecordingMethodEnum recordingMethodEnum,
+) {
+  return recordingMethodEnum.value;
+}
+
+enums.RecordingMethodEnum recordingMethodEnumFromJson(
+  Object? recordingMethodEnum, [
+  enums.RecordingMethodEnum? defaultValue,
+]) {
+  return enums.RecordingMethodEnum.values.firstWhereOrNull(
+        (e) => e.value == recordingMethodEnum,
+      ) ??
+      defaultValue ??
+      enums.RecordingMethodEnum.swaggerGeneratedUnknown;
+}
+
+enums.RecordingMethodEnum? recordingMethodEnumNullableFromJson(
+  Object? recordingMethodEnum, [
+  enums.RecordingMethodEnum? defaultValue,
+]) {
+  if (recordingMethodEnum == null) {
+    return null;
+  }
+  return enums.RecordingMethodEnum.values.firstWhereOrNull(
+        (e) => e.value == recordingMethodEnum,
+      ) ??
+      defaultValue;
+}
+
+String recordingMethodEnumExplodedListToJson(
+  List<enums.RecordingMethodEnum>? recordingMethodEnum,
+) {
+  return recordingMethodEnum?.map((e) => e.value!).join(',') ?? '';
+}
+
+List<String> recordingMethodEnumListToJson(
+  List<enums.RecordingMethodEnum>? recordingMethodEnum,
+) {
+  if (recordingMethodEnum == null) {
+    return [];
+  }
+
+  return recordingMethodEnum.map((e) => e.value!).toList();
+}
+
+List<enums.RecordingMethodEnum> recordingMethodEnumListFromJson(
+  List? recordingMethodEnum, [
+  List<enums.RecordingMethodEnum>? defaultValue,
+]) {
+  if (recordingMethodEnum == null) {
+    return defaultValue ?? [];
+  }
+
+  return recordingMethodEnum
+      .map((e) => recordingMethodEnumFromJson(e.toString()))
+      .toList();
+}
+
+List<enums.RecordingMethodEnum>? recordingMethodEnumNullableListFromJson(
+  List? recordingMethodEnum, [
+  List<enums.RecordingMethodEnum>? defaultValue,
+]) {
+  if (recordingMethodEnum == null) {
+    return defaultValue;
+  }
+
+  return recordingMethodEnum
+      .map((e) => recordingMethodEnumFromJson(e.toString()))
+      .toList();
+}
+
+String? sleepStageEnumNullableToJson(enums.SleepStageEnum? sleepStageEnum) {
+  return sleepStageEnum?.value;
+}
+
+String? sleepStageEnumToJson(enums.SleepStageEnum sleepStageEnum) {
+  return sleepStageEnum.value;
+}
+
+enums.SleepStageEnum sleepStageEnumFromJson(
+  Object? sleepStageEnum, [
+  enums.SleepStageEnum? defaultValue,
+]) {
+  return enums.SleepStageEnum.values.firstWhereOrNull(
+        (e) => e.value == sleepStageEnum,
+      ) ??
+      defaultValue ??
+      enums.SleepStageEnum.swaggerGeneratedUnknown;
+}
+
+enums.SleepStageEnum? sleepStageEnumNullableFromJson(
+  Object? sleepStageEnum, [
+  enums.SleepStageEnum? defaultValue,
+]) {
+  if (sleepStageEnum == null) {
+    return null;
+  }
+  return enums.SleepStageEnum.values.firstWhereOrNull(
+        (e) => e.value == sleepStageEnum,
+      ) ??
+      defaultValue;
+}
+
+String sleepStageEnumExplodedListToJson(
+  List<enums.SleepStageEnum>? sleepStageEnum,
+) {
+  return sleepStageEnum?.map((e) => e.value!).join(',') ?? '';
+}
+
+List<String> sleepStageEnumListToJson(
+  List<enums.SleepStageEnum>? sleepStageEnum,
+) {
+  if (sleepStageEnum == null) {
+    return [];
+  }
+
+  return sleepStageEnum.map((e) => e.value!).toList();
+}
+
+List<enums.SleepStageEnum> sleepStageEnumListFromJson(
+  List? sleepStageEnum, [
+  List<enums.SleepStageEnum>? defaultValue,
+]) {
+  if (sleepStageEnum == null) {
+    return defaultValue ?? [];
+  }
+
+  return sleepStageEnum
+      .map((e) => sleepStageEnumFromJson(e.toString()))
+      .toList();
+}
+
+List<enums.SleepStageEnum>? sleepStageEnumNullableListFromJson(
+  List? sleepStageEnum, [
+  List<enums.SleepStageEnum>? defaultValue,
+]) {
+  if (sleepStageEnum == null) {
+    return defaultValue;
+  }
+
+  return sleepStageEnum
+      .map((e) => sleepStageEnumFromJson(e.toString()))
+      .toList();
 }
 
 String? statusEnumNullableToJson(enums.StatusEnum? statusEnum) {

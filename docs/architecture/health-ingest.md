@@ -33,3 +33,17 @@ The plan recommended a separate `health.sqlite3` behind a database router, so th
 5. **Coverage.** Silence before the batch's `coverage_start_ms` means nothing, since HC hid that data, so those hours are not stored. A bucket HC did return is stored wherever it lies.
 
 `test_properties.py` checks rules 1, 2, 4 and 5 against a reference model under random order and duplication; `test_ingest.py` pins their exact boundaries.
+
+## Endpoint
+
+`POST /api/v1/health/ingest/`, operation `health_ingest` in `backend/openapi.json`. JSON only (anything else is 415). The phone authenticates with its device session, `Authorization: Session <token>`; a dead token is a 401 with `WWW-Authenticate: Session`. Requests draw on their own `health_ingest` throttle scope, 2000 an hour, instead of the general 500/hour budget a backfill would exhaust; a 429 carries `Retry-After`. The endpoint makes no outbound HTTP.
+
+The body is `coverage_start_ms` (required; the earliest instant HC let the phone read, or null with the history permission) and five optional lists: `steps`, `resting_heart_rate`, `sleep_session`, `deletions` and `aggregate_windows`. Times are integer epoch milliseconds, zone offsets integer seconds or null. Every record carries `hc_id` (HC `metadata.id`), `data_origin`, `last_modified_ms`, `recording_method` and `device` (null, or `{type, manufacturer, model}`); HC's integer constants are sent as the lower-snake names in the schema's enums, and a constant the contract does not know maps to `unknown`. Steps and sleep carry `start_ms`, `start_offset_s`, `end_ms` (exclusive) and `end_offset_s`; resting heart rate carries `time_ms` and `offset_s`. Sleep stages must lie within their session. An aggregate window covers whole UTC hours, at most 31 days, with one bucket per hour HC returned.
+
+| Bound | Value | Beyond it |
+|---|---|---|
+| Body | 4,194,304 bytes, checked against `Content-Length` and while reading | 413 |
+| Items | 5,000 records, deletions and aggregate-window hours together | 400 |
+| Values | Looser than HC's own: times 0 to 2100, offsets ±18 h, strings 255 (title and notes 10,000), stages 10,000 per session | 400 |
+
+JSON types are strict: an integer sent as a string, a float or a boolean is a 400, and so is any key the contract does not declare, including a record type this server does not support yet. A 200 carries `{batch_id, records_written, records_deleted, aggregates_written}`. A 400 carries field errors, with a failing list item keyed by its index (`{"steps": {"1": {...}}}`).
