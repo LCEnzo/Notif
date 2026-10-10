@@ -68,3 +68,14 @@ The command writes one CSV per record type, `<profile>-<type>.csv`: UTF-8, LF li
 | `resting_heart_rate` | Local day | The latest reading; a tie on time goes to the newer `last_modified`, then the larger id | Readings that day | The day starts before the earliest `coverage_start_ms` of any batch; never once a batch had the history permission |
 
 A window with no stored answer at all has no row: a gap. A complete window where HC had nothing has `value` 0 and `partial` false: a real zero. Local days run 23 or 25 hours across DST changes, which `window_*_utc` shows. Each hourly bucket goes to the window containing its start, which is exact for whole-hour zones such as `Europe/Belgrade`.
+
+## Deleting an account
+
+A user's health rows go with the account (`backend/health/lifecycle.py`).
+
+1. **Hard delete** (`actually_delete`, the admin's bulk delete) cascades through the `owner` foreign keys.
+2. **Soft delete** (`User.delete`, which `DELETE /api/v1/accounts/users/{id}/` calls) only sets `date_deleted`, so a `post_save` hook deletes the rows inside that same transaction. A deletion that rolls back keeps them, and no state exists where the account is gone but its rows remain.
+3. **Deactivation** (`is_active` false, no `date_deleted`) keeps them.
+4. **A request already past authentication** cannot store a batch for an account deleted meanwhile. `apply_batch` checks, first thing in its transaction, that the owner is active and undeleted. Transactions are `IMMEDIATE`, so the check runs under the write lock: a soft delete either committed before it, and the check sees it, or waits and then deletes the batch too. The request then gets a 401 with `WWW-Authenticate: Session`.
+
+`HealthSource` rows are shared across owners and stay.
