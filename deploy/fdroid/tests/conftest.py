@@ -67,6 +67,10 @@ class FakeHost:
 		status = self._status(argv)
 		if status == 0 and "archive" in argv and stdout is not None:
 			os.write(stdout, self.archive_bytes)
+		if status == 0 and argv[3:5] == ["worktree", "add"]:
+			Path(argv[-2]).mkdir(parents=True)
+		if status == 0 and argv[3:5] == ["worktree", "remove"]:
+			shutil.rmtree(argv[-1])
 		return status
 
 	def capture(self, argv: Sequence[str]) -> tuple[int, str]:
@@ -74,6 +78,12 @@ class FakeHost:
 		status = self._status(argv)
 		if "inspect" in argv:
 			return status, self.inspect.popleft() if status == 0 else ""
+		if "--verify" in argv:
+			return status, "c0ffee" * 6 + "c0ff"
+		if "--count" in argv:
+			return status, "674"
+		if "--short" in argv:
+			return status, "c0ffeec"
 		return status, ""
 
 	def lock(self, directory: Path) -> bool:
@@ -116,7 +126,7 @@ class Host:
 def vps(tmp_path: Path) -> Host:
 	fdroid_dir = tmp_path / "checkout" / "deploy" / "fdroid"
 	(fdroid_dir / "pins").mkdir(parents=True)
-	for name in ("notif-apk", "publish.Dockerfile"):
+	for name in ("notif-apk", "publish.Dockerfile", "build.Dockerfile"):
 		(fdroid_dir / name).write_text("", encoding="utf-8")
 	for name in ("apk-cert.sha256", "repo-index-cert.sha256"):
 		(fdroid_dir / "pins" / name).write_text("# no value yet\n", encoding="utf-8")

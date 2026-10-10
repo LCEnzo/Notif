@@ -14,6 +14,7 @@ only. Fixed locations, overridable for tests:
 import io
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -34,10 +35,14 @@ Usage:
                              Create the F-Droid directories, this command's link
                              and the publish image; generate, restore or verify
                              the signing keys. ./deploy.sh runs it every time.
+  notif-apk build [commit]   Build <commit> (default: origin/master after a fetch)
+                             as a signed arm64 APK, then publish it.
+  notif-apk publish <apk>    Check a signed APK and add it to the F-Droid repo.
   notif-apk export-keys      Write the signing keys to ~/notif-fdroid-keys.tar,
                              for deploy/fdroid/backup-keys.sh to copy off.
 """
 
+BUILD_IMAGE = "notif-apk-build"
 PUBLISH_IMAGE = "notif-apk-publish"
 APK_PIN = "apk-cert.sha256"
 REPO_PIN = "repo-index-cert.sha256"
@@ -269,6 +274,9 @@ class NotifApk:
 		if status != 0:
 			raise CommandError(status)
 
+	def git(self, *args: str) -> tuple[int, str]:
+		return self.host.capture(["git", "-C", str(self.paths.checkout), *args])
+
 	def pin_value(self, name: str) -> str:
 		file = self.paths.fdroid_dir / "pins" / name
 		if not file.is_file():
@@ -292,6 +300,12 @@ class NotifApk:
 				" set both or neither"
 			)
 		return Pins(apk, repo) if apk else None
+
+	def require_pins(self) -> Pins:
+		pins = self.read_pins()
+		if pins is None:
+			die("refused: pin missing: deploy/fdroid/pins/*.sha256 have no value (runbook: first-ever setup)")
+		return pins
 
 	# One notif-apk at a time: two builds would need 2 x 5 GB.
 	def take_lock(self) -> None:
@@ -489,6 +503,92 @@ class NotifApk:
 			Path(tmp).unlink(missing_ok=True)
 		info(f"wrote {pickup} (APK cert {state.apk}, repo index cert {state.repo})")
 
+	def publish(self, pins: Pins, apk: Path) -> None:
+		keys_dir = self.paths.keys_dir
+		self.check([
+			"docker", "run", "--rm", "--name", "notif-apk-publish", "--network", "none",
+			"--env", f"APK_CERT_SHA256={pins.apk}",
+			"--env", f"REPO_CERT_SHA256={pins.repo}",
+			"--mount", f"type=bind,src={self.paths.fdroid_dir},dst=/tool,readonly",
+			"--mount", f"type=bind,src={self.paths.repo_dir},dst=/work/repo",
+			"--mount", f"type=bind,src={keys_dir}/repo-index.p12,dst=/run/secrets/repo-index.p12,readonly",
+			"--mount", f"type=bind,src={keys_dir}/repo-index.pass,dst=/run/secrets/repo-index.pass,readonly",
+			"--mount", f"type=bind,src={apk},dst=/in/notif.apk,readonly",
+			PUBLISH_IMAGE, "python3", "/tool/publish_apk.py", "/in/notif.apk",
+		])  # fmt: skip
+
+	def cmd_build(self, args: Sequence[str]) -> None:
+		paths = self.paths
+		if len(args) > 1:
+			die("usage: notif-apk build [commit]")
+		rev = args[0] if args and args[0] else "origin/master"
+		if rev.startswith("-"):
+			die(f"not a commit: {rev}")
+		pins = self.require_pins()
+		self.take_lock()
+
+		self.check(["git", "-C", str(paths.checkout), "fetch", "--quiet", "origin"])
+		status, commit = self.git("rev-parse", "--verify", "--quiet", f"{rev}^{{commit}}")
+		if status != 0:
+			die(f"not a commit: {rev}")
+		status, version_code = self.git("rev-list", "--count", commit)
+		if status != 0:
+			raise CommandError(status)
+		status, short_sha = self.git("rev-parse", "--short", commit)
+		if status != 0:
+			raise CommandError(status)
+		print(f"notif-apk: building {short_sha}, versionCode {version_code}")
+
+		self.ensure_image(BUILD_IMAGE, "build.Dockerfile")
+		self.ensure_image(PUBLISH_IMAGE, "publish.Dockerfile")
+
+		paths.work_root.mkdir(parents=True, exist_ok=True)
+		work = Path(tempfile.mkdtemp(prefix="build.", dir=paths.work_root))
+		try:
+			src = work / "src"
+			out = work / "out"
+			self.check(["git", "-C", str(paths.checkout), "worktree", "add", "--detach", "--quiet", str(src), commit])
+			out.mkdir()
+			self.check([
+				"docker", "run", "--rm", "--name", "notif-apk-build",
+				"--memory", "5g", "--memory-swap", "5g", "--cpus", "3",
+				"--mount", f"type=bind,src={src},dst=/src,readonly",
+				"--mount", f"type=bind,src={out},dst=/out",
+				"--mount", f"type=bind,src={paths.fdroid_dir},dst=/tool,readonly",
+				"--mount", f"type=bind,src={paths.keys_dir}/apk.p12,dst=/run/secrets/apk.p12,readonly",
+				"--mount", f"type=bind,src={paths.keys_dir}/apk.pass,dst=/run/secrets/apk.pass,readonly",
+				"--mount", "type=volume,src=notif-apk-gradle,dst=/root/.gradle",
+				"--mount", "type=volume,src=notif-apk-pub,dst=/root/.pub-cache",
+				BUILD_IMAGE, "bash", "/tool/container-build.sh", version_code, short_sha,
+			])  # fmt: skip
+			self.publish(pins, out / f"notif-{version_code}-{short_sha}.apk")
+		finally:
+			self.host.hold_signals()
+			self.remove_work(work)
+
+	def remove_work(self, work: Path) -> None:
+		src = work / "src"
+		if src.exists():
+			status = self.host.call(["git", "-C", str(self.paths.checkout), "worktree", "remove", "--force", str(src)])
+			if status != 0:
+				warn(f"could not remove worktree {src}")
+
+		def report(_function: object, path: str, error: BaseException) -> None:
+			warn(f"could not remove {path}: {error}")
+
+		shutil.rmtree(work, onexc=report)
+
+	def cmd_publish(self, args: Sequence[str]) -> None:
+		if len(args) != 1:
+			die("usage: notif-apk publish <apk>")
+		apk = Path(args[0]).resolve()
+		if not apk.is_file():
+			die(f"not a file: {args[0]}")
+		pins = self.require_pins()
+		self.take_lock()
+		self.ensure_image(PUBLISH_IMAGE, "publish.Dockerfile")
+		self.publish(pins, apk)
+
 
 def main(argv: Sequence[str], environ: Mapping[str, str], host: Host, *, script: Path, as_root: bool) -> int:
 	app = NotifApk(Paths.from_env(script, environ), host, as_root=as_root)
@@ -497,6 +597,10 @@ def main(argv: Sequence[str], environ: Mapping[str, str], host: Host, *, script:
 		match command:
 			case "setup":
 				app.cmd_setup(args)
+			case "build":
+				app.cmd_build(args)
+			case "publish":
+				app.cmd_publish(args)
 			case "export-keys":
 				app.cmd_export_keys(args)
 			case "-h" | "--help" | "help":
