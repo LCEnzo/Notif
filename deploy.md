@@ -465,15 +465,22 @@ curl https://notif.lcenzo.com/api/v1/monitoring/status/
 # API docs (public)
 open https://notif.lcenzo.com/api/v1/docs/
 
+# Pick a throwaway test password (typed, not echoed); both calls below use it
+read -rs PASSWORD
+
 # Register a user
 curl -X POST https://notif.lcenzo.com/api/v1/accounts/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"test","email":"test@example.com","password": "correct horse battery staple"}'
+  -d @- <<EOF
+{"username": "test", "email": "test@example.com", "password": "$PASSWORD"}
+EOF
 
 # Get a token
 curl -X POST https://notif.lcenzo.com/api/v1/token/ \
   -H "Content-Type: application/json" \
-  -d '{"username":"test","password": "correct horse battery staple"}'
+  -d @- <<EOF
+{"username": "test", "password": "$PASSWORD"}
+EOF
 ```
 
 ---

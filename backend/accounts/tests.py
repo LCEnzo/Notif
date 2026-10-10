@@ -35,8 +35,8 @@ from accounts.views import _send_reset_email_in_background
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client, production_throttling  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
 
-_VALID_TEST_PASSWORD = "N0tif-Test-Credential-2026!"
-_ALTERNATE_VALID_TEST_PASSWORD = "N0tif-Alternate-Credential-2026!"
+_VALID_TEST_PASSWORD = "N0tif-Test-Credential-2026!"  # pragma: whitelist secret
+_ALTERNATE_VALID_TEST_PASSWORD = "N0tif-Alternate-Credential-2026!"  # pragma: whitelist secret
 
 
 class UserViewSetTestCase(ViewSetMixin):
@@ -719,7 +719,7 @@ class DevBootstrapLoginTestCase(TestCase):
 			reverse("auth-login"),
 			{
 				"username": settings.DEV_BOOTSTRAP_USERNAME,
-				"password": "definitely-not-the-dev-password",
+				"password": "definitely-not-the-dev-password",  # pragma: whitelist secret
 				"transport": "bearer",
 			},
 			format="json",
@@ -1589,7 +1589,7 @@ class ChangePasswordTestCase(TestCase):
 	def test_enforces_password_validators(self):
 		response = self.authed.post(
 			self.url,
-			{"current_password": _VALID_TEST_PASSWORD, "new_password": "password"},
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": "password"},  # pragma: whitelist secret
 			format="json",
 		)
 
@@ -1630,7 +1630,7 @@ class PasswordResetTestCase(TestCase):
 		cls.user = User.objects.create_user(
 			username="resetuser",
 			email="reset@example.com",
-			password="oldpassword123!",
+			password="oldpassword123!",  # pragma: whitelist secret
 		)
 		cls.client = APIClient()
 		cls.reset_url = reverse("password-reset")
@@ -1675,7 +1675,7 @@ class PasswordResetTestCase(TestCase):
 		User.objects.create_user(
 			username="mixedcase",
 			email="MixedCase@example.com",
-			password="oldpassword123!",
+			password="oldpassword123!",  # pragma: whitelist secret
 		)
 
 		with patch("commons.email.send_password_reset_email") as mock_send:
@@ -1769,7 +1769,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -1787,7 +1787,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "000000",
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1802,7 +1802,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "nobody@example.com",
 				"code": "000000",
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1820,7 +1820,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1835,7 +1835,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(PasswordResetCode.objects.count(), 0)
@@ -1849,7 +1849,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "password",  # common password
+				"new_password": "password",  # common password  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1869,7 +1869,7 @@ class PasswordResetTestCase(TestCase):
 				{
 					"email": "reset@example.com",
 					"code": "000000",
-					"new_password": "NewSecurePass123!",
+					"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 				},
 			)
 			self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1882,7 +1882,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1899,7 +1899,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 			format="multipart",
 		)
@@ -1917,7 +1917,7 @@ class PasswordResetTestCase(TestCase):
 				{
 					"email": "reset@example.com",
 					"code": "000000",
-					"new_password": "NewSecurePass123!",
+					"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 				},
 			)
 			self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1938,7 +1938,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": fresh_code_value,
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1964,7 +1964,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "000000",
-				"new_password": "NewSecurePass123!",
+				"new_password": "NewSecurePass123!",  # pragma: whitelist secret
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
