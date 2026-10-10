@@ -1,7 +1,7 @@
 # F-Droid repo runbook
 
 The self-hosted F-Droid repo at `https://fdroid.lcenzo.com/repo` (Phase 1 of the plan in
-PR #113, `docs/plans/fdroid-self-hosting.md` on branch `docs/plan-fdroid-hosting`).
+`docs/plans/fdroid-self-hosting.md`).
 `./deploy.sh` sets up and checks the VPS side on every run, through
 `deploy/fdroid/notif-apk setup`. This runbook covers only what code cannot do: moving the
 keys to and from Luka's PC, committing the pins, the phone, and the one-time Phase 1
