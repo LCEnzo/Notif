@@ -13,7 +13,6 @@ on:
       # merge with stale generated models.
       - 'backend/openapi.json'
   pull_request:
-    branches: [master]
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend.yml'

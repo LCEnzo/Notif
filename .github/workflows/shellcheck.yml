@@ -12,7 +12,6 @@ on:
       - '.githooks/**'
       - '.github/workflows/shellcheck.yml'
   pull_request:
-    branches: [master]
     paths:
       - '**/*.sh'
       - '.github/**/*.sh'
