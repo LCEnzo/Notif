@@ -52,7 +52,9 @@ class FakeHost:
 	inspect: deque[str] = field(default_factory=deque)
 	statuses: dict[str, int] = field(default_factory=dict)
 	archive_bytes: bytes = b"tar bytes"
+	lock_free: bool = True
 	calls: list[list[str]] = field(default_factory=list)
+	locks: list[Path] = field(default_factory=list)
 
 	def _status(self, argv: Sequence[str]) -> int:
 		for word, status in self.statuses.items():
@@ -73,6 +75,10 @@ class FakeHost:
 		if "inspect" in argv:
 			return status, self.inspect.popleft() if status == 0 else ""
 		return status, ""
+
+	def lock(self, directory: Path) -> bool:
+		self.locks.append(directory)
+		return self.lock_free
 
 	def hold_signals(self) -> None:
 		pass
