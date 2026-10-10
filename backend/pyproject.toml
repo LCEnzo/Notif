@@ -16,6 +16,8 @@ dependencies = [
 	"pydantic-settings>=2.14.2,<3.0",
 	"python-dotenv>=1.1,<2.0",
 	"requests>=2.32,<3.0",
+	# Explicit for export's Europe/Belgrade: Django pulls it only on Windows; the production image has the system zone database.
+	"tzdata>=2026.4",
 ]
 
 [dependency-groups]

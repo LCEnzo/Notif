@@ -47,3 +47,24 @@ The body is `coverage_start_ms` (required; the earliest instant HC let the phone
 | Values | Looser than HC's own: times 0 to 2100, offsets ±18 h, strings 255 (title and notes 10,000), stages 10,000 per session | 400 |
 
 JSON types are strict: an integer sent as a string, a float or a boolean is a 400, and so is any key the contract does not declare, including a record type this server does not support yet. A 200 carries `{batch_id, records_written, records_deleted, aggregates_written}`. A 400 carries field errors, with a failing list item keyed by its index (`{"steps": {"1": {...}}}`).
+
+## Export
+
+```bash
+uv run python manage.py export_health --user LCEnzo --profile daily --output-dir exports/ \
+	[--types all|steps,sleep_session] [--start 2026-01-01] [--end 2026-03-31] [--tz Europe/Belgrade]
+```
+
+The command writes one CSV per record type, `<profile>-<type>.csv`: UTF-8, LF line ends, a header row, blank cells for nulls. Each file is written through a `.partial` file, so an interrupted export leaves no truncated CSV. `--start` and `--end` are local dates in `--tz`, both inclusive: `raw` selects by each record's start, `daily` by the window's date. Rows stream from the database 2,000 at a time.
+
+**`raw`** has one row per record, or per stage for sleep; a session without stages gets one row with blank stage columns. Every file starts with `hc_id, data_origin, recording_method, device_type, device_manufacturer, device_model, start_utc, start_local, start_offset_s, end_utc, end_local, end_offset_s, last_modified_utc`. `*_local` is the instant in `--tz`, with the right offset on each side of a DST change; `*_offset_s` is the offset HC recorded. The type columns are `count`, `beats_per_minute`, or `title, notes, stage, stage_start_utc, stage_start_local, stage_end_utc, stage_end_local`.
+
+**`daily`** has the columns `date, type, value, unit, window_start_utc, window_end_utc, n, partial`.
+
+| Type | Window | `value` | `n` | `partial` |
+|---|---|---|---|---|
+| `steps` | Local day | Sum of HC's hourly `steps_count_total` | Hours with a value | Some hour of the window has no stored answer |
+| `sleep_session` | Noon to noon, dated by the wake-up day | Sum of hourly `sleep_duration_total`, in exact decimal seconds | Hours with a value | As `steps` |
+| `resting_heart_rate` | Local day | The latest reading; a tie on time goes to the newer `last_modified`, then the larger id | Readings that day | The day starts before the earliest `coverage_start_ms` of any batch; never once a batch had the history permission |
+
+A window with no stored answer at all has no row: a gap. A complete window where HC had nothing has `value` 0 and `partial` false: a real zero. Local days run 23 or 25 hours across DST changes, which `window_*_utc` shows. Each hourly bucket goes to the window containing its start, which is exact for whole-hour zones such as `Europe/Belgrade`.
