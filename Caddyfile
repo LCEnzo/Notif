@@ -96,8 +96,35 @@ lcenzo.com, www.lcenzo.com {
 	}
 }
 
+# Self-hosted F-Droid repo; deploy/fdroid/notif-apk publishes into it.
+# Docker default: /srv/fdroid (compose mounts /srv/notif-fdroid/repo there)
+# Bare default:   /srv/notif-fdroid
+#
+# The index files are no-cache: entry.jar pins index-v2.json by hash, so a
+# stale edge copy of either hides an update or fails verification in the
+# client. index.jar and index.xml are the v0 index fdroidserver 2.4.2 still
+# writes; /repo/ is index.html. An APK URL never changes content (publish
+# refuses to overwrite one), so APKs are cacheable for good.
+fdroid.lcenzo.com {
+	tls {$FALLBACK_TLS_CERT:/etc/caddy/origin-certs/lcenzo.com.pem} {$FALLBACK_TLS_KEY:/etc/caddy/origin-certs/lcenzo.com.key}
+
+	root * {$FDROID_ROOT:/srv/notif-fdroid}
+
+	@index path /repo/entry.jar /repo/entry.json /repo/index-v1.jar /repo/index-v1.json /repo/index-v2.json /repo/diff/* /repo/index.jar /repo/index.xml /repo/ /repo/index.html /repo/index.png
+	header @index Cache-Control "no-cache"
+
+	# Only existing APKs: a 404 marked immutable would stay at the edge for a year.
+	@apk {
+		path *.apk
+		file
+	}
+	header @apk Cache-Control "public, max-age=31536000, immutable"
+
+	file_server
+}
+
 # Wildcard catch-all for any other lcenzo.com hostname that isn't
-# notif.lcenzo.com (which has its own block above). Always 404.
+# notif.lcenzo.com or fdroid.lcenzo.com (own blocks above). Always 404.
 *.lcenzo.com {
 	tls {$FALLBACK_TLS_CERT:/etc/caddy/origin-certs/lcenzo.com.pem} {$FALLBACK_TLS_KEY:/etc/caddy/origin-certs/lcenzo.com.key}
 

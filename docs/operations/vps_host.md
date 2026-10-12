@@ -28,6 +28,16 @@ sudo chmod 0644 /etc/notif/notif-compose.env
 
 If the checkout moves, update only `NOTIF_DEPLOY_DIR`.
 
+## F-Droid Repo
+
+After the web deploy, `./deploy.sh` runs `deploy/fdroid/notif-apk setup`. It creates
+`/etc/notif/fdroid` (root, 0700) and `/srv/notif-fdroid/repo` (root, 0755), points
+`/usr/local/bin/notif-apk` at the checkout, builds the `notif-apk-publish` image, and
+generates, restores or verifies the signing keys against the pins in
+`deploy/fdroid/pins/`. A failure there leaves the web deploy in place and makes
+`deploy.sh` exit 1. Key backups, pins, restores and rotation are in
+`docs/operations/fdroid_runbook.md`.
+
 ## Boot Services
 
 `./deploy.sh` installs and enables the repo-managed units on every deploy, then

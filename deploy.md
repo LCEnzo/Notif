@@ -89,7 +89,7 @@ ssh root@<VPS-IP>
 
 # Docker
 curl -fsSL https://get.docker.com | sh
-apt update && apt install -y docker-compose-v2 git
+apt update && apt install -y docker-compose-v2 git python3
 
 # Create deploy user (don't run services as root)
 useradd -m -s /bin/bash deploy
