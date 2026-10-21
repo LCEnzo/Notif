@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Bookkeeping for claude-review.yml, which runs this file as it stands on the PR's base branch.
-#   prepare  Copies the reviewer's instructions and the trusted part of the PR discussion into
-#            $RUNNER_TEMP/claude-review, and works out the round and diff range from earlier summaries.
+#   prepare  Works out the round and diff range from earlier summaries, and writes everything the reviewer
+#            reads into $RUNNER_TEMP/claude-review: its instructions, the reviewed diff, the commit log and
+#            the trusted part of the PR discussion. The reviewer has no shell, so this is all it gets.
 #   post     Validates the reviewer's structured output, keeps findings that sit in the reviewed diff and
 #            were not posted before, posts them inline, and posts the round's summary.
 # The reviewer's output is untrusted: it is validated here and only ever sent to GitHub as JSON bodies.
@@ -26,6 +27,17 @@ readonly SHA_LINE='^Reviewed-SHA: [0-9a-f]{40}$'
 readonly INSTRUCTIONS=(.github/review-rules.md AGENTS.md)
 # Paths that are high risk by location alone; review-rules.md names the rest of the tier.
 readonly HIGH_RISK_PATHS='^(backend/accounts/|\.github/workflows/|deploy/|deploy\.sh$|compose\.yaml$|Caddyfile$)|(^|/)migrations/'
+# The reviewed diff, which the reviewer reads and the poster anchors findings to: one context size, and none
+# of the generated, locked or captured files review-rules.md says not to review.
+readonly DIFF_CONTEXT=3
+readonly SKIP_PATHSPEC=(
+  ':(exclude,glob)frontend/lib/generated/**' ':(exclude,glob)**/*.lock' ':(exclude)backend/openapi.json'
+  ':(exclude).secrets.baseline' ':(exclude,glob)backend/monitoring/tests/*.xml'
+  ':(exclude,glob)backend/monitoring/tests/*.html'
+)
+# Past these sizes the run fails rather than hand the reviewer a truncated view.
+readonly MAX_DIFF_BYTES=1000000
+readonly MAX_LIST_BYTES=200000
 
 : "${GH_TOKEN:?}" "${GITHUB_REPOSITORY:?}" "${GITHUB_OUTPUT:?}" "${GITHUB_STEP_SUMMARY:?}" "${RUNNER_TEMP:?}"
 : "${PR_NUMBER:?}" "${HEAD_SHA:?}" "${BASE_REF:?}"
@@ -42,6 +54,18 @@ fail() {
 emit() { printf '%s=%s\n' "$1" "$2" >>"$GITHUB_OUTPUT"; }
 
 summary() { printf '%s\n' "$@" >>"$GITHUB_STEP_SUMMARY"; }
+
+# Fails when file $1 is larger than $2 bytes; $3 names it in the error.
+require_size_at_most() {
+  local bytes
+  bytes=$(wc -c <"$1")
+  ((bytes <= $2)) || fail "$3 is $bytes bytes, over the cap of $2"
+}
+
+# Prints the diff under review: the round's range, without the paths in SKIP_PATHSPEC.
+reviewed_diff() {
+  git diff --no-color --no-ext-diff --unified="$DIFF_CONTEXT" "$RANGE" -- . "${SKIP_PATHSPEC[@]}"
+}
 
 # Writes every element of a paginated list endpoint to stdout, one JSON object per line.
 fetch_all() {
@@ -95,6 +119,14 @@ prepare() {
     summary "### Claude review" "" "Skipped: round $((ROUND - 1)) already reviewed \`$HEAD_SHA\`."
     return 0
   fi
+
+  reviewed_diff >"$OUT_DIR/diff.patch"
+  require_size_at_most "$OUT_DIR/diff.patch" "$MAX_DIFF_BYTES" "the reviewed diff"
+  git diff --name-status "$RANGE" >"$OUT_DIR/files.txt"
+  require_size_at_most "$OUT_DIR/files.txt" "$MAX_LIST_BYTES" "the changed-file list"
+  # git log reads a...b as the commits on either side; the PR's own commits are a..b.
+  git log --no-color --format='commit %H%nAuthor: %an%n%n%B' "${RANGE/.../..}" >"$OUT_DIR/log.txt"
+  require_size_at_most "$OUT_DIR/log.txt" "$MAX_LIST_BYTES" "the commit log"
 
   jq -r --arg who "$POSTER" '
     select(.user.login == $who)
@@ -157,6 +189,17 @@ readonly VALID_OUTPUT='
     and (.paths | type == "array" and length <= $max_paths and all(.[]; text(300) and one_line)))
   and (.dropped_over_cap | count) and (.refuted | count)'
 
+# Credential shapes, the one list of them. Any match rejects the reviewer's whole output and nothing is posted.
+#   Anywhere in the output: sk-ant- (Anthropic keys and OAuth tokens), gh[pousr]_ (GitHub tokens), github_pat_.
+#   In finding text: a run of 40+ characters of [A-Za-z0-9+/=_-] that mixes upper case, lower case and digits
+#   (base64-ish), or that is 65+ hex digits (longer than a SHA-256).
+# shellcheck disable=SC2016 # A jq program: its $names are jq variables.
+readonly NO_CREDENTIALS='
+  def prefixed: test("sk-ant-|(^|[^A-Za-z0-9])gh[pousr]_|github_pat_");
+  def encoded: (test("[A-Z]") and test("[a-z]") and test("[0-9]")) or test("^[0-9a-fA-F]{65,}$");
+  ([.. | strings | select(prefixed)] | length) == 0
+  and ([.findings[] | (.body, .bug_class) | scan("[A-Za-z0-9+/=_-]{40,}") | select(encoded)] | length) == 0'
+
 # Breaks @mentions with a zero-width space (code point 8203) so posted text notifies nobody.
 # shellcheck disable=SC2016 # A jq program: its $names are jq variables.
 readonly QUIET='def quiet: ([8203] | implode) as $zwsp | gsub("@(?<u>[A-Za-z0-9])"; "@\($zwsp)\(.u)");'
@@ -169,11 +212,14 @@ post() {
   jq -e --argjson max_findings "$MAX_FINDINGS" --argjson max_body "$MAX_BODY_CHARS" \
     --argjson max_paths "$MAX_RISK_PATHS" "$VALID_OUTPUT" "$WORK_DIR/findings.json" >/dev/null ||
     fail "the reviewer's output does not match the contract; nothing was posted"
+  # The error names no match: run logs are public.
+  jq -e "$NO_CREDENTIALS" "$WORK_DIR/findings.json" >/dev/null ||
+    fail "the reviewer's output contains a credential-shaped string; nothing was posted"
 
   compute_state
   [[ $LAST_SHA != "$HEAD_SHA" ]] || fail "round $((ROUND - 1)) already summarized $HEAD_SHA"
 
-  git diff --no-color --no-ext-diff --unified=3 "$RANGE" | hunk_lines >"$WORK_DIR/diff-lines.tsv"
+  reviewed_diff | hunk_lines >"$WORK_DIR/diff-lines.tsv"
   git diff --name-only "origin/$BASE_REF...$HEAD_SHA" >"$WORK_DIR/changed-files.txt"
   jq -r --arg who "$POSTER" '
     select(.user.login == $who)
