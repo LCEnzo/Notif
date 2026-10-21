@@ -259,15 +259,19 @@ def _user_agent(request: Request) -> str:
 
 
 def _ensure_dev_user(username: str, password: str) -> None:
-	"""Create (or reanimate) the dev bootstrap account on first dev login.
+	"""Create (or reanimate) a dev bootstrap account on its first dev login.
 
-	Guarded by DEV_BOOTSTRAP_LOGIN_ENABLED, which defaults to off. The
-	credentials must match exactly, so this never turns a failed login for a real
-	account into an account creation.
+	Guarded by DEV_BOOTSTRAP_LOGIN_ENABLED, which defaults to off. Username and
+	password must both match the same configured account exactly, so this never
+	turns a failed login for a real account into an account creation.
 	"""
 	if not settings.DEV_BOOTSTRAP_LOGIN_ENABLED:
 		return
-	if username != settings.DEV_BOOTSTRAP_USERNAME or password != settings.DEV_BOOTSTRAP_PASSWORD:
+	account = next(
+		(item for item in settings.DEV_BOOTSTRAP_ACCOUNTS if item.username == username and item.password == password),
+		None,
+	)
+	if account is None:
 		return
 
 	existing_user = User._base_manager.filter(username=username).first()
@@ -279,10 +283,10 @@ def _ensure_dev_user(username: str, password: str) -> None:
 		return
 
 	User.objects.create_user(
-		email=settings.DEV_BOOTSTRAP_EMAIL,
-		username=settings.DEV_BOOTSTRAP_USERNAME,
-		password=settings.DEV_BOOTSTRAP_PASSWORD,
-		name=settings.DEV_BOOTSTRAP_NAME,
+		email=account.email,
+		username=account.username,
+		password=account.password,
+		name=account.name,
 	)
 
 

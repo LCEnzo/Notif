@@ -41,7 +41,7 @@ uv run mypy .
 ### User Login:
   - Route: `api/v1/auth/login/`
   - Method: `POST` (JSON only)
-  - Example, as the dev bootstrap account from `.env.example`:
+  - Example, as a dev bootstrap account from `notif/config.py` (`.env.example` enables them):
     ```bash
     curl -X POST http://localhost:8000/api/v1/auth/login/ \
       -H 'Content-Type: application/json' \

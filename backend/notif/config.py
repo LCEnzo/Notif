@@ -7,7 +7,7 @@ Replaces scattered ``os.getenv()`` calls with a single validated config object.
 from enum import StrEnum
 from pathlib import Path
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Resolve .env relative to the backend package directory so lookups
@@ -15,6 +15,24 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # from repo root, Docker containers, etc.).
 _ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
 _MAX_DEV_API_LATENCY_MS = 5_000
+_MAX_DEV_BOOTSTRAP_ACCOUNTS = 8
+
+
+class DevAccount(BaseModel):
+	"""A dev bootstrap login, created on its first successful login. Name defaults to the username."""
+
+	model_config = ConfigDict(frozen=True, extra="forbid")
+
+	username: str = Field(min_length=1)
+	password: str = Field(min_length=1)
+	email: str = Field(min_length=1)
+	name: str = Field(default_factory=lambda data: data.get("username", ""), min_length=1)
+
+
+_DEFAULT_DEV_BOOTSTRAP_ACCOUNTS = (
+	DevAccount(username="LCEnzo", password="1ukacolic", email="lcenzo@notif.local"),  # pragma: whitelist secret
+	DevAccount(username="Liang", password="change-me", email="liang@notif.local"),  # pragma: whitelist secret
+)
 
 
 class Environment(StrEnum):
@@ -93,10 +111,13 @@ class Settings(BaseSettings):
 
 	# ── dev bootstrap ─────────────────────────────────────
 	DEV_BOOTSTRAP_LOGIN_ENABLED: bool = False
-	DEV_BOOTSTRAP_USERNAME: str = Field(default="LCEnzo", min_length=1)
-	DEV_BOOTSTRAP_PASSWORD: str = Field(default="1ukacolic", min_length=1)
-	DEV_BOOTSTRAP_EMAIL: str = Field(default="lcenzo@notif.local", min_length=1)
-	DEV_BOOTSTRAP_NAME: str = ""
+	# The env override is a JSON list of DevAccount objects.
+	DEV_BOOTSTRAP_ACCOUNTS: tuple[DevAccount, ...] = Field(
+		default=_DEFAULT_DEV_BOOTSTRAP_ACCOUNTS,
+		min_length=1,
+		max_length=_MAX_DEV_BOOTSTRAP_ACCOUNTS,
+		validate_default=True,
+	)
 
 	# ── dev latency middleware ────────────────────────────
 	DEV_API_LATENCY_MS: int = Field(default=0, ge=0, le=_MAX_DEV_API_LATENCY_MS)
@@ -106,11 +127,27 @@ class Settings(BaseSettings):
 	VERSION: str = "0.3.0"
 	GIT_HASH: str = "dev"
 
+	@field_validator("DEV_BOOTSTRAP_ACCOUNTS")
+	@classmethod
+	def _dev_accounts_fit_the_user_table(cls, accounts: tuple[DevAccount, ...]) -> tuple[DevAccount, ...]:
+		"""Usernames and emails are unique on User, so the accounts must not collide.
+
+		Usernames compare exactly, as the table does. Emails compare case-insensitively,
+		which covers the domain lowercasing ``create_user`` applies.
+		"""
+		for field, keys in (
+			("usernames", [account.username for account in accounts]),
+			("emails", [account.email.lower() for account in accounts]),
+		):
+			duplicates = sorted({key for key in keys if keys.count(key) > 1})
+			if duplicates:
+				raise ValueError(f"DEV_BOOTSTRAP_ACCOUNTS repeats {field}: {', '.join(duplicates)}")
+		return accounts
+
 	@model_validator(mode="after")
 	def _resolve_conditional_defaults(self) -> Settings:
 		"""Defaults that depend on other fields, plus fail-closed environment invariants.
 
-		* DEV_BOOTSTRAP_NAME defaults to DEV_BOOTSTRAP_USERNAME when empty.
 		* Empty email secrets are coerced to None.
 		* RESEND_API_KEY is accepted as a backward-compatible alias for
 			EMAIL_HOST_PASSWORD because Resend SMTP uses the API key as the
@@ -118,8 +155,6 @@ class Settings(BaseSettings):
 		* Fail-closed invariants: production never claims DEBUG, and the dev
 			bootstrap login is only legal in a local DEBUG environment.
 		"""
-		if not self.DEV_BOOTSTRAP_NAME:
-			self.DEV_BOOTSTRAP_NAME = self.DEV_BOOTSTRAP_USERNAME
 		if self.EMAIL_HOST_PASSWORD == "":
 			self.EMAIL_HOST_PASSWORD = None
 		if self.EMAIL_BACKEND == "":
