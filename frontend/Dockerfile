@@ -31,7 +31,7 @@ RUN flutter build web --release \
 
 # Export stage — minimal image. Assets stay in /image-dist.
 # The entrypoint copies them into the shared volume at runtime.
-FROM alpine:3.21
+FROM alpine:3.24
 
 COPY --from=build /app/build/web /image-dist
 COPY entrypoint.sh /entrypoint.sh
