@@ -5,6 +5,7 @@
 # and runs the matching fast checks:
 #   backend  → uv lock --check, uv sync --frozen, ruff format --check, ruff check, mypy, migration drift
 #   frontend → dart format check (no rewrite), flutter analyze
+#   deploy/fdroid → uv lock --check, ruff format --check, ruff check, mypy
 #
 # This is intentionally not full CI, as tests and builds take too long for everyday operations. They are checked in CI.
 #
@@ -18,6 +19,7 @@ NC='\033[0m' # No Color
 
 check_backend=false
 check_frontend=false
+check_fdroid=false
 check_hooks=false
 exit_code=0
 repo_root=$(git rev-parse --show-toplevel)
@@ -60,6 +62,9 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 	fi
 	if grep -Eq '^(frontend/|\.github/workflows/frontend\.yml$)' <<<"$changed"; then
 		check_frontend=true
+	fi
+	if grep -Eq '^(deploy/fdroid/|backend/pyproject\.toml$|\.github/workflows/fdroid\.yml$)' <<<"$changed"; then
+		check_fdroid=true
 	fi
 	if grep -Eq '^\.githooks/' <<<"$changed"; then
 		check_hooks=true
@@ -123,6 +128,20 @@ if $check_frontend; then
 		"$FLUTTER" analyze --no-pub
 		exit_code=1
 	fi
+
+	cd "$repo_root"
+fi
+
+# ── deploy/fdroid checks ─────────────────────────────────────────
+if $check_fdroid; then
+	echo -e "${YELLOW}━━━ deploy/fdroid changed — running quick checks ━━━${NC}"
+
+	cd "$repo_root/deploy/fdroid"
+
+	run_check "uv lock --check" uv lock --check
+	run_check "ruff format --check" uv run ruff format --check .
+	run_check "ruff check" uv run ruff check .
+	run_check "mypy" uv run mypy
 
 	cd "$repo_root"
 fi
