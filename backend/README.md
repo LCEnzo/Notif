@@ -29,28 +29,23 @@ uv run mypy .
 ### User Registration:
   - Route: `api/v1/accounts/users/`
   - Method: `POST`
-  - Body: 
-    ```json
-    {
-		"username": "new_user",
-		"email": "newuser@example.com",
-		"password": "securepassword123 securepassword123"
-	}
+  - Example:
+    ```bash
+    curl -X POST http://localhost:8000/api/v1/accounts/users/ \
+      -H 'Content-Type: application/json' \
+      -d '{"username": "new_user", "email": "newuser@example.com", "password": "securepassword123 securepassword123"}'  # pragma: whitelist secret
     ```
-	> Note: name is an optional field, so is the password. 
+	> Note: name is an optional field; the password is required.
 
 
 ### User Login:
   - Route: `api/v1/auth/login/`
   - Method: `POST` (JSON only)
-  - Body:
-    ```json
-    {
-        "username": "new_user",
-        "password": "securepassword123 securepassword123",
-        "transport": "bearer",
-        "device_label": "Pixel 8"
-    }
+  - Example, as the dev bootstrap account from `.env.example`:
+    ```bash
+    curl -X POST http://localhost:8000/api/v1/auth/login/ \
+      -H 'Content-Type: application/json' \
+      -d '{"username": "Liang", "password": "change-me", "transport": "bearer", "device_label": "Pixel 8"}'  # pragma: whitelist secret
     ```
   - `transport: "bearer"` returns the opaque session token once, in the body; send it
     back as `Authorization: Session <token>`. `transport: "cookie"` sets an HttpOnly
