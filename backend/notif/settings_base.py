@@ -21,10 +21,7 @@ SECRET_KEY = settings.DJANGO_SECRET_KEY
 # unless an environment module opts in. Only settings_dev does; production never
 # does, whatever its env attests (NOTIF_ENV itself defaults to local).
 DEV_BOOTSTRAP_LOGIN_ENABLED = False
-DEV_BOOTSTRAP_USERNAME = settings.DEV_BOOTSTRAP_USERNAME
-DEV_BOOTSTRAP_PASSWORD = settings.DEV_BOOTSTRAP_PASSWORD
-DEV_BOOTSTRAP_EMAIL = settings.DEV_BOOTSTRAP_EMAIL
-DEV_BOOTSTRAP_NAME = settings.DEV_BOOTSTRAP_NAME
+DEV_BOOTSTRAP_ACCOUNTS = settings.DEV_BOOTSTRAP_ACCOUNTS
 
 ALLOWED_HOSTS = [host.strip() for host in settings.ALLOWED_HOSTS.split(",") if host.strip()]
 # Never allow every origin, not even in dev. Combined with CORS_ALLOW_CREDENTIALS
@@ -195,8 +192,8 @@ _REST_THROTTLE_RATES = {
 	# leaves a live session behind, which is the failure mode worth avoiding.
 	"logout": "20/min",
 	"client_events": "30/min",
-	"password_reset": "3/min",
-	"password_reset_confirm": "5/min",
+	"password_reset": "3/min",  # pragma: whitelist secret
+	"password_reset_confirm": "5/min",  # pragma: whitelist secret
 	"scrape": "12/min",
 }
 

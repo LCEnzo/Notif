@@ -5,22 +5,27 @@
 * The dev bootstrap login is only legal in a local DEBUG environment.
 * Session lifetimes are capped at a year, so no configuration mints an
   immortal session.
+* The dev bootstrap accounts are a short list the User table can hold.
 
 The invariants are driven through environment variables, the way a container
 supplies them, with ``_env_file=None`` and the relevant variables cleared so a
 developer's ``.env`` or the CI environment cannot leak into the result.
 """
 
+import json
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
-from notif.config import Environment, Settings
+from notif.config import DevAccount, Environment, Settings
 
 # Env vars whose ambient values would otherwise leak into the fields under test.
 _AMBIENT_KEYS = (
 	"DEBUG",
 	"NOTIF_ENV",
 	"DEV_BOOTSTRAP_LOGIN_ENABLED",
+	"DEV_BOOTSTRAP_ACCOUNTS",
 	"DJANGO_SECRET_KEY",
 	"SESSION_IDLE_LIFETIME_DAYS",
 	"SESSION_ABSOLUTE_LIFETIME_DAYS",
@@ -28,6 +33,7 @@ _AMBIENT_KEYS = (
 
 # DJANGO_SECRET_KEY is required by the model.
 _SECRET = "test-secret-key"  # pragma: allowlist secret
+_ACCOUNT_PASSWORD = "dev-account-password"  # pragma: whitelist secret
 
 
 @pytest.fixture(autouse=True)
@@ -61,6 +67,81 @@ def test_session_lifetimes_are_bounded(key: str, days: int, *, accepted: bool, m
 		with pytest.raises(ValidationError) as excinfo:
 			Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
 		assert [error["loc"] for error in excinfo.value.errors()] == [(key,)]
+
+
+def _account(username: str, **overrides: str) -> dict[str, str]:
+	return {"username": username, "password": _ACCOUNT_PASSWORD, "email": f"{username}@notif.local", **overrides}
+
+
+def _settings_with_accounts(accounts: list[dict[str, str]], monkeypatch: pytest.MonkeyPatch) -> Settings:
+	monkeypatch.setenv("DEV_BOOTSTRAP_ACCOUNTS", json.dumps(accounts))
+	return Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
+
+
+def _assert_accounts_rejected(accounts: list[dict[str, str]], monkeypatch: pytest.MonkeyPatch) -> None:
+	with pytest.raises(ValidationError) as excinfo:
+		_settings_with_accounts(accounts, monkeypatch)
+	locations: list[Any] = [error["loc"] for error in excinfo.value.errors()]
+	assert locations
+	assert all(loc[0] == "DEV_BOOTSTRAP_ACCOUNTS" for loc in locations)
+
+
+def test_dev_bootstrap_default_accounts() -> None:
+	accounts = Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET).DEV_BOOTSTRAP_ACCOUNTS
+
+	# LCEnzo is what the frontend's debug login sends; Liang is the README's example.
+	assert [(account.username, account.email, account.name) for account in accounts] == [
+		("LCEnzo", "lcenzo@notif.local", "LCEnzo"),
+		("Liang", "liang@notif.local", "Liang"),
+	]
+	assert accounts[1].password == "change-me"  # pragma: whitelist secret
+
+
+def test_dev_bootstrap_accounts_parse_from_json_env(monkeypatch: pytest.MonkeyPatch) -> None:
+	expected = (
+		DevAccount(username="ada", password=_ACCOUNT_PASSWORD, email="ada@notif.local", name="ada"),
+		DevAccount(username="bob", password=_ACCOUNT_PASSWORD, email="bob@notif.local", name="Robert"),
+	)
+
+	settings = _settings_with_accounts([_account("ada"), _account("bob", name="Robert")], monkeypatch)
+	accounts = settings.DEV_BOOTSTRAP_ACCOUNTS
+
+	assert accounts == expected
+
+
+@pytest.mark.parametrize(("count", "accepted"), [(0, False), (1, True), (8, True), (9, False)])
+def test_dev_bootstrap_account_count_is_bounded(count: int, *, accepted: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+	accounts = [_account(f"dev{index}") for index in range(count)]
+
+	if accepted:
+		assert len(_settings_with_accounts(accounts, monkeypatch).DEV_BOOTSTRAP_ACCOUNTS) == count
+	else:
+		_assert_accounts_rejected(accounts, monkeypatch)
+
+
+@pytest.mark.parametrize(
+	"accounts",
+	[
+		pytest.param([_account("dev"), _account("dev", email="other@notif.local")], id="duplicate-username"),
+		pytest.param([_account("dev"), _account("other", email="DEV@notif.local")], id="duplicate-email"),
+		pytest.param([_account("", email="dev@notif.local")], id="empty-username"),
+		pytest.param([_account("dev", password="")], id="empty-password"),
+		pytest.param([_account("dev", email="")], id="empty-email"),
+		pytest.param([_account("dev", name="")], id="empty-name"),
+		pytest.param([_account("dev", nmae="Dev")], id="unknown-key"),
+	],
+)
+def test_invalid_dev_bootstrap_accounts_are_rejected(
+	accounts: list[dict[str, str]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+	_assert_accounts_rejected(accounts, monkeypatch)
+
+
+def test_dev_bootstrap_usernames_compare_case_sensitively(monkeypatch: pytest.MonkeyPatch) -> None:
+	# As the User table does: these are two accounts, so config must not merge or refuse them.
+	accounts = [_account("dev"), _account("Dev", email="dev2@notif.local")]
+
+	assert len(_settings_with_accounts(accounts, monkeypatch).DEV_BOOTSTRAP_ACCOUNTS) == 2
 
 
 @pytest.mark.parametrize("env", list(Environment))
