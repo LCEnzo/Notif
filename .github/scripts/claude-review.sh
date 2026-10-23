@@ -67,12 +67,14 @@ reviewed_diff() {
   git diff --no-color --no-ext-diff --unified="$DIFF_CONTEXT" "$RANGE" -- . "${SKIP_PATHSPEC[@]}"
 }
 
-# Writes every element of a paginated list endpoint to stdout, one JSON object per line.
+# Writes every element of paginated list endpoint $1 to file $2, one JSON object per line. Writing to a file
+# rather than stdout keeps stdout free, so a fail here reaches the job log.
 fetch_all() {
-  local endpoint=$1 page body
+  local endpoint=$1 out=$2 page body
+  : >"$out"
   for ((page = 1; page <= MAX_PAGES; page++)); do
     body=$(gh api "$endpoint?per_page=$PER_PAGE&page=$page")
-    jq -c '.[]' <<<"$body"
+    jq -c '.[]' <<<"$body" >>"$out"
     if (($(jq 'length' <<<"$body") < PER_PAGE)); then return 0; fi
   done
   fail "$endpoint lists more than $((PER_PAGE * MAX_PAGES)) entries"
@@ -82,8 +84,8 @@ fetch_all() {
 compute_state() {
   local shas
   local -a reviewed=()
-  fetch_all "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" >"$WORK_DIR/issue-comments.jsonl"
-  fetch_all "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/comments" >"$WORK_DIR/review-comments.jsonl"
+  fetch_all "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" "$WORK_DIR/issue-comments.jsonl"
+  fetch_all "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/comments" "$WORK_DIR/review-comments.jsonl"
   shas=$(jq -r --arg who "$POSTER" --arg re "$SHA_LINE" '
     select(.user.login == $who) | .body | split("\n") | map(rtrimstr("\r") | select(test($re))) | last // empty
     | ltrimstr("Reviewed-SHA: ")' "$WORK_DIR/issue-comments.jsonl")
