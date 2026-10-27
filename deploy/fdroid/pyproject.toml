@@ -1,0 +1,81 @@
+# Lint, type-check and test tooling for the F-Droid scripts in this directory:
+# notif-apk (VPS host, standard library only), publish_apk.py and
+# container_keys.py (publish image, which adds fdroidserver). Nothing here is
+# installed on the VPS or in an image; both ship Python 3.13 (Debian 13).
+[project]
+name = "notif-fdroid-tools"
+version = "0"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+	"hypothesis>=6.152,<7.0",
+	"mypy>=2.3,<3.0",
+	"pytest>=9.0.3,<10.0",
+	"ruff>=0.16.1,<0.17.0",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+# The host script has no extension.
+extend-include = ["notif-apk"]
+
+[tool.ruff.lint]
+# The backend's selection (backend/pyproject.toml), minus what is Django- or
+# requests-specific (DJ, TID251, S113, S308, S501, S610, S611). T201 is left
+# out: printing is these scripts' interface. S602-S605 are added: commands are
+# argument lists, never shell strings.
+select = [
+	"E", "F", "W", "UP", "I", "N", "ASYNC", "B", "C4", "DTZ", "RET", "SIM", "PTH",
+	"RUF100", "ISC004", "LOG004", "PLE0304", "PLR1708", "RUF036", "RUF063", "RUF068", "FURB164", "FURB192",
+	"PLE", "PLW", "PLR0124", "PLR0133", "PLR0206", "PLR1704", "PLR1711", "PLR1714", "PLR1722", "PLR5501",
+	"PLC0105", "PLC0131", "PLC0132", "PLC0205", "PLC0206", "PLC0208", "PLC2401", "PLC2403", "PLC3002",
+	"BLE001", "FBT", "G004", "PGH003", "PGH004", "PLC0415", "PIE",
+	"PT011", "PT014", "PT017", "PT018", "RUF001", "RUF002", "RUF003",
+	"S301", "S302", "S307", "S324", "S506", "S608", "S602", "S604", "S605",
+]
+ignore = ["E501", "RET501", "RET504", "SIM103", "SIM108", "SIM118", "W191"]
+
+[tool.ruff.format]
+indent-style = "tab"
+
+[tool.mypy]
+files = ["notif-apk", "publish_apk.py", "container_keys.py", "tests"]
+python_version = "3.13"
+# The scripts run on Linux; check them as Linux from any host.
+platform = "linux"
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_reexport = true
+warn_unreachable = true
+warn_return_any = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+# Only the publish image has fdroidserver.
+module = ["fdroidserver"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--tb=short"]
+filterwarnings = ["error"]
