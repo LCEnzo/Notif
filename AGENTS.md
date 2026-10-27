@@ -17,8 +17,12 @@ All Python commands run under `uv run` so they pick up the locked environment. R
 - Format: `uv run ruff format .` — format the whole tree, even for single file edits
 - Lint: `uv run ruff check .` — do not pass `--unsafe-fixes` unless explicitly requested
 - Type-check: Run `uv run mypy .` always, even for single file edits
+- Complexity gate: `uv run xenon . --max-absolute C --max-average A --max-average-num 3.0 --max-modules B --exclude "*/migrations/*"` — the same command CI runs
+- Complexity report: `uv run radon cc . -s -n C -e "*/migrations/*"` for the offenders, `uv run radon cc . -a --total-average -e "*/migrations/*"` for the average, `uv run radon mi . -s -e "*/migrations/*"` for maintainability index
 - Tests: `uv run pytest -q` for the full suite
 - Migrations: if a model changes, run `uv run python manage.py makemigrations` and commit the migration. CI fails on missing migrations
+
+The complexity thresholds are ceilings pinned at where the tree already sits, not aspirations: the gate is green today, and a change that pushes a block past grade C, a module past grade B, or the tree average past 3.0 fails CI. Note what that does *not* catch — a block can grow from CC 11 to CC 20 without leaving the C band, and the average has room to drift from 2.48 up to 3.0. The gate stops cliffs, not creep. Migrations are excluded because they are generated and frozen, matching the ruff and mypy excludes. Tighten the numbers as the offenders get refactored; never loosen them to land a change.
 
 ### Frontend tooling
 
