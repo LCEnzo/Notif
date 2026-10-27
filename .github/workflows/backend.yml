@@ -29,6 +29,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set build info
         run: echo "GIT_HASH=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
