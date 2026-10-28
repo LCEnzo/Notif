@@ -34,27 +34,51 @@ def test_pins_are_required_before_any_command(vps: Host, capsys, command):
 	assert host.calls == []
 
 
-def test_build_mounts_only_the_apk_key_and_publish_only_the_index_key(vps: Host, capsys):
+def secrets(argv: list[str]) -> list[str]:
+	return [m.split(",")[2] for m in mounts(argv) if "dst=/run/secrets/" in m]
+
+
+def bind_src(argv: list[str], dst: str) -> Path:
+	(mount,) = [m for m in mounts(argv) if f",dst={dst}" in m]
+	return Path(mount.split(",")[1].removeprefix("src="))
+
+
+def test_build_gets_no_key_signing_only_the_apk_key_and_publish_only_the_index_key(vps: Host, capsys):
 	vps.set_pins(APK_PIN, REPO_PIN)
 	host = FakeHost()
 	assert vps.run("build", host=host) == 0
 	checkout = str(vps.root / "checkout")
 	assert host.calls[0] == ["git", "-C", checkout, "fetch", "--quiet", "origin"]
 	assert host.calls[1][-1] == "origin/master^{commit}"
-	build, publish = host.docker_runs()
+	build, sign, publish = host.docker_runs()
+
 	assert build[-3:] == ["/tool/container-build.sh", "674", "c0ffeec"]
 	assert build[5:11] == ["--memory", "5g", "--memory-swap", "5g", "--cpus", "3"]
-	build_secrets = [m for m in mounts(build) if "/run/secrets/" in m]
-	assert [m.split(",")[2] for m in build_secrets] == ["dst=/run/secrets/apk.p12", "dst=/run/secrets/apk.pass"]
-	assert all(m.endswith(",readonly") for m in build_secrets)
-	publish_secrets = [m for m in mounts(publish) if "/run/secrets/" in m]
-	assert [m.split(",")[2] for m in publish_secrets] == [
-		"dst=/run/secrets/repo-index.p12",
-		"dst=/run/secrets/repo-index.pass",
+	assert secrets(build) == []
+	assert "--env" not in build
+	assert "--network" not in build  # pub and Gradle download
+
+	assert sign[-4:] == ["bash", "/tool/sign-apk.sh", "/in/notif.apk", "/out/notif-674-c0ffeec.apk"]
+	assert sign[sign.index("--network") + 1] == "none"
+	assert mounts(sign) == [
+		f"type=bind,src={vps.fdroid_dir},dst=/tool,readonly",
+		f"type=bind,src={vps.keys}/apk.p12,dst=/run/secrets/apk.p12,readonly",
+		f"type=bind,src={vps.keys}/apk.pass,dst=/run/secrets/apk.pass,readonly",
+		f"type=bind,src={bind_src(build, '/out') / 'notif-674-c0ffeec-debug-signed.apk'},dst=/in/notif.apk,readonly",
+		f"type=bind,src={bind_src(sign, '/out')},dst=/out",
 	]
+	assert [sign[i + 1] for i, word in enumerate(sign) if word == "--env"] == [
+		"APK_KS=/run/secrets/apk.p12",
+		"APK_KS_PASS_FILE=/run/secrets/apk.pass",
+	]
+
+	assert secrets(publish) == ["dst=/run/secrets/repo-index.p12", "dst=/run/secrets/repo-index.pass"]
 	assert f"type=bind,src={vps.data / 'repo'},dst=/work/repo" in mounts(publish)
-	apk_mount = next(m for m in mounts(publish) if "dst=/in/notif.apk" in m)
-	assert apk_mount.endswith(f"{Path('out') / 'notif-674-c0ffeec.apk'},dst=/in/notif.apk,readonly")
+	assert bind_src(publish, "/in/notif.apk") == bind_src(sign, "/out") / "notif-674-c0ffeec.apk"
+	for run in (build, sign, publish):
+		if secrets(run):
+			assert run[run.index("--network") + 1] == "none"
+
 	assert host.calls[-1][3:6] == ["worktree", "remove", "--force"]
 	assert list(vps.work.iterdir()) == []
 	assert "notif-apk: building c0ffeec, versionCode 674" in capsys.readouterr().out
@@ -71,8 +95,10 @@ def test_only_the_intended_mounts_are_writable(vps: Host):
 	vps.set_pins(APK_PIN, REPO_PIN)
 	host = FakeHost()
 	assert vps.run("build", host=host) == 0
-	build, publish = host.docker_runs()
+	build, sign, publish = host.docker_runs()
 	assert writable_binds(build) == ["dst=/out"]
+	assert writable_binds(sign) == ["dst=/out"]
+	assert bind_src(build, "/out") != bind_src(sign, "/out")
 	assert writable_binds(publish) == ["dst=/work/repo"]
 
 	vps.set_pins("", "")
@@ -98,6 +124,16 @@ def test_a_failed_build_exits_with_its_status_and_cleans_up(vps: Host):
 	host = FakeHost(statuses={"/tool/container-build.sh": 3})
 	assert vps.run("build", "c0ffeec", host=host) == 3
 	assert len(host.docker_runs()) == 1
+	assert host.calls[-1][3:5] == ["worktree", "remove"]
+	assert list(vps.work.iterdir()) == []
+
+
+def test_a_failed_signing_exits_with_its_status_publishes_nothing_and_cleans_up(vps: Host):
+	vps.set_pins(APK_PIN, REPO_PIN)
+	host = FakeHost(statuses={"/tool/sign-apk.sh": 4})
+	assert vps.run("build", "c0ffeec", host=host) == 4
+	scripts = [next(word for word in r if word.startswith("/tool/")) for r in host.docker_runs()]
+	assert scripts == ["/tool/container-build.sh", "/tool/sign-apk.sh"]
 	assert host.calls[-1][3:5] == ["worktree", "remove"]
 	assert list(vps.work.iterdir()) == []
 

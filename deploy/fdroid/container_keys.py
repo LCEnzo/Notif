@@ -118,6 +118,9 @@ def remove(path: Path) -> None:
 @contextmanager
 def staging(keys: Path) -> Iterator[Path]:
 	"""An empty <keys>/.staging, removed afterwards; same filesystem, so install_from can hard-link."""
+	if not keys.is_dir():
+		# Not created here: `notif-apk setup` owns the directory and its mode.
+		fail(f"no key directory at {keys}; mount the host's key directory there")
 	stage = keys / ".staging"
 	remove(stage)
 	stage.mkdir(mode=0o700)
@@ -129,14 +132,24 @@ def staging(keys: Path) -> Iterator[Path]:
 
 
 def install_from(directory: Path, keys: Path) -> None:
-	"""Hard links, because a link never replaces an existing file."""
+	"""Hard links, because a link never replaces an existing file. A failure
+	removes the links made so far and names any it could not remove."""
 	for f in FILES:
 		(directory / f).chmod(0o600)
+	installed: list[Path] = []
 	for f in FILES:
 		try:
 			os.link(directory / f, keys / f)
 		except OSError as e:
-			fail(f"cannot install {f}: {e.strerror}")
+			stuck = []
+			for path in installed:
+				try:
+					path.unlink(missing_ok=True)
+				except OSError:
+					stuck.append(path.name)
+			left = f"; could not remove {' '.join(stuck)}" if stuck else ""
+			fail(f"cannot install {f}: {e.strerror}{left}")
+		installed.append(keys / f)
 
 
 def generate(keys: Path) -> None:

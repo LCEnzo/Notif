@@ -1,7 +1,10 @@
 import hashlib
 import json
 import os
+import signal
 import stat
+import subprocess
+import sys
 import tempfile
 import zipfile
 from pathlib import Path
@@ -11,7 +14,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 import publish_apk
-from tests.conftest import run_tool, shell_tool
+from tests.conftest import FDROID_DIR, run_tool, shell_tool
 
 CERT = "3f" * 32
 PUBKEY = "9e" * 32
@@ -212,7 +215,20 @@ case $FAKE_FDROID in
     mkdir -p repo/status && printf '{}' >repo/status/new.json
     exit 1 ;;
   ok) printf '{"published": true}' >repo/index-v2.json ;;
+  killed) kill -KILL "$PPID"; exit 1 ;;
 esac
+"""
+# add_to_repo in a process of its own, for the fake fdroid to SIGKILL.
+PUBLISH_PROCESS = """
+import os, sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import publish_apk
+work, scratch, new = (Path(a) for a in sys.argv[2:])
+publish_apk.WORK, publish_apk.REPO = work, work / "repo"
+target = publish_apk.REPO / f"{publish_apk.APP_ID}_2004.apk"
+prune = publish_apk.prune_selection([p.name for p in publish_apk.REPO.iterdir()], target.name, publish_apk.KEEP)
+publish_apk.add_to_repo(new, target, prune, scratch, os.environ, publish_apk.Journal())
 """
 
 
@@ -299,6 +315,36 @@ def test_a_successful_update_prunes_and_publishes(repo):
 	assert names == [apk(2002), apk(2003), apk(2004)]
 	assert (repo["repo"] / apk(2004)).read_bytes() == b"apk 2004"
 	assert stat.S_IMODE((repo["repo"] / apk(2004)).stat().st_mode) == 0o644
+
+
+def test_a_killed_publish_leaves_an_unindexed_apk_until_it_is_removed(repo, tmp_path: Path):
+	# A SIGKILL (docker stop after 10 s, OOM, reboot) skips the rollback. The
+	# runbook's recovery relies on what this shows.
+	index = (repo["repo"] / "index-v2.json").read_bytes()
+	scratch = tmp_path / "scratch"
+	scratch.mkdir()
+	argv = [
+		sys.executable,
+		"-c",
+		PUBLISH_PROCESS,
+		str(FDROID_DIR),
+		str(repo["repo"].parent),
+		str(scratch),
+		str(repo["new"]),
+	]
+	result = subprocess.run(argv, env={**os.environ, "PATH": repo["path"], "FAKE_FDROID": "killed"}, check=False)
+	assert result.returncode == -signal.SIGKILL
+	# The new APK stays, the pruned one is gone from repo/ (in the container
+	# that is lost with its /tmp), and the index is the old one.
+	assert sorted(p.name for p in repo["repo"].glob("*.apk")) == [apk(2002), apk(2003), apk(2004)]
+	assert (repo["repo"] / "index-v2.json").read_bytes() == index
+	# So a rerun passes 3c (2004 > 2003) and is refused at 3d, as the file exists.
+	assert publish_apk.newest_published() == 2003
+	(repo["repo"] / apk(2004)).unlink()
+	journal, error = add(repo, "ok")
+	assert error is None
+	assert journal.pruned == []
+	assert sorted(p.name for p in repo["repo"].glob("*.apk")) == [apk(2002), apk(2003), apk(2004)]
 
 
 def test_an_apk_that_appeared_meanwhile_is_neither_replaced_nor_removed(repo):

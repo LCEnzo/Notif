@@ -1,0 +1,48 @@
+name: Workflow Lint
+
+on:
+  # `push` only fires on master; pull_request covers feature branches, matching
+  # the other workflows.
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/**'
+      - '.github/zizmor.yml'
+      - '.github/actionlint.yaml'
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/zizmor.yml'
+      - '.github/actionlint.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # The module version is pinned, and Go verifies it through the checksum
+      # database, so the binary cannot be swapped under the workflow.
+      - name: Install actionlint
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          printf '%s\n' "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Lint workflows (actionlint)
+        run: actionlint
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.3.2
+
+      # zizmor runs offline by default. The pin policy lives in
+      # .github/zizmor.yml, and the version is pinned so a release cannot
+      # change the gate on its own.
+      - name: Audit workflows (zizmor)
+        run: uvx zizmor@1.31.1 .github/workflows

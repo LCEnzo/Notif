@@ -264,6 +264,7 @@ class NotifApk:
 		self.paths = paths
 		self.host = host
 		self.as_root = as_root
+		self._locked = False
 
 	# Same convention as deploy.sh.
 	def sudo(self, argv: Sequence[str]) -> None:
@@ -307,8 +308,12 @@ class NotifApk:
 			die("refused: pin missing: deploy/fdroid/pins/*.sha256 have no value (runbook: first-ever setup)")
 		return pins
 
-	# One notif-apk at a time: two builds would need 2 x 5 GB.
+	# One notif-apk at a time: two builds would need 2 x 5 GB. Every key
+	# inspection holds it. Idempotent: Host.lock opens a new descriptor on each
+	# call, and a second flock in this process would conflict with the first.
 	def take_lock(self) -> None:
+		if self._locked:
+			return
 		data_dir = self.paths.data_dir
 		if not self.paths.repo_dir.is_dir():
 			die(f"{data_dir}/repo does not exist (./deploy.sh runs notif-apk setup, which creates it)")
@@ -318,6 +323,7 @@ class NotifApk:
 			die(f"cannot lock {data_dir}: {e.strerror}")
 		if not locked:
 			die("another notif-apk run is in progress")
+		self._locked = True
 
 	def ensure_image(self, image: str, dockerfile: str) -> None:
 		print(f"notif-apk: docker build {image} (cached after the first run)")
@@ -420,6 +426,7 @@ class NotifApk:
 		"""The key state machine; the runbook has it as a table."""
 		keys_dir = self.paths.keys_dir
 		pins = self.read_pins()
+		self.take_lock()
 		match self.inspect_keys():
 			case Present() as keys:
 				if restore is not None:
@@ -477,6 +484,7 @@ class NotifApk:
 		pickup = paths.pickup
 		if pickup.exists(follow_symlinks=False):
 			die(f"refused: {pickup} exists, left by an earlier export; shred it, then run this again")
+		self.take_lock()
 		pins = self.read_pins()
 		state = self.inspect_keys()
 		if not isinstance(state, Present):
@@ -517,6 +525,23 @@ class NotifApk:
 			PUBLISH_IMAGE, "python3", "/tool/publish_apk.py", "/in/notif.apk",
 		])  # fmt: skip
 
+	def sign(self, debug_signed: Path, signed: Path) -> None:
+		"""apksigner in a container with no network and only the APK key: the
+		build container, which runs the commit's own Gradle and pub code, never
+		gets the key."""
+		keys_dir = self.paths.keys_dir
+		self.check([
+			"docker", "run", "--rm", "--name", "notif-apk-sign", "--network", "none",
+			"--env", "APK_KS=/run/secrets/apk.p12",
+			"--env", "APK_KS_PASS_FILE=/run/secrets/apk.pass",
+			"--mount", f"type=bind,src={self.paths.fdroid_dir},dst=/tool,readonly",
+			"--mount", f"type=bind,src={keys_dir}/apk.p12,dst=/run/secrets/apk.p12,readonly",
+			"--mount", f"type=bind,src={keys_dir}/apk.pass,dst=/run/secrets/apk.pass,readonly",
+			"--mount", f"type=bind,src={debug_signed},dst=/in/notif.apk,readonly",
+			"--mount", f"type=bind,src={signed.parent},dst=/out",
+			BUILD_IMAGE, "bash", "/tool/sign-apk.sh", "/in/notif.apk", f"/out/{signed.name}",
+		])  # fmt: skip
+
 	def cmd_build(self, args: Sequence[str]) -> None:
 		paths = self.paths
 		if len(args) > 1:
@@ -547,21 +572,24 @@ class NotifApk:
 		try:
 			src = work / "src"
 			out = work / "out"
+			signed = work / "signed"
 			self.check(["git", "-C", str(paths.checkout), "worktree", "add", "--detach", "--quiet", str(src), commit])
 			out.mkdir()
+			signed.mkdir()
+			# No key and the default network: pub and Gradle download.
 			self.check([
 				"docker", "run", "--rm", "--name", "notif-apk-build",
 				"--memory", "5g", "--memory-swap", "5g", "--cpus", "3",
 				"--mount", f"type=bind,src={src},dst=/src,readonly",
 				"--mount", f"type=bind,src={out},dst=/out",
 				"--mount", f"type=bind,src={paths.fdroid_dir},dst=/tool,readonly",
-				"--mount", f"type=bind,src={paths.keys_dir}/apk.p12,dst=/run/secrets/apk.p12,readonly",
-				"--mount", f"type=bind,src={paths.keys_dir}/apk.pass,dst=/run/secrets/apk.pass,readonly",
 				"--mount", "type=volume,src=notif-apk-gradle,dst=/root/.gradle",
 				"--mount", "type=volume,src=notif-apk-pub,dst=/root/.pub-cache",
 				BUILD_IMAGE, "bash", "/tool/container-build.sh", version_code, short_sha,
 			])  # fmt: skip
-			self.publish(pins, out / f"notif-{version_code}-{short_sha}.apk")
+			name = f"notif-{version_code}-{short_sha}"
+			self.sign(out / f"{name}-debug-signed.apk", signed / f"{name}.apk")
+			self.publish(pins, signed / f"{name}.apk")
 		finally:
 			self.host.hold_signals()
 			self.remove_work(work)

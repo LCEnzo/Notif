@@ -1,11 +1,12 @@
 #! /usr/bin/env bash
 # Pre-push hook: run quick CI-ish checks on changed code before pushing.
 #
-# Detects which part of the stack changed (backend, frontend, or both)
-# and runs the matching fast checks:
-#   backend  → uv lock --check, uv sync --frozen, ruff format --check, ruff check, mypy, migration drift
-#   frontend → dart format check (no rewrite), flutter analyze
+# Detects which part of the stack changed (backend, frontend, deploy/fdroid,
+# or workflows) and runs the matching fast checks:
+#   backend       → uv lock --check, uv sync --frozen, ruff format --check, ruff check, mypy, migration drift
+#   frontend      → dart format check (no rewrite), flutter analyze
 #   deploy/fdroid → uv lock --check, ruff format --check, ruff check, mypy
+#   workflows     → actionlint, when installed
 #
 # This is intentionally not full CI, as tests and builds take too long for everyday operations. They are checked in CI.
 #
@@ -21,6 +22,7 @@ check_backend=false
 check_frontend=false
 check_fdroid=false
 check_hooks=false
+check_workflows=false
 exit_code=0
 repo_root=$(git rev-parse --show-toplevel)
 
@@ -69,6 +71,9 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
 	if grep -Eq '^\.githooks/' <<<"$changed"; then
 		check_hooks=true
 	fi
+	if grep -Eq '^\.github/workflows/' <<<"$changed"; then
+		check_workflows=true
+	fi
 done
 
 # ── hook checks ──────────────────────────────────────────────────
@@ -77,6 +82,19 @@ if $check_hooks; then
 	for hook in "$repo_root"/.githooks/*; do
 		run_check "bash syntax ($(basename "$hook"))" bash -n "$hook"
 	done
+fi
+
+# ── workflow checks ──────────────────────────────────────────────
+if $check_workflows; then
+	echo -e "${YELLOW}━━━ workflows changed — linting ━━━${NC}"
+
+	if command -v actionlint >/dev/null 2>&1; then
+		run_check "actionlint" actionlint
+	else
+		# CI runs this unconditionally; a missing local binary should not
+		# block pushes from a machine that never installed it.
+		echo -e "  actionlint … ${YELLOW}SKIP (not installed; CI still runs it)${NC}"
+	fi
 fi
 
 # ── backend checks ───────────────────────────────────────────────

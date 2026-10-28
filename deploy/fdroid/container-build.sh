@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Entry point of the build container under `notif-apk build`. Builds a copy of
 # the read-only worktree at /src, so nothing the build writes lands on the host
-# except the signed APK in /out, then reports the container's memory use.
+# except the debug-signed APK in /out, then reports the container's memory use.
+# The container gets no key: sign-apk.sh signs in a container of its own.
 #
 # Usage: container-build.sh <versionCode> <short sha>
 set -Eeuo pipefail
@@ -56,9 +57,8 @@ mkdir /build
 cp -a /src/. /build/
 # The worktree's .git file points outside the container.
 rm -f /build/.git
-ks_pass=$(</run/secrets/apk.pass)
 cd /build
 # In the background so that wait, unlike a foreground command, is interrupted by the traps.
-APK_KS=/run/secrets/apk.p12 APK_KS_PASS=$ks_pass nice -n 10 bash /tool/build-apk.sh "$1" "$2" &
+nice -n 10 bash /tool/build-apk.sh "$1" "$2" &
 wait "$!"
-install -m 0644 "out/notif-$1-$2.apk" /out/
+install -m 0644 "out/notif-$1-$2-debug-signed.apk" /out/
