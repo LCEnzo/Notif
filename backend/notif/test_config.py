@@ -166,3 +166,11 @@ def test_environment_invariants(
 			Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
 		# An invariant fired, not an unrelated field error such as a missing value.
 		assert [error["type"] for error in excinfo.value.errors()] == ["value_error"]
+
+
+def test_rejected_value_is_not_echoed(monkeypatch: pytest.MonkeyPatch) -> None:
+	# A traceback prints str(exc). Nested, so it also covers DevAccount under Settings' flag.
+	with pytest.raises(ValidationError) as excinfo:
+		_settings_with_accounts([_account("dev", leftover="rejected-value-sentinel")], monkeypatch)
+
+	assert "rejected-value-sentinel" not in str(excinfo.value)
