@@ -37,6 +37,11 @@ apksigner=${ANDROID_HOME:?ANDROID_HOME must point to the Android SDK}/build-tool
   --v4-signing-enabled false \
   --out "$out_apk" \
   "$in_apk"
-"$apksigner" verify "$out_apk"
+# Its output only on failure: warnings about the JAR entries are not errors,
+# and publish's check 3a verifies again, against the pin.
+if ! verify_output=$("$apksigner" verify "$out_apk" 2>&1); then
+  printf '%s\n' "$verify_output" >&2
+  die "apksigner verify failed on $out_apk"
+fi
 
 printf 'sign-apk: signed %s\n' "$out_apk"
