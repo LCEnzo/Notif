@@ -3,6 +3,7 @@
 import os
 import secrets
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,11 @@ if [ "$1" = sign ]; then
   done
   printf 'signed' >"$out"
 fi
+if [ "$1" = verify ]; then
+  echo 'WARNING: a fake verify warning' >&2
+  [ "${FAKE_VERIFY_STATUS:-0}" = 0 ] || echo 'ERROR: a fake verify error'
+  exit "${FAKE_VERIFY_STATUS:-0}"
+fi
 """
 
 
@@ -44,7 +50,7 @@ def executable(path: Path, text: str) -> Path:
 
 def run_script(name: str, args: list[str], cwd: Path, env: dict[str, str]) -> subprocess.CompletedProcess[bytes]:
 	assert BASH is not None
-	return subprocess.run([BASH, str(FDROID_DIR / name), *args], cwd=cwd, env=env, check=False)
+	return subprocess.run([BASH, str(FDROID_DIR / name), *args], cwd=cwd, env=env, capture_output=True, check=False)
 
 
 def test_build_apk_builds_without_a_key(tmp_path: Path):
@@ -59,7 +65,23 @@ def test_build_apk_builds_without_a_key(tmp_path: Path):
 	assert "argv: build apk --release" in log.read_text(encoding="utf-8")
 
 
-def test_sign_apk_reads_the_password_only_from_its_file(tmp_path: Path):
+@dataclass
+class Signing:
+	root: Path
+	password: str
+	keystore: Path
+	pass_file: Path
+	debug_signed: Path
+	signed: Path
+	log: Path
+	env: dict[str, str]
+
+	def run(self) -> subprocess.CompletedProcess[bytes]:
+		return run_script("sign-apk.sh", [str(self.debug_signed), str(self.signed)], self.root, self.env)
+
+
+@pytest.fixture
+def signing(tmp_path: Path) -> Signing:
 	password = secrets.token_urlsafe(24)
 	keystore = tmp_path / "secrets" / "apk.p12"
 	keystore.parent.mkdir()
@@ -81,11 +103,32 @@ def test_sign_apk_reads_the_password_only_from_its_file(tmp_path: Path):
 		"FAKE_LOG": str(log),
 		"FAKE_PASS_READ": str(tmp_path / "pass-read"),
 	}
-	assert run_script("sign-apk.sh", [str(debug_signed), str(signed)], tmp_path, env).returncode == 0
-	assert signed.read_bytes() == b"signed"
-	assert (tmp_path / "pass-read").read_text(encoding="utf-8") == password
-	calls = [line for line in log.read_text(encoding="utf-8").splitlines() if line.startswith("argv: ")]
+	return Signing(tmp_path, password, keystore, pass_file, debug_signed, signed, log, env)
+
+
+def test_sign_apk_reads_the_password_only_from_its_file(signing: Signing):
+	assert signing.run().returncode == 0
+	assert signing.signed.read_bytes() == b"signed"
+	assert (signing.root / "pass-read").read_text(encoding="utf-8") == signing.password
+	log = signing.log.read_text(encoding="utf-8")
+	calls = [line for line in log.splitlines() if line.startswith("argv: ")]
 	assert [call.split()[1] for call in calls] == ["sign", "verify"]
-	assert f"--ks {keystore} --ks-key-alias notif-apk --ks-pass file:{pass_file}" in calls[0]
-	assert calls[1] == f"argv: verify {signed}"
-	assert password not in log.read_text(encoding="utf-8")
+	assert f"--ks {signing.keystore} --ks-key-alias notif-apk --ks-pass file:{signing.pass_file}" in calls[0]
+	assert calls[1] == f"argv: verify {signing.signed}"
+	assert signing.password not in log
+
+
+def test_sign_apk_prints_only_its_own_line_when_verify_passes(signing: Signing):
+	result = signing.run()
+	assert result.returncode == 0
+	assert result.stdout.decode() == f"sign-apk: signed {signing.signed}\n"
+	assert result.stderr.decode() == ""
+
+
+def test_sign_apk_fails_with_apksigners_output_when_verify_fails(signing: Signing):
+	signing.env["FAKE_VERIFY_STATUS"] = "1"
+	result = signing.run()
+	assert result.returncode == 1
+	assert result.stdout.decode() == ""
+	assert "ERROR: a fake verify error" in result.stderr.decode()
+	assert "WARNING: a fake verify warning" in result.stderr.decode()
