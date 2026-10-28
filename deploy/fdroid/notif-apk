@@ -1,0 +1,355 @@
+#!/usr/bin/env python3
+"""notif-apk: set up the self-hosted F-Droid repo on the VPS, build Notif APKs,
+and publish them to it. Runbook: docs/operations/fdroid_runbook.md
+
+Runs on the VPS as a docker-group user; `setup` also uses sudo. Standard library
+only. Fixed locations, overridable for tests:
+  NOTIF_FDROID_KEYS    /etc/notif/fdroid         apk.p12, apk.pass, repo-index.p12, repo-index.pass
+  NOTIF_FDROID_DATA    /srv/notif-fdroid         repo/ is what Caddy serves
+  NOTIF_APK_WORK       ~/.cache/notif-apk        throwaway worktrees and build output
+  NOTIF_APK_LINK       /usr/local/bin/notif-apk  the link `setup` points at this file
+  NOTIF_FDROID_PICKUP  ~/notif-fdroid-keys.tar   the key backup `export-keys` writes
+"""
+
+import io
+import os
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from types import FrameType
+from typing import IO, ClassVar, NoReturn, Protocol, Self
+
+USAGE = """\
+Usage:
+  notif-apk export-keys      Write the signing keys to ~/notif-fdroid-keys.tar,
+                             to copy off the VPS.
+"""
+
+PUBLISH_IMAGE = "notif-apk-publish"
+APK_PIN = "apk-cert.sha256"
+REPO_PIN = "repo-index-cert.sha256"
+HEX64 = re.compile(r"[0-9a-f]{64}")
+# sed's and tr's [[:space:]] within a line, in the C locale.
+_PIN_COMMENT = re.compile(r"[ \t\r\v\f]*#")
+_PIN_SPACE = re.compile(r"[ \t\r\v\f]")
+
+
+class FatalError(Exception):
+	"""Ends notif-apk with `notif-apk: <message>` on stderr and exit 1."""
+
+
+class Interrupted(BaseException):
+	"""HUP, INT or TERM; notif-apk exits 128 + the signal number after cleanup."""
+
+	def __init__(self, signum: int) -> None:
+		super().__init__(signum)
+		self.signum = signum
+
+
+def die(message: str) -> NoReturn:
+	raise FatalError(message)
+
+
+def info(message: str) -> None:
+	print(f"notif-apk: {message}")
+
+
+@dataclass(frozen=True)
+class Paths:
+	script: Path
+	keys_dir: Path
+	data_dir: Path
+	work_root: Path
+	link: Path
+	pickup: Path
+
+	@property
+	def fdroid_dir(self) -> Path:
+		return self.script.parent
+
+	@property
+	def checkout(self) -> Path:
+		return self.script.parents[2]
+
+	@property
+	def repo_dir(self) -> Path:
+		return self.data_dir / "repo"
+
+	@classmethod
+	def from_env(cls, script: Path, environ: Mapping[str, str]) -> Self:
+		# An empty variable counts as unset, like the shell's ${VAR:-default}.
+		def env(name: str) -> str | None:
+			return environ.get(name) or None
+
+		home = Path(env("HOME") or Path.home())
+		cache = Path(env("XDG_CACHE_HOME") or home / ".cache")
+		return cls(
+			script=script,
+			keys_dir=Path(env("NOTIF_FDROID_KEYS") or "/etc/notif/fdroid"),
+			data_dir=Path(env("NOTIF_FDROID_DATA") or "/srv/notif-fdroid"),
+			work_root=Path(env("NOTIF_APK_WORK") or cache / "notif-apk"),
+			link=Path(env("NOTIF_APK_LINK") or "/usr/local/bin/notif-apk"),
+			pickup=Path(env("NOTIF_FDROID_PICKUP") or home / "notif-fdroid-keys.tar"),
+		)
+
+
+@dataclass(frozen=True)
+class Pins:
+	apk: str
+	repo: str
+
+
+def pin_text(text: str) -> str:
+	"""A pin file without comment lines (optional whitespace, then `#`) and without
+	any whitespace, as `sed '/^[[:space:]]*#/d' | tr -d '[:space:]'` leaves it."""
+	kept = "".join(line for line in text.split("\n") if not _PIN_COMMENT.match(line))
+	return _PIN_SPACE.sub("", kept)
+
+
+def parse_pin(text: str) -> str:
+	"""The digest in a pin file, or "" while unset; raises ValueError unless
+	what pin_text leaves is empty or 64 lowercase hex digits."""
+	pin = pin_text(text)
+	if pin and not HEX64.fullmatch(pin):
+		raise ValueError(f"not 64 lowercase hex digits: {pin!r}")
+	return pin
+
+
+@dataclass(frozen=True)
+class Absent:
+	word: ClassVar[str] = "absent"
+
+
+@dataclass(frozen=True)
+class Partial:
+	files: str
+	word: ClassVar[str] = "partial"
+
+
+@dataclass(frozen=True)
+class Present:
+	apk: str
+	repo: str
+	word: ClassVar[str] = "present"
+
+
+type KeyState = Absent | Partial | Present
+
+
+def parse_inspection(out: str) -> KeyState:
+	"""Parses `container_keys.py inspect`; raises ValueError on anything else."""
+	match out.split():
+		case ["absent"]:
+			return Absent()
+		case ["partial", *files] if files:
+			return Partial(" ".join(files))
+		case ["present", apk, repo] if HEX64.fullmatch(apk) and HEX64.fullmatch(repo):
+			return Present(apk, repo)
+		case _:
+			raise ValueError(f"unexpected inspection output: {out!r}")
+
+
+class Host(Protocol):
+	def call(self, argv: Sequence[str], *, stdin: IO[bytes] | None = None, stdout: int | None = None) -> int: ...
+
+	def capture(self, argv: Sequence[str]) -> tuple[int, str]: ...
+
+	def hold_signals(self) -> None: ...
+
+
+def exit_status(returncode: int) -> int:
+	# Popen reports death by signal N as -N; a shell reports 128 + N.
+	return returncode if returncode >= 0 else 128 - returncode
+
+
+class LocalHost:
+	"""Runs commands like the shell version: in the foreground, with this
+	process's stdio. HUP, INT and TERM are recorded, never raised from the
+	handler: a running command is waited for (Ctrl-C reached it too, and docker
+	forwards it to the container), and no further command starts. notif-apk then
+	unwinds through its `finally` cleanups and exits 128 + N."""
+
+	def __init__(self) -> None:
+		self.pending: int | None = None
+		self._holding = False
+
+	def install_signal_handlers(self) -> None:
+		for signum in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+			signal.signal(signum, self._on_signal)
+
+	def _on_signal(self, signum: int, _frame: FrameType | None) -> None:
+		if self.pending is None:
+			self.pending = signum
+
+	def hold_signals(self) -> None:
+		"""For cleanup: commands run despite a pending signal; run() exits with it afterwards."""
+		self._holding = True
+
+	def _check_signal(self) -> None:
+		if self.pending is not None and not self._holding:
+			raise Interrupted(self.pending)
+
+	def _run(self, argv: Sequence[str], stdin: IO[bytes] | None, stdout: int | None) -> tuple[int, bytes | None]:
+		self._check_signal()
+		try:
+			proc = subprocess.Popen(
+				argv,
+				stdin=stdin,
+				stdout=stdout,
+			)
+		except FileNotFoundError:
+			print(f"notif-apk: {argv[0]}: command not found", file=sys.stderr)
+			return 127, None
+		out, _ = proc.communicate()
+		self._check_signal()
+		return exit_status(proc.returncode), out
+
+	def call(self, argv: Sequence[str], *, stdin: IO[bytes] | None = None, stdout: int | None = None) -> int:
+		status, _ = self._run(argv, stdin, stdout)
+		return status
+
+	def capture(self, argv: Sequence[str]) -> tuple[int, str]:
+		status, out = self._run(argv, None, subprocess.PIPE)
+		return status, (out or b"").decode("utf-8", "replace").rstrip("\n")
+
+
+class NotifApk:
+	def __init__(self, paths: Paths, host: Host, *, as_root: bool) -> None:
+		self.paths = paths
+		self.host = host
+		self.as_root = as_root
+
+	def pin_value(self, name: str) -> str:
+		file = self.paths.fdroid_dir / "pins" / name
+		if not file.is_file():
+			die(f"refused: pin file deploy/fdroid/pins/{name} does not exist")
+		try:
+			text = file.read_bytes().decode("utf-8", "replace")
+		except OSError as e:
+			die(f"refused: cannot read deploy/fdroid/pins/{name}: {e.strerror}")
+		try:
+			return parse_pin(text)
+		except ValueError:
+			die(f"refused: deploy/fdroid/pins/{name} is not a lowercase SHA-256 hex digest")
+
+	def read_pins(self) -> Pins | None:
+		"""Both pins, or None before the first-ever setup."""
+		apk = self.pin_value(APK_PIN)
+		repo = self.pin_value(REPO_PIN)
+		if bool(apk) != bool(repo):
+			die(
+				"refused: only one of deploy/fdroid/pins/{apk-cert,repo-index-cert}.sha256 has a value;"
+				" set both or neither"
+			)
+		return Pins(apk, repo) if apk else None
+
+	def keys_argv(self, args: Sequence[str], *, writable: bool, options: Sequence[str] = ()) -> list[str]:
+		"""A container_keys.py run in the publish image. Only generate and restore get /keys writable."""
+		mount = f"type=bind,src={self.paths.keys_dir},dst=/keys" + ("" if writable else ",readonly")
+		return [
+			"docker", "run", "--rm", "--network", "none",
+			"--mount", mount,
+			"--mount", f"type=bind,src={self.paths.fdroid_dir},dst=/tool,readonly",
+			*options,
+			PUBLISH_IMAGE, "python3", "/tool/container_keys.py", *args,
+		]  # fmt: skip
+
+	def inspect_keys(self) -> KeyState:
+		status, out = self.host.capture(self.keys_argv(["inspect"], writable=False))
+		if status != 0:
+			die(f"refused: cannot read the keys in {self.paths.keys_dir} (see above); not touching them")
+		try:
+			return parse_inspection(out)
+		except ValueError:
+			die(f"unexpected key inspection output: {out}")
+
+	def verify_disk_keys(self, state: Present, pins: Pins) -> None:
+		keys_dir = self.paths.keys_dir
+		if state.apk != pins.apk:
+			die(
+				f"refused: the APK key in {keys_dir} has cert SHA-256 {state.apk}, but the pin is {pins.apk};"
+				" not touching it (runbook: refusals)"
+			)
+		if state.repo != pins.repo:
+			die(
+				f"refused: the repo index key in {keys_dir} has cert SHA-256 {state.repo}, but the pin is {pins.repo};"
+				" not touching it (runbook: refusals)"
+			)
+
+	def cmd_export_keys(self, args: Sequence[str]) -> None:
+		paths = self.paths
+		if args:
+			die("usage: notif-apk export-keys")
+		pickup = paths.pickup
+		if pickup.exists(follow_symlinks=False):
+			die(f"refused: {pickup} exists, left by an earlier export; shred it, then run this again")
+		pins = self.read_pins()
+		state = self.inspect_keys()
+		if not isinstance(state, Present):
+			die(f"refused: {paths.keys_dir} holds no complete key set ({state.word})")
+		if pins is not None:
+			self.verify_disk_keys(state, pins)
+		try:
+			fd, tmp = tempfile.mkstemp(prefix=f"{pickup.name}.", dir=pickup.parent)
+		except OSError as e:
+			die(f"cannot create a file next to {pickup}: {e}")
+		try:
+			try:
+				status = self.host.call(self.keys_argv(["archive"], writable=False), stdout=fd)
+			finally:
+				os.close(fd)
+			if status != 0:
+				die("archiving the keys failed (see above)")
+			try:
+				os.link(tmp, pickup)  # never replaces an existing file
+			except OSError as e:
+				die(f"cannot create {pickup}: {e.strerror}")
+		finally:
+			self.host.hold_signals()
+			Path(tmp).unlink(missing_ok=True)
+		info(f"wrote {pickup} (APK cert {state.apk}, repo index cert {state.repo})")
+
+
+def main(argv: Sequence[str], environ: Mapping[str, str], host: Host, *, script: Path, as_root: bool) -> int:
+	app = NotifApk(Paths.from_env(script, environ), host, as_root=as_root)
+	command, args = (argv[1], argv[2:]) if len(argv) > 1 else ("", [])
+	try:
+		match command:
+			case "export-keys":
+				app.cmd_export_keys(args)
+			case "-h" | "--help" | "help":
+				print(USAGE, end="")
+			case _:
+				print(USAGE, end="", file=sys.stderr)
+				return 2
+	except FatalError as e:
+		print(f"notif-apk: {e}", file=sys.stderr)
+		return 1
+	except Interrupted as e:
+		return 128 + e.signum
+	return 0
+
+
+def run() -> int:
+	# Line-buffered, so these lines and the commands' output stay in order in a
+	# pipe; surrogateescape writes a non-UTF-8 path back as the bytes it was.
+	for stream in (sys.stdout, sys.stderr):
+		if isinstance(stream, io.TextIOWrapper):
+			stream.reconfigure(line_buffering=True, errors="surrogateescape")
+	host = LocalHost()
+	host.install_signal_handlers()
+	# Symlinks resolved: setup points the link at this file, and the checkout is two levels up.
+	status = main(sys.argv, os.environ, host, script=Path(__file__).resolve(), as_root=os.geteuid() == 0)
+	host.hold_signals()
+	if host.pending is not None:
+		return 128 + host.pending
+	return status
+
+
+if __name__ == "__main__":
+	sys.exit(run())

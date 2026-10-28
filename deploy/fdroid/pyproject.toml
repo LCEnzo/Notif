@@ -32,7 +32,7 @@ extend-ignore = ["T201"]
 extend-select = ["S602", "S604", "S605"]
 
 [tool.mypy]
-files = ["container_keys.py", "tests"]
+files = ["notif-apk", "container_keys.py", "tests"]
 python_version = "3.13"
 # The scripts run on Linux; check them as Linux from any host.
 platform = "linux"
