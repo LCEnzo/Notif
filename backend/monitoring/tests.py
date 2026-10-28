@@ -814,6 +814,55 @@ class StrategyViewSetTestCase(SetupMixin, TestCase):
 		strat = Strategy.objects.get(pk=resp.data["id"])
 		self.assertEqual(strat.user_id, self.regular_user.pk)
 
+	def test_create_strategy_json_null_data_is_rejected(self):
+		resp = self.api_client.post(
+			reverse("strategies-list"),
+			{"strat_cls": "GeneralSelectorStrategy", "data": None},
+			format="json",
+		)
+		self.assertEqual(resp.status_code, 400)
+		self.assertIn("data", resp.data)
+
+	def test_create_strategy_form_null_data_is_rejected(self):
+		"""Form bodies carry `data` as a JSON string; "null" must not slip past the null check."""
+		before = Strategy.objects.count()
+		url = reverse("strategies-list")
+		with self.subTest("multipart"):
+			resp = self.api_client.post(
+				url, {"strat_cls": "GeneralSelectorStrategy", "data": "null"}, format="multipart"
+			)
+			self.assertEqual(resp.status_code, 400)
+			self.assertIn("data", resp.data)
+		with self.subTest("urlencoded"):
+			resp = self.api_client.post(
+				url,
+				"strat_cls=GeneralSelectorStrategy&data=null",
+				content_type="application/x-www-form-urlencoded",
+			)
+			self.assertEqual(resp.status_code, 400)
+			self.assertIn("data", resp.data)
+		self.assertEqual(Strategy.objects.count(), before)
+
+	def test_update_strategy_form_null_data_is_rejected(self):
+		resp = self.api_client.patch(
+			reverse("strategies-detail", kwargs={"pk": self.strat.pk}),
+			{"data": "null"},
+			format="multipart",
+		)
+		self.assertEqual(resp.status_code, 400)
+		self.assertIn("data", resp.data)
+		self.strat.refresh_from_db()
+		self.assertIsNotNone(self.strat.data)
+
+	def test_create_strategy_multipart_valid_data_succeeds(self):
+		resp = self.api_client.post(
+			reverse("strategies-list"),
+			{"strat_cls": "GeneralSelectorStrategy", "data": '{"selectors": ["body"]}'},
+			format="multipart",
+		)
+		self.assertEqual(resp.status_code, 201)
+		self.assertEqual(Strategy.objects.get(pk=resp.data["id"]).data, {"selectors": ["body"]})
+
 	def test_pivot_link_does_not_expose_another_users_strategy(self):
 		"""F2: referencing another user's strategy from your own link must not expose it."""
 		other_client = login_client(APIClient(), self.secondary_user.get_username())
