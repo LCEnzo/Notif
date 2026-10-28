@@ -1,0 +1,10 @@
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        # Reviewed actions may use release tags. Anything new must be
+        # hash-pinned, so a fresh third-party action cannot land on a tag.
+        actions/*: ref-pin
+        astral-sh/setup-uv: ref-pin
+        subosito/flutter-action: ref-pin
+        "*": hash-pin
