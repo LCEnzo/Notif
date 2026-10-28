@@ -61,7 +61,7 @@ def test_setup_verifies_keys_that_match_the_pins(vps: Host, capsys):
 	assert vps.run("setup", host=host) == 0
 	assert f"notif-apk: the keys in {vps.keys} match the pins" in capsys.readouterr().out
 	assert [r[-1] for r in host.docker_runs()] == ["inspect"]
-	assert host.locks == []
+	assert host.locks == [vps.data]
 
 
 @pytest.mark.parametrize(
@@ -186,6 +186,53 @@ def test_one_pin_set_is_refused_after_the_idempotent_steps(vps: Host, capsys):
 def test_setup_failures(vps: Host, capsys, make_host, message):
 	assert vps.run("setup", host=make_host()) == 1
 	assert capsys.readouterr().err.endswith(f"notif-apk: {message.format(keys=vps.keys)}\n")
+
+
+PRESENT = f"present {APK_PIN} {REPO_PIN}"
+
+
+@pytest.mark.parametrize(
+	("pinned", "restore", "inspect", "status"),
+	[
+		(True, False, [PRESENT], 0),
+		(True, False, [f"present {OTHER} {REPO_PIN}"], 1),
+		(False, False, [PRESENT], 0),
+		(True, True, [PRESENT], 0),
+		(False, False, ["partial apk.p12"], 1),
+		(True, False, ["absent"], 1),
+		(False, False, ["absent", PRESENT], 0),
+		(True, True, ["absent", PRESENT], 0),
+	],
+	ids=["verify", "mismatch", "unpinned", "restore-ignored", "partial", "absent-pinned", "generate", "restore"],
+)
+def test_every_setup_branch_inspects_the_keys_under_the_lock(vps: Host, pinned, restore, inspect, status):
+	if pinned:
+		vps.set_pins(APK_PIN, REPO_PIN)
+	tar = vps.root / "backup.tar"
+	tar.write_bytes(b"x")
+	host = FakeHost(inspect=deque(inspect))
+	assert vps.run("setup", *(["--restore", str(tar)] if restore else []), host=host) == status
+	assert host.inspections == [True] * len(inspect)
+	assert host.locks == [vps.data]
+
+
+def test_a_second_take_lock_in_one_run_keeps_the_first(vps: Host):
+	host = FakeHost()
+	app = notif_apk.NotifApk(notif_apk.Paths.from_env(vps.script, vps.environ), host, as_root=False)
+	app.take_lock()
+	app.take_lock()
+	assert host.locks == [vps.data]
+
+
+@posix_only
+def test_a_second_take_lock_keeps_the_real_flock(vps: Host):
+	host = notif_apk.LocalHost()
+	app = notif_apk.NotifApk(notif_apk.Paths.from_env(vps.script, vps.environ), host, as_root=False)
+	app.take_lock()
+	app.take_lock()
+	assert notif_apk.LocalHost().lock(vps.data) is False
+	for fd in host._lock_fds:
+		os.close(fd)
 
 
 def test_a_failing_sudo_stops_setup_with_its_status(vps: Host):
