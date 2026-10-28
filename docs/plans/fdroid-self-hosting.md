@@ -66,20 +66,20 @@ HTTP basic auth (O3), key backups on Luka's PC (Recommendation 4), signing insid
    | APK signing key | Reinstall Notif, log in, re-grant Health Connect. App-local settings go too (`allowBackup=false`). | Alone, nothing (item 2). |
    | Repo index key | Re-add the repo from the new QR code in `index.html`; the installed app keeps working. | Alone, nothing: the attacker must also serve `fdroid.lcenzo.com`, and an update to Notif must carry the APK cert (F6). Both keys plus the host give code on the phone at the next manual update. |
 
-5. Signing happens inside `build-apk.sh`, right after the build. V mounts the APK key read-only; G decodes it from the master-only environment secret. Build-time code can read it, but by item 2 the key alone cannot reach the phone, and by item 4 losing it costs one reinstall, so a separate no-network signing container would buy almost nothing. The index key never enters a build; only `publish` holds it.
+5. Signing happens after the build, apart from it, so build-time code never reads the APK key. Under V the build container gets no key and keeps its network for pub and Gradle; a second container with `--network none` and only the APK key and its password runs `sign-apk.sh` on the debug-signed release build. Under G the build job has no secrets, and a job in the master-only environment signs the artifact on a fresh runner. By item 2 the key alone cannot reach the phone, but by item 4 replacing it costs a reinstall, and keeping it from the build costs one short container. The index key never enters a build; only `publish` holds it. (Revised 2026-10-28 in review of #141; this item first kept signing inside `build-apk.sh`.)
 
 **O3. HTTP basic auth: no.** The client supports it and Caddy needs 3 lines, but it would put a username and password in front of the whole repo site, stored in the F-Droid client, and hide nothing: the APK is built from public source.
 
 ## Recommendation
 
-1. **The default is V.** `notif-apk build [commit]` checks out the commit (default `origin/master`) into a throwaway `git worktree`. It runs `build-apk.sh <versionCode> <short sha>` in a build image (`FROM ghcr.io/cirruslabs/flutter:3.44.0` plus the NDK) under `--memory 5g --memory-swap 5g --cpus 3` and `nice`, with the APK key mounted read-only. The script builds, signs with `apksigner`, and then `publish` runs. The caller computes both arguments, because a worktree's `.git` file points outside the container's mount (*inference*). Equal `--memory` and `--memory-swap` keep the build out of swap [docker-mem], so the host's 4 GB swap stays production's cushion.
-2. **G is optional.** The workflow below runs the same `build-apk.sh` on the runner and uploads the signed APK. `notif-apk fetch` uses the PAT to download the newest successful master run, then calls `publish`.
+1. **The default is V.** `notif-apk build [commit]` checks out the commit (default `origin/master`) into a throwaway `git worktree`. It runs `build-apk.sh <versionCode> <short sha>` in a build image (`FROM ghcr.io/cirruslabs/flutter:3.44.0` plus the NDK) under `--memory 5g --memory-swap 5g --cpus 3` and `nice`, with no key mounted. `sign-apk.sh` then signs the result with `apksigner` in a second container (O2.5), and `publish` runs. The caller computes both arguments, because a worktree's `.git` file points outside the container's mount (*inference*). Equal `--memory` and `--memory-swap` keep the build out of swap [docker-mem], so the host's 4 GB swap stays production's cushion.
+2. **G is optional.** The workflow below runs the same `build-apk.sh` and `sign-apk.sh` in two jobs and uploads the signed APK. `notif-apk fetch` uses the PAT to download the newest successful master run, then calls `publish`.
 3. **The shared `notif-apk publish <apk>`** runs in a Debian trixie container with fdroidserver 2.4.2:
    a. `apksigner verify --print-certs` must match the cert SHA-256 pinned in git. This catches debug-signed or wrong-key APKs.
    b. The built-in API URL must be production: `lib/arm64-v8a/libapp.so` must contain `https://notif.lcenzo.com/api/v1` and must not contain `localhost:8000`. Dart AOT keeps string literals as plain bytes, so `unzip -p` and `grep -c` suffice (*inference*; Phase 1 tests it).
    c. versionCode must be higher than the newest published. An equal code is a no-op, so V and G building the same commit is harmless.
    d. It never overwrites an existing APK, prunes `repo/` to the newest 3, and runs `fdroid update`.
-4. **Keys** live in `/etc/notif/fdroid/` (root, 0700; files 0600). Passwords reach fdroid through `{env:}` and `apksigner` through `--ks-pass env:`, so `config.yml` and `metadata/` can be committed under `deploy/fdroid/`. The build container gets only the APK key and its password; publish gets only the index key and its password; the backend container mounts neither. Both fingerprints are committed. `repo/status/*.json` is public and records the command line, so secrets must never appear as arguments. The backup is the whole directory, passwords included, in `~/Documents` on Luka's PC. If Windows syncs Documents to OneDrive, that is also a cloud copy, which is acceptable at these stakes (O2.4).
+4. **Keys** live in `/etc/notif/fdroid/` (root, 0700; files 0600). Passwords reach fdroid through `{env:}` and `apksigner` through `--ks-pass file:`, so `config.yml` and `metadata/` can be committed under `deploy/fdroid/`. The build container gets no key; the signing container gets only the APK key and its password; publish gets only the index key and its password; the backend container mounts neither. Both fingerprints are committed. `repo/status/*.json` is public and records the command line, so secrets must never appear as arguments. The backup is the whole directory, passwords included, in `~/Documents` on Luka's PC. If Windows syncs Documents to OneDrive, that is also a cloud copy, which is acceptable at these stakes (O2.4).
 5. **Versions.** `--build-number "$(git rev-list --count HEAD)"`. It only grows, because every new master commit has the old tip as an ancestor. `build.gradle` should fail rather than fall back to `1` (F5).
 6. **Compile-time defines.** `build-apk.sh` passes exactly `--dart-define=API_URL=https://notif.lcenzo.com/api/v1` and `--dart-define=GIT_HASH=<short sha>` (F18). It takes no other arguments, so nothing can add the `DEV_LOGIN_*` defines; check 3b catches a build that missed the URL.
 7. **`deploy.sh --apk` is opt-in.** After the web deploy finishes, it runs `notif-apk build <deployed sha>`, so web and APK come from one commit. An APK failure prints a banner and makes `deploy.sh` exit non-zero, but never undoes or blocks the web deploy, which is done by then. Without the flag, `deploy.sh` behaves as today. `notif-apk build` stays usable on its own.
@@ -92,16 +92,26 @@ refresh or within about 4 h, and Luka taps install.
 on: workflow_dispatch                                # never on push or pull_request
 permissions: { contents: read }
 jobs:
-  apk:
+  build:                                             # no secrets (O2.5)
     if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    steps:
+      - { uses: actions/checkout@v6, with: { fetch-depth: 0, persist-credentials: false } }   # rev-list needs history
+      - { uses: subosito/flutter-action@v2, with: { flutter-version: '3.44.0', cache: true } }
+      - run: deploy/fdroid/build-apk.sh "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+      - { uses: actions/upload-artifact@v7, with: { name: notif-apk-debug-signed, path: out/*.apk, retention-days: 1 } }
+  sign:                                              # a fresh runner, which no build process outlives into
+    needs: build
     runs-on: ubuntu-24.04
     environment: apk-signing                         # branch policy: master only
     steps:
-      - { uses: actions/checkout@v6, with: { fetch-depth: 0 } }   # rev-list needs history
-      - { uses: subosito/flutter-action@v2, with: { flutter-version: '3.44.0', cache: true } }
-      - run: |                                       # builds, then signs (O2.5)
+      - { uses: actions/checkout@v6, with: { persist-credentials: false } }
+      - { uses: actions/download-artifact@v7, with: { name: notif-apk-debug-signed, path: in } }
+      - run: |
           base64 -d <<<"$APK_KS_B64" > "$RUNNER_TEMP/apk.p12"
-          APK_KS="$RUNNER_TEMP/apk.p12" deploy/fdroid/build-apk.sh "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+          printf '%s' "$APK_KS_PASS" > "$RUNNER_TEMP/apk.pass"
+          mkdir out
+          APK_KS="$RUNNER_TEMP/apk.p12" APK_KS_PASS_FILE="$RUNNER_TEMP/apk.pass" deploy/fdroid/sign-apk.sh in/*.apk out/notif.apk
         env: { APK_KS_B64: "${{ secrets.APK_KS_B64 }}", APK_KS_PASS: "${{ secrets.APK_KS_PASS }}" }
       - { uses: actions/upload-artifact@v7, with: { name: notif-apk, path: out/*.apk, retention-days: 7 } }
 ```
