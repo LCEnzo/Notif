@@ -42,7 +42,12 @@ class Environment(StrEnum):
 
 
 class Settings(BaseSettings):
-	model_config = SettingsConfigDict(env_file=str(_ENV_FILE), env_file_encoding="utf-8")
+	model_config = SettingsConfigDict(
+		env_file=str(_ENV_FILE),
+		env_file_encoding="utf-8",
+		# A startup traceback must not echo a rejected value: it may be a secret.
+		hide_input_in_errors=True,
+	)
 
 	# ── environment ────────────────────────────────────────
 	NOTIF_ENV: Environment = Environment.LOCAL

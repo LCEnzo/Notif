@@ -13,10 +13,12 @@ developer's ``.env`` or the CI environment cannot leak into the result.
 """
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
 from pydantic import ValidationError
+from pydantic_settings import SettingsError
 
 from notif.config import DevAccount, Environment, Settings
 
@@ -166,3 +168,61 @@ def test_environment_invariants(
 			Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
 		# An invariant fired, not an unrelated field error such as a missing value.
 		assert [error["type"] for error in excinfo.value.errors()] == ["value_error"]
+
+
+# ── configuration errors never echo the offending value ─────────────────────
+#
+# ``str(exc)`` is what a startup traceback prints, and a rejected value can be a
+# secret. ``errors()`` is a programmatic API and still carries ``input``.
+
+_SENTINEL = "Zq7Kp2Xw9Lm4Vb8Nc3Rt6Yh1"  # pragma: whitelist secret
+
+
+def _rejected_text(monkeypatch: pytest.MonkeyPatch, case: str, tmp_path: Path) -> tuple[str, str]:
+	"""Build Settings that fails ``case`` with the sentinel in the failing value; return (str(exc), problem)."""
+	env_file: Path | None = None
+	if case == "top_level":
+		monkeypatch.setenv("EMAIL_PORT", _SENTINEL)
+		problem = "int_parsing"
+	elif case == "nested_missing_field":
+		monkeypatch.setenv("DEV_BOOTSTRAP_ACCOUNTS", json.dumps([{"password": _SENTINEL}]))
+		problem = "missing"
+	elif case == "nested_extra_key":
+		monkeypatch.setenv("DEV_BOOTSTRAP_ACCOUNTS", json.dumps([_account("dev", leftover=_SENTINEL)]))
+		problem = "extra_forbidden"
+	else:
+		assert case == "leftover_dotenv_key"
+		env_file = tmp_path / ".env"
+		env_file.write_text(f"DJANGO_SECRET_KEY={_SECRET}\nDEV_BOOTSTRAP_PASSWORD={_SENTINEL}\n", encoding="utf-8")
+		problem = "extra_forbidden"
+	with pytest.raises(ValidationError) as excinfo:
+		Settings(_env_file=env_file, DJANGO_SECRET_KEY=_SECRET)
+	return str(excinfo.value), problem
+
+
+@pytest.mark.parametrize("case", ["top_level", "nested_missing_field", "nested_extra_key", "leftover_dotenv_key"])
+def test_validation_error_text_omits_rejected_value(case: str, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+	text, problem = _rejected_text(monkeypatch, case, tmp_path)
+
+	assert _SENTINEL not in text
+	# Still diagnosable: the problem is named, and so is where it is.
+	assert f"[type={problem}]" in text
+	expected_location = {
+		"top_level": "EMAIL_PORT",
+		"nested_missing_field": "DEV_BOOTSTRAP_ACCOUNTS.0.email",
+		"nested_extra_key": "DEV_BOOTSTRAP_ACCOUNTS.0.leftover",
+		"leftover_dotenv_key": "dev_bootstrap_password",
+	}[case]
+	assert expected_location in text
+
+
+def test_malformed_json_error_omits_raw_value(monkeypatch: pytest.MonkeyPatch) -> None:
+	monkeypatch.setenv("DEV_BOOTSTRAP_ACCOUNTS", f'[{{"username": "u", "password": "{_SENTINEL}",')
+
+	with pytest.raises(SettingsError) as excinfo:
+		Settings(_env_file=None, DJANGO_SECRET_KEY=_SECRET)
+
+	assert "DEV_BOOTSTRAP_ACCOUNTS" in str(excinfo.value)
+	# What a traceback prints for the exception and for the one it chains.
+	assert _SENTINEL not in str(excinfo.value)
+	assert _SENTINEL not in str(excinfo.value.__cause__)
