@@ -52,7 +52,12 @@ class FakeHost:
 	inspect: deque[str] = field(default_factory=deque)
 	statuses: dict[str, int] = field(default_factory=dict)
 	archive_bytes: bytes = b"tar bytes"
+	lock_free: bool = True
 	calls: list[list[str]] = field(default_factory=list)
+	locks: list[Path] = field(default_factory=list)
+	held: set[Path] = field(default_factory=set)
+	# Per key inspection: whether this run held the lock at that moment.
+	inspections: list[bool] = field(default_factory=list)
 
 	def _status(self, argv: Sequence[str]) -> int:
 		for word, status in self.statuses.items():
@@ -71,8 +76,18 @@ class FakeHost:
 		self.calls.append(list(argv))
 		status = self._status(argv)
 		if "inspect" in argv:
+			self.inspections.append(bool(self.held))
 			return status, self.inspect.popleft() if status == 0 else ""
 		return status, ""
+
+	def lock(self, directory: Path) -> bool:
+		"""Like LocalHost.lock: each call is a new flock, so a second one on a
+		directory this process already holds conflicts with the first."""
+		self.locks.append(directory)
+		if not self.lock_free or directory in self.held:
+			return False
+		self.held.add(directory)
+		return True
 
 	def hold_signals(self) -> None:
 		pass
