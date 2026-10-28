@@ -173,6 +173,13 @@ def test_export_keys_writes_the_archive_and_nothing_else(vps: Host, capsys):
 	assert host.calls[0][:2] == ["docker", "run"]  # no sudo
 
 
+def test_export_keys_inspects_the_keys_under_the_lock(vps: Host):
+	host = FakeHost(inspect=deque([f"present {APK_PIN} {REPO_PIN}"]))
+	assert vps.run("export-keys", host=host) == 0
+	assert host.inspections == [True]
+	assert host.locks == [vps.data]
+
+
 def test_export_keys_refuses_an_existing_pickup(vps: Host, capsys):
 	vps.pickup.write_bytes(b"old")
 	host = FakeHost()
@@ -204,6 +211,7 @@ def test_export_keys_refuses_a_dangling_symlink_pickup(vps: Host):
 		),
 		(None, lambda: FakeHost(statuses={"inspect": 1}), "refused: cannot read the keys in {keys} (see above)"),
 		(None, lambda: FakeHost(inspect=deque(["what"])), "unexpected key inspection output: what"),
+		(None, lambda: FakeHost(inspect=deque(["absent"]), lock_free=False), "another notif-apk run is in progress"),
 	],
 )
 def test_export_keys_failures_leave_no_file(vps: Host, capsys, pins, make_host, message):
