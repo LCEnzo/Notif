@@ -33,6 +33,17 @@ class StrategySerializer(_StrategyModelSerializer):
 		fields = ["id", "user", "strat_cls", "data"]
 		read_only_fields = ["id", "user"]
 
+	def validate_data(self, value: Any) -> Any:
+		"""Reject a null ``data`` for every content type.
+
+		DRF's JSONField checks null on the raw input, but form/multipart bodies
+		arrive as the JSON *string* "null", which only decodes to None afterwards.
+		Without this the column's NOT NULL constraint raised IntegrityError (500).
+		"""
+		if value is None:
+			raise serializers.ValidationError(self.fields["data"].error_messages["null"], code="null")
+		return value
+
 
 class OwnedStrategyField(_StrategyRelatedField):
 	"""A strategy reference scoped to the requester's own strategies.
