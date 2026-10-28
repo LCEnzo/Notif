@@ -23,13 +23,15 @@ improvise around it.
 | Cert pins | `deploy/fdroid/pins/apk-cert.sha256`, `deploy/fdroid/pins/repo-index-cert.sha256` |
 | Served repo | `/srv/notif-fdroid/repo` (root, 0755), mounted read-only into Caddy at `/srv/fdroid/repo` |
 | Tool | `/usr/local/bin/notif-apk` -> `deploy/fdroid/notif-apk` in the checkout; Python 3.13, standard library only (Debian 13's `python3`) |
-| Images | `notif-apk-publish` (built by `setup`), `notif-apk-build` (built by the first `notif-apk build`) |
+| Images | `notif-apk-publish` (built by `setup`), `notif-apk-build` (built by the first `notif-apk build`; it also runs the signing step) |
 | Caches | Docker volumes `notif-apk-gradle`, `notif-apk-pub`; throwaway worktrees in `~/.cache/notif-apk` |
 
-The build container gets only `apk.p12` and `apk.pass`; the publish container gets only
-`repo-index.p12` and `repo-index.pass`. Passwords are read from those files inside the
-containers and never appear on a command line: `repo/status/*.json` is public and records
-the `fdroid` command line.
+The build container gets no key: it runs the built commit's own Gradle and pub code, with
+network access. The signing container, with `--network none`, gets only `apk.p12` and
+`apk.pass`, and signs the build's debug-signed APK. The publish container, also with
+`--network none`, gets only `repo-index.p12` and `repo-index.pass`. Passwords are read from
+those files inside the containers and never appear on a command line: `repo/status/*.json`
+is public and records the `fdroid` command line.
 
 ## What `./deploy.sh` does
 
@@ -137,8 +139,9 @@ the one that added this file.
    the end:
 
    ```text
-   build-apk: signed /build/out/notif-<versionCode>-<sha>.apk
+   build-apk: built /build/out/notif-<versionCode>-<sha>-debug-signed.apk
    notif-apk: build memory: anon peak <A> MiB (sampled every 2 s), memory.peak <P> MiB (includes page cache); memory.events: low 0 high 0 max <M> oom 0 oom_kill 0 oom_group_kill 0
+   sign-apk: signed /out/notif-<versionCode>-<sha>.apk
    publish: check 3a passed: signed by the pinned APK key
    publish: check 3b passed: built against https://notif.lcenzo.com/api/v1
    publish: check 3c passed: versionCode <versionCode> (<versionName>) > 0
@@ -206,7 +209,8 @@ Expect no containers, an empty directory, and only `/home/luka/notif` in the wor
 **Negative test: a build without the API URL (plan 1e).** Build an APK without the
 `API_URL` define, signed with the real APK key and with a versionCode one above the
 published one, then try to publish it. This bypasses `build-apk.sh` on purpose, since that
-script always passes the define.
+script always passes the define. As in `notif-apk build`, the build container gets no key,
+and `sign-apk.sh` signs in a second container without network.
 
 ```bash
 cd /home/luka/notif
@@ -214,28 +218,33 @@ git fetch origin
 mkdir -p /home/luka/.cache/notif-apk
 neg=$(mktemp -d /home/luka/.cache/notif-apk/negtest.XXXXXX)
 git worktree add --detach "$neg/src" origin/master
+mkdir "$neg/out" "$neg/signed"
 vc=$(( $(git rev-list --count origin/master) + 1 ))
 docker run --rm --name notif-apk-negtest \
   --memory 5g --memory-swap 5g --cpus 3 \
   --mount type=bind,src="$neg/src",dst=/src,readonly \
-  --mount type=bind,src="$neg",dst=/out \
-  --mount type=bind,src=/etc/notif/fdroid/apk.p12,dst=/run/secrets/apk.p12,readonly \
-  --mount type=bind,src=/etc/notif/fdroid/apk.pass,dst=/run/secrets/apk.pass,readonly \
+  --mount type=bind,src="$neg/out",dst=/out \
   --mount type=volume,src=notif-apk-gradle,dst=/root/.gradle \
   --mount type=volume,src=notif-apk-pub,dst=/root/.pub-cache \
   notif-apk-build bash -euo pipefail -c '
 mkdir /build && cp -a /src/. /build/ && rm -f /build/.git
 cd /build/frontend
 flutter build apk --release --target-platform android-arm64 --build-number "$1"
-"$ANDROID_HOME/build-tools/36.0.0/apksigner" sign --ks /run/secrets/apk.p12 \
-  --ks-key-alias notif-apk --ks-pass file:/run/secrets/apk.pass --v4-signing-enabled false \
-  --out /out/negtest.apk build/app/outputs/flutter-apk/app-release.apk' negtest "$vc"
+cp build/app/outputs/flutter-apk/app-release.apk /out/negtest-debug-signed.apk' negtest "$vc"
+docker run --rm --name notif-apk-negtest-sign --network none \
+  --env APK_KS=/run/secrets/apk.p12 --env APK_KS_PASS_FILE=/run/secrets/apk.pass \
+  --mount type=bind,src=/home/luka/notif/deploy/fdroid,dst=/tool,readonly \
+  --mount type=bind,src=/etc/notif/fdroid/apk.p12,dst=/run/secrets/apk.p12,readonly \
+  --mount type=bind,src=/etc/notif/fdroid/apk.pass,dst=/run/secrets/apk.pass,readonly \
+  --mount type=bind,src="$neg/out/negtest-debug-signed.apk",dst=/in/notif.apk,readonly \
+  --mount type=bind,src="$neg/signed",dst=/out \
+  notif-apk-build bash /tool/sign-apk.sh /in/notif.apk /out/negtest.apk
 ls /srv/notif-fdroid/repo/*.apk
-notif-apk publish "$neg/negtest.apk"; echo "exit=$?"
+notif-apk publish "$neg/signed/negtest.apk"; echo "exit=$?"
 ls /srv/notif-fdroid/repo/*.apk
 ```
 
-Expect, from `notif-apk publish`:
+Expect `sign-apk: signed /out/negtest.apk`, then, from `notif-apk publish`:
 
 ```text
 publish: check 3a passed: signed by the pinned APK key
@@ -352,10 +361,53 @@ refuses, because the file name exists; rename the first one.
 | `REFUSED: check 3b: ...` | built without the production `API_URL` | rebuild with `notif-apk build` |
 | `check 3c: versionCode N is already published; nothing to do` | same commit published before (exit 0) | none |
 | `REFUSED: check 3c: ... lower than the newest published` | an older commit, or `master` was rewritten | build a newer commit; never force-push `master` |
-| `REFUSED: check 3d: ... already exists in repo/` | a stray APK not in the index, left by an interrupted publish | report; remove only after confirming it is not in `index-v2.json` |
-| `another notif-apk run is in progress` | another build, publish, key generation or restore holds the lock | wait for it |
+| `REFUSED: check 3d: ... already exists in repo/` | a stray APK not in the index, left by a publish that was killed | see "A killed publish" below |
+| `another notif-apk run is in progress` | another `notif-apk` run holds the lock: a build, a publish, `setup` or `export-keys` | wait for it to finish. If `./deploy.sh` printed it, the web deploy is done; run `./deploy.sh` again afterwards |
 | `REFUSED: publish failed (see the output above); restored repo/ to its state before this run` | `fdroid update` (or moving an APK) failed after the checks passed; the new APK was removed, and the pruned APKs and the old index files were put back | report the `fdroid` output above it; the repo still serves what it served before |
 | `REFUSED: publish failed, and so did restoring repo/; it is now inconsistent` | the restore failed too; pruned APKs that were not put back are lost | stop; do not refresh F-Droid on the phone; report the whole output |
 
 To reset the build caches (for example after a Flutter upgrade):
 `docker volume rm notif-apk-gradle notif-apk-pub`.
+
+## A killed publish
+
+The publish restores `repo/` itself when `fdroid update` or moving an APK fails. It cannot
+when its container dies: `docker stop` (the publish runs as PID 1, which ignores SIGTERM,
+so Docker sends SIGKILL after 10 s), the OOM killer, or a reboot. The APKs it was pruning,
+and the snapshot it restores from, are in the container's `/tmp` and go with it.
+
+**Recognise it.** A rerun is refused with
+`REFUSED: check 3d: com.lcenzo.notif_<N>.apk already exists in repo/`. Compare the APKs with
+the versionCodes the index lists:
+
+```bash
+ls /srv/notif-fdroid/repo/*.apk
+grep -o '"versionCode": *[0-9]*' /srv/notif-fdroid/repo/index-v2.json | sort -u
+```
+
+`<N>` has an APK but no index entry. The index may also list an older versionCode whose
+APK is gone: the one the killed run was pruning.
+
+**Recover.**
+
+1. Remove the unindexed APK. It may be cut short, so never publish it as it is; `repo/`
+   belongs to root:
+
+   ```bash
+   sudo rm /srv/notif-fdroid/repo/com.lcenzo.notif_<N>.apk
+   ```
+
+2. Run the interrupted command again: `./deploy.sh --apk`, `notif-apk build <commit>` with
+   the same commit, or `notif-apk publish <apk>`. Expect the publish lines from step 4 of
+   the first-ever setup. Its `fdroid update` writes an index of exactly the APKs in `repo/`.
+
+**What is gone.** Only the APKs the killed run was pruning, normally the oldest one, which
+the prune meant to drop. Until the rerun, the old index still lists them, so installing
+that old version from F-Droid fails.
+
+**If `<N>` is already in the index**, the kill came during or after `fdroid update`, and a
+rerun reports `check 3c: versionCode <N> is already published; nothing to do`. Refresh
+F-Droid on the phone. If it shows the update without an error, nothing is left to do.
+Otherwise the index files may disagree with each other; this runbook has no procedure for
+that, so report it with the output of `ls -la /srv/notif-fdroid/repo`. Which files
+fdroidserver 2.4.2 writes, in which order, was not checked.
