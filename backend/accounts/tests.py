@@ -1,3 +1,4 @@
+import itertools
 import json
 import re
 from datetime import timedelta
@@ -34,9 +35,13 @@ from accounts.serializers import UserCreationSerializer, UserFullReadSerializer,
 from accounts.views import _send_reset_email_in_background
 from commons.test_utils import SetupMixin, ViewSetMixin, login_client, production_throttling  # noqa: F401
 from commons.utils import create_users, password  # noqa: F401
+from notif.config import DevAccount, Settings
 
-_VALID_TEST_PASSWORD = "N0tif-Test-Credential-2026!"
-_ALTERNATE_VALID_TEST_PASSWORD = "N0tif-Alternate-Credential-2026!"
+_VALID_TEST_PASSWORD = "N0tif-Test-Credential-2026!"  # pragma: whitelist secret
+_ALTERNATE_VALID_TEST_PASSWORD = "N0tif-Alternate-Credential-2026!"  # pragma: whitelist secret
+_RESET_OLD_PASSWORD = "oldpassword123!"  # pragma: whitelist secret
+_RESET_NEW_PASSWORD = "NewSecurePass123!"  # pragma: whitelist secret
+_COMMON_PASSWORD = "password"  # pragma: whitelist secret
 
 
 class UserViewSetTestCase(ViewSetMixin):
@@ -693,55 +698,64 @@ class LoginViewTestCase(TestCase):
 		self.assertEqual(legacy["path"], settings.LEGACY_REFRESH_COOKIE_PATH)
 
 
+# The config defaults, whatever a developer's .env overrides them with.
+_DEV_ACCOUNTS: tuple[DevAccount, ...] = Settings.model_fields["DEV_BOOTSTRAP_ACCOUNTS"].default
+_WRONG_DEV_PASSWORD = "definitely-not-the-dev-password"  # pragma: whitelist secret
+
+
+@override_settings(DEV_BOOTSTRAP_ACCOUNTS=_DEV_ACCOUNTS)
 class DevBootstrapLoginTestCase(TestCase):
-	def test_dev_login_bootstraps_user_when_missing(self):
-		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())
+	"""Each account is created on its own exact credentials, and on nothing else."""
 
-		response = APIClient().post(
+	def _login(self, username: str, secret: str) -> Any:
+		return APIClient().post(
 			reverse("auth-login"),
-			{
-				"username": settings.DEV_BOOTSTRAP_USERNAME,
-				"password": settings.DEV_BOOTSTRAP_PASSWORD,
-				"transport": "bearer",
-			},
+			{"username": username, "password": secret, "transport": "bearer"},
 			format="json",
 		)
 
-		self.assertEqual(response.status_code, status.HTTP_200_OK)
-		self.assertIsNotNone(response.data["token"])
-
-		user = User._base_manager.get(username=settings.DEV_BOOTSTRAP_USERNAME)
-		self.assertEqual(user.email, settings.DEV_BOOTSTRAP_EMAIL)
-		self.assertEqual(user.name, settings.DEV_BOOTSTRAP_NAME)
-
-	def test_wrong_password_does_not_bootstrap_dev_user(self):
-		response = APIClient().post(
-			reverse("auth-login"),
-			{
-				"username": settings.DEV_BOOTSTRAP_USERNAME,
-				"password": "definitely-not-the-dev-password",
-				"transport": "bearer",
-			},
-			format="json",
-		)
+	def _assert_rejected_without_users(self, username: str, secret: str) -> None:
+		response = self._login(username, secret)
 
 		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())
+		self.assertFalse(User._base_manager.exists())
+
+	def test_each_account_bootstraps_only_itself(self):
+		for account in _DEV_ACCOUNTS:
+			with self.subTest(username=account.username):
+				User._base_manager.all().delete()
+
+				response = self._login(account.username, account.password)
+
+				self.assertEqual(response.status_code, status.HTTP_200_OK)
+				self.assertIsNotNone(response.data["token"])
+				user = User._base_manager.get()  # the only user
+				self.assertEqual(
+					(user.username, user.email, user.name), (account.username, account.email, account.name)
+				)
+				self.assertTrue(user.check_password(account.password))
+
+	def test_wrong_password_bootstraps_nothing(self):
+		for account in _DEV_ACCOUNTS:
+			with self.subTest(username=account.username):
+				self._assert_rejected_without_users(account.username, _WRONG_DEV_PASSWORD)
+
+	def test_another_accounts_password_bootstraps_nothing(self):
+		for owner, other in itertools.permutations(_DEV_ACCOUNTS, 2):
+			with self.subTest(username=owner.username, password_of=other.username):
+				self.assertNotEqual(owner.password, other.password)
+				self._assert_rejected_without_users(owner.username, other.password)
+
+	def test_username_must_match_case_exactly(self):
+		for account in _DEV_ACCOUNTS:
+			with self.subTest(username=account.username):
+				self._assert_rejected_without_users(account.username.swapcase(), account.password)
 
 	@override_settings(DEV_BOOTSTRAP_LOGIN_ENABLED=False)
-	def test_disabled_bootstrap_login_rejects_the_public_credentials(self):
-		response = APIClient().post(
-			reverse("auth-login"),
-			{
-				"username": settings.DEV_BOOTSTRAP_USERNAME,
-				"password": settings.DEV_BOOTSTRAP_PASSWORD,
-				"transport": "bearer",
-			},
-			format="json",
-		)
-
-		self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
-		self.assertFalse(User._base_manager.filter(username=settings.DEV_BOOTSTRAP_USERNAME).exists())
+	def test_disabled_bootstrap_login_rejects_every_account(self):
+		for account in _DEV_ACCOUNTS:
+			with self.subTest(username=account.username):
+				self._assert_rejected_without_users(account.username, account.password)
 
 
 class LogoutViewTestCase(TestCase):
@@ -1589,7 +1603,7 @@ class ChangePasswordTestCase(TestCase):
 	def test_enforces_password_validators(self):
 		response = self.authed.post(
 			self.url,
-			{"current_password": _VALID_TEST_PASSWORD, "new_password": "password"},
+			{"current_password": _VALID_TEST_PASSWORD, "new_password": _COMMON_PASSWORD},
 			format="json",
 		)
 
@@ -1630,7 +1644,7 @@ class PasswordResetTestCase(TestCase):
 		cls.user = User.objects.create_user(
 			username="resetuser",
 			email="reset@example.com",
-			password="oldpassword123!",
+			password=_RESET_OLD_PASSWORD,
 		)
 		cls.client = APIClient()
 		cls.reset_url = reverse("password-reset")
@@ -1675,7 +1689,7 @@ class PasswordResetTestCase(TestCase):
 		User.objects.create_user(
 			username="mixedcase",
 			email="MixedCase@example.com",
-			password="oldpassword123!",
+			password=_RESET_OLD_PASSWORD,
 		)
 
 		with patch("commons.email.send_password_reset_email") as mock_send:
@@ -1769,14 +1783,14 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_200_OK)
 		self.assertEqual(response.data, {"status": "ok"})
 
 		self.user.refresh_from_db()
-		self.assertTrue(self.user.check_password("NewSecurePass123!"))
+		self.assertTrue(self.user.check_password(_RESET_NEW_PASSWORD))
 
 	def test_confirm_with_invalid_code_fails(self):
 		"""Wrong code returns 400."""
@@ -1787,7 +1801,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "000000",
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1802,7 +1816,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "nobody@example.com",
 				"code": "000000",
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1820,7 +1834,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1835,7 +1849,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 		)
 		self.assertEqual(PasswordResetCode.objects.count(), 0)
@@ -1849,7 +1863,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "password",  # common password
+				"new_password": _COMMON_PASSWORD,
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1857,7 +1871,7 @@ class PasswordResetTestCase(TestCase):
 
 		# Password was NOT changed
 		self.user.refresh_from_db()
-		self.assertTrue(self.user.check_password("oldpassword123!"))
+		self.assertTrue(self.user.check_password(_RESET_OLD_PASSWORD))
 
 	def test_confirm_locks_code_after_too_many_failures(self):
 		"""Repeated wrong guesses lock the code even if the right code arrives later."""
@@ -1869,7 +1883,7 @@ class PasswordResetTestCase(TestCase):
 				{
 					"email": "reset@example.com",
 					"code": "000000",
-					"new_password": "NewSecurePass123!",
+					"new_password": _RESET_NEW_PASSWORD,
 				},
 			)
 			self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1882,13 +1896,13 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 		self.user.refresh_from_db()
-		self.assertTrue(self.user.check_password("oldpassword123!"))
+		self.assertTrue(self.user.check_password(_RESET_OLD_PASSWORD))
 
 	def test_confirm_rejects_form_encoded_bodies(self):
 		"""Cross-site form POSTs must not be able to burn guesses from a victim's browser."""
@@ -1899,7 +1913,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "654321",
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 			format="multipart",
 		)
@@ -1917,7 +1931,7 @@ class PasswordResetTestCase(TestCase):
 				{
 					"email": "reset@example.com",
 					"code": "000000",
-					"new_password": "NewSecurePass123!",
+					"new_password": _RESET_NEW_PASSWORD,
 				},
 			)
 			self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1938,12 +1952,12 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": fresh_code_value,
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 		self.user.refresh_from_db()
-		self.assertTrue(self.user.check_password("oldpassword123!"))
+		self.assertTrue(self.user.check_password(_RESET_OLD_PASSWORD))
 
 	def test_budget_window_expiry_resets_both_counters(self):
 		"""A guess opening a fresh window must not carry the old window's mint cap forward."""
@@ -1964,7 +1978,7 @@ class PasswordResetTestCase(TestCase):
 			{
 				"email": "reset@example.com",
 				"code": "000000",
-				"new_password": "NewSecurePass123!",
+				"new_password": _RESET_NEW_PASSWORD,
 			},
 		)
 		self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

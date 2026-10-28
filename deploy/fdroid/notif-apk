@@ -264,6 +264,7 @@ class NotifApk:
 		self.paths = paths
 		self.host = host
 		self.as_root = as_root
+		self._locked = False
 
 	# Same convention as deploy.sh.
 	def sudo(self, argv: Sequence[str]) -> None:
@@ -307,8 +308,12 @@ class NotifApk:
 			die("refused: pin missing: deploy/fdroid/pins/*.sha256 have no value (runbook: first-ever setup)")
 		return pins
 
-	# One notif-apk at a time: two builds would need 2 x 5 GB.
+	# One notif-apk at a time: two builds would need 2 x 5 GB. Every key
+	# inspection holds it. Idempotent: Host.lock opens a new descriptor on each
+	# call, and a second flock in this process would conflict with the first.
 	def take_lock(self) -> None:
+		if self._locked:
+			return
 		data_dir = self.paths.data_dir
 		if not self.paths.repo_dir.is_dir():
 			die(f"{data_dir}/repo does not exist (./deploy.sh runs notif-apk setup, which creates it)")
@@ -318,6 +323,7 @@ class NotifApk:
 			die(f"cannot lock {data_dir}: {e.strerror}")
 		if not locked:
 			die("another notif-apk run is in progress")
+		self._locked = True
 
 	def ensure_image(self, image: str, dockerfile: str) -> None:
 		print(f"notif-apk: docker build {image} (cached after the first run)")
@@ -420,6 +426,7 @@ class NotifApk:
 		"""The key state machine; the runbook has it as a table."""
 		keys_dir = self.paths.keys_dir
 		pins = self.read_pins()
+		self.take_lock()
 		match self.inspect_keys():
 			case Present() as keys:
 				if restore is not None:
@@ -477,6 +484,7 @@ class NotifApk:
 		pickup = paths.pickup
 		if pickup.exists(follow_symlinks=False):
 			die(f"refused: {pickup} exists, left by an earlier export; shred it, then run this again")
+		self.take_lock()
 		pins = self.read_pins()
 		state = self.inspect_keys()
 		if not isinstance(state, Present):
