@@ -219,7 +219,8 @@ docker compose -f compose.yaml --profile prod restart backend caddy
 # Pull updates
 cd /home/deploy/notif
 git pull
-docker compose -f compose.yaml build
+docker compose -f compose.yaml build --pull
+docker compose -f compose.yaml --profile prod pull --ignore-buildable
 docker compose -f compose.yaml --profile prod up -d
 
 # Rebuild only the frontend after UI changes
