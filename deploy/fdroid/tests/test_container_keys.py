@@ -1,5 +1,6 @@
 import gzip
 import io
+import re
 import tarfile
 from pathlib import Path
 
@@ -169,6 +170,41 @@ def test_install_never_replaces_an_existing_file(tmp_path: Path):
 	assert (keys / "repo-index.p12").read_bytes() == b"existing"
 
 
+@pytest.mark.parametrize("existing", container_keys.FILES)
+def test_a_failed_install_removes_the_links_it_made(tmp_path: Path, existing: str):
+	stage = tmp_path / "stage"
+	write_keys(stage)
+	keys = tmp_path / "keys"
+	keys.mkdir()
+	(keys / existing).write_bytes(b"existing")
+	with pytest.raises(container_keys.FatalError, match=rf"^cannot install {existing}"):
+		container_keys.install_from(stage, keys)
+	assert extracted(keys) == {existing: b"existing"}
+	assert extracted(stage) == dict(sorted(CONTENT.items()))
+
+
+def test_a_failed_install_names_the_links_it_could_not_remove(tmp_path: Path, monkeypatch):
+	stage = tmp_path / "stage"
+	write_keys(stage)
+	keys = tmp_path / "keys"
+	keys.mkdir()
+	(keys / "repo-index.pass").write_bytes(b"existing")
+	real_unlink = Path.unlink
+
+	def unlink(self: Path, *, missing_ok: bool = False) -> None:
+		if self.name == "apk.p12":
+			raise PermissionError(13, "Permission denied")
+		real_unlink(self, missing_ok=missing_ok)
+
+	monkeypatch.setattr(Path, "unlink", unlink)
+	with pytest.raises(
+		container_keys.FatalError, match=r"^cannot install repo-index.pass: .+; could not remove apk.p12$"
+	):
+		container_keys.install_from(stage, keys)
+	monkeypatch.undo()
+	assert sorted(p.name for p in keys.iterdir()) == ["apk.p12", "repo-index.pass"]
+
+
 def test_install_links_all_four(tmp_path: Path):
 	stage = tmp_path / "stage"
 	write_keys(stage)
@@ -187,6 +223,24 @@ def test_staging_is_removed_afterwards_even_on_failure(tmp_path: Path):
 		assert list(stage.iterdir()) == []
 		raise RuntimeError("boom")
 	assert list(keys.iterdir()) == []
+
+
+@pytest.mark.parametrize("make", [lambda keys: None, lambda keys: keys.write_bytes(b"x")], ids=["missing", "file"])
+@pytest.mark.parametrize(
+	"operation",
+	[
+		lambda keys, tar: container_keys.generate(keys),
+		lambda keys, tar: container_keys.restore(tar, keys, {}),
+	],
+	ids=["generate", "restore"],
+)
+def test_key_operations_refuse_without_a_key_directory(tmp_path: Path, make, operation):
+	keys = tmp_path / "keys"
+	make(keys)
+	tar = make_tar(tmp_path / "b.tar", key_members())
+	with pytest.raises(container_keys.FatalError, match=rf"^no key directory at {re.escape(str(keys))}"):
+		operation(keys, tar)
+	assert not keys.is_dir()
 
 
 @pytest.mark.parametrize(

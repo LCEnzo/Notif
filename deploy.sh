@@ -103,8 +103,15 @@ remove_legacy_cron_entry() {
 set_env_value VERSION "$APP_VERSION" backend/.env
 set_env_value GIT_HASH "$GIT_HASH" backend/.env
 
-# Build with build arg so the image ENV has the hash as fallback.
-docker compose -f compose.yaml build --build-arg GIT_HASH="$GIT_HASH"
+# Build with build arg so the image ENV has the hash as fallback. --pull
+# refreshes the FROM images, which a cached layer would otherwise pin forever.
+docker compose -f compose.yaml build --pull --build-arg GIT_HASH="$GIT_HASH"
+
+# Refresh images that are only pulled (caddy). This must precede
+# sync_host_config: systemd's `up -d` recreates a container whose image
+# changed, whereas `restart` keeps the old one. --profile prod is needed
+# because pull skips profile-gated services (caddy) without it.
+docker compose -f compose.yaml --profile prod pull --ignore-buildable
 
 # Install host configuration, then let systemd own the Compose lifecycle.
 sync_host_config
