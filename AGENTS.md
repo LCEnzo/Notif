@@ -47,6 +47,8 @@ Backend tests use `pytest`, `pytest-django`, Hypothesis, and xdist. Name tests `
 
 Use concise imperative commit subjects, for example `Harden refresh token sessions` or `Parse frontend service contracts`. For non-trivial changes, include a body explaining root cause, approach, and impact. Keep unrelated backend, frontend, deploy, and documentation changes separate when practical. Pull requests should describe behavior changes, list validation commands, link issues when relevant, and include screenshots for visible UI changes.
 
+When reviewing a change, including with `/code-review`, apply `.github/review-rules.md`; the CI reviewer reads the same file from the PR's base branch.
+
 ## Security & Configuration Tips
 
 Do not commit secrets or production `.env` values. Treat live deployment behavior as distinct from repo defaults; verify Caddy, Docker, and VPS state directly before changing production-sensitive configuration. Do not rewrite deployed migration history; add new migrations for new deltas.
