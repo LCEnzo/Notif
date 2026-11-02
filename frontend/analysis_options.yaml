@@ -18,6 +18,9 @@ analyzer:
     # lint noise there is noise. The dio-boundary architecture test still
     # reads these files directly and keeps enforcing its rules.
     - lib/generated/**
+  errors:
+    # very_good_analysis sets close_sinks to ignore, which would silence the rule enabled below.
+    close_sinks: info
 
 linter:
   rules:
