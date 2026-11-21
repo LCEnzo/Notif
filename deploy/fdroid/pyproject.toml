@@ -1,0 +1,62 @@
+# Lint, type-check and test tooling for the F-Droid scripts in this directory.
+# Nothing here is installed on the VPS or in an image; both run Debian 13's
+# Python 3.13, which ruff and mypy check against.
+[project]
+name = "notif-fdroid-tools"
+version = "0"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+	"hypothesis>=6.152,<7.0",
+	"mypy>=2.3,<3.0",
+	"pytest>=9.0.3,<10.0",
+	"ruff>=0.16.1,<0.17.0",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+
+[tool.ruff]
+# The backend's settings: line length, tabs, and the rule selection.
+extend = "../../backend/pyproject.toml"
+target-version = "py313"
+# The host script has no extension.
+extend-include = ["notif-apk"]
+
+[tool.ruff.lint]
+# Printing is these scripts' interface; commands are argument lists, never shell strings.
+extend-ignore = ["T201"]
+extend-select = ["S602", "S604", "S605"]
+
+[tool.mypy]
+files = ["container_keys.py", "tests"]
+python_version = "3.13"
+# The scripts run on Linux; check them as Linux from any host.
+platform = "linux"
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+warn_unused_configs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_reexport = true
+warn_unreachable = true
+warn_return_any = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--tb=short"]
+filterwarnings = ["error"]
